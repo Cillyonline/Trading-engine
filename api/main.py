@@ -1,12 +1,14 @@
 """
 FastAPI-Anwendung für die Cilly Trading Engine (MVP).
 
-Endpunkte:
+Enthaltene Endpunkte:
 - GET /health
 - POST /strategy/analyze
-
-Später:
 - POST /screener/basic
+
+Strategien:
+- RSI2 (Rebound)
+- TURTLE (Breakout)
 """
 
 from __future__ import annotations
@@ -51,6 +53,47 @@ class StrategyAnalyzeResponse(BaseModel):
     signals: List[Dict[str, Any]]
 
 
+class ScreenerRequest(BaseModel):
+    """
+    Request-Modell für den Basis-Screener.
+
+    MVP:
+    - Wenn keine Symbolliste angegeben ist, wird eine Default-Liste pro Markt verwendet.
+    - Nutzt alle registrierten Strategien (RSI2 & TURTLE).
+    """
+    symbols: Optional[List[str]] = Field(
+        default=None,
+        description="Liste von Symbolen. Wenn None, wird eine Default-Watchlist verwendet.",
+    )
+    market_type: str = Field(
+        "stock",
+        description="Markttyp: 'stock' oder 'crypto'",
+        pattern="^(stock|crypto)$",
+    )
+    lookback_days: int = Field(
+        200,
+        ge=30,
+        le=1000,
+        description="Anzahl der Tage, die mindestens geladen werden sollen.",
+    )
+    min_score: float = Field(
+        30.0,
+        ge=0.0,
+        le=100.0,
+        description="Mindestscore für Setups, die im Screener erscheinen sollen.",
+    )
+
+
+class ScreenerSymbolResult(BaseModel):
+    symbol: str
+    setups: List[Dict[str, Any]]
+
+
+class ScreenerResponse(BaseModel):
+    market_type: str
+    symbols: List[ScreenerSymbolResult]
+
+
 # --- FastAPI-App initialisieren ---
 
 
@@ -67,6 +110,20 @@ signal_repo = SqliteSignalRepository()
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
     "TURTLE": TurtleStrategy(),
+}
+
+# Standard-Strategie-Konfigurationen
+default_strategy_configs: Dict[str, Dict[str, Any]] = {
+    "RSI2": {
+        "rsi_period": 2,
+        "oversold_threshold": 10.0,
+        "min_score": 20.0,
+    },
+    "TURTLE": {
+        "breakout_lookback": 20,
+        "proximity_threshold_pct": 0.03,
+        "min_score": 30.0,
+    },
 }
 
 
@@ -99,21 +156,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         data_source="yahoo" if req.market_type == "stock" else "binance",
     )
 
-    # Standard-Strategie-Konfigurationen
-    default_strategy_configs: Dict[str, Dict[str, Any]] = {
-        "RSI2": {
-            "rsi_period": 2,
-            "oversold_threshold": 10.0,
-            "min_score": 20.0,
-        },
-        "TURTLE": {
-            "breakout_lookback": 20,
-            "proximity_threshold_pct": 0.03,
-            "min_score": 30.0,
-        },
-    }
-
-    # Konfiguration aus Request überschreibt Defaults (falls vorhanden)
+    # Konfiguration: Defaults + optional Request-Override
     effective_config = default_strategy_configs.get(strategy_name, {}).copy()
     if req.strategy_config:
         effective_config.update(req.strategy_config)
@@ -131,7 +174,6 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         signal_repo=signal_repo,
     )
 
-    # Nur die Signale dieses Symbols & dieser Strategie zurückgeben
     filtered_signals = [
         s for s in signals
         if s.get("symbol") == req.symbol and s.get("strategy") == strategy_name
@@ -141,6 +183,91 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         symbol=req.symbol,
         strategy=strategy_name,
         signals=filtered_signals,
+    )
+
+
+@app.post("/screener/basic", response_model=ScreenerResponse)
+def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
+    """
+    Einfacher Basis-Screener.
+
+    - Wenn keine Symbole angegeben werden, nutzt der Screener eine Default-Watchlist
+      (unterschiedlich für Aktien & Krypto).
+    - Nutzt alle registrierten Strategien (RSI2 + TURTLE).
+    - Gibt nur SETUP-Signale mit Score >= min_score zurück.
+    """
+
+    # Default-Watchlists, MVP-Variante
+    if req.symbols is None or len(req.symbols) == 0:
+        if req.market_type == "stock":
+            symbols = ["AAPL", "MSFT", "NVDA", "META", "TSLA"]
+        else:  # crypto
+            symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
+    else:
+        symbols = req.symbols
+
+    engine_config = EngineConfig(
+        timeframe="D1",
+        lookback_days=req.lookback_days,
+        market_type=req.market_type,
+        data_source="yahoo" if req.market_type == "stock" else "binance",
+    )
+
+    # Alle Strategien nutzen
+    strategies = list(strategy_registry.values())
+
+    # Für den Screener nutzen wir einfach die Default-Configs
+    strategy_configs = default_strategy_configs
+
+    signals = run_watchlist_analysis(
+        symbols=symbols,
+        strategies=strategies,
+        engine_config=engine_config,
+        strategy_configs=strategy_configs,
+        signal_repo=signal_repo,
+    )
+
+    # Nur SETUP-Signale mit Score >= min_score
+    setup_signals = [
+        s
+        for s in signals
+        if s.get("stage") == "setup" and float(s.get("score", 0.0)) >= req.min_score
+    ]
+
+    # Nach Symbol gruppieren
+    by_symbol: Dict[str, List[Dict[str, Any]]] = {}
+    for s in setup_signals:
+        sym = s.get("symbol", "")
+        if not sym:
+            continue
+
+        # Nur relevante Felder fürs Frontend extrahieren
+        setup_info: Dict[str, Any] = {
+            "strategy": s.get("strategy"),
+            "score": s.get("score"),
+            "stage": s.get("stage"),
+            "confirmation_rule": s.get("confirmation_rule"),
+            "entry_zone": s.get("entry_zone"),
+            "timeframe": s.get("timeframe"),
+            "market_type": s.get("market_type"),
+        }
+
+        by_symbol.setdefault(sym, []).append(setup_info)
+
+    symbol_results = [
+        ScreenerSymbolResult(symbol=symbol, setups=setups)
+        for symbol, setups in by_symbol.items()
+    ]
+
+    # Optional: nach höchstem Score sortieren
+    symbol_results.sort(
+        key=lambda item: max((s.get("score", 0.0) for s in item.setups), default=0.0),
+        reverse=True,
+    )
+
+    return ScreenerResponse(
+        market_type=req.market_type,
+        symbols=symbol_results,
     )
 
 
