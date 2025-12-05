@@ -5,3 +5,5 @@ fastapi
 uvicorn
 sqlalchemy
 aiosqlite
+yfinance
+ccxt
