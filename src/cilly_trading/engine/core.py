@@ -8,6 +8,7 @@ Core-Engine der Cilly Trading Engine.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol, List, Dict, Any
@@ -15,6 +16,9 @@ from typing import Protocol, List, Dict, Any
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import load_ohlcv
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,10 +77,26 @@ def run_watchlist_analysis(
     - schreibt alle resultierenden Signals in das SignalRepository
     - gibt die Signals zurück
     """
+    logger.info(
+        "Engine run started: symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
+        len(symbols),
+        len(strategies),
+        engine_config.timeframe,
+        engine_config.lookback_days,
+        engine_config.market_type,
+    )
 
     all_signals: List[Signal] = []
 
     for symbol in symbols:
+        logger.debug(
+            "Loading data for symbol=%s market_type=%s lookback_days=%d timeframe=%s",
+            symbol,
+            engine_config.market_type,
+            engine_config.lookback_days,
+            engine_config.timeframe,
+        )
+
         try:
             df = load_ohlcv(
                 symbol=symbol,
@@ -84,20 +104,34 @@ def run_watchlist_analysis(
                 lookback_days=engine_config.lookback_days,
                 market_type=engine_config.market_type,  # "stock" | "crypto"
             )
-        except Exception as exc:  # MVP: pragmatisches Error-Handling
-            # In einer späteren Version: Logging einbauen
-            # z. B. logger.exception("Error loading data for %s: %s", symbol, exc)
+        except Exception:
+            logger.error("Error loading data for symbol=%s", symbol, exc_info=True)
             continue
 
         for strategy in strategies:
             strat_name = getattr(strategy, "name", strategy.__class__.__name__)
             strat_config = strategy_configs.get(strat_name, {})
 
+            logger.debug("Running strategy=%s for symbol=%s", strat_name, symbol)
+
             try:
                 signals = strategy.generate_signals(df, strat_config)
             except Exception:
                 # MVP: Fehler in einer Strategie sollen nicht die gesamte Engine stoppen
+                logger.error(
+                    "Error in strategy=%s for symbol=%s",
+                    strat_name,
+                    symbol,
+                    exc_info=True,
+                )
                 continue
+
+            logger.info(
+                "Strategy finished: strategy=%s symbol=%s signals=%d",
+                strat_name,
+                symbol,
+                len(signals),
+            )
 
             # Basisfelder sicherstellen
             for s in signals:
@@ -113,6 +147,10 @@ def run_watchlist_analysis(
             all_signals.extend(signals)
 
     if all_signals:
+        logger.info("Persisting %d signals", len(all_signals))
         signal_repo.save_signals(all_signals)
+        logger.info("Engine run completed: signals_total=%d", len(all_signals))
+    else:
+        logger.info("Engine run completed: signals_total=0")
 
     return all_signals
