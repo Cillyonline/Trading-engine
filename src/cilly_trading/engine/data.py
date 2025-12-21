@@ -8,6 +8,7 @@ Aktien (über Yahoo Finance) und Krypto (über Binance via CCXT) lädt.
 from __future__ import annotations
 
 import logging
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Final, Literal
 
@@ -17,9 +18,23 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+# yfinance FutureWarning (auto_adjust default) gezielt ausblenden (Noise, kein MVP-Value)
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=r".*YF\.download\(\) has changed argument auto_adjust default to True.*",
+)
+
 MarketType = Literal["stock", "crypto"]
 
-REQUIRED_COLS: Final[tuple[str, ...]] = ("timestamp", "open", "high", "low", "close", "volume")
+REQUIRED_COLS: Final[tuple[str, ...]] = (
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+)
 
 
 def _utc_now() -> datetime:
@@ -27,7 +42,10 @@ def _utc_now() -> datetime:
 
 
 def _empty_ohlcv() -> pd.DataFrame:
-    # MVP-konform: leeres DF signalisiert "no data" / "error", ohne Engine zu crashen
+    """
+    MVP-konform: leeres DataFrame signalisiert "no data" oder Provider-Fehler.
+    Die Engine darf dadurch niemals crashen.
+    """
     return pd.DataFrame(columns=list(REQUIRED_COLS))
 
 
@@ -38,11 +56,12 @@ def _validate_and_normalize_ohlcv(
     source: str,
 ) -> pd.DataFrame:
     """
-    Normalisiert und validiert das OHLCV-DataFrame.
+    Validiert und normalisiert ein OHLCV-DataFrame auf das Canonical-Schema.
 
-    Erwartetes Schema: ["timestamp", "open", "high", "low", "close", "volume"]
-    - timestamp: tz-aware UTC datetime
-    - keine Exceptions nach außen (gibt leeres DF zurück bei Ungültigkeit)
+    Erwartet Spalten:
+    ["timestamp", "open", "high", "low", "close", "volume"]
+
+    Gibt bei Ungültigkeit immer ein leeres DataFrame zurück.
     """
     if df is None or df.empty:
         logger.warning("No data (empty df) from %s for symbol=%s", source, symbol)
@@ -63,24 +82,23 @@ def _validate_and_normalize_ohlcv(
 
     # timestamp -> datetime UTC
     try:
-        ts = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
+        out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
     except Exception:
         logger.exception("Failed to parse timestamp from %s for symbol=%s", source, symbol)
         return _empty_ohlcv()
 
-    out["timestamp"] = ts
     out = out.dropna(subset=["timestamp"])
     if out.empty:
         logger.warning("All timestamps invalid from %s for symbol=%s", source, symbol)
         return _empty_ohlcv()
 
-    # OHLCV numerisch machen (robust)
+    # OHLCV numerisch machen
     for col in ("open", "high", "low", "close", "volume"):
         out[col] = pd.to_numeric(out[col], errors="coerce")
 
-    # Wenn OHLC komplett NaN sind -> ungültig
-    ohlc_all_nan = out[["open", "high", "low", "close"]].isna().all(axis=1)
-    out = out.loc[~ohlc_all_nan].copy()
+    # Zeilen verwerfen, bei denen OHLC komplett NaN sind
+    mask_all_nan = out[["open", "high", "low", "close"]].isna().all(axis=1)
+    out = out.loc[~mask_all_nan].copy()
     if out.empty:
         logger.warning("No valid OHLC rows from %s for symbol=%s", source, symbol)
         return _empty_ohlcv()
@@ -98,38 +116,36 @@ def load_ohlcv(
     """
     Lädt OHLCV-Daten für ein Symbol.
 
-    :param symbol: Ticker (z. B. "AAPL" oder "BTC/USDT")
-    :param timeframe: Zeitrahmen, z. B. "D1"
-    :param lookback_days: Anzahl Tage, die mindestens abgedeckt sein sollen
-    :param market_type: "stock" oder "crypto"
-    :return: DataFrame mit Spalten: ["timestamp", "open", "high", "low", "close", "volume"]
-             Bei Provider-Fehler / No-Data: leeres DataFrame (Engine darf nicht crashen)
+    Bei Provider-Fehlern oder No-Data:
+    - Fehler wird geloggt
+    - leeres DataFrame wird zurückgegeben
+    - Engine darf nicht crashen
     """
     if timeframe.upper() == "D1":
         yf_interval = "1d"
         ccxt_timeframe = "1d"
     else:
-        # MVP: nur Tagesdaten offiziell unterstützt (Programmierfehler => darf knallen)
+        # MVP: nur Tagesdaten offiziell unterstützt
         raise ValueError(f"Unsupported timeframe for MVP: {timeframe}")
 
     if lookback_days <= 0:
-        # Ebenfalls eher Programmierfehler / Request-Fehler
         raise ValueError(f"lookback_days must be > 0, got: {lookback_days}")
 
     end = _utc_now()
-    # etwas Puffer nach hinten, falls es Feiertage etc. gibt
     start = end - timedelta(days=lookback_days * 2)
 
     try:
         if market_type == "stock":
             raw = _load_stock_yahoo(symbol, start, end, yf_interval)
             return _validate_and_normalize_ohlcv(raw, symbol=symbol, source="yfinance")
+
         if market_type == "crypto":
             raw = _load_crypto_binance(symbol, lookback_days, ccxt_timeframe)
             return _validate_and_normalize_ohlcv(raw, symbol=symbol, source="ccxt/binance")
+
         raise ValueError(f"Unsupported market_type: {market_type}")
+
     except Exception:
-        # Wichtigster MVP-Guardrail: ein Symbol darf die Engine nicht stoppen
         logger.exception(
             "Failed to load OHLCV (symbol=%s, timeframe=%s, lookback_days=%s, market_type=%s)",
             symbol,
@@ -148,7 +164,6 @@ def _load_stock_yahoo(
 ) -> pd.DataFrame:
     """
     Lädt OHLCV-Daten für Aktien über Yahoo Finance.
-    Gibt bei Provider-Fehlern ein leeres DF zurück (Logging erfolgt hier).
     """
     try:
         df = yf.download(
@@ -166,8 +181,10 @@ def _load_stock_yahoo(
         logger.warning("No data returned from Yahoo Finance for symbol=%s", symbol)
         return _empty_ohlcv()
 
-    # yfinance liefert typischerweise Spalten: Open, High, Low, Close, Adj Close, Volume
-    # Robuste Umbenennung (case-sensitive Mapping auf bekannte Namen)
+    # yfinance kann MultiIndex-Spalten liefern (Price, Ticker)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
     rename_map = {
         "Open": "open",
         "High": "high",
@@ -178,10 +195,8 @@ def _load_stock_yahoo(
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-    # Index -> timestamp
     df = df.reset_index()
 
-    # Je nach yfinance kann die Index-Spalte unterschiedlich heißen
     if "Date" in df.columns:
         df = df.rename(columns={"Date": "timestamp"})
     elif "Datetime" in df.columns:
@@ -189,7 +204,6 @@ def _load_stock_yahoo(
     elif "index" in df.columns:
         df = df.rename(columns={"index": "timestamp"})
 
-    # Pflichtspalten extrahieren (falls was fehlt -> leer)
     cols = ["timestamp", "open", "high", "low", "close", "volume"]
     if not all(c in df.columns for c in cols):
         logger.warning(
@@ -201,7 +215,6 @@ def _load_stock_yahoo(
 
     df = df[cols].copy()
 
-    # timestamp in UTC normieren (Yahoo liefert meist tz-naive)
     try:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
     except Exception:
@@ -218,7 +231,6 @@ def _load_crypto_binance(
 ) -> pd.DataFrame:
     """
     Lädt OHLCV-Daten für Krypto über Binance (CCXT).
-    Gibt bei Provider-Fehlern ein leeres DF zurück (Logging erfolgt hier).
     """
     try:
         exchange = ccxt.binance()
@@ -226,7 +238,6 @@ def _load_crypto_binance(
         logger.exception("Failed to initialize ccxt binance exchange")
         return _empty_ohlcv()
 
-    # seit X Tagen zurück; CCXT arbeitet mit ms seit Epoch
     since = int((_utc_now() - timedelta(days=lookback_days * 2)).timestamp() * 1000)
 
     try:
@@ -244,7 +255,6 @@ def _load_crypto_binance(
         columns=["timestamp", "open", "high", "low", "close", "volume"],
     )
 
-    # Timestamp von ms in datetime umwandeln
     try:
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
     except Exception:
