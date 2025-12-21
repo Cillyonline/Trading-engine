@@ -72,10 +72,10 @@ def run_watchlist_analysis(
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
 
-    - lädt Kursdaten pro Symbol
-    - lässt alle Strategien laufen
-    - schreibt alle resultierenden Signals in das SignalRepository
-    - gibt die Signals zurück
+    Robustheitsziele (MVP):
+    - Leere DataFrames skippen
+    - Pro Symbol loggen (info/warning)
+    - Engine darf niemals abbrechen
     """
     logger.info(
         "Engine run started: symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
@@ -89,66 +89,122 @@ def run_watchlist_analysis(
     all_signals: List[Signal] = []
 
     for symbol in symbols:
-        logger.debug(
-            "Loading data for symbol=%s market_type=%s lookback_days=%d timeframe=%s",
-            symbol,
-            engine_config.market_type,
-            engine_config.lookback_days,
-            engine_config.timeframe,
-        )
+        logger.info("Symbol analysis start: symbol=%s", symbol)
 
         try:
-            df = load_ohlcv(
-                symbol=symbol,
-                timeframe=engine_config.timeframe,
-                lookback_days=engine_config.lookback_days,
-                market_type=engine_config.market_type,  # "stock" | "crypto"
+            logger.debug(
+                "Loading data for symbol=%s market_type=%s lookback_days=%d timeframe=%s",
+                symbol,
+                engine_config.market_type,
+                engine_config.lookback_days,
+                engine_config.timeframe,
             )
-        except Exception:
-            logger.error("Error loading data for symbol=%s", symbol, exc_info=True)
-            continue
-
-        for strategy in strategies:
-            strat_name = getattr(strategy, "name", strategy.__class__.__name__)
-            strat_config = strategy_configs.get(strat_name, {})
-
-            logger.debug("Running strategy=%s for symbol=%s", strat_name, symbol)
 
             try:
-                signals = strategy.generate_signals(df, strat_config)
+                df = load_ohlcv(
+                    symbol=symbol,
+                    timeframe=engine_config.timeframe,
+                    lookback_days=engine_config.lookback_days,
+                    market_type=engine_config.market_type,
+                )
             except Exception:
-                # MVP: Fehler in einer Strategie sollen nicht die gesamte Engine stoppen
-                logger.error(
-                    "Error in strategy=%s for symbol=%s",
-                    strat_name,
+                logger.error("Error loading data for symbol=%s", symbol, exc_info=True)
+                continue
+
+            # Leere / fehlende Daten sauber skippen
+            if df is None or getattr(df, "empty", False):
+                logger.warning(
+                    "Skipping symbol due to empty OHLCV data: symbol=%s timeframe=%s lookback_days=%d market_type=%s",
                     symbol,
-                    exc_info=True,
+                    engine_config.timeframe,
+                    engine_config.lookback_days,
+                    engine_config.market_type,
                 )
                 continue
 
+            symbol_signals_count = 0
+
+            for strategy in strategies:
+                strat_name = getattr(strategy, "name", strategy.__class__.__name__)
+                strat_config = strategy_configs.get(strat_name, {})
+
+                logger.debug("Running strategy=%s for symbol=%s", strat_name, symbol)
+
+                try:
+                    signals = strategy.generate_signals(df, strat_config)
+                except Exception:
+                    # Fehler in einer Strategie dürfen die Engine nicht stoppen
+                    logger.error(
+                        "Error in strategy=%s for symbol=%s",
+                        strat_name,
+                        symbol,
+                        exc_info=True,
+                    )
+                    continue
+
+                # Defensive: Strategie liefert None oder leere Liste
+                if not signals:
+                    logger.info(
+                        "Strategy finished: strategy=%s symbol=%s signals=0",
+                        strat_name,
+                        symbol,
+                    )
+                    continue
+
+                logger.info(
+                    "Strategy finished: strategy=%s symbol=%s signals=%d",
+                    strat_name,
+                    symbol,
+                    len(signals),
+                )
+
+                for s in signals:
+                    try:
+                        s.setdefault("symbol", symbol)
+                        s.setdefault("strategy", strat_name)
+                        s.setdefault("timestamp", _now_iso())
+                        s.setdefault("timeframe", engine_config.timeframe)
+                        s.setdefault("market_type", engine_config.market_type)
+                        s.setdefault("data_source", engine_config.data_source)
+                        s.setdefault("direction", "long")
+                    except Exception:
+                        logger.error(
+                            "Invalid signal object from strategy=%s for symbol=%s (skipping signal)",
+                            strat_name,
+                            symbol,
+                            exc_info=True,
+                        )
+                        continue
+
+                all_signals.extend(signals)
+                symbol_signals_count += len(signals)
+
             logger.info(
-                "Strategy finished: strategy=%s symbol=%s signals=%d",
-                strat_name,
+                "Symbol analysis done: symbol=%s signals=%d",
                 symbol,
-                len(signals),
+                symbol_signals_count,
             )
 
-            # Basisfelder sicherstellen
-            for s in signals:
-                s.setdefault("symbol", symbol)
-                s.setdefault("strategy", strat_name)
-                s.setdefault("timestamp", _now_iso())
-                s.setdefault("timeframe", engine_config.timeframe)
-                s.setdefault("market_type", engine_config.market_type)
-                # Informativ, passt zu deinem Datenmodell
-                s.setdefault("data_source", engine_config.data_source)
-                s.setdefault("direction", "long")
-
-            all_signals.extend(signals)
+        except Exception:
+            # Letzter Schutzschirm: ein Symbol darf die Engine nie stoppen
+            logger.error(
+                "Unexpected error while processing symbol=%s",
+                symbol,
+                exc_info=True,
+            )
+            continue
 
     if all_signals:
         logger.info("Persisting %d signals", len(all_signals))
-        signal_repo.save_signals(all_signals)
+        try:
+            signal_repo.save_signals(all_signals)
+        except Exception:
+            # Persistenzfehler dürfen die Engine nicht abbrechen
+            logger.error(
+                "Error persisting signals (signals_total=%d)",
+                len(all_signals),
+                exc_info=True,
+            )
         logger.info("Engine run completed: signals_total=%d", len(all_signals))
     else:
         logger.info("Engine run completed: signals_total=0")
