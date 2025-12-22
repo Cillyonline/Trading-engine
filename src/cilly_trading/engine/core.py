@@ -126,6 +126,16 @@ def run_watchlist_analysis(
                 )
                 continue
 
+            # --- I-016: Defensive Handling ---
+            # Strategy darf None nicht liefern, aber Engine muss robust bleiben
+            if signals is None:
+                logger.warning(
+                    "Strategy returned None: strategy=%s symbol=%s -> treating as empty list",
+                    strat_name,
+                    symbol,
+                )
+                signals = []
+
             logger.info(
                 "Strategy finished: strategy=%s symbol=%s signals=%d",
                 strat_name,
@@ -140,7 +150,6 @@ def run_watchlist_analysis(
                 s.setdefault("timestamp", _now_iso())
                 s.setdefault("timeframe", engine_config.timeframe)
                 s.setdefault("market_type", engine_config.market_type)
-                # Informativ, passt zu deinem Datenmodell
                 s.setdefault("data_source", engine_config.data_source)
                 s.setdefault("direction", "long")
 
@@ -148,7 +157,15 @@ def run_watchlist_analysis(
 
     if all_signals:
         logger.info("Persisting %d signals", len(all_signals))
-        signal_repo.save_signals(all_signals)
+        try:
+            signal_repo.save_signals(all_signals)
+        except Exception:
+            # I-016: Repository-Fehler dürfen Engine nicht abbrechen
+            logger.error(
+                "Error persisting signals (signals_total=%d) - continuing without persistence",
+                len(all_signals),
+                exc_info=True,
+            )
         logger.info("Engine run completed: signals_total=%d", len(all_signals))
     else:
         logger.info("Engine run completed: signals_total=0")
