@@ -1,4 +1,6 @@
 # Cilly Trading Engine
 
-MVP v1 – Engine → SQLite → API → Trading Desk
-Siehe `docs/mvp_v1.md` für die vollständige Spezifikation.
+MVP v1 – Engine → SQLite → API → Trading Desk  
+
+- Core architecture and scope: `docs/mvp_v1.md`
+- Strategy configuration schema (RSI2, Turtle): `docs/strategy-configs.md`
