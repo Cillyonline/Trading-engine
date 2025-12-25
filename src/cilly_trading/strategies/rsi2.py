@@ -21,6 +21,7 @@ import pandas as pd
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
 from cilly_trading.indicators.rsi import rsi
+from cilly_trading.strategies.config_schema import normalize_rsi2_config
 
 
 @dataclass
@@ -58,15 +59,17 @@ class Rsi2Strategy(BaseStrategy):
         df: pd.DataFrame,
         config: Dict[str, Any],
     ) -> List[Signal]:
+        if df.empty:
+            return []
+
+        config = normalize_rsi2_config(config)
+
         # Konfiguration aus Dict in Rsi2Config überführen (mit Defaults)
         cfg = Rsi2Config(
             rsi_period=int(config.get("rsi_period", 2)),
             oversold_threshold=float(config.get("oversold_threshold", 10.0)),
             min_score=float(config.get("min_score", 20.0)),
         )
-
-        if df.empty:
-            return []
 
         # Sicherstellen, dass die notwendigen Spalten existieren
         if "close" not in df.columns:
