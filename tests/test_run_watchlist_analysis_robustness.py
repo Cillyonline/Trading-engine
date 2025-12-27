@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -144,3 +145,65 @@ def test_strategy_returns_none_no_crash(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert isinstance(result, list)
     assert result == []
+
+
+def test_unknown_strategy_config_keys_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def _ok(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        return _df_minimal()
+
+    class StrategyRecordsConfig:
+        name = "RSI2"
+
+        def generate_signals(self, df: Any, config: Dict[str, Any]) -> List[dict]:
+            return []
+
+    monkeypatch.setattr("cilly_trading.engine.core.load_ohlcv", _ok)
+
+    repo = DummyRepo()
+    caplog.set_level(logging.WARNING, logger="cilly_trading.engine.core")
+    result = run_watchlist_analysis(
+        symbols=["AAPL"],
+        strategies=[StrategyRecordsConfig()],
+        engine_config=EngineConfig(),
+        strategy_configs={"RSI2": {"unknown_key": 123}},
+        signal_repo=repo,
+    )
+
+    assert isinstance(result, list)
+    assert "Unknown config keys for strategy=RSI2" in caplog.text
+    assert "unknown_key" in caplog.text
+
+
+def test_missing_strategy_config_defaults_to_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _ok(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        return _df_minimal()
+
+    class StrategyRecordsConfig:
+        name = "RSI2"
+
+        def __init__(self) -> None:
+            self.last_config: Dict[str, Any] | None = None
+
+        def generate_signals(self, df: Any, config: Dict[str, Any]) -> List[dict]:
+            self.last_config = config
+            return []
+
+    monkeypatch.setattr("cilly_trading.engine.core.load_ohlcv", _ok)
+
+    repo = DummyRepo()
+    strategy = StrategyRecordsConfig()
+    result = run_watchlist_analysis(
+        symbols=["AAPL"],
+        strategies=[strategy],
+        engine_config=EngineConfig(),
+        strategy_configs={"RSI2": None},
+        signal_repo=repo,
+    )
+
+    assert isinstance(result, list)
+    assert strategy.last_config == {}
