@@ -12,6 +12,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol, List, Dict, Any
+from collections.abc import Mapping
 
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
@@ -19,6 +20,38 @@ from cilly_trading.engine.data import load_ohlcv
 
 
 logger = logging.getLogger(__name__)
+
+
+STRATEGY_CONFIG_KEYS: Dict[str, set[str]] = {
+    "RSI2": {"rsi_period", "oversold_threshold", "min_score"},
+    "TURTLE": {"breakout_lookback", "proximity_threshold_pct", "min_score"},
+}
+
+
+def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, Any]:
+    if raw_config is None:
+        normalized: Dict[str, Any] = {}
+    elif isinstance(raw_config, Mapping):
+        normalized = dict(raw_config)
+    else:
+        logger.warning(
+            "Invalid strategy config type for strategy=%s (expected mapping, got %s); using empty config",
+            strat_name,
+            type(raw_config).__name__,
+        )
+        normalized = {}
+
+    allowed_keys = STRATEGY_CONFIG_KEYS.get(strat_name)
+    if allowed_keys:
+        unknown_keys = sorted(set(normalized.keys()) - allowed_keys)
+        if unknown_keys:
+            logger.warning(
+                "Unknown config keys for strategy=%s: %s",
+                strat_name,
+                ", ".join(unknown_keys),
+            )
+
+    return normalized
 
 
 @dataclass
@@ -86,6 +119,15 @@ def run_watchlist_analysis(
         engine_config.market_type,
     )
 
+    if not isinstance(strategy_configs, Mapping):
+        logger.warning(
+            "Invalid strategy_configs type (expected mapping, got %s); using empty configs",
+            type(strategy_configs).__name__,
+        )
+        strategy_configs_map: Mapping[str, Any] = {}
+    else:
+        strategy_configs_map = strategy_configs
+
     all_signals: List[Signal] = []
 
     for symbol in symbols:
@@ -126,7 +168,8 @@ def run_watchlist_analysis(
 
             for strategy in strategies:
                 strat_name = getattr(strategy, "name", strategy.__class__.__name__)
-                strat_config = strategy_configs.get(strat_name, {})
+                raw_config = strategy_configs_map.get(strat_name)
+                strat_config = _normalize_strategy_config(strat_name, raw_config)
 
                 logger.debug("Running strategy=%s for symbol=%s", strat_name, symbol)
 
