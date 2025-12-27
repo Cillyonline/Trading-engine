@@ -114,6 +114,8 @@ class ScreenerRequest(BaseModel):
 
 class ScreenerSymbolResult(BaseModel):
     symbol: str
+    score: Optional[float] = None
+    signal_strength: Optional[float] = None
     setups: List[Dict[str, Any]]
 
 
@@ -286,11 +288,22 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     logger.info("Screener engine run finished: total_signals=%d", len(signals))
 
     # Nur SETUP-Signale mit Score >= min_score
-    setup_signals = [
-        s
-        for s in signals
-        if s.get("stage") == "setup" and float(s.get("score", 0.0)) >= req.min_score
-    ]
+    def _coerce_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    setup_signals = []
+    for s in signals:
+        if s.get("stage") != "setup":
+            continue
+        score_value = _coerce_float(s.get("score"))
+        if (score_value or 0.0) < req.min_score:
+            continue
+        setup_signals.append(s)
 
     # Nach Symbol gruppieren
     by_symbol: Dict[str, List[Dict[str, Any]]] = {}
@@ -303,6 +316,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         setup_info: Dict[str, Any] = {
             "strategy": s.get("strategy"),
             "score": s.get("score"),
+            "signal_strength": s.get("signal_strength"),
             "stage": s.get("stage"),
             "confirmation_rule": s.get("confirmation_rule"),
             "entry_zone": s.get("entry_zone"),
@@ -312,15 +326,33 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
 
         by_symbol.setdefault(sym, []).append(setup_info)
 
-    symbol_results = [
-        ScreenerSymbolResult(symbol=symbol, setups=setups) for symbol, setups in by_symbol.items()
-    ]
+    def _max_numeric(values: List[Optional[float]]) -> Optional[float]:
+        numeric_values = [value for value in values if value is not None]
+        return max(numeric_values) if numeric_values else None
 
-    # Optional: nach höchstem Score sortieren
-    symbol_results.sort(
-        key=lambda item: max((s.get("score", 0.0) for s in item.setups), default=0.0),
-        reverse=True,
-    )
+    symbol_results = []
+    for symbol, setups in by_symbol.items():
+        score = _max_numeric([_coerce_float(s.get("score")) for s in setups])
+        signal_strength = _max_numeric([_coerce_float(s.get("signal_strength")) for s in setups])
+        symbol_results.append(
+            ScreenerSymbolResult(
+                symbol=symbol,
+                score=score,
+                signal_strength=signal_strength,
+                setups=setups,
+            )
+        )
+
+    def _sorting_key(item: ScreenerSymbolResult) -> tuple:
+        # Missing numeric values are normalized to -inf to guarantee deterministic ordering.
+        score = item.score if item.score is not None else float("-inf")
+        signal_strength = (
+            item.signal_strength if item.signal_strength is not None else float("-inf")
+        )
+        symbol = item.symbol or ""
+        return (-score, -signal_strength, symbol)
+
+    symbol_results.sort(key=_sorting_key)
 
     logger.info(
         "Screener result prepared: setup_signals=%d symbols_returned=%d",
