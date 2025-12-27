@@ -130,6 +130,10 @@ def run_watchlist_analysis(
 
     all_signals: List[Signal] = []
     ordered_symbols = sorted(symbols)
+    ordered_strategies = sorted(
+        strategies,
+        key=lambda s: getattr(s, "name", s.__class__.__name__),
+    )
 
     for symbol in ordered_symbols:
         logger.info("Symbol analysis start: symbol=%s", symbol)
@@ -167,7 +171,7 @@ def run_watchlist_analysis(
 
             symbol_signals_count = 0
 
-            for strategy in strategies:
+            for strategy in ordered_strategies:
                 strat_name = getattr(strategy, "name", strategy.__class__.__name__)
                 raw_config = strategy_configs_map.get(strat_name)
                 strat_config = _normalize_strategy_config(strat_name, raw_config)

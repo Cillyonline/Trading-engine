@@ -38,6 +38,20 @@ class StrategyReturnsOne:
         return [{"score": 50.0, "stage": "setup"}]
 
 
+class StrategyReturnsOneAlpha:
+    name = "AAA_STRAT"
+
+    def generate_signals(self, df: Any, config: Dict[str, Any]) -> List[dict]:
+        return [{"score": 60.0, "stage": "setup"}]
+
+
+class StrategyReturnsOneBeta:
+    name = "BBB_STRAT"
+
+    def generate_signals(self, df: Any, config: Dict[str, Any]) -> List[dict]:
+        return [{"score": 40.0, "stage": "setup"}]
+
+
 def test_screener_response_schema_and_ordering(monkeypatch) -> None:
     signals = [
         {
@@ -149,3 +163,29 @@ def test_run_watchlist_analysis_symbol_failure_isolated(monkeypatch) -> None:
     )
 
     assert [signal["symbol"] for signal in result] == ["AAA", "BBB"]
+
+
+def test_run_watchlist_analysis_deterministic_order_multiple_strategies(
+    monkeypatch,
+) -> None:
+    def _ok(*args: Any, **kwargs: Any) -> pd.DataFrame:
+        return _df_minimal()
+
+    monkeypatch.setattr("cilly_trading.engine.core.load_ohlcv", _ok)
+
+    repo = DummyRepo()
+    result = run_watchlist_analysis(
+        symbols=["BBB", "AAA"],
+        strategies=[StrategyReturnsOneBeta(), StrategyReturnsOneAlpha()],
+        engine_config=EngineConfig(),
+        strategy_configs={},
+        signal_repo=repo,
+    )
+
+    assert [signal["symbol"] for signal in result] == ["AAA", "AAA", "BBB", "BBB"]
+
+    aaa_strategies = [signal["strategy"] for signal in result[:2]]
+    bbb_strategies = [signal["strategy"] for signal in result[2:]]
+
+    assert aaa_strategies == ["AAA_STRAT", "BBB_STRAT"]
+    assert bbb_strategies == ["AAA_STRAT", "BBB_STRAT"]
