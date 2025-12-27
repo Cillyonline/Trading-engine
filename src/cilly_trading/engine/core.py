@@ -129,8 +129,9 @@ def run_watchlist_analysis(
         strategy_configs_map = strategy_configs
 
     all_signals: List[Signal] = []
+    ordered_symbols = sorted(symbols)
 
-    for symbol in symbols:
+    for symbol in ordered_symbols:
         logger.info("Symbol analysis start: symbol=%s", symbol)
 
         try:
