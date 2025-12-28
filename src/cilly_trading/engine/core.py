@@ -58,36 +58,21 @@ def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, An
 class EngineConfig:
     """
     Minimale Konfiguration für die Engine.
-
-    MVP-Fokus:
-    - Tagesdaten (D1)
-    - Lookback in Tagen
-    - Markt-Typ (Aktie/Krypto)
     """
     timeframe: str = "D1"
     lookback_days: int = 200
-    market_type: str = "stock"   # "stock" oder "crypto"
-    data_source: str = "yahoo"   # informativ; wird aktuell im Daten-Layer abgeleitet
+    market_type: str = "stock"
+    data_source: str = "yahoo"
 
 
 class BaseStrategy(Protocol):
-    """
-    Interface, das jede Strategie im MVP implementieren muss.
-    """
-
-    name: str  # z. B. "RSI2" oder "TURTLE"
+    name: str
 
     def generate_signals(
         self,
         df,
         config: Dict[str, Any],
     ) -> List[Signal]:
-        """
-        Erzeugt eine Liste von Signals auf Basis der übergebenen Kursdaten.
-
-        df: DataFrame mit Spalten ["timestamp", "open", "high", "low", "close", "volume"]
-        config: Strategiekonfiguration (MVP: einfacher Dict)
-        """
         ...
 
 
@@ -104,11 +89,6 @@ def run_watchlist_analysis(
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
-
-    Robustheitsziele (MVP):
-    - Leere DataFrames skippen
-    - Pro Symbol loggen (info/warning)
-    - Engine darf niemals abbrechen
     """
     logger.info(
         "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
@@ -167,7 +147,6 @@ def run_watchlist_analysis(
                 )
                 continue
 
-            # Leere / fehlende Daten sauber skippen
             if df is None or getattr(df, "empty", False):
                 logger.warning(
                     "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s lookback_days=%d market_type=%s",
@@ -195,7 +174,6 @@ def run_watchlist_analysis(
                 try:
                     signals = strategy.generate_signals(df, strat_config)
                 except Exception:
-                    # Fehler in einer Strategie dürfen die Engine nicht stoppen
                     logger.error(
                         "Error in strategy: component=engine strategy=%s symbol=%s timeframe=%s",
                         strat_name,
@@ -205,7 +183,6 @@ def run_watchlist_analysis(
                     )
                     continue
 
-                # Defensive: Strategie liefert None oder leere Liste
                 if not signals:
                     logger.debug(
                         "Strategy finished: component=engine strategy=%s symbol=%s timeframe=%s signals=0",
@@ -253,7 +230,6 @@ def run_watchlist_analysis(
             )
 
         except Exception:
-            # Letzter Schutzschirm: ein Symbol darf die Engine nie stoppen
             logger.error(
                 "Unexpected error while processing symbol: component=engine symbol=%s timeframe=%s",
                 symbol,
@@ -270,7 +246,6 @@ def run_watchlist_analysis(
         try:
             signal_repo.save_signals(all_signals)
         except Exception:
-            # Persistenzfehler dürfen die Engine nicht abbrechen
             logger.error(
                 "Error persisting signals: component=engine signals_total=%d",
                 len(all_signals),
