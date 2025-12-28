@@ -95,7 +95,6 @@ def test_strategy_raises_engine_continues(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_repo_save_signals_raises_run_completes(monkeypatch: pytest.MonkeyPatch) -> None:
     # Acceptance criterion: repo.save_signals raises -> run completes (no crash)
-    # This test will currently FAIL if run_watchlist_analysis doesn't catch repo exceptions.
     def _ok(*args: Any, **kwargs: Any) -> pd.DataFrame:
         return _df_minimal()
 
@@ -122,7 +121,6 @@ def test_repo_save_signals_raises_run_completes(monkeypatch: pytest.MonkeyPatch)
 
 def test_strategy_returns_none_no_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     # Acceptance criterion: strategy returns None -> no crash
-    # This test will currently FAIL if the engine assumes signals is a list.
     def _ok(*args: Any, **kwargs: Any) -> pd.DataFrame:
         return _df_minimal()
 
@@ -164,6 +162,7 @@ def test_unknown_strategy_config_keys_logged(
 
     repo = DummyRepo()
     caplog.set_level(logging.WARNING, logger="cilly_trading.engine.core")
+
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyRecordsConfig()],
@@ -173,7 +172,9 @@ def test_unknown_strategy_config_keys_logged(
     )
 
     assert isinstance(result, list)
-    assert "Unknown config keys for strategy=RSI2" in caplog.text
+    assert "Unknown config keys:" in caplog.text
+    assert "component=engine" in caplog.text
+    assert "strategy=RSI2" in caplog.text
     assert "unknown_key" in caplog.text
 
 
