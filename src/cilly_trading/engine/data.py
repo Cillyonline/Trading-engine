@@ -190,7 +190,18 @@ def _load_stock_yahoo(
         )
         return _empty_ohlcv()
 
-    return df[list(REQUIRED_COLS)].copy()
+    df = df[cols].copy()
+
+    try:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
+    except Exception:
+        logger.exception(
+            "Failed to convert Yahoo timestamp: component=data symbol=%s",
+            symbol,
+        )
+        return _empty_ohlcv()
+
+    return df
 
 
 def _load_crypto_binance(
@@ -201,8 +212,9 @@ def _load_crypto_binance(
         exchange = ccxt.binance()
     except Exception:
         logger.exception(
-            "Failed to initialize ccxt binance exchange: component=data symbol=%s",
+            "Failed to initialize ccxt binance exchange: component=data symbol=%s timeframe=%s",
             symbol,
+            timeframe,
         )
         return _empty_ohlcv()
 
@@ -212,15 +224,17 @@ def _load_crypto_binance(
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe="1d", since=since)
     except Exception:
         logger.exception(
-            "ccxt fetch_ohlcv failed: component=data symbol=%s",
+            "ccxt fetch_ohlcv failed: component=data symbol=%s timeframe=%s",
             symbol,
+            timeframe,
         )
         return _empty_ohlcv()
 
     if not ohlcv:
         logger.warning(
-            "No data returned from Binance: component=data symbol=%s",
+            "No data returned from Binance: component=data symbol=%s timeframe=%s",
             symbol,
+            timeframe,
         )
         return _empty_ohlcv()
 
@@ -228,3 +242,15 @@ def _load_crypto_binance(
         ohlcv,
         columns=["timestamp", "open", "high", "low", "close", "volume"],
     )
+
+    try:
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
+    except Exception:
+        logger.exception(
+            "Failed to convert Binance timestamps: component=data symbol=%s timeframe=%s",
+            symbol,
+            timeframe,
+        )
+        return _empty_ohlcv()
+
+    return df

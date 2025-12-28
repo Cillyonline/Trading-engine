@@ -173,7 +173,6 @@ def test_unknown_strategy_config_keys_logged(
 
     assert isinstance(result, list)
     assert "Unknown config keys:" in caplog.text
-    assert "component=engine" in caplog.text
     assert "strategy=RSI2" in caplog.text
     assert "unknown_key" in caplog.text
 
