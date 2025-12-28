@@ -35,7 +35,7 @@ def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, An
         normalized = dict(raw_config)
     else:
         logger.warning(
-            "Invalid strategy config type for strategy=%s (expected mapping, got %s); using empty config",
+            "Invalid strategy config type: component=engine strategy=%s (expected mapping, got %s); using empty config",
             strat_name,
             type(raw_config).__name__,
         )
@@ -46,7 +46,7 @@ def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, An
         unknown_keys = sorted(set(normalized.keys()) - allowed_keys)
         if unknown_keys:
             logger.warning(
-                "Unknown config keys for strategy=%s: %s",
+                "Unknown config keys: component=engine strategy=%s keys=%s",
                 strat_name,
                 ", ".join(unknown_keys),
             )
@@ -111,7 +111,7 @@ def run_watchlist_analysis(
     - Engine darf niemals abbrechen
     """
     logger.info(
-        "Engine run started: symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
+        "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
         len(symbols),
         len(strategies),
         engine_config.timeframe,
@@ -121,7 +121,7 @@ def run_watchlist_analysis(
 
     if not isinstance(strategy_configs, Mapping):
         logger.warning(
-            "Invalid strategy_configs type (expected mapping, got %s); using empty configs",
+            "Invalid strategy_configs type: component=engine (expected mapping, got %s); using empty configs",
             type(strategy_configs).__name__,
         )
         strategy_configs_map: Mapping[str, Any] = {}
@@ -136,11 +136,15 @@ def run_watchlist_analysis(
     )
 
     for symbol in ordered_symbols:
-        logger.info("Symbol analysis start: symbol=%s", symbol)
+        logger.info(
+            "Symbol analysis start: component=engine symbol=%s timeframe=%s",
+            symbol,
+            engine_config.timeframe,
+        )
 
         try:
             logger.debug(
-                "Loading data for symbol=%s market_type=%s lookback_days=%d timeframe=%s",
+                "Loading data: component=engine symbol=%s market_type=%s lookback_days=%d timeframe=%s",
                 symbol,
                 engine_config.market_type,
                 engine_config.lookback_days,
@@ -155,13 +159,18 @@ def run_watchlist_analysis(
                     market_type=engine_config.market_type,
                 )
             except Exception:
-                logger.error("Error loading data for symbol=%s", symbol, exc_info=True)
+                logger.error(
+                    "Error loading data: component=engine symbol=%s timeframe=%s",
+                    symbol,
+                    engine_config.timeframe,
+                    exc_info=True,
+                )
                 continue
 
             # Leere / fehlende Daten sauber skippen
             if df is None or getattr(df, "empty", False):
                 logger.warning(
-                    "Skipping symbol due to empty OHLCV data: symbol=%s timeframe=%s lookback_days=%d market_type=%s",
+                    "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s lookback_days=%d market_type=%s",
                     symbol,
                     engine_config.timeframe,
                     engine_config.lookback_days,
@@ -176,33 +185,41 @@ def run_watchlist_analysis(
                 raw_config = strategy_configs_map.get(strat_name)
                 strat_config = _normalize_strategy_config(strat_name, raw_config)
 
-                logger.debug("Running strategy=%s for symbol=%s", strat_name, symbol)
+                logger.debug(
+                    "Running strategy: component=engine strategy=%s symbol=%s timeframe=%s",
+                    strat_name,
+                    symbol,
+                    engine_config.timeframe,
+                )
 
                 try:
                     signals = strategy.generate_signals(df, strat_config)
                 except Exception:
                     # Fehler in einer Strategie dürfen die Engine nicht stoppen
                     logger.error(
-                        "Error in strategy=%s for symbol=%s",
+                        "Error in strategy: component=engine strategy=%s symbol=%s timeframe=%s",
                         strat_name,
                         symbol,
+                        engine_config.timeframe,
                         exc_info=True,
                     )
                     continue
 
                 # Defensive: Strategie liefert None oder leere Liste
                 if not signals:
-                    logger.info(
-                        "Strategy finished: strategy=%s symbol=%s signals=0",
+                    logger.debug(
+                        "Strategy finished: component=engine strategy=%s symbol=%s timeframe=%s signals=0",
                         strat_name,
                         symbol,
+                        engine_config.timeframe,
                     )
                     continue
 
-                logger.info(
-                    "Strategy finished: strategy=%s symbol=%s signals=%d",
+                logger.debug(
+                    "Strategy finished: component=engine strategy=%s symbol=%s timeframe=%s signals=%d",
                     strat_name,
                     symbol,
+                    engine_config.timeframe,
                     len(signals),
                 )
 
@@ -217,9 +234,10 @@ def run_watchlist_analysis(
                         s.setdefault("direction", "long")
                     except Exception:
                         logger.error(
-                            "Invalid signal object from strategy=%s for symbol=%s (skipping signal)",
+                            "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
                             strat_name,
                             symbol,
+                            engine_config.timeframe,
                             exc_info=True,
                         )
                         continue
@@ -228,33 +246,41 @@ def run_watchlist_analysis(
                 symbol_signals_count += len(signals)
 
             logger.info(
-                "Symbol analysis done: symbol=%s signals=%d",
+                "Symbol analysis done: component=engine symbol=%s timeframe=%s signals=%d",
                 symbol,
+                engine_config.timeframe,
                 symbol_signals_count,
             )
 
         except Exception:
             # Letzter Schutzschirm: ein Symbol darf die Engine nie stoppen
             logger.error(
-                "Unexpected error while processing symbol=%s",
+                "Unexpected error while processing symbol: component=engine symbol=%s timeframe=%s",
                 symbol,
+                engine_config.timeframe,
                 exc_info=True,
             )
             continue
 
     if all_signals:
-        logger.info("Persisting %d signals", len(all_signals))
+        logger.info(
+            "Persisting signals: component=engine signals_total=%d",
+            len(all_signals),
+        )
         try:
             signal_repo.save_signals(all_signals)
         except Exception:
             # Persistenzfehler dürfen die Engine nicht abbrechen
             logger.error(
-                "Error persisting signals (signals_total=%d)",
+                "Error persisting signals: component=engine signals_total=%d",
                 len(all_signals),
                 exc_info=True,
             )
-        logger.info("Engine run completed: signals_total=%d", len(all_signals))
+        logger.info(
+            "Engine run completed: component=engine signals_total=%d",
+            len(all_signals),
+        )
     else:
-        logger.info("Engine run completed: signals_total=0")
+        logger.info("Engine run completed: component=engine signals_total=0")
 
     return all_signals

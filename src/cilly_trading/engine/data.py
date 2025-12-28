@@ -64,13 +64,17 @@ def _validate_and_normalize_ohlcv(
     Gibt bei Ungültigkeit immer ein leeres DataFrame zurück.
     """
     if df is None or df.empty:
-        logger.warning("No data (empty df) from %s for symbol=%s", source, symbol)
+        logger.warning(
+            "No data (empty df): component=data source=%s symbol=%s",
+            source,
+            symbol,
+        )
         return _empty_ohlcv()
 
     missing = [c for c in REQUIRED_COLS if c not in df.columns]
     if missing:
         logger.warning(
-            "Invalid OHLCV schema from %s for symbol=%s (missing=%s, columns=%s)",
+            "Invalid OHLCV schema: component=data source=%s symbol=%s missing=%s columns=%s",
             source,
             symbol,
             missing,
@@ -84,12 +88,20 @@ def _validate_and_normalize_ohlcv(
     try:
         out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
     except Exception:
-        logger.exception("Failed to parse timestamp from %s for symbol=%s", source, symbol)
+        logger.exception(
+            "Failed to parse timestamp: component=data source=%s symbol=%s",
+            source,
+            symbol,
+        )
         return _empty_ohlcv()
 
     out = out.dropna(subset=["timestamp"])
     if out.empty:
-        logger.warning("All timestamps invalid from %s for symbol=%s", source, symbol)
+        logger.warning(
+            "All timestamps invalid: component=data source=%s symbol=%s",
+            source,
+            symbol,
+        )
         return _empty_ohlcv()
 
     # OHLCV numerisch machen
@@ -100,7 +112,11 @@ def _validate_and_normalize_ohlcv(
     mask_all_nan = out[["open", "high", "low", "close"]].isna().all(axis=1)
     out = out.loc[~mask_all_nan].copy()
     if out.empty:
-        logger.warning("No valid OHLC rows from %s for symbol=%s", source, symbol)
+        logger.warning(
+            "No valid OHLC rows: component=data source=%s symbol=%s",
+            source,
+            symbol,
+        )
         return _empty_ohlcv()
 
     out = out.sort_values("timestamp").reset_index(drop=True)
@@ -147,7 +163,7 @@ def load_ohlcv(
 
     except Exception:
         logger.exception(
-            "Failed to load OHLCV (symbol=%s, timeframe=%s, lookback_days=%s, market_type=%s)",
+            "Failed to load OHLCV: component=data symbol=%s timeframe=%s lookback_days=%s market_type=%s",
             symbol,
             timeframe,
             lookback_days,
@@ -174,11 +190,17 @@ def _load_stock_yahoo(
             progress=False,
         )
     except Exception:
-        logger.exception("yfinance download failed for symbol=%s", symbol)
+        logger.exception(
+            "yfinance download failed: component=data symbol=%s",
+            symbol,
+        )
         return _empty_ohlcv()
 
     if df is None or df.empty:
-        logger.warning("No data returned from Yahoo Finance for symbol=%s", symbol)
+        logger.warning(
+            "No data returned from Yahoo Finance: component=data symbol=%s",
+            symbol,
+        )
         return _empty_ohlcv()
 
     # yfinance kann MultiIndex-Spalten liefern (Price, Ticker)
@@ -207,7 +229,7 @@ def _load_stock_yahoo(
     cols = ["timestamp", "open", "high", "low", "close", "volume"]
     if not all(c in df.columns for c in cols):
         logger.warning(
-            "Unexpected Yahoo Finance schema for symbol=%s (columns=%s)",
+            "Unexpected Yahoo Finance schema: component=data symbol=%s columns=%s",
             symbol,
             list(df.columns),
         )
@@ -218,7 +240,10 @@ def _load_stock_yahoo(
     try:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
     except Exception:
-        logger.exception("Failed to convert Yahoo timestamp for symbol=%s", symbol)
+        logger.exception(
+            "Failed to convert Yahoo timestamp: component=data symbol=%s",
+            symbol,
+        )
         return _empty_ohlcv()
 
     return df
@@ -235,7 +260,11 @@ def _load_crypto_binance(
     try:
         exchange = ccxt.binance()
     except Exception:
-        logger.exception("Failed to initialize ccxt binance exchange")
+        logger.exception(
+            "Failed to initialize ccxt binance exchange: component=data symbol=%s timeframe=%s",
+            symbol,
+            timeframe,
+        )
         return _empty_ohlcv()
 
     since = int((_utc_now() - timedelta(days=lookback_days * 2)).timestamp() * 1000)
@@ -243,11 +272,19 @@ def _load_crypto_binance(
     try:
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since)
     except Exception:
-        logger.exception("ccxt fetch_ohlcv failed for symbol=%s", symbol)
+        logger.exception(
+            "ccxt fetch_ohlcv failed: component=data symbol=%s timeframe=%s",
+            symbol,
+            timeframe,
+        )
         return _empty_ohlcv()
 
     if not ohlcv:
-        logger.warning("No data returned from Binance for symbol=%s", symbol)
+        logger.warning(
+            "No data returned from Binance: component=data symbol=%s timeframe=%s",
+            symbol,
+            timeframe,
+        )
         return _empty_ohlcv()
 
     df = pd.DataFrame(
@@ -258,7 +295,11 @@ def _load_crypto_binance(
     try:
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
     except Exception:
-        logger.exception("Failed to convert Binance timestamps for symbol=%s", symbol)
+        logger.exception(
+            "Failed to convert Binance timestamps: component=data symbol=%s timeframe=%s",
+            symbol,
+            timeframe,
+        )
         return _empty_ohlcv()
 
     return df
