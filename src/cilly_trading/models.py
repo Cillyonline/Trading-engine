@@ -72,7 +72,7 @@ class SignalReadItemDTO(BaseModel):
     strategy: str
     direction: Direction
     score: float
-    created_at: datetime
+    created_at: str
     stage: Stage
     entry_zone: Optional[EntryZoneDTO] = None
     confirmation_rule: Optional[str] = None

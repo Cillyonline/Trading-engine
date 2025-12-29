@@ -18,8 +18,8 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException
-from pydantic import BaseModel, Field, root_validator
+from fastapi import Depends, FastAPI, HTTPException, Query
+from pydantic import BaseModel, ConfigDict, Field
 
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
@@ -127,6 +127,8 @@ class ScreenerResponse(BaseModel):
 
 
 class SignalsReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", validate_by_name=True)
+
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
@@ -134,20 +136,6 @@ class SignalsReadQuery(BaseModel):
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
-
-    @root_validator
-    def _validate_range(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        from_value = values.get("from_")
-        to_value = values.get("to")
-        if from_value is not None and to_value is not None and from_value > to_value:
-            raise ValueError("from must be less than or equal to to")
-        return values
-
-    class Config:
-        extra = "forbid"
-        allow_population_by_field_name = True
-
-
 
 # --- FastAPI-App initialisieren ---
 
@@ -194,8 +182,30 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
+def _get_signals_query(
+    symbol: Optional[str] = Query(default=None),
+    strategy: Optional[str] = Query(default=None),
+    from_: Optional[datetime] = Query(default=None, alias="from"),
+    to: Optional[datetime] = Query(default=None, alias="to"),
+    sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> SignalsReadQuery:
+    if from_ is not None and to is not None and from_ > to:
+        raise HTTPException(status_code=422, detail="from must be less than or equal to to")
+    return SignalsReadQuery(
+        symbol=symbol,
+        strategy=strategy,
+        from_=from_,
+        to=to,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
 @app.get("/signals", response_model=SignalReadResponseDTO)
-def read_signals(params: SignalsReadQuery = Depends()) -> SignalReadResponseDTO:
+def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
     items, total = signal_repo.read_signals(
         symbol=params.symbol,
         strategy=params.strategy,
