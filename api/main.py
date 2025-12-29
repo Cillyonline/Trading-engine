@@ -3,6 +3,7 @@ FastAPI-Anwendung für die Cilly Trading Engine (MVP).
 
 Enthaltene Endpunkte:
 - GET /health
+- GET /signals
 - POST /strategy/analyze
 - POST /screener/basic
 
@@ -15,15 +16,21 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field, root_validator
 
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
+from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.strategies import Rsi2Strategy, TurtleStrategy
 
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 
 def configure_logging() -> None:
     """
@@ -37,7 +44,6 @@ def configure_logging() -> None:
 
     root_logger = logging.getLogger()
     if root_logger.handlers:
-        # Logging ist bereits konfiguriert (z. B. durch Reload / anderes Setup)
         return
 
     logging.basicConfig(
@@ -50,8 +56,9 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-# --- Pydantic-Modelle für Requests/Responses ---
-
+# ---------------------------------------------------------------------------
+# Pydantic Modelle
+# ---------------------------------------------------------------------------
 
 class StrategyAnalyzeRequest(BaseModel):
     symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
@@ -124,8 +131,39 @@ class ScreenerResponse(BaseModel):
     symbols: List[ScreenerSymbolResult]
 
 
-# --- FastAPI-App initialisieren ---
+class SignalsReadQuery(BaseModel):
+    symbol: Optional[str] = Field(default=None)
+    strategy: Optional[str] = Field(default=None)
 
+    # Query params: ?from=...&to=...
+    from_: Optional[datetime] = Field(default=None, alias="from")
+    to: Optional[datetime] = Field(default=None, alias="to")
+
+    sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
+    limit: int = Field(default=50, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    # Pydantic v2: root_validator ist deprecated, aber MVP-ok.
+    # Wichtig: skip_on_failure=True, sonst PydanticUserError/ImportError.
+    @root_validator(skip_on_failure=True)
+    def _validate_range(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        from_value = values.get("from_")
+        to_value = values.get("to")
+        if from_value is not None and to_value is not None and from_value > to_value:
+            raise ValueError("from must be less than or equal to to")
+        return values
+
+    class Config:
+        extra = "forbid"
+        # Pydantic v2 Fix: allow_population_by_field_name ist deprecated / renamed.
+        # populate_by_name erlaubt, dass FastAPI intern auch "from_" setzen darf,
+        # obwohl der Client "from" nutzt.
+        populate_by_name = True
+
+
+# ---------------------------------------------------------------------------
+# FastAPI App
+# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="Cilly Trading Engine API",
@@ -158,8 +196,9 @@ default_strategy_configs: Dict[str, Dict[str, Any]] = {
 }
 
 
-# --- Endpunkte ---
-
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @app.get("/health")
 def health() -> Dict[str, str]:
@@ -167,6 +206,47 @@ def health() -> Dict[str, str]:
     Einfacher Health-Check-Endpoint.
     """
     return {"status": "ok"}
+
+
+@app.get("/signals", response_model=SignalReadResponseDTO)
+def read_signals(params: SignalsReadQuery = Depends()) -> SignalReadResponseDTO:
+    """
+    Read-Endpoint für gespeicherte Signals (Filter/Sort/Pagination).
+    """
+    items, total = signal_repo.read_signals(
+        symbol=params.symbol,
+        strategy=params.strategy,
+        from_=params.from_,
+        to=params.to,
+        sort=params.sort,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+    response_items: List[SignalReadItemDTO] = []
+    for signal in items:
+        response_items.append(
+            SignalReadItemDTO(
+                symbol=signal["symbol"],
+                strategy=signal["strategy"],
+                direction=signal["direction"],
+                score=signal["score"],
+                created_at=signal["timestamp"],  # DTO erwartet string-safe timestamp
+                stage=signal["stage"],
+                entry_zone=signal.get("entry_zone"),
+                confirmation_rule=signal.get("confirmation_rule"),
+                timeframe=signal["timeframe"],
+                market_type=signal["market_type"],
+                data_source=signal["data_source"],
+            )
+        )
+
+    return SignalReadResponseDTO(
+        items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
 
 
 @app.post("/strategy/analyze", response_model=StrategyAnalyzeResponse)
@@ -296,7 +376,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         except (TypeError, ValueError):
             return None
 
-    setup_signals = []
+    setup_signals: List[Dict[str, Any]] = []
     for s in signals:
         if s.get("stage") != "setup":
             continue
@@ -330,7 +410,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         numeric_values = [value for value in values if value is not None]
         return max(numeric_values) if numeric_values else None
 
-    symbol_results = []
+    symbol_results: List[ScreenerSymbolResult] = []
     for symbol, setups in by_symbol.items():
         score = _max_numeric([_coerce_float(s.get("score")) for s in setups])
         signal_strength = _max_numeric([_coerce_float(s.get("signal_strength")) for s in setups])
@@ -346,9 +426,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     def _sorting_key(item: ScreenerSymbolResult) -> tuple:
         # Missing numeric values are normalized to -inf to guarantee deterministic ordering.
         score = item.score if item.score is not None else float("-inf")
-        signal_strength = (
-            item.signal_strength if item.signal_strength is not None else float("-inf")
-        )
+        signal_strength = item.signal_strength if item.signal_strength is not None else float("-inf")
         symbol = item.symbol or ""
         return (-score, -signal_strength, symbol)
 
@@ -362,7 +440,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
 
     return ScreenerResponse(
         market_type=req.market_type,
-        symbols=symbol_results,
+        symbols=symbols_results if False else symbol_results,  # keep for clarity
     )
 
 
