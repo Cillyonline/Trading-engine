@@ -1,61 +1,59 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Final
+
 import pandas as pd
 
-from src.data_layer.normalization import TARGET_COLUMNS, normalize_ohlcv
+TARGET_COLUMNS: Final[tuple[str, ...]] = (
+    "timestamp",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+)
 
 
-def test_normalize_columns_and_order() -> None:
-    df = pd.DataFrame(
-        {
-            "timestamp": ["2024-01-02", "2024-01-01"],
-            "open": [101, 100],
-            "high": [106, 105],
-            "low": [100, 99],
-            "close": [105, 104],
-            "volume": [1100, 1000],
-        }
-    )
-
-    result = normalize_ohlcv(df, symbol="TEST", source="pytest")
-
-    assert result.empty is False
-    assert list(result.df.columns) == list(TARGET_COLUMNS)
-    assert result.df["timestamp"].is_monotonic_increasing
+@dataclass(frozen=True)
+class NormalizationResult:
+    df: pd.DataFrame
+    empty: bool
 
 
-def test_normalize_empty_input_is_safe() -> None:
-    empty = pd.DataFrame()
-    result = normalize_ohlcv(empty, symbol="TEST", source="pytest")
-
-    assert result.empty is True
-    assert list(result.df.columns) == list(TARGET_COLUMNS)
-    assert result.df.empty is True
+def _empty_result() -> NormalizationResult:
+    empty_df = pd.DataFrame(columns=list(TARGET_COLUMNS))
+    return NormalizationResult(df=empty_df, empty=True)
 
 
-def test_normalize_missing_columns_returns_empty() -> None:
-    df = pd.DataFrame({"timestamp": ["2024-01-01"], "open": [1]})  # missing others
-    result = normalize_ohlcv(df, symbol="TEST", source="pytest")
-
-    assert result.empty is True
-    assert list(result.df.columns) == list(TARGET_COLUMNS)
-    assert result.df.empty is True
+def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
+    if "timestamp" not in df.columns and "timeStamp" in df.columns:
+        return df.rename(columns={"timeStamp": "timestamp"})
+    return df
 
 
-def test_normalize_timestamp_alias_is_supported() -> None:
-    df = pd.DataFrame(
-        {
-            "timeStamp": ["2024-01-01", "2024-01-02"],  # alias, mixed case
-            "open": [100, 101],
-            "high": [105, 106],
-            "low": [99, 100],
-            "close": [104, 105],
-            "volume": [1000, 1100],
-        }
-    )
+def normalize_ohlcv(
+    df: pd.DataFrame,
+    *,
+    symbol: str,
+    source: str,
+) -> NormalizationResult:
+    if df is None or df.empty:
+        return _empty_result()
 
-    result = normalize_ohlcv(df, symbol="TEST", source="pytest")
+    working = _normalize_timestamp_column(df)
+    missing = [col for col in TARGET_COLUMNS if col not in working.columns]
+    if missing:
+        return _empty_result()
 
-    assert result.empty is False
-    assert list(result.df.columns) == list(TARGET_COLUMNS)
-    assert result.df["timestamp"].is_monotonic_increasing
+    out = working[list(TARGET_COLUMNS)].copy()
+    out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
+    out = out.dropna(subset=["timestamp"])
+    if out.empty:
+        return _empty_result()
+
+    for col in TARGET_COLUMNS[1:]:
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+
+    out = out.sort_values("timestamp").reset_index(drop=True)
+    return NormalizationResult(df=out, empty=out.empty)
