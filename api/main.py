@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field, root_validator
 
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
+from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.strategies import Rsi2Strategy, TurtleStrategy
 
@@ -124,6 +126,29 @@ class ScreenerResponse(BaseModel):
     symbols: List[ScreenerSymbolResult]
 
 
+class SignalsReadQuery(BaseModel):
+    symbol: Optional[str] = Field(default=None)
+    strategy: Optional[str] = Field(default=None)
+    from_: Optional[datetime] = Field(default=None, alias="from")
+    to: Optional[datetime] = Field(default=None, alias="to")
+    sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
+    limit: int = Field(default=50, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
+
+    @root_validator
+    def _validate_range(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        from_value = values.get("from_")
+        to_value = values.get("to")
+        if from_value is not None and to_value is not None and from_value > to_value:
+            raise ValueError("from must be less than or equal to to")
+        return values
+
+    class Config:
+        extra = "forbid"
+        allow_population_by_field_name = True
+
+
+
 # --- FastAPI-App initialisieren ---
 
 
@@ -167,6 +192,44 @@ def health() -> Dict[str, str]:
     Einfacher Health-Check-Endpoint.
     """
     return {"status": "ok"}
+
+
+@app.get("/signals", response_model=SignalReadResponseDTO)
+def read_signals(params: SignalsReadQuery = Depends()) -> SignalReadResponseDTO:
+    items, total = signal_repo.read_signals(
+        symbol=params.symbol,
+        strategy=params.strategy,
+        from_=params.from_,
+        to=params.to,
+        sort=params.sort,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+    response_items: List[SignalReadItemDTO] = []
+    for signal in items:
+        response_items.append(
+            SignalReadItemDTO(
+                symbol=signal["symbol"],
+                strategy=signal["strategy"],
+                direction=signal["direction"],
+                score=signal["score"],
+                created_at=signal["timestamp"],
+                stage=signal["stage"],
+                entry_zone=signal.get("entry_zone"),
+                confirmation_rule=signal.get("confirmation_rule"),
+                timeframe=signal["timeframe"],
+                market_type=signal["market_type"],
+                data_source=signal["data_source"],
+            )
+        )
+
+    return SignalReadResponseDTO(
+        items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
 
 
 @app.post("/strategy/analyze", response_model=StrategyAnalyzeResponse)
