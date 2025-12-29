@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 from cilly_trading.db import init_db, DEFAULT_DB_PATH  # type: ignore
 from cilly_trading.models import Signal
@@ -150,3 +151,97 @@ class SqliteSignalRepository(SignalRepository):
             result.append(signal)
 
         return result
+
+    def read_signals(
+        self,
+        *,
+        symbol: Optional[str] = None,
+        strategy: Optional[str] = None,
+        from_: Optional[datetime] = None,
+        to: Optional[datetime] = None,
+        sort: str = "created_at_desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Signal], int]:
+        where_clauses = []
+        params: List[object] = []
+
+        if symbol is not None:
+            where_clauses.append("symbol = ?")
+            params.append(symbol)
+        if strategy is not None:
+            where_clauses.append("strategy = ?")
+            params.append(strategy)
+        if from_ is not None:
+            where_clauses.append("timestamp >= ?")
+            params.append(from_.isoformat())
+        if to is not None:
+            where_clauses.append("timestamp <= ?")
+            params.append(to.isoformat())
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        if sort == "created_at_asc":
+            order_sql = "ORDER BY timestamp ASC, id ASC"
+        else:
+            order_sql = "ORDER BY timestamp DESC, id DESC"
+
+        conn = self._get_connection()
+        cur = conn.cursor()
+
+        count_query = f"SELECT COUNT(*) FROM signals {where_sql};"
+        cur.execute(count_query, params)
+        total = int(cur.fetchone()[0])
+
+        data_query = f"""
+            SELECT
+                id,
+                symbol,
+                strategy,
+                direction,
+                score,
+                timestamp,
+                stage,
+                entry_zone_from,
+                entry_zone_to,
+                confirmation_rule,
+                timeframe,
+                market_type,
+                data_source
+            FROM signals
+            {where_sql}
+            {order_sql}
+            LIMIT ?
+            OFFSET ?;
+        """
+        cur.execute(data_query, [*params, limit, offset])
+        rows = cur.fetchall()
+        conn.close()
+
+        result: List[Signal] = []
+        for row in rows:
+            signal: Signal = {
+                "symbol": row["symbol"],
+                "strategy": row["strategy"],
+                "direction": row["direction"],
+                "score": row["score"],
+                "timestamp": row["timestamp"],
+                "stage": row["stage"],
+                "timeframe": row["timeframe"],
+                "market_type": row["market_type"],
+                "data_source": row["data_source"],
+            }
+            if row["confirmation_rule"] is not None:
+                signal["confirmation_rule"] = row["confirmation_rule"]
+
+            if row["entry_zone_from"] is not None and row["entry_zone_to"] is not None:
+                signal["entry_zone"] = {
+                    "from_": row["entry_zone_from"],
+                    "to": row["entry_zone_to"],
+                }
+
+            result.append(signal)
+
+        return result, total

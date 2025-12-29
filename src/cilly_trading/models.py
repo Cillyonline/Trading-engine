@@ -4,7 +4,10 @@ Zentrale Datenmodelle für die Cilly Trading Engine.
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict, Optional
+from datetime import datetime
+from typing import List, Literal, Optional, TypedDict
+
+from pydantic import BaseModel, Field
 
 
 Stage = Literal["setup", "entry_confirmed"]
@@ -53,3 +56,39 @@ class Trade(TypedDict, total=False):
     timeframe: str
     market_type: MarketType
     data_source: DataSource
+
+
+class EntryZoneDTO(BaseModel):
+    from_: float = Field(..., alias="from_")
+    to: float
+
+    class Config:
+        extra = "forbid"
+        allow_population_by_field_name = True
+
+
+class SignalReadItemDTO(BaseModel):
+    symbol: str
+    strategy: str
+    direction: Direction
+    score: float
+    created_at: str
+    stage: Stage
+    entry_zone: Optional[EntryZoneDTO] = None
+    confirmation_rule: Optional[str] = None
+    timeframe: str
+    market_type: MarketType
+    data_source: DataSource
+
+    class Config:
+        extra = "forbid"
+
+
+class SignalReadResponseDTO(BaseModel):
+    items: List[SignalReadItemDTO]
+    limit: int
+    offset: int
+    total: int
+
+    class Config:
+        extra = "forbid"
