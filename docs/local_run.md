@@ -54,7 +54,7 @@ docker compose up
 To reset the local SQLite database, remove the volume:
 
 ```bash
-docker volume rm trading-engine_sqlite_data
+docker compose down -v
 ```
 
 ## Run tests
