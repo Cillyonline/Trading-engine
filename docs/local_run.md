@@ -9,13 +9,7 @@
 
 ```bash
 python -m venv .venv
-```
-
-```bash
 source .venv/bin/activate
-```
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -62,3 +56,31 @@ docker compose down -v
 ```bash
 python -m pytest
 ```
+
+## Acceptance criteria
+
+docker compose up starts the API successfully
+
+SQLite data persists after container restart
+
+No runtime behavior changes beyond containerization
+
+Documentation clearly explains local Docker run
+
+## Test requirements
+
+No tests required (container/docs change only)
+
+However, validate basic run path:
+
+```bash
+docker compose up --build
+```
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+restart: docker compose down then docker compose up
+
+DB file should exist in volume-mounted working dir (/data/cilly_trading.db)
