@@ -57,3 +57,22 @@ def test_normalize_timestamp_alias_is_supported() -> None:
     assert result.empty is False
     assert list(result.df.columns) == list(TARGET_COLUMNS)
     assert result.df["timestamp"].is_monotonic_increasing
+
+
+def test_normalize_drops_all_nan_ohlc_rows() -> None:
+    df = pd.DataFrame(
+        {
+            "timestamp": ["2024-01-01"],
+            "open": ["N/A"],
+            "high": ["N/A"],
+            "low": ["N/A"],
+            "close": ["N/A"],
+            "volume": ["1000"],
+        }
+    )
+
+    result = normalize_ohlcv(df, symbol="TEST", source="pytest")
+
+    assert result.empty is True
+    assert list(result.df.columns) == list(TARGET_COLUMNS)
+    assert result.df.empty is True

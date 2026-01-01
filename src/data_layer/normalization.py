@@ -55,5 +55,9 @@ def normalize_ohlcv(
     for col in TARGET_COLUMNS[1:]:
         out[col] = pd.to_numeric(out[col], errors="coerce")
 
+    out = out.dropna(subset=["open", "high", "low", "close"], how="all")
+    if out.empty:
+        return _empty_result()
+
     out = out.sort_values("timestamp").reset_index(drop=True)
     return NormalizationResult(df=out, empty=out.empty)
