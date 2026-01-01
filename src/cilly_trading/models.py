@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Literal, Optional, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 Stage = Literal["setup", "entry_confirmed"]
@@ -62,9 +62,7 @@ class EntryZoneDTO(BaseModel):
     from_: float = Field(..., alias="from_")
     to: float
 
-    class Config:
-        extra = "forbid"
-        allow_population_by_field_name = True
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class SignalReadItemDTO(BaseModel):
@@ -80,8 +78,7 @@ class SignalReadItemDTO(BaseModel):
     market_type: MarketType
     data_source: DataSource
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
 
 
 class SignalReadResponseDTO(BaseModel):
@@ -90,5 +87,4 @@ class SignalReadResponseDTO(BaseModel):
     offset: int
     total: int
 
-    class Config:
-        extra = "forbid"
+    model_config = ConfigDict(extra="forbid")
