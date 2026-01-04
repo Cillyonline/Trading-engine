@@ -40,58 +40,58 @@ class SqliteSignalRepository(SignalRepository):
         cur = conn.cursor()
 
         cur.executemany(
-    """
-    INSERT INTO signals (
-        symbol,
-        strategy,
-        direction,
-        score,
-        timestamp,
-        stage,
-        entry_zone_from,
-        entry_zone_to,
-        confirmation_rule,
-        timeframe,
-        market_type,
-        data_source
-    )
-    VALUES (
-        :symbol,
-        :strategy,
-        :direction,
-        :score,
-        :timestamp,
-        :stage,
-        :entry_zone_from,
-        :entry_zone_to,
-        :confirmation_rule,
-        :timeframe,
-        :market_type,
-        :data_source
-    );
-    """,
-    [
-        {
-            "symbol": s["symbol"],
-            "strategy": s["strategy"],
-            "direction": s["direction"],
-            "score": s["score"],
-            "timestamp": s["timestamp"],
-            "stage": s["stage"],
-            "entry_zone_from": (
-                s["entry_zone"]["from_"] if "entry_zone" in s and s["entry_zone"] else None
-            ),
-            "entry_zone_to": (
-                s["entry_zone"]["to"] if "entry_zone" in s and s["entry_zone"] else None
-            ),
-            "confirmation_rule": s.get("confirmation_rule"),
-            "timeframe": s["timeframe"],
-            "market_type": s["market_type"],
-            "data_source": s["data_source"],
-        }
-        for s in signals
-    ],
-)
+            """
+            INSERT INTO signals (
+                symbol,
+                strategy,
+                direction,
+                score,
+                timestamp,
+                stage,
+                entry_zone_from,
+                entry_zone_to,
+                confirmation_rule,
+                timeframe,
+                market_type,
+                data_source
+            )
+            VALUES (
+                :symbol,
+                :strategy,
+                :direction,
+                :score,
+                :timestamp,
+                :stage,
+                :entry_zone_from,
+                :entry_zone_to,
+                :confirmation_rule,
+                :timeframe,
+                :market_type,
+                :data_source
+            );
+            """,
+            [
+                {
+                    "symbol": s["symbol"],
+                    "strategy": s["strategy"],
+                    "direction": s["direction"],
+                    "score": s["score"],
+                    "timestamp": s["timestamp"],
+                    "stage": s["stage"],
+                    "entry_zone_from": (
+                        s["entry_zone"]["from_"] if "entry_zone" in s and s["entry_zone"] else None
+                    ),
+                    "entry_zone_to": (
+                        s["entry_zone"]["to"] if "entry_zone" in s and s["entry_zone"] else None
+                    ),
+                    "confirmation_rule": s.get("confirmation_rule"),
+                    "timeframe": s["timeframe"],
+                    "market_type": s["market_type"],
+                    "data_source": s["data_source"],
+                }
+                for s in signals
+            ],
+        )
 
         conn.commit()
         conn.close()
@@ -253,8 +253,8 @@ class SqliteSignalRepository(SignalRepository):
         timeframe: str,
         min_score: Optional[float] = None,
     ) -> List[dict]:
-        where_clauses = ["strategy = ?", "timeframe = ?"]
-        params: List[object] = [strategy, timeframe]
+        where_clauses = ["strategy = ?", "timeframe = ?", "stage = ?"]
+        params: List[object] = [strategy, timeframe, "setup"]
 
         if min_score is not None:
             where_clauses.append("score >= ?")
