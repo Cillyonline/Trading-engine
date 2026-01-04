@@ -2,3 +2,8 @@
 *.pyc
 .pytest_cache/
 *.db
+
+.venv*/
+.venv/
+venv/
+
