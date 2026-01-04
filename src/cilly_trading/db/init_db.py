@@ -63,6 +63,30 @@ def init_db(db_path: Optional[Path] = None) -> None:
         );
         """
     )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_signals_timestamp
+          ON signals(timestamp);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_signals_symbol_timestamp
+          ON signals(symbol, timestamp);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_signals_strategy_timestamp
+          ON signals(strategy, timestamp);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_signals_symbol_strategy_timestamp
+          ON signals(symbol, strategy, timestamp);
+        """
+    )
 
     # Tabelle: trades
     cur.execute(
