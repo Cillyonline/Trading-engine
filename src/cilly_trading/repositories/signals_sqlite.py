@@ -245,3 +245,53 @@ class SqliteSignalRepository(SignalRepository):
             result.append(signal)
 
         return result, total
+
+    def read_screener_results(
+        self,
+        *,
+        strategy: str,
+        timeframe: str,
+        min_score: Optional[float] = None,
+    ) -> List[dict]:
+        where_clauses = ["strategy = ?", "timeframe = ?"]
+        params: List[object] = [strategy, timeframe]
+
+        if min_score is not None:
+            where_clauses.append("score >= ?")
+            params.append(min_score)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+        order_sql = "ORDER BY score DESC, symbol ASC"
+
+        conn = self._get_connection()
+        cur = conn.cursor()
+        query = f"""
+            SELECT
+                symbol,
+                score,
+                strategy,
+                timeframe,
+                market_type,
+                timestamp
+            FROM signals
+            {where_sql}
+            {order_sql};
+        """
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        conn.close()
+
+        result: List[dict] = []
+        for row in rows:
+            result.append(
+                {
+                    "symbol": row["symbol"],
+                    "score": row["score"],
+                    "strategy": row["strategy"],
+                    "timeframe": row["timeframe"],
+                    "market_type": row["market_type"],
+                    "created_at": row["timestamp"],
+                }
+            )
+
+        return result

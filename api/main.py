@@ -137,6 +137,32 @@ class SignalsReadQuery(BaseModel):
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 
+
+class ScreenerResultsQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: str
+    timeframe: str
+    min_score: Optional[float] = Field(default=None, ge=0.0)
+
+
+class ScreenerResultItem(BaseModel):
+    symbol: str
+    score: float
+    strategy: str
+    timeframe: str
+    market_type: str
+    created_at: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ScreenerResultsResponse(BaseModel):
+    items: List[ScreenerResultItem]
+    total: int
+
+    model_config = ConfigDict(extra="forbid")
+
 # --- FastAPI-App initialisieren ---
 
 
@@ -204,6 +230,18 @@ def _get_signals_query(
     )
 
 
+def _get_screener_results_query(
+    strategy: str = Query(...),
+    timeframe: str = Query(...),
+    min_score: Optional[float] = Query(default=None, ge=0.0),
+) -> ScreenerResultsQuery:
+    return ScreenerResultsQuery(
+        strategy=strategy,
+        timeframe=timeframe,
+        min_score=min_score,
+    )
+
+
 @app.get("/signals", response_model=SignalReadResponseDTO)
 def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
     items, total = signal_repo.read_signals(
@@ -239,6 +277,23 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
         limit=params.limit,
         offset=params.offset,
         total=total,
+    )
+
+
+@app.get("/screener/v2/results", response_model=ScreenerResultsResponse)
+def read_screener_results(
+    params: ScreenerResultsQuery = Depends(_get_screener_results_query),
+) -> ScreenerResultsResponse:
+    items = signal_repo.read_screener_results(
+        strategy=params.strategy,
+        timeframe=params.timeframe,
+        min_score=params.min_score,
+    )
+    response_items = [ScreenerResultItem(**item) for item in items]
+
+    return ScreenerResultsResponse(
+        items=response_items,
+        total=len(response_items),
     )
 
 
