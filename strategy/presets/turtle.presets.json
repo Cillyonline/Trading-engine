@@ -1,0 +1,21 @@
+{
+  "strategy": "TURTLE",
+  "presets": [
+    {
+      "id": "turtle.conservative.v1",
+      "params": {
+        "breakout_lookback": 55,
+        "proximity_threshold_pct": 0.02,
+        "min_score": 40.0
+      }
+    },
+    {
+      "id": "turtle.aggressive.v1",
+      "params": {
+        "breakout_lookback": 20,
+        "proximity_threshold_pct": 0.05,
+        "min_score": 20.0
+      }
+    }
+  ]
+}

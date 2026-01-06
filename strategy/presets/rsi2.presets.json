@@ -1,0 +1,21 @@
+{
+  "strategy": "RSI2",
+  "presets": [
+    {
+      "id": "rsi2.conservative.v1",
+      "params": {
+        "rsi_period": 2,
+        "oversold_threshold": 8.0,
+        "min_score": 30.0
+      }
+    },
+    {
+      "id": "rsi2.aggressive.v1",
+      "params": {
+        "rsi_period": 2,
+        "oversold_threshold": 15.0,
+        "min_score": 10.0
+      }
+    }
+  ]
+}
