@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
@@ -134,7 +135,12 @@ class SignalsReadQuery(BaseModel):
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
-    limit: int = Field(default=50, ge=1, le=100)
+    limit: int = Field(
+        default=50,
+        ge=1,
+        le=SIGNALS_READ_MAX_LIMIT,
+        description=f"Maximal {SIGNALS_READ_MAX_LIMIT} Einträge.",
+    )
     offset: int = Field(default=0, ge=0)
 
 
@@ -214,7 +220,12 @@ def _get_signals_query(
     from_: Optional[datetime] = Query(default=None, alias="from"),
     to: Optional[datetime] = Query(default=None, alias="to"),
     sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=SIGNALS_READ_MAX_LIMIT,
+        description=f"Maximal {SIGNALS_READ_MAX_LIMIT} Einträge.",
+    ),
     offset: int = Query(default=0, ge=0),
 ) -> SignalsReadQuery:
     if from_ is not None and to is not None and from_ > to:
@@ -242,7 +253,13 @@ def _get_screener_results_query(
     )
 
 
-@app.get("/signals", response_model=SignalReadResponseDTO)
+@app.get(
+    "/signals",
+    response_model=SignalReadResponseDTO,
+    responses={
+        422: {"description": "Validation error (z. B. ungültiger Zeitraum oder limit > max)."}
+    },
+)
 def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
     items, total = signal_repo.read_signals(
         symbol=params.symbol,
