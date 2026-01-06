@@ -215,18 +215,46 @@ def health() -> Dict[str, str]:
 
 
 def _get_signals_query(
-    symbol: Optional[str] = Query(default=None),
-    strategy: Optional[str] = Query(default=None),
-    from_: Optional[datetime] = Query(default=None, alias="from"),
-    to: Optional[datetime] = Query(default=None, alias="to"),
-    sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
+    symbol: Optional[str] = Query(
+        default=None,
+        description="Optionales Symbol-Filter (z. B. 'AAPL' oder 'BTC/USDT').",
+    ),
+    strategy: Optional[str] = Query(
+        default=None,
+        description="Optionaler Strategie-Filter (z. B. 'RSI2' oder 'TURTLE').",
+    ),
+    from_: Optional[datetime] = Query(
+        default=None,
+        alias="from",
+        description="Startzeit (inklusive) für created_at im ISO-8601-Format.",
+    ),
+    to: Optional[datetime] = Query(
+        default=None,
+        alias="to",
+        description="Endzeit (inklusive) für created_at im ISO-8601-Format.",
+    ),
+    sort: Literal["created_at_asc", "created_at_desc"] = Query(
+        default="created_at_desc",
+        description=(
+            "Sortierung nach created_at. "
+            "'created_at_desc' liefert neueste zuerst, "
+            "'created_at_asc' liefert älteste zuerst."
+        ),
+    ),
     limit: int = Query(
         default=50,
         ge=1,
         le=SIGNALS_READ_MAX_LIMIT,
-        description=f"Maximal {SIGNALS_READ_MAX_LIMIT} Einträge.",
+        description=(
+            "Seitenlimit für Pagination. "
+            f"Maximal {SIGNALS_READ_MAX_LIMIT} Einträge."
+        ),
     ),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Pagination-Offset: Anzahl der Einträge, die übersprungen werden.",
+    ),
 ) -> SignalsReadQuery:
     if from_ is not None and to is not None and from_ > to:
         raise HTTPException(status_code=422, detail="from must be less than or equal to to")
@@ -242,9 +270,13 @@ def _get_signals_query(
 
 
 def _get_screener_results_query(
-    strategy: str = Query(...),
-    timeframe: str = Query(...),
-    min_score: Optional[float] = Query(default=None, ge=0.0),
+    strategy: str = Query(..., description="Strategie-Name für den Screener-Filter."),
+    timeframe: str = Query(..., description="Timeframe-Filter (z. B. 'D1')."),
+    min_score: Optional[float] = Query(
+        default=None,
+        ge=0.0,
+        description="Optionaler Mindest-Score für die Screener-Ergebnisse.",
+    ),
 ) -> ScreenerResultsQuery:
     return ScreenerResultsQuery(
         strategy=strategy,
@@ -257,6 +289,33 @@ def _get_screener_results_query(
     "/signals",
     response_model=SignalReadResponseDTO,
     responses={
+        200: {
+            "description": "Signals read (paginated).",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "items": [
+                            {
+                                "symbol": "AAPL",
+                                "strategy": "RSI2",
+                                "direction": "long",
+                                "score": 42.5,
+                                "created_at": "2024-01-15T09:30:00Z",
+                                "stage": "setup",
+                                "entry_zone": {"from_": 178.5, "to": 182.0},
+                                "confirmation_rule": "RSI below 10",
+                                "timeframe": "D1",
+                                "market_type": "stock",
+                                "data_source": "yahoo",
+                            }
+                        ],
+                        "limit": 50,
+                        "offset": 0,
+                        "total": 128,
+                    }
+                }
+            },
+        },
         422: {"description": "Validation error (z. B. ungültiger Zeitraum oder limit > max)."}
     },
 )
@@ -297,7 +356,32 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
     )
 
 
-@app.get("/screener/v2/results", response_model=ScreenerResultsResponse)
+@app.get(
+    "/screener/v2/results",
+    response_model=ScreenerResultsResponse,
+    responses={
+        200: {
+            "description": "Screener results (filtered by strategy/timeframe).",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "items": [
+                            {
+                                "symbol": "NVDA",
+                                "score": 68.2,
+                                "strategy": "TURTLE",
+                                "timeframe": "D1",
+                                "market_type": "stock",
+                                "created_at": "2024-01-15T09:30:00Z",
+                            }
+                        ],
+                        "total": 1,
+                    }
+                }
+            },
+        }
+    },
+)
 def read_screener_results(
     params: ScreenerResultsQuery = Depends(_get_screener_results_query),
 ) -> ScreenerResultsResponse:
