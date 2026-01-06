@@ -79,3 +79,16 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
         and item.get("created_at") == fixed_timestamp
         for item in items
     ), f"Expected signal not found in payload items: {items}"
+
+
+def test_api_smoke_signals_empty(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+
+    client = TestClient(api_main.app)
+    response = client.get("/signals")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"] == []
+    assert payload["total"] == 0
