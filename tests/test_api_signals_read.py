@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 
@@ -102,9 +103,20 @@ def test_read_signals_invalid_params(tmp_path: Path, monkeypatch) -> None:
 
     for params in [
         {"sort": "foo"},
-        {"limit": 101},
+        {"limit": SIGNALS_READ_MAX_LIMIT + 1},
         {"limit": 0},
         {"from": "2025-01-02T00:00:00+00:00", "to": "2025-01-01T00:00:00+00:00"},
     ]:
         response = client.get("/signals", params=params)
         assert response.status_code == 422
+
+
+def test_read_signals_limit_boundary(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals([_base_signal(symbol="AAPL")])
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/signals", params={"limit": SIGNALS_READ_MAX_LIMIT})
+    assert response.status_code == 200
