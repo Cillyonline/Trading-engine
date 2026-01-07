@@ -17,22 +17,24 @@ from collections.abc import Mapping
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import load_ohlcv
+from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 
 
 logger = logging.getLogger(__name__)
-
-
-STRATEGY_CONFIG_KEYS: Dict[str, set[str]] = {
-    "RSI2": {"rsi_period", "oversold_threshold", "min_score"},
-    "TURTLE": {"breakout_lookback", "proximity_threshold_pct", "min_score"},
-}
 
 
 def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, Any]:
     if raw_config is None:
         normalized: Dict[str, Any] = {}
     elif isinstance(raw_config, Mapping):
-        normalized = dict(raw_config)
+        normalized, unknown_keys = normalize_and_validate_strategy_params(strat_name, raw_config)
+
+        if unknown_keys:
+            logger.warning(
+                "Unknown config keys: component=engine strategy=%s keys=%s",
+                strat_name,
+                ", ".join(unknown_keys),
+            )
     else:
         logger.warning(
             "Invalid strategy config type: component=engine strategy=%s (expected mapping, got %s); using empty config",
@@ -40,16 +42,6 @@ def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, An
             type(raw_config).__name__,
         )
         normalized = {}
-
-    allowed_keys = STRATEGY_CONFIG_KEYS.get(strat_name)
-    if allowed_keys:
-        unknown_keys = sorted(set(normalized.keys()) - allowed_keys)
-        if unknown_keys:
-            logger.warning(
-                "Unknown config keys: component=engine strategy=%s keys=%s",
-                strat_name,
-                ", ".join(unknown_keys),
-            )
 
     return normalized
 
@@ -162,7 +154,15 @@ def run_watchlist_analysis(
             for strategy in ordered_strategies:
                 strat_name = getattr(strategy, "name", strategy.__class__.__name__)
                 raw_config = strategy_configs_map.get(strat_name)
-                strat_config = _normalize_strategy_config(strat_name, raw_config)
+                try:
+                    strat_config = _normalize_strategy_config(strat_name, raw_config)
+                except Exception as exc:
+                    logger.error(
+                        "Invalid strategy config: component=engine strategy=%s error=%s",
+                        strat_name,
+                        exc,
+                    )
+                    continue
 
                 logger.debug(
                     "Running strategy: component=engine strategy=%s symbol=%s timeframe=%s",

@@ -23,7 +23,6 @@ import pandas as pd
 
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
-from cilly_trading.strategies.config_schema import normalize_turtle_config
 
 
 @dataclass
@@ -60,7 +59,6 @@ class TurtleStrategy(BaseStrategy):
         df: pd.DataFrame,
         config: Dict[str, Any],
     ) -> List[Signal]:
-        config = normalize_turtle_config(config)
         cfg = TurtleConfig(
             breakout_lookback=int(config.get("breakout_lookback", 20)),
             proximity_threshold_pct=float(config.get("proximity_threshold_pct", 0.03)),
