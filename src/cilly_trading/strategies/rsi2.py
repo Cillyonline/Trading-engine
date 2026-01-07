@@ -21,7 +21,6 @@ import pandas as pd
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
 from cilly_trading.indicators.rsi import rsi
-from cilly_trading.strategies.config_schema import normalize_rsi2_config
 
 
 @dataclass
@@ -61,8 +60,6 @@ class Rsi2Strategy(BaseStrategy):
     ) -> List[Signal]:
         if df.empty:
             return []
-
-        config = normalize_rsi2_config(config)
 
         # Konfiguration aus Dict in Rsi2Config überführen (mit Defaults)
         cfg = Rsi2Config(
