@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
+from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.strategies import Rsi2Strategy, TurtleStrategy
 
@@ -81,6 +82,40 @@ class StrategyAnalyzeResponse(BaseModel):
     symbol: str
     strategy: str
     signals: List[Dict[str, Any]]
+
+
+class ManualAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_run_id: str = Field(..., min_length=1, description="Client-provided run ID.")
+    ingestion_run_id: str = Field(..., min_length=1, description="Snapshot reference ID.")
+    symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
+    strategy: str = Field(..., description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
+    market_type: str = Field(
+        "stock",
+        description="Markttyp: 'stock' oder 'crypto'",
+        pattern="^(stock|crypto)$",
+    )
+    lookback_days: int = Field(
+        200,
+        ge=30,
+        le=1000,
+        description="Anzahl der Tage, die mindestens geladen werden sollen.",
+    )
+    strategy_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optionale Strategie-Konfiguration (z. B. Oversold-Schwelle).",
+    )
+
+
+class ManualAnalysisResponse(BaseModel):
+    analysis_run_id: str
+    ingestion_run_id: str
+    symbol: str
+    strategy: str
+    signals: List[Dict[str, Any]]
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ScreenerRequest(BaseModel):
@@ -182,6 +217,7 @@ logger.info("Cilly Trading Engine API starting up")
 
 # Repositories & Strategien als Singletons im Modul
 signal_repo = SqliteSignalRepository()
+analysis_run_repo = SqliteAnalysisRunRepository()
 
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
@@ -464,6 +500,27 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         strategy=strategy_name,
         signals=filtered_signals,
     )
+
+
+@app.post(
+    "/analysis/run",
+    response_model=ManualAnalysisResponse,
+    responses={
+        200: {"description": "Manual analysis result (idempotent)."},
+        400: {"description": "Validation error (z. B. unbekannte Strategie)."},
+        422: {"description": "Snapshot fehlt oder wird nicht unterstützt."},
+    },
+)
+def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
+    """
+    Manuelles Triggern einer Analyse mit idempotenter Run-ID.
+    """
+    existing_run = analysis_run_repo.get_run(req.analysis_run_id)
+    if existing_run is not None:
+        return ManualAnalysisResponse(**existing_run["result"])
+
+    raise HTTPException(status_code=422, detail="snapshot_not_supported")
+
 
 
 @app.post("/screener/basic", response_model=ScreenerResponse)
