@@ -2,7 +2,8 @@
 Init-Skript für die SQLite-Datenbank der Cilly Trading Engine.
 
 - Legt die Datei `cilly_trading.db` im Projektverzeichnis an (falls nicht vorhanden).
-- Erzeugt die Tabellen `signals` und `trades` entsprechend der MVP-Spezifikation.
+- Erzeugt die Tabellen `signals`, `trades` und `analysis_runs`
+  entsprechend der MVP-Spezifikation.
 """
 
 from __future__ import annotations
@@ -107,6 +108,25 @@ def init_db(db_path: Optional[Path] = None) -> None:
             market_type TEXT NOT NULL,
             data_source TEXT NOT NULL
         );
+        """
+    )
+
+    # Tabelle: analysis_runs
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS analysis_runs (
+            analysis_run_id TEXT PRIMARY KEY,
+            ingestion_run_id TEXT NOT NULL,
+            request_payload TEXT NOT NULL,
+            result_payload TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_analysis_runs_ingestion
+          ON analysis_runs(ingestion_run_id);
         """
     )
 
