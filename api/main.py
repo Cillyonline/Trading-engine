@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
@@ -58,6 +59,11 @@ logger = logging.getLogger(__name__)
 
 
 class StrategyAnalyzeRequest(BaseModel):
+    ingestion_run_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Snapshot reference ID.",
+    )
     symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
     strategy: str = Field(..., description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
     market_type: str = Field(
@@ -127,6 +133,11 @@ class ScreenerRequest(BaseModel):
     - Nutzt alle registrierten Strategien (RSI2 & TURTLE).
     """
 
+    ingestion_run_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Snapshot reference ID.",
+    )
     symbols: Optional[List[str]] = Field(
         default=None,
         description="Liste von Symbolen. Wenn None, wird eine Default-Watchlist verwendet.",
@@ -218,6 +229,21 @@ logger.info("Cilly Trading Engine API starting up")
 # Repositories & Strategien als Singletons im Modul
 signal_repo = SqliteSignalRepository()
 analysis_run_repo = SqliteAnalysisRunRepository()
+
+
+def _is_uuid4(value: str) -> bool:
+    try:
+        parsed = uuid.UUID(value)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    return parsed.version == 4
+
+
+def _require_ingestion_run(ingestion_run_id: str) -> None:
+    if not _is_uuid4(ingestion_run_id):
+        raise HTTPException(status_code=422, detail="invalid_ingestion_run_id")
+    if not analysis_run_repo.ingestion_run_exists(ingestion_run_id):
+        raise HTTPException(status_code=422, detail="ingestion_run_not_found")
 
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
@@ -447,6 +473,9 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         req.lookback_days,
     )
 
+    if req.ingestion_run_id:
+        _require_ingestion_run(req.ingestion_run_id)
+
     strategy_name = req.strategy.upper()
     strategy = strategy_registry.get(strategy_name)
     if strategy is None:
@@ -482,6 +511,8 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         engine_config=engine_config,
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
+        ingestion_run_id=req.ingestion_run_id,
+        db_path=analysis_run_repo._db_path,
     )
 
     filtered_signals = [
@@ -517,9 +548,63 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     """
     existing_run = analysis_run_repo.get_run(req.analysis_run_id)
     if existing_run is not None:
+        _require_ingestion_run(existing_run["ingestion_run_id"])
         return ManualAnalysisResponse(**existing_run["result"])
 
-    raise HTTPException(status_code=422, detail="snapshot_not_supported")
+    if req.ingestion_run_id:
+        _require_ingestion_run(req.ingestion_run_id)
+
+    strategy_name = req.strategy.upper()
+    strategy = strategy_registry.get(strategy_name)
+    if strategy is None:
+        logger.warning("Unknown strategy requested: %s", req.strategy)
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+
+    engine_config = EngineConfig(
+        timeframe="D1",
+        lookback_days=req.lookback_days,
+        market_type=req.market_type,
+        data_source="yahoo" if req.market_type == "stock" else "binance",
+    )
+
+    effective_config = default_strategy_configs.get(strategy_name, {}).copy()
+    if req.strategy_config:
+        effective_config.update(req.strategy_config)
+
+    strategy_configs = {
+        strategy_name: effective_config,
+    }
+
+    signals = run_watchlist_analysis(
+        symbols=[req.symbol],
+        strategies=[strategy],
+        engine_config=engine_config,
+        strategy_configs=strategy_configs,
+        signal_repo=signal_repo,
+        ingestion_run_id=req.ingestion_run_id,
+        db_path=analysis_run_repo._db_path,
+    )
+
+    filtered_signals = [
+        s for s in signals if s.get("symbol") == req.symbol and s.get("strategy") == strategy_name
+    ]
+
+    response_payload = {
+        "analysis_run_id": req.analysis_run_id,
+        "ingestion_run_id": req.ingestion_run_id,
+        "symbol": req.symbol,
+        "strategy": strategy_name,
+        "signals": filtered_signals,
+    }
+
+    analysis_run_repo.save_run(
+        analysis_run_id=req.analysis_run_id,
+        ingestion_run_id=req.ingestion_run_id,
+        request_payload=req.model_dump(),
+        result_payload=response_payload,
+    )
+
+    return ManualAnalysisResponse(**response_payload)
 
 
 
@@ -533,6 +618,8 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     - Nutzt alle registrierten Strategien (RSI2 + TURTLE).
     - Gibt nur SETUP-Signale mit Score >= min_score zurück.
     """
+    if req.ingestion_run_id:
+        _require_ingestion_run(req.ingestion_run_id)
     # Default-Watchlists, MVP-Variante
     if req.symbols is None or len(req.symbols) == 0:
         if req.market_type == "stock":
@@ -569,6 +656,8 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         engine_config=engine_config,
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
+        ingestion_run_id=req.ingestion_run_id,
+        db_path=analysis_run_repo._db_path,
     )
 
     logger.info("Screener engine run finished: total_signals=%d", len(signals))
