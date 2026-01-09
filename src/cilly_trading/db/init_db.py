@@ -130,6 +130,51 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
 
+    # Tabelle: ingestion_runs
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ingestion_runs (
+            ingestion_run_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            source TEXT NOT NULL,
+            symbols_json TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            fingerprint_hash TEXT NULL
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_ingestion_runs_created_at
+          ON ingestion_runs(created_at);
+        """
+    )
+
+    # Tabelle: ohlcv_snapshots
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ohlcv_snapshots (
+            ingestion_run_id TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            timeframe TEXT NOT NULL,
+            ts INTEGER NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            PRIMARY KEY (ingestion_run_id, symbol, timeframe, ts),
+            FOREIGN KEY (ingestion_run_id) REFERENCES ingestion_runs(ingestion_run_id)
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_ohlcv_snapshots_lookup
+          ON ohlcv_snapshots(ingestion_run_id, symbol, timeframe, ts);
+        """
+    )
+
     conn.commit()
     conn.close()
 

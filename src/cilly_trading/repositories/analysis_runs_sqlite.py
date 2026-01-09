@@ -30,6 +30,22 @@ class SqliteAnalysisRunRepository:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def ingestion_run_exists(self, ingestion_run_id: str) -> bool:
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT 1
+            FROM ingestion_runs
+            WHERE ingestion_run_id = ?
+            LIMIT 1;
+            """,
+            (ingestion_run_id,),
+        )
+        row = cur.fetchone()
+        conn.close()
+        return row is not None
+
     def get_run(self, analysis_run_id: str) -> Optional[Dict[str, Any]]:
         """
         Lädt einen Analyse-Run anhand der Run-ID.
@@ -109,4 +125,3 @@ class SqliteAnalysisRunRepository:
         )
         conn.commit()
         conn.close()
-

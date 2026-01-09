@@ -5,13 +5,17 @@ Daten-Layer für die Cilly Trading Engine.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import warnings
 from datetime import datetime, timedelta, timezone
-from typing import Final, Literal
+from pathlib import Path
+from typing import Final, Literal, Optional
 
 import ccxt
 import pandas as pd
 import yfinance as yf
+
+from cilly_trading.db import DEFAULT_DB_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +108,61 @@ def _validate_and_normalize_ohlcv(
     return out
 
 
+def load_ohlcv_snapshot(
+    *,
+    ingestion_run_id: str,
+    symbol: str,
+    timeframe: str,
+    db_path: Optional[Path] = None,
+) -> pd.DataFrame:
+    if timeframe.upper() != "D1":
+        raise ValueError(f"Unsupported timeframe for MVP: {timeframe}")
+
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            ts,
+            open,
+            high,
+            low,
+            close,
+            volume
+        FROM ohlcv_snapshots
+        WHERE ingestion_run_id = ?
+          AND symbol = ?
+          AND timeframe = ?
+        ORDER BY ts ASC;
+        """,
+        (ingestion_run_id, symbol, timeframe),
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        logger.warning(
+            "No snapshot data: component=data ingestion_run_id=%s symbol=%s timeframe=%s",
+            ingestion_run_id,
+            symbol,
+            timeframe,
+        )
+        return _empty_ohlcv()
+
+    df = pd.DataFrame(
+        rows,
+        columns=["ts", "open", "high", "low", "close", "volume"],
+    )
+    df = df.rename(columns={"ts": "timestamp"})
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
+
+    return _validate_and_normalize_ohlcv(df, symbol=symbol, source="snapshot")
+
+
 def load_ohlcv(
     symbol: str,
     timeframe: str,
@@ -190,7 +249,7 @@ def _load_stock_yahoo(
         )
         return _empty_ohlcv()
 
-    df = df[cols].copy()
+    df = df[list(REQUIRED_COLS)].copy()
 
     try:
         df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True, errors="coerce")
@@ -212,9 +271,8 @@ def _load_crypto_binance(
         exchange = ccxt.binance()
     except Exception:
         logger.exception(
-            "Failed to initialize ccxt binance exchange: component=data symbol=%s timeframe=%s",
+            "Failed to initialize ccxt binance exchange: component=data symbol=%s",
             symbol,
-            timeframe,
         )
         return _empty_ohlcv()
 
@@ -224,21 +282,19 @@ def _load_crypto_binance(
         ohlcv = exchange.fetch_ohlcv(symbol, timeframe="1d", since=since)
     except Exception:
         logger.exception(
-            "ccxt fetch_ohlcv failed: component=data symbol=%s timeframe=%s",
+            "ccxt fetch_ohlcv failed: component=data symbol=%s",
             symbol,
-            timeframe,
         )
         return _empty_ohlcv()
 
     if not ohlcv:
         logger.warning(
-            "No data returned from Binance: component=data symbol=%s timeframe=%s",
+            "No data returned from Binance: component=data symbol=%s",
             symbol,
-            timeframe,
         )
         return _empty_ohlcv()
 
-    return pd.DataFrame(
+    df = pd.DataFrame(
         ohlcv,
         columns=["timestamp", "open", "high", "low", "close", "volume"],
     )
@@ -247,9 +303,8 @@ def _load_crypto_binance(
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
     except Exception:
         logger.exception(
-            "Failed to convert Binance timestamps: component=data symbol=%s timeframe=%s",
+            "Failed to convert Binance timestamps: component=data symbol=%s",
             symbol,
-            timeframe,
         )
         return _empty_ohlcv()
 

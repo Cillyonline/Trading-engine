@@ -11,12 +11,13 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol, List, Dict, Any
+from typing import Protocol, List, Dict, Any, Optional
 from collections.abc import Mapping
+from pathlib import Path
 
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
-from cilly_trading.engine.data import load_ohlcv
+from cilly_trading.engine.data import load_ohlcv, load_ohlcv_snapshot
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 
 
@@ -78,17 +79,23 @@ def run_watchlist_analysis(
     engine_config: EngineConfig,
     strategy_configs: Dict[str, Dict[str, Any]],
     signal_repo: SignalRepository,
+    *,
+    ingestion_run_id: Optional[str] = None,
+    db_path: Optional[Path] = None,
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
     """
+    if ingestion_run_id and db_path is None:
+        raise ValueError("db_path is required when ingestion_run_id is provided")
     logger.info(
-        "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s",
+        "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s ingestion_run_id=%s",
         len(symbols),
         len(strategies),
         engine_config.timeframe,
         engine_config.lookback_days,
         engine_config.market_type,
+        ingestion_run_id or "n/a",
     )
 
     if not isinstance(strategy_configs, Mapping):
@@ -116,36 +123,45 @@ def run_watchlist_analysis(
 
         try:
             logger.debug(
-                "Loading data: component=engine symbol=%s market_type=%s lookback_days=%d timeframe=%s",
+                "Loading data: component=engine symbol=%s market_type=%s lookback_days=%d timeframe=%s ingestion_run_id=%s",
                 symbol,
                 engine_config.market_type,
                 engine_config.lookback_days,
                 engine_config.timeframe,
+                ingestion_run_id,
             )
 
             try:
-                df = load_ohlcv(
-                    symbol=symbol,
-                    timeframe=engine_config.timeframe,
-                    lookback_days=engine_config.lookback_days,
-                    market_type=engine_config.market_type,
-                )
+                if ingestion_run_id:
+                    df = load_ohlcv_snapshot(
+                        ingestion_run_id=ingestion_run_id,
+                        symbol=symbol,
+                        timeframe=engine_config.timeframe,
+                        db_path=db_path,
+                    )
+                else:
+                    df = load_ohlcv(
+                        symbol=symbol,
+                        timeframe=engine_config.timeframe,
+                        lookback_days=engine_config.lookback_days,
+                        market_type=engine_config.market_type,
+                    )
             except Exception:
                 logger.error(
-                    "Error loading data: component=engine symbol=%s timeframe=%s",
+                    "Error loading data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
                     symbol,
                     engine_config.timeframe,
+                    ingestion_run_id or "n/a",
                     exc_info=True,
                 )
                 continue
 
             if df is None or getattr(df, "empty", False):
                 logger.warning(
-                    "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s lookback_days=%d market_type=%s",
+                    "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
                     symbol,
                     engine_config.timeframe,
-                    engine_config.lookback_days,
-                    engine_config.market_type,
+                    ingestion_run_id or "n/a",
                 )
                 continue
 
