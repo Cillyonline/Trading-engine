@@ -174,7 +174,7 @@ class ScreenerResponse(BaseModel):
 
 
 class SignalsReadQuery(BaseModel):
-    model_config = ConfigDict(extra="forbid", validate_by_name=True)
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
