@@ -279,6 +279,31 @@ def _require_ingestion_run(ingestion_run_id: str) -> None:
     if not analysis_run_repo.ingestion_run_exists(ingestion_run_id):
         raise HTTPException(status_code=422, detail="ingestion_run_not_found")
 
+
+def _resolve_analysis_db_path() -> str:
+    """
+    Resolves the SQLite DB path used for analysis & snapshot loading.
+
+    Resolution order:
+    1. Public analysis_run_repo.db_path (preferred, test-patchable)
+    2. Module-level ANALYSIS_DB_PATH (test-patchable fallback)
+    3. analysis_run_repo._db_path (legacy compatibility fallback)
+
+    Raises RuntimeError if no path can be resolved.
+    """
+    db_path = getattr(analysis_run_repo, "db_path", None)
+    if db_path:
+        return str(db_path)
+
+    if ANALYSIS_DB_PATH:
+        return str(ANALYSIS_DB_PATH)
+
+    db_path = getattr(analysis_run_repo, "_db_path", None)
+    if db_path:
+        return str(db_path)
+
+    raise RuntimeError("analysis db path not configured")
+
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
     "TURTLE": TurtleStrategy(),
@@ -581,7 +606,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
                 strategy_configs=strategy_configs,
                 signal_repo=signal_repo,
                 ingestion_run_id=req.ingestion_run_id,
-                db_path=ANALYSIS_DB_PATH,
+                db_path=_resolve_analysis_db_path(),
             )
 
             filtered_signals = [
@@ -628,7 +653,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=ANALYSIS_DB_PATH,
+        db_path=_resolve_analysis_db_path(),
     )
 
     filtered_signals = [
@@ -698,7 +723,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=ANALYSIS_DB_PATH,
+        db_path=_resolve_analysis_db_path(),
     )
 
     filtered_signals = [
@@ -773,7 +798,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=ANALYSIS_DB_PATH,
+        db_path=_resolve_analysis_db_path(),
     )
 
     logger.info("Screener engine run finished: total_signals=%d", len(signals))
