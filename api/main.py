@@ -258,11 +258,11 @@ app = FastAPI(
 logger.info("Cilly Trading Engine API starting up")
 
 # Analysis DB Path (test-patchable)
-ANALYSIS_DB_PATH = DEFAULT_DB_PATH
+ANALYSIS_DB_PATH: Optional[str] = None
 
 # Repositories & Strategien als Singletons im Modul
 signal_repo = SqliteSignalRepository()
-analysis_run_repo = SqliteAnalysisRunRepository(db_path=ANALYSIS_DB_PATH)
+analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 
 
 def _is_uuid4(value: str) -> bool:
