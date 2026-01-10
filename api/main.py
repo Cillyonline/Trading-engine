@@ -178,6 +178,7 @@ class SignalsReadQuery(BaseModel):
 
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
+    preset: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
@@ -285,6 +286,10 @@ def _get_signals_query(
         default=None,
         description="Optionaler Strategie-Filter (z. B. 'RSI2' oder 'TURTLE').",
     ),
+    preset: Optional[str] = Query(
+        default=None,
+        description="Optionaler Preset-Filter (z. B. 'D1' oder 'H1').",
+    ),
     from_: Optional[datetime] = Query(
         default=None,
         alias="from",
@@ -293,6 +298,14 @@ def _get_signals_query(
     to: Optional[datetime] = Query(
         default=None,
         alias="to",
+        description="Endzeit (inklusive) für created_at im ISO-8601-Format.",
+    ),
+    start: Optional[datetime] = Query(
+        default=None,
+        description="Startzeit (inklusive) für created_at im ISO-8601-Format.",
+    ),
+    end: Optional[datetime] = Query(
+        default=None,
         description="Endzeit (inklusive) für created_at im ISO-8601-Format.",
     ),
     sort: Literal["created_at_asc", "created_at_desc"] = Query(
@@ -318,13 +331,22 @@ def _get_signals_query(
         description="Pagination-Offset: Anzahl der Einträge, die übersprungen werden.",
     ),
 ) -> SignalsReadQuery:
-    if from_ is not None and to is not None and from_ > to:
+    if start is not None and from_ is not None and start != from_:
+        raise HTTPException(status_code=422, detail="start conflicts with from")
+    if end is not None and to is not None and end != to:
+        raise HTTPException(status_code=422, detail="end conflicts with to")
+
+    resolved_from = start if start is not None else from_
+    resolved_to = end if end is not None else to
+
+    if resolved_from is not None and resolved_to is not None and resolved_from > resolved_to:
         raise HTTPException(status_code=422, detail="from must be less than or equal to to")
     return SignalsReadQuery(
         symbol=symbol,
         strategy=strategy,
-        from_=from_,
-        to=to,
+        preset=preset,
+        from_=resolved_from,
+        to=resolved_to,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -385,6 +407,7 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
     items, total = signal_repo.read_signals(
         symbol=params.symbol,
         strategy=params.strategy,
+        preset=params.preset,
         from_=params.from_,
         to=params.to,
         sort=params.sort,
