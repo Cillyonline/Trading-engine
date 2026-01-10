@@ -20,9 +20,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import SIGNALS_READ_MAX_LIMIT
+from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
@@ -58,6 +59,16 @@ logger = logging.getLogger(__name__)
 # --- Pydantic-Modelle für Requests/Responses ---
 
 
+class PresetConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(..., min_length=1, description="Stabiler Preset-Identifier.")
+    params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Strategie-Parameter für dieses Preset.",
+    )
+
+
 class StrategyAnalyzeRequest(BaseModel):
     ingestion_run_id: Optional[str] = Field(
         default=None,
@@ -82,12 +93,29 @@ class StrategyAnalyzeRequest(BaseModel):
         default=None,
         description="Optionale Strategie-Konfiguration (z. B. Oversold-Schwelle).",
     )
+    presets: Optional[List[PresetConfig]] = Field(
+        default=None,
+        min_length=1,
+        description="Optional: mehrere Presets für dieselbe Strategie (Vergleich).",
+    )
+
+    @model_validator(mode="after")
+    def _validate_presets(self) -> "StrategyAnalyzeRequest":
+        if self.presets is None:
+            return self
+
+        preset_ids = [preset.id for preset in self.presets]
+        if len(set(preset_ids)) != len(preset_ids):
+            raise ValueError("preset ids must be unique")
+
+        return self
 
 
 class StrategyAnalyzeResponse(BaseModel):
     symbol: str
     strategy: str
-    signals: List[Dict[str, Any]]
+    signals: Optional[List[Dict[str, Any]]] = None
+    results_by_preset: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
 class ManualAnalysisRequest(BaseModel):
@@ -229,9 +257,12 @@ app = FastAPI(
 
 logger.info("Cilly Trading Engine API starting up")
 
+# Analysis DB Path (test-patchable)
+ANALYSIS_DB_PATH: Optional[str] = None
+
 # Repositories & Strategien als Singletons im Modul
 signal_repo = SqliteSignalRepository()
-analysis_run_repo = SqliteAnalysisRunRepository()
+analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 
 
 def _is_uuid4(value: str) -> bool:
@@ -247,6 +278,31 @@ def _require_ingestion_run(ingestion_run_id: str) -> None:
         raise HTTPException(status_code=422, detail="invalid_ingestion_run_id")
     if not analysis_run_repo.ingestion_run_exists(ingestion_run_id):
         raise HTTPException(status_code=422, detail="ingestion_run_not_found")
+
+
+def _resolve_analysis_db_path() -> str:
+    """
+    Resolves the SQLite DB path used for analysis & snapshot loading.
+
+    Resolution order:
+    1. ANALYSIS_DB_PATH if explicitly set (test-patchable override)
+    2. analysis_run_repo._db_path (preferred in tests where repo is patched)
+    3. DEFAULT_DB_PATH (last-resort fallback)
+    """
+    if ANALYSIS_DB_PATH:
+        resolved = str(ANALYSIS_DB_PATH)
+        logger.debug("Analysis DB path resolved via ANALYSIS_DB_PATH override: %s", resolved)
+        return resolved
+
+    repo_path = getattr(analysis_run_repo, "_db_path", None)
+    if repo_path:
+        resolved = str(repo_path)
+        logger.debug("Analysis DB path resolved via analysis_run_repo._db_path: %s", resolved)
+        return resolved
+
+    resolved = str(DEFAULT_DB_PATH)
+    logger.debug("Analysis DB path resolved via DEFAULT_DB_PATH fallback: %s", resolved)
+    return resolved
 
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
@@ -518,6 +574,62 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         data_source="yahoo" if req.market_type == "stock" else "binance",
     )
 
+    if req.presets:
+        if req.strategy_config:
+            logger.info(
+                "Ignoring single strategy_config because presets are provided: strategy=%s",
+                strategy_name,
+            )
+
+        results_by_preset: Dict[str, List[Dict[str, Any]]] = {}
+        for preset in req.presets:
+            effective_config = default_strategy_configs.get(strategy_name, {}).copy()
+            if preset.params:
+                effective_config.update(preset.params)
+
+            logger.debug(
+                "Effective strategy config: strategy=%s preset=%s keys=%s",
+                strategy_name,
+                preset.id,
+                sorted(list(effective_config.keys())),
+            )
+
+            strategy_configs = {
+                strategy_name: effective_config,
+            }
+
+            # Engine-Aufruf
+            signals = run_watchlist_analysis(
+                symbols=[req.symbol],
+                strategies=[strategy],
+                engine_config=engine_config,
+                strategy_configs=strategy_configs,
+                signal_repo=signal_repo,
+                ingestion_run_id=req.ingestion_run_id,
+                db_path=_resolve_analysis_db_path(),
+            )
+
+            filtered_signals = [
+                s
+                for s in signals
+                if s.get("symbol") == req.symbol and s.get("strategy") == strategy_name
+            ]
+
+            results_by_preset[preset.id] = filtered_signals
+
+        logger.info(
+            "Strategy analyze finished: symbol=%s strategy=%s presets=%d",
+            req.symbol,
+            strategy_name,
+            len(results_by_preset),
+        )
+
+        return StrategyAnalyzeResponse(
+            symbol=req.symbol,
+            strategy=strategy_name,
+            results_by_preset=results_by_preset,
+        )
+
     # Konfiguration: Defaults + optional Request-Override
     effective_config = default_strategy_configs.get(strategy_name, {}).copy()
     if req.strategy_config:
@@ -541,7 +653,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=analysis_run_repo._db_path,
+        db_path=_resolve_analysis_db_path(),
     )
 
     filtered_signals = [
@@ -611,7 +723,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=analysis_run_repo._db_path,
+        db_path=_resolve_analysis_db_path(),
     )
 
     filtered_signals = [
@@ -686,7 +798,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         strategy_configs=strategy_configs,
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=analysis_run_repo._db_path,
+        db_path=_resolve_analysis_db_path(),
     )
 
     logger.info("Screener engine run finished: total_signals=%d", len(signals))
