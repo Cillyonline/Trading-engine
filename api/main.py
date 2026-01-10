@@ -285,18 +285,18 @@ def _resolve_analysis_db_path() -> str:
     Resolves the SQLite DB path used for analysis & snapshot loading.
 
     Resolution order:
-    1. Public analysis_run_repo.db_path (preferred, test-patchable)
-    2. Module-level ANALYSIS_DB_PATH (test-patchable fallback)
+    1. Module-level ANALYSIS_DB_PATH (preferred, test-patchable)
+    2. Public analysis_run_repo.db_path
     3. analysis_run_repo._db_path (legacy compatibility fallback)
 
     Raises RuntimeError if no path can be resolved.
     """
+    if ANALYSIS_DB_PATH:
+        return str(ANALYSIS_DB_PATH)
+
     db_path = getattr(analysis_run_repo, "db_path", None)
     if db_path:
         return str(db_path)
-
-    if ANALYSIS_DB_PATH:
-        return str(ANALYSIS_DB_PATH)
 
     db_path = getattr(analysis_run_repo, "_db_path", None)
     if db_path:
