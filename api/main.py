@@ -286,19 +286,23 @@ def _resolve_analysis_db_path() -> str:
 
     Resolution order:
     1. ANALYSIS_DB_PATH if explicitly set (test-patchable override)
-    2. analysis_run_repo.db_path (preferred in tests where repo is patched)
-    3. analysis_run_repo._db_path (legacy fallback)
-    4. DEFAULT_DB_PATH (last-resort fallback)
+    2. analysis_run_repo._db_path (preferred in tests where repo is patched)
+    3. DEFAULT_DB_PATH (last-resort fallback)
     """
     if ANALYSIS_DB_PATH:
-        return str(ANALYSIS_DB_PATH)
+        resolved = str(ANALYSIS_DB_PATH)
+        logger.debug("Analysis DB path resolved via ANALYSIS_DB_PATH override: %s", resolved)
+        return resolved
 
-    for attr in ("db_path", "_db_path", "path", "_path"):
-        value = getattr(analysis_run_repo, attr, None)
-        if value:
-            return str(value)
+    repo_path = getattr(analysis_run_repo, "_db_path", None)
+    if repo_path:
+        resolved = str(repo_path)
+        logger.debug("Analysis DB path resolved via analysis_run_repo._db_path: %s", resolved)
+        return resolved
 
-    return str(DEFAULT_DB_PATH)
+    resolved = str(DEFAULT_DB_PATH)
+    logger.debug("Analysis DB path resolved via DEFAULT_DB_PATH fallback: %s", resolved)
+    return resolved
 
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
