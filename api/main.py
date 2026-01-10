@@ -181,6 +181,8 @@ class SignalsReadQuery(BaseModel):
     preset: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
+    start: Optional[datetime] = Field(default=None)
+    end: Optional[datetime] = Field(default=None)
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
     limit: int = Field(
         default=50,
@@ -347,6 +349,8 @@ def _get_signals_query(
         preset=preset,
         from_=resolved_from,
         to=resolved_to,
+        start=start,
+        end=end,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -404,12 +408,14 @@ def _get_screener_results_query(
     },
 )
 def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
+    effective_from = params.from_ or params.start
+    effective_to = params.to or params.end
     items, total = signal_repo.read_signals(
         symbol=params.symbol,
         strategy=params.strategy,
         preset=params.preset,
-        from_=params.from_,
-        to=params.to,
+        from_=effective_from,
+        to=effective_to,
         sort=params.sort,
         limit=params.limit,
         offset=params.offset,
