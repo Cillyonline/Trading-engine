@@ -120,3 +120,87 @@ def test_read_signals_limit_boundary(tmp_path: Path, monkeypatch) -> None:
 
     response = client.get("/signals", params={"limit": SIGNALS_READ_MAX_LIMIT})
     assert response.status_code == 200
+
+
+def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(timestamp="2025-01-01T00:00:00+00:00"),
+            _base_signal(timestamp="2025-01-02T00:00:00+00:00"),
+            _base_signal(timestamp="2025-01-03T00:00:00+00:00"),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response_start = client.get("/signals", params={"start": "2025-01-02T00:00:00+00:00"})
+    assert response_start.status_code == 200
+    payload_start = response_start.json()
+    assert payload_start["total"] == 2
+    assert [item["created_at"] for item in payload_start["items"]] == [
+        "2025-01-03T00:00:00+00:00",
+        "2025-01-02T00:00:00+00:00",
+    ]
+
+    response_end = client.get("/signals", params={"end": "2025-01-02T00:00:00+00:00"})
+    assert response_end.status_code == 200
+    payload_end = response_end.json()
+    assert payload_end["total"] == 2
+    assert [item["created_at"] for item in payload_end["items"]] == [
+        "2025-01-02T00:00:00+00:00",
+        "2025-01-01T00:00:00+00:00",
+    ]
+
+    response_range = client.get(
+        "/signals",
+        params={
+            "start": "2025-01-02T00:00:00+00:00",
+            "end": "2025-01-02T00:00:00+00:00",
+        },
+    )
+    assert response_range.status_code == 200
+    payload_range = response_range.json()
+    assert payload_range["total"] == 1
+    assert payload_range["items"][0]["created_at"] == "2025-01-02T00:00:00+00:00"
+
+
+def test_read_signals_filters_strategy_and_preset(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(strategy="RSI2", timeframe="D1", symbol="AAA"),
+            _base_signal(strategy="RSI2", timeframe="H1", symbol="BBB"),
+            _base_signal(strategy="TURTLE", timeframe="H1", symbol="CCC"),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/signals", params={"strategy": "RSI2", "preset": "H1"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["symbol"] == "BBB"
+
+
+def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(symbol=f"SYM{i}", timestamp="2025-01-01T00:00:00+00:00")
+            for i in range(1, 61)
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/signals")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 50
+    assert payload["total"] == 60
+    assert len(payload["items"]) == 50

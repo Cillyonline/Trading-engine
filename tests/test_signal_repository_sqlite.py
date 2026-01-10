@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -118,3 +119,45 @@ def test_save_signals_missing_required_key_raises_keyerror(tmp_path: Path) -> No
 
     with pytest.raises(KeyError):
         repo.save_signals([invalid])
+
+
+def test_read_signals_filters_and_sorting(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(
+                symbol="AAA",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-01T00:00:00+00:00",
+            ),
+            _base_signal(
+                symbol="BBB",
+                strategy="RSI2",
+                timeframe="H1",
+                timestamp="2025-01-02T00:00:00+00:00",
+            ),
+            _base_signal(
+                symbol="CCC",
+                strategy="TURTLE",
+                timeframe="H1",
+                timestamp="2025-01-03T00:00:00+00:00",
+            ),
+        ]
+    )
+
+    items, total = repo.read_signals(strategy="RSI2", preset="H1")
+    assert total == 1
+    assert items[0]["symbol"] == "BBB"
+
+    items_start, total_start = repo.read_signals(from_=datetime.fromisoformat("2025-01-02T00:00:00+00:00"))
+    assert total_start == 2
+    assert [item["symbol"] for item in items_start] == ["CCC", "BBB"]
+
+    items_end, total_end = repo.read_signals(to=datetime.fromisoformat("2025-01-02T00:00:00+00:00"))
+    assert total_end == 2
+    assert [item["symbol"] for item in items_end] == ["BBB", "AAA"]
+
+    items_asc, total_asc = repo.read_signals(sort="created_at_asc", limit=10)
+    assert total_asc == 3
+    assert [item["symbol"] for item in items_asc] == ["AAA", "BBB", "CCC"]

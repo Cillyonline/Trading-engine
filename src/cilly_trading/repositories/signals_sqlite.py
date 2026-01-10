@@ -157,6 +157,7 @@ class SqliteSignalRepository(SignalRepository):
         *,
         symbol: Optional[str] = None,
         strategy: Optional[str] = None,
+        preset: Optional[str] = None,
         from_: Optional[datetime] = None,
         to: Optional[datetime] = None,
         sort: str = "created_at_desc",
@@ -172,11 +173,15 @@ class SqliteSignalRepository(SignalRepository):
         if strategy is not None:
             where_clauses.append("strategy = ?")
             params.append(strategy)
+        if preset is not None:
+            where_clauses.append("timeframe = ?")
+            params.append(preset)
+        normalized_timestamp = "REPLACE(timestamp, 'Z', '+00:00')"
         if from_ is not None:
-            where_clauses.append("timestamp >= ?")
+            where_clauses.append(f"{normalized_timestamp} >= ?")
             params.append(from_.isoformat())
         if to is not None:
-            where_clauses.append("timestamp <= ?")
+            where_clauses.append(f"{normalized_timestamp} <= ?")
             params.append(to.isoformat())
 
         where_sql = ""
