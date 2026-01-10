@@ -293,13 +293,10 @@ def _resolve_analysis_db_path() -> str:
     if ANALYSIS_DB_PATH:
         return str(ANALYSIS_DB_PATH)
 
-    db_path = getattr(analysis_run_repo, "db_path", None)
-    if db_path:
-        return str(db_path)
-
-    db_path = getattr(analysis_run_repo, "_db_path", None)
-    if db_path:
-        return str(db_path)
+    for attr in ("db_path", "_db_path", "path", "_path"):
+        value = getattr(analysis_run_repo, attr, None)
+        if value:
+            return str(value)
 
     return str(DEFAULT_DB_PATH)
 
