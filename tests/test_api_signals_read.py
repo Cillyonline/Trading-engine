@@ -204,3 +204,4 @@ def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None
     assert payload["limit"] == 50
     assert payload["total"] == 60
     assert len(payload["items"]) == 50
+
