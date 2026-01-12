@@ -6,7 +6,7 @@
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn api.main:app --reload
+PYTHONPATH=src uvicorn api.main:app --reload
 ```
 
 ```bash
@@ -44,8 +44,10 @@ pip install -r requirements.txt
 No CLI entrypoint yet; use API endpoints.
 
 ```bash
-uvicorn api.main:app --reload
+PYTHONPATH=src uvicorn api.main:app --reload
 ```
+
+The code uses a `src/` layout; `PYTHONPATH=src` makes `cilly_trading` importable.
 
 4) **Verify the API is up**
 
