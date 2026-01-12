@@ -93,6 +93,16 @@ class StrategyAnalyzeRequest(BaseModel):
         default=None,
         description="Optionale Strategie-Konfiguration (z. B. Oversold-Schwelle).",
     )
+    preset_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Optional: einzelner Preset-Identifier.",
+    )
+    preset_ids: Optional[List[str]] = Field(
+        default=None,
+        min_length=1,
+        description="Optional: mehrere Preset-Identifier für Vergleich.",
+    )
     presets: Optional[List[PresetConfig]] = Field(
         default=None,
         min_length=1,
@@ -101,7 +111,19 @@ class StrategyAnalyzeRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_presets(self) -> "StrategyAnalyzeRequest":
+        if self.presets and (self.preset_id or self.preset_ids):
+            raise ValueError("presets cannot be combined with preset_id or preset_ids")
+
+        if self.preset_id and self.preset_ids:
+            raise ValueError("preset_id and preset_ids cannot be used together")
+
         if self.presets is None:
+            if self.preset_ids is None:
+                return self
+
+            preset_ids = self.preset_ids
+            if len(set(preset_ids)) != len(preset_ids):
+                raise ValueError("preset ids must be unique")
             return self
 
         preset_ids = [preset.id for preset in self.presets]
@@ -111,11 +133,17 @@ class StrategyAnalyzeRequest(BaseModel):
         return self
 
 
+class PresetAnalysisResult(BaseModel):
+    preset_id: str
+    signals: List[Dict[str, Any]]
+
+
 class StrategyAnalyzeResponse(BaseModel):
     symbol: str
     strategy: str
     signals: Optional[List[Dict[str, Any]]] = None
     results_by_preset: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    preset_results: Optional[List[PresetAnalysisResult]] = None
 
 
 class ManualAnalysisRequest(BaseModel):
@@ -574,23 +602,34 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         data_source="yahoo" if req.market_type == "stock" else "binance",
     )
 
-    if req.presets:
-        if req.strategy_config:
+    if req.presets or req.preset_ids or req.preset_id:
+        if req.presets and req.strategy_config:
             logger.info(
                 "Ignoring single strategy_config because presets are provided: strategy=%s",
                 strategy_name,
             )
 
         results_by_preset: Dict[str, List[Dict[str, Any]]] = {}
-        for preset in req.presets:
+        preset_results: List[PresetAnalysisResult] = []
+
+        if req.presets:
+            preset_inputs = [(preset.id, preset.params) for preset in req.presets]
+        else:
+            preset_ids = req.preset_ids if req.preset_ids is not None else [req.preset_id]
+            preset_inputs = [(preset_id, None) for preset_id in preset_ids]
+
+        for preset_id, preset_params in preset_inputs:
             effective_config = default_strategy_configs.get(strategy_name, {}).copy()
-            if preset.params:
-                effective_config.update(preset.params)
+            if req.presets:
+                if preset_params:
+                    effective_config.update(preset_params)
+            elif req.strategy_config:
+                effective_config.update(req.strategy_config)
 
             logger.debug(
                 "Effective strategy config: strategy=%s preset=%s keys=%s",
                 strategy_name,
-                preset.id,
+                preset_id,
                 sorted(list(effective_config.keys())),
             )
 
@@ -615,7 +654,10 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
                 if s.get("symbol") == req.symbol and s.get("strategy") == strategy_name
             ]
 
-            results_by_preset[preset.id] = filtered_signals
+            results_by_preset[preset_id] = filtered_signals
+            preset_results.append(
+                PresetAnalysisResult(preset_id=preset_id, signals=filtered_signals)
+            )
 
         logger.info(
             "Strategy analyze finished: symbol=%s strategy=%s presets=%d",
@@ -628,6 +670,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
             symbol=req.symbol,
             strategy=strategy_name,
             results_by_preset=results_by_preset,
+            preset_results=preset_results,
         )
 
     # Konfiguration: Defaults + optional Request-Override
