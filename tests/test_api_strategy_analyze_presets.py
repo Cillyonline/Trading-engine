@@ -57,10 +57,8 @@ def test_strategy_analyze_multi_presets_returns_results(tmp_path: Path, monkeypa
         "strategy": "RSI2",
         "market_type": "stock",
         "lookback_days": 30,
-        "presets": [
-            {"id": "fast", "params": {"oversold_threshold": 15.0}},
-            {"id": "slow", "params": {"oversold_threshold": 8.0}},
-        ],
+        "preset_ids": ["fast", "slow"],
+        "strategy_config": {"oversold_threshold": 15.0},
     }
 
     response = client.post("/strategy/analyze", json=payload)
@@ -73,6 +71,8 @@ def test_strategy_analyze_multi_presets_returns_results(tmp_path: Path, monkeypa
     assert list(data["results_by_preset"].keys()) == ["fast", "slow"]
     assert isinstance(data["results_by_preset"]["fast"], list)
     assert isinstance(data["results_by_preset"]["slow"], list)
+    assert data["preset_results"] is not None
+    assert [item["preset_id"] for item in data["preset_results"]] == ["fast", "slow"]
 
 
 def test_strategy_analyze_duplicate_preset_ids_rejected(
@@ -86,10 +86,7 @@ def test_strategy_analyze_duplicate_preset_ids_rejected(
         "strategy": "RSI2",
         "market_type": "stock",
         "lookback_days": 30,
-        "presets": [
-            {"id": "dup", "params": {"oversold_threshold": 15.0}},
-            {"id": "dup", "params": {"oversold_threshold": 8.0}},
-        ],
+        "preset_ids": ["dup", "dup"],
     }
 
     response = client.post("/strategy/analyze", json=payload)
@@ -108,7 +105,7 @@ def test_strategy_analyze_missing_preset_id_rejected(
         "strategy": "RSI2",
         "market_type": "stock",
         "lookback_days": 30,
-        "presets": [{"params": {"oversold_threshold": 15.0}}],
+        "preset_ids": [],
     }
 
     response = client.post("/strategy/analyze", json=payload)
@@ -124,10 +121,8 @@ def test_strategy_analyze_deterministic_output(tmp_path: Path, monkeypatch) -> N
         "strategy": "RSI2",
         "market_type": "stock",
         "lookback_days": 30,
-        "presets": [
-            {"id": "fast", "params": {"oversold_threshold": 15.0}},
-            {"id": "slow", "params": {"oversold_threshold": 8.0}},
-        ],
+        "preset_ids": ["fast", "slow"],
+        "strategy_config": {"oversold_threshold": 15.0},
     }
 
     response_one = client.post("/strategy/analyze", json=payload)
