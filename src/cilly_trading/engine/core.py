@@ -17,6 +17,8 @@ from typing import Protocol, List, Dict, Any, Optional
 from collections.abc import Mapping
 from pathlib import Path
 
+import pandas as pd
+
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import load_ohlcv, load_ohlcv_snapshot
@@ -117,6 +119,23 @@ class EngineConfig:
     data_source: str = "yahoo"
 
 
+@dataclass(frozen=True)
+class AnalysisRun:
+    """Minimal analysis run representation.
+
+    Args:
+        analysis_run_id: Deterministic identifier for the analysis run.
+        ingestion_run_id: Snapshot ingestion run reference.
+        request_payload: Canonical request payload for the run.
+        signals: Signals emitted during the run (with deterministic IDs).
+    """
+
+    analysis_run_id: str
+    ingestion_run_id: str
+    request_payload: Dict[str, Any]
+    signals: List[Signal]
+
+
 class BaseStrategy(Protocol):
     name: str
 
@@ -130,6 +149,127 @@ class BaseStrategy(Protocol):
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_timestamp_to_utc(value: Any) -> Optional[str]:
+    timestamp = pd.to_datetime(value, utc=True, errors="coerce")
+    if pd.isna(timestamp):
+        return None
+    return timestamp.isoformat()
+
+
+def _derive_timestamp_from_df(df: Any) -> Optional[str]:
+    index = getattr(df, "index", None)
+    if index is not None and len(index) > 0:
+        if isinstance(index, pd.DatetimeIndex) or pd.api.types.is_datetime64_any_dtype(index):
+            derived = _normalize_timestamp_to_utc(index[-1])
+            if derived is not None:
+                return derived
+
+    if getattr(df, "columns", None) is not None and "timestamp" in df.columns:
+        try:
+            return _normalize_timestamp_to_utc(df["timestamp"].iloc[-1])
+        except Exception:
+            logger.warning(
+                "Failed to derive timestamp from OHLCV column: component=engine",
+                exc_info=True,
+            )
+            return None
+
+    return None
+
+
+def compute_analysis_run_id(run_request_payload: Mapping[str, Any]) -> str:
+    """Compute a deterministic analysis run ID.
+
+    Args:
+        run_request_payload: Request payload for the analysis run.
+
+    Returns:
+        Deterministic analysis run ID.
+    """
+    return sha256_hex(canonical_json(dict(run_request_payload)))
+
+
+def _signal_identity_payload(signal: Mapping[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for key in (
+        "symbol",
+        "strategy",
+        "timestamp",
+        "timeframe",
+        "market_type",
+        "data_source",
+        "direction",
+        "stage",
+        "assets",
+    ):
+        if key in signal:
+            payload[key] = signal[key]
+    return payload
+
+
+def compute_signal_id(signal: Mapping[str, Any]) -> str:
+    """Compute a deterministic signal ID.
+
+    Args:
+        signal: Signal payload used to compute the ID.
+
+    Returns:
+        Deterministic signal ID.
+    """
+    return sha256_hex(canonical_json(_signal_identity_payload(signal)))
+
+
+def add_signal_ids(signals: List[Signal]) -> List[Signal]:
+    """Attach deterministic IDs to signals.
+
+    Signals missing a timestamp are skipped with a warning.
+
+    Args:
+        signals: Signals to process.
+
+    Returns:
+        Signals with signal_id attached.
+    """
+    enriched_signals: List[Signal] = []
+    for signal in signals:
+        if not signal.get("timestamp"):
+            logger.warning(
+                "Skipping signal without timestamp for deterministic ID: component=engine symbol=%s strategy=%s",
+                signal.get("symbol", "n/a"),
+                signal.get("strategy", "n/a"),
+            )
+            continue
+        signal_with_id = dict(signal)
+        signal_with_id["signal_id"] = compute_signal_id(signal_with_id)
+        enriched_signals.append(signal_with_id)
+    return enriched_signals
+
+
+def build_analysis_run(
+    *,
+    ingestion_run_id: str,
+    run_request_payload: Mapping[str, Any],
+    signals: List[Signal],
+) -> AnalysisRun:
+    """Build a minimal analysis run with deterministic IDs.
+
+    Args:
+        ingestion_run_id: Snapshot ingestion run reference.
+        run_request_payload: Request payload for the analysis run.
+        signals: Signals emitted during the run.
+
+    Returns:
+        AnalysisRun with deterministic IDs applied.
+    """
+    analysis_run_id = compute_analysis_run_id(run_request_payload)
+    return AnalysisRun(
+        analysis_run_id=analysis_run_id,
+        ingestion_run_id=ingestion_run_id,
+        request_payload=dict(run_request_payload),
+        signals=add_signal_ids(signals),
+    )
 
 
 def run_watchlist_analysis(
@@ -224,6 +364,7 @@ def run_watchlist_analysis(
                 )
                 continue
 
+            derived_timestamp = _derive_timestamp_from_df(df)
             symbol_signals_count = 0
 
             for strategy in ordered_strategies:
@@ -275,11 +416,21 @@ def run_watchlist_analysis(
                     len(signals),
                 )
 
+                processed_signals: List[Signal] = []
                 for s in signals:
                     try:
                         s.setdefault("symbol", symbol)
                         s.setdefault("strategy", strat_name)
-                        s.setdefault("timestamp", _now_iso())
+                        if not s.get("timestamp"):
+                            if derived_timestamp is None:
+                                logger.warning(
+                                    "Skipping signal without deterministic timestamp: component=engine strategy=%s symbol=%s timeframe=%s",
+                                    strat_name,
+                                    symbol,
+                                    engine_config.timeframe,
+                                )
+                                continue
+                            s["timestamp"] = derived_timestamp
                         s.setdefault("timeframe", engine_config.timeframe)
                         s.setdefault("market_type", engine_config.market_type)
                         s.setdefault("data_source", engine_config.data_source)
@@ -293,9 +444,10 @@ def run_watchlist_analysis(
                             exc_info=True,
                         )
                         continue
+                    processed_signals.append(s)
 
-                all_signals.extend(signals)
-                symbol_signals_count += len(signals)
+                all_signals.extend(processed_signals)
+                symbol_signals_count += len(processed_signals)
 
             logger.info(
                 "Symbol analysis done: component=engine symbol=%s timeframe=%s signals=%d",
