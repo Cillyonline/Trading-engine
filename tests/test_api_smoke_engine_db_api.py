@@ -44,8 +44,7 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
     # (repo is not bound at import or startup time).
     monkeypatch.setattr(api_main, "signal_repo", repo)
 
-    fixed_timestamp = "2025-01-03T00:00:00+00:00"
-    monkeypatch.setattr(engine_core, "_now_iso", lambda: fixed_timestamp)
+    expected_timestamp = _mock_ohlcv_df()["timestamp"].iloc[-1].isoformat()
     monkeypatch.setattr(engine_core, "load_ohlcv", lambda **_: _mock_ohlcv_df())
 
     engine_config = EngineConfig(
@@ -76,7 +75,7 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
     assert any(
         item.get("symbol") == "AAPL"
         and item.get("strategy") == "RSI2"
-        and item.get("created_at") == fixed_timestamp
+        and item.get("created_at") == expected_timestamp
         for item in items
     ), f"Expected signal not found in payload items: {items}"
 
