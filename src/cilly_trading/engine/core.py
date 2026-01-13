@@ -17,6 +17,8 @@ from typing import Protocol, List, Dict, Any, Optional
 from collections.abc import Mapping
 from pathlib import Path
 
+import pandas as pd
+
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import load_ohlcv, load_ohlcv_snapshot
@@ -147,6 +149,32 @@ class BaseStrategy(Protocol):
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_timestamp_to_utc(value: Any) -> Optional[str]:
+    timestamp = pd.to_datetime(value, utc=True, errors="coerce")
+    if pd.isna(timestamp):
+        return None
+    return timestamp.isoformat()
+
+
+def _derive_timestamp_from_df(df: Any) -> Optional[str]:
+    index = getattr(df, "index", None)
+    if index is not None and len(index) > 0:
+        if isinstance(index, pd.DatetimeIndex):
+            return _normalize_timestamp_to_utc(index[-1])
+
+    if getattr(df, "columns", None) is not None and "timestamp" in df.columns:
+        try:
+            return _normalize_timestamp_to_utc(df["timestamp"].iloc[-1])
+        except Exception:
+            logger.warning(
+                "Failed to derive timestamp from OHLCV column: component=engine",
+                exc_info=True,
+            )
+            return None
+
+    return None
 
 
 def compute_analysis_run_id(run_request_payload: Mapping[str, Any]) -> str:
@@ -334,6 +362,7 @@ def run_watchlist_analysis(
                 )
                 continue
 
+            derived_timestamp = _derive_timestamp_from_df(df)
             symbol_signals_count = 0
 
             for strategy in ordered_strategies:
@@ -385,10 +414,21 @@ def run_watchlist_analysis(
                     len(signals),
                 )
 
+                processed_signals: List[Signal] = []
                 for s in signals:
                     try:
                         s.setdefault("symbol", symbol)
                         s.setdefault("strategy", strat_name)
+                        if not s.get("timestamp"):
+                            if derived_timestamp is None:
+                                logger.warning(
+                                    "Skipping signal without deterministic timestamp: component=engine strategy=%s symbol=%s timeframe=%s",
+                                    strat_name,
+                                    symbol,
+                                    engine_config.timeframe,
+                                )
+                                continue
+                            s["timestamp"] = derived_timestamp
                         s.setdefault("timeframe", engine_config.timeframe)
                         s.setdefault("market_type", engine_config.market_type)
                         s.setdefault("data_source", engine_config.data_source)
@@ -402,9 +442,10 @@ def run_watchlist_analysis(
                             exc_info=True,
                         )
                         continue
+                    processed_signals.append(s)
 
-                all_signals.extend(signals)
-                symbol_signals_count += len(signals)
+                all_signals.extend(processed_signals)
+                symbol_signals_count += len(processed_signals)
 
             logger.info(
                 "Symbol analysis done: component=engine symbol=%s timeframe=%s signals=%d",
