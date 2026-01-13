@@ -161,8 +161,10 @@ def _normalize_timestamp_to_utc(value: Any) -> Optional[str]:
 def _derive_timestamp_from_df(df: Any) -> Optional[str]:
     index = getattr(df, "index", None)
     if index is not None and len(index) > 0:
-        if isinstance(index, pd.DatetimeIndex):
-            return _normalize_timestamp_to_utc(index[-1])
+        if isinstance(index, pd.DatetimeIndex) or pd.api.types.is_datetime64_any_dtype(index):
+            derived = _normalize_timestamp_to_utc(index[-1])
+            if derived is not None:
+                return derived
 
     if getattr(df, "columns", None) is not None and "timestamp" in df.columns:
         try:
