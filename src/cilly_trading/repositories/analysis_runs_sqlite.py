@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from cilly_trading.db import DEFAULT_DB_PATH, init_db
+from cilly_trading.engine.core import AnalysisRun
 
 
 class SqliteAnalysisRunRepository:
@@ -125,3 +126,22 @@ class SqliteAnalysisRunRepository:
         )
         conn.commit()
         conn.close()
+
+    def save_analysis_run(
+        self,
+        analysis_run: AnalysisRun,
+        *,
+        result_payload: Dict[str, Any],
+    ) -> None:
+        """Persist an analysis run using the existing schema.
+
+        Args:
+            analysis_run: AnalysisRun entity containing IDs and request payload.
+            result_payload: Result payload to persist.
+        """
+        self.save_run(
+            analysis_run_id=analysis_run.analysis_run_id,
+            ingestion_run_id=analysis_run.ingestion_run_id,
+            request_payload=analysis_run.request_payload,
+            result_payload=result_payload,
+        )
