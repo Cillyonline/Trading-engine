@@ -212,7 +212,7 @@ def add_signal_ids(signals: List[Signal]) -> List[Signal]:
             )
             continue
         signal_with_id = dict(signal)
-        signal_with_id["signal_id"] = compute_signal_id(signal)
+        signal_with_id["signal_id"] = compute_signal_id(signal_with_id)
         enriched_signals.append(signal_with_id)
     return enriched_signals
 
@@ -389,7 +389,6 @@ def run_watchlist_analysis(
                     try:
                         s.setdefault("symbol", symbol)
                         s.setdefault("strategy", strat_name)
-                        s.setdefault("timestamp", _now_iso())
                         s.setdefault("timeframe", engine_config.timeframe)
                         s.setdefault("market_type", engine_config.market_type)
                         s.setdefault("data_source", engine_config.data_source)
