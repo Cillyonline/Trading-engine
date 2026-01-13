@@ -117,6 +117,23 @@ class EngineConfig:
     data_source: str = "yahoo"
 
 
+@dataclass(frozen=True)
+class AnalysisRun:
+    """Minimal analysis run representation.
+
+    Args:
+        analysis_run_id: Deterministic identifier for the analysis run.
+        ingestion_run_id: Snapshot ingestion run reference.
+        request_payload: Canonical request payload for the run.
+        signals: Signals emitted during the run (with deterministic IDs).
+    """
+
+    analysis_run_id: str
+    ingestion_run_id: str
+    request_payload: Dict[str, Any]
+    signals: List[Signal]
+
+
 class BaseStrategy(Protocol):
     name: str
 
@@ -130,6 +147,99 @@ class BaseStrategy(Protocol):
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def compute_analysis_run_id(run_request_payload: Mapping[str, Any]) -> str:
+    """Compute a deterministic analysis run ID.
+
+    Args:
+        run_request_payload: Request payload for the analysis run.
+
+    Returns:
+        Deterministic analysis run ID.
+    """
+    return sha256_hex(canonical_json(dict(run_request_payload)))
+
+
+def _signal_identity_payload(signal: Mapping[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for key in (
+        "symbol",
+        "strategy",
+        "timestamp",
+        "timeframe",
+        "market_type",
+        "data_source",
+        "direction",
+        "stage",
+        "assets",
+    ):
+        if key in signal:
+            payload[key] = signal[key]
+    return payload
+
+
+def compute_signal_id(signal: Mapping[str, Any]) -> str:
+    """Compute a deterministic signal ID.
+
+    Args:
+        signal: Signal payload used to compute the ID.
+
+    Returns:
+        Deterministic signal ID.
+    """
+    return sha256_hex(canonical_json(_signal_identity_payload(signal)))
+
+
+def add_signal_ids(signals: List[Signal]) -> List[Signal]:
+    """Attach deterministic IDs to signals.
+
+    Signals missing a timestamp are skipped with a warning.
+
+    Args:
+        signals: Signals to process.
+
+    Returns:
+        Signals with signal_id attached.
+    """
+    enriched_signals: List[Signal] = []
+    for signal in signals:
+        if not signal.get("timestamp"):
+            logger.warning(
+                "Skipping signal without timestamp for deterministic ID: component=engine symbol=%s strategy=%s",
+                signal.get("symbol", "n/a"),
+                signal.get("strategy", "n/a"),
+            )
+            continue
+        signal_with_id = dict(signal)
+        signal_with_id["signal_id"] = compute_signal_id(signal)
+        enriched_signals.append(signal_with_id)
+    return enriched_signals
+
+
+def build_analysis_run(
+    *,
+    ingestion_run_id: str,
+    run_request_payload: Mapping[str, Any],
+    signals: List[Signal],
+) -> AnalysisRun:
+    """Build a minimal analysis run with deterministic IDs.
+
+    Args:
+        ingestion_run_id: Snapshot ingestion run reference.
+        run_request_payload: Request payload for the analysis run.
+        signals: Signals emitted during the run.
+
+    Returns:
+        AnalysisRun with deterministic IDs applied.
+    """
+    analysis_run_id = compute_analysis_run_id(run_request_payload)
+    return AnalysisRun(
+        analysis_run_id=analysis_run_id,
+        ingestion_run_id=ingestion_run_id,
+        request_payload=dict(run_request_payload),
+        signals=add_signal_ids(signals),
+    )
 
 
 def run_watchlist_analysis(
