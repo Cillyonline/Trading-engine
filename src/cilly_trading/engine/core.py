@@ -8,6 +8,8 @@ Core-Engine der Cilly Trading Engine.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +24,63 @@ from cilly_trading.engine.strategy_params import normalize_and_validate_strategy
 
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_assets(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("assets must be a list or tuple")
+
+    normalized = []
+    for item in value:
+        if not isinstance(item, str):
+            raise TypeError("assets list items must be strings")
+        normalized.append(item.strip().upper())
+
+    return sorted(normalized)
+
+
+def _normalize_canonical_value(value: Any, *, key: Optional[str] = None) -> Any:
+    if isinstance(value, float):
+        raise TypeError("floats are not supported in canonical_json")
+
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+
+    if isinstance(value, dict):
+        normalized_dict: Dict[str, Any] = {}
+        for raw_key, raw_value in value.items():
+            if not isinstance(raw_key, str):
+                raise TypeError("dict keys must be strings")
+            normalized_dict[raw_key] = _normalize_canonical_value(raw_value, key=raw_key)
+        return normalized_dict
+
+    if isinstance(value, (list, tuple)):
+        if key == "assets":
+            return _normalize_assets(value)
+        return [_normalize_canonical_value(item) for item in value]
+
+    raise TypeError(f"unsupported type for canonical_json: {type(value).__name__}")
+
+
+def canonical_json(obj: Any) -> str:
+    """
+    Create a deterministic JSON representation of the provided object.
+    """
+    normalized = _normalize_canonical_value(obj)
+    return json.dumps(
+        normalized,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def sha256_hex(text: str) -> str:
+    """
+    Return a SHA-256 hex digest for the provided text.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, Any]:
