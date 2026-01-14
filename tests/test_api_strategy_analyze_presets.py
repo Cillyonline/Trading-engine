@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import sqlite3
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -37,7 +41,34 @@ def _mock_ohlcv_df() -> pd.DataFrame:
     )
 
 
-def _setup_client(tmp_path: Path, monkeypatch) -> TestClient:
+def _insert_ingestion_run(db_path: Path, ingestion_run_id: str) -> None:
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO ingestion_runs (
+            ingestion_run_id,
+            created_at,
+            source,
+            symbols_json,
+            timeframe,
+            fingerprint_hash
+        )
+        VALUES (?, ?, ?, ?, ?, ?);
+        """,
+        (
+            ingestion_run_id,
+            datetime.now(timezone.utc).isoformat(),
+            "test",
+            json.dumps(["AAPL"]),
+            "D1",
+            None,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _setup_client(tmp_path: Path, monkeypatch) -> tuple[TestClient, str]:
     repo = _make_repo(tmp_path)
     analysis_db_path = tmp_path / "analysis_runs.db"
     analysis_repo = SqliteAnalysisRunRepository(db_path=analysis_db_path)
@@ -46,13 +77,16 @@ def _setup_client(tmp_path: Path, monkeypatch) -> TestClient:
     monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
     monkeypatch.setattr(engine_core, "load_ohlcv", lambda **_: _mock_ohlcv_df())
     monkeypatch.setattr(engine_core, "_now_iso", lambda: "2025-01-03T00:00:00+00:00")
-    return TestClient(api_main.app)
+    ingestion_run_id = str(uuid.uuid4())
+    _insert_ingestion_run(analysis_db_path, ingestion_run_id)
+    return TestClient(api_main.app), ingestion_run_id
 
 
 def test_strategy_analyze_multi_presets_returns_results(tmp_path: Path, monkeypatch) -> None:
-    client = _setup_client(tmp_path, monkeypatch)
+    client, ingestion_run_id = _setup_client(tmp_path, monkeypatch)
 
     payload = {
+        "ingestion_run_id": ingestion_run_id,
         "symbol": "AAPL",
         "strategy": "RSI2",
         "market_type": "stock",
@@ -79,9 +113,10 @@ def test_strategy_analyze_duplicate_preset_ids_rejected(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    client = _setup_client(tmp_path, monkeypatch)
+    client, ingestion_run_id = _setup_client(tmp_path, monkeypatch)
 
     payload = {
+        "ingestion_run_id": ingestion_run_id,
         "symbol": "AAPL",
         "strategy": "RSI2",
         "market_type": "stock",
@@ -98,9 +133,10 @@ def test_strategy_analyze_missing_preset_id_rejected(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    client = _setup_client(tmp_path, monkeypatch)
+    client, ingestion_run_id = _setup_client(tmp_path, monkeypatch)
 
     payload = {
+        "ingestion_run_id": ingestion_run_id,
         "symbol": "AAPL",
         "strategy": "RSI2",
         "market_type": "stock",
@@ -114,9 +150,10 @@ def test_strategy_analyze_missing_preset_id_rejected(
 
 
 def test_strategy_analyze_deterministic_output(tmp_path: Path, monkeypatch) -> None:
-    client = _setup_client(tmp_path, monkeypatch)
+    client, ingestion_run_id = _setup_client(tmp_path, monkeypatch)
 
     payload = {
+        "ingestion_run_id": ingestion_run_id,
         "symbol": "AAPL",
         "strategy": "RSI2",
         "market_type": "stock",
@@ -137,9 +174,10 @@ def test_strategy_analyze_single_preset_backwards_compatible(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    client = _setup_client(tmp_path, monkeypatch)
+    client, ingestion_run_id = _setup_client(tmp_path, monkeypatch)
 
     payload = {
+        "ingestion_run_id": ingestion_run_id,
         "symbol": "AAPL",
         "strategy": "RSI2",
         "market_type": "stock",

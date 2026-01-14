@@ -102,8 +102,10 @@ def test_screener_response_schema_and_ordering(monkeypatch) -> None:
         return signals
 
     monkeypatch.setattr(main, "run_watchlist_analysis", fake_run_watchlist_analysis)
+    monkeypatch.setattr(main, "_require_ingestion_run", lambda *_: None)
 
     request = main.ScreenerRequest(
+        ingestion_run_id="test-ingestion-run",
         symbols=["AAA", "AAC", "BBB", "CCC", "DDD"],
         market_type="stock",
         lookback_days=200,
