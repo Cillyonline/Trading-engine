@@ -103,6 +103,7 @@ def test_screener_response_schema_and_ordering(monkeypatch) -> None:
 
     monkeypatch.setattr(main, "run_watchlist_analysis", fake_run_watchlist_analysis)
     monkeypatch.setattr(main, "_require_ingestion_run", lambda *_: None)
+    monkeypatch.setattr(main, "_require_snapshot_ready", lambda *_args, **_kwargs: None)
 
     request = main.ScreenerRequest(
         ingestion_run_id="test-ingestion-run",
