@@ -316,6 +316,20 @@ def _require_ingestion_run(ingestion_run_id: str) -> None:
         raise HTTPException(status_code=422, detail="ingestion_run_not_found")
 
 
+def _require_snapshot_ready(
+    ingestion_run_id: str,
+    *,
+    symbols: list[str],
+    timeframe: str = "D1",
+) -> None:
+    if not analysis_run_repo.ingestion_run_is_ready(
+        ingestion_run_id,
+        symbols=symbols,
+        timeframe=timeframe,
+    ):
+        raise HTTPException(status_code=422, detail="ingestion_run_not_ready")
+
+
 def _resolve_analysis_db_path() -> str:
     """
     Resolves the SQLite DB path used for analysis & snapshot loading.
@@ -608,6 +622,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
     )
 
     _require_ingestion_run(req.ingestion_run_id)
+    _require_snapshot_ready(req.ingestion_run_id, symbols=[req.symbol], timeframe="D1")
 
     strategy_name = req.strategy.upper()
     strategy = strategy_registry.get(strategy_name)
@@ -841,6 +856,8 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
             symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
     else:
         symbols = req.symbols
+
+    _require_snapshot_ready(req.ingestion_run_id, symbols=symbols, timeframe="D1")
 
     logger.info(
         "Screener start: market_type=%s lookback_days=%s min_score=%s symbols=%d",

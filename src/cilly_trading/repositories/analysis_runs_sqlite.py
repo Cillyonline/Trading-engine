@@ -47,6 +47,52 @@ class SqliteAnalysisRunRepository:
         conn.close()
         return row is not None
 
+    def ingestion_run_is_ready(
+        self,
+        ingestion_run_id: str,
+        *,
+        symbols: list[str],
+        timeframe: str,
+    ) -> bool:
+        try:
+            conn = self._get_connection()
+        except sqlite3.Error:
+            return False
+
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT 1
+                FROM ingestion_runs
+                WHERE ingestion_run_id = ?
+                LIMIT 1;
+                """,
+                (ingestion_run_id,),
+            )
+            if cur.fetchone() is None:
+                return False
+
+            for symbol in symbols:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM ohlcv_snapshots
+                    WHERE ingestion_run_id = ?
+                      AND symbol = ?
+                      AND timeframe = ?
+                    LIMIT 1;
+                    """,
+                    (ingestion_run_id, symbol, timeframe),
+                )
+                if cur.fetchone() is None:
+                    return False
+            return True
+        except sqlite3.Error:
+            return False
+        finally:
+            conn.close()
+
     def get_run(self, analysis_run_id: str) -> Optional[Dict[str, Any]]:
         """
         Lädt einen Analyse-Run anhand der Run-ID.

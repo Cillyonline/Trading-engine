@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -41,7 +40,12 @@ def _mock_ohlcv_df() -> pd.DataFrame:
     )
 
 
-def _insert_ingestion_run(db_path: Path, ingestion_run_id: str) -> None:
+def _insert_ingestion_run(
+    db_path: Path,
+    ingestion_run_id: str,
+    *,
+    created_at: str = "2025-01-01T00:00:00+00:00",
+) -> None:
     conn = sqlite3.connect(db_path)
     conn.execute(
         """
@@ -57,11 +61,44 @@ def _insert_ingestion_run(db_path: Path, ingestion_run_id: str) -> None:
         """,
         (
             ingestion_run_id,
-            datetime.now(timezone.utc).isoformat(),
+            created_at,
             "test",
             json.dumps(["AAPL"]),
             "D1",
             None,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _insert_snapshot_rows(db_path: Path, ingestion_run_id: str) -> None:
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        INSERT INTO ohlcv_snapshots (
+            ingestion_run_id,
+            symbol,
+            timeframe,
+            ts,
+            open,
+            high,
+            low,
+            close,
+            volume
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """,
+        (
+            ingestion_run_id,
+            "AAPL",
+            "D1",
+            1735689600000,
+            101.0,
+            102.0,
+            100.0,
+            101.0,
+            1000.0,
         ),
     )
     conn.commit()
@@ -79,6 +116,7 @@ def _setup_client(tmp_path: Path, monkeypatch) -> tuple[TestClient, str]:
     monkeypatch.setattr(engine_core, "_now_iso", lambda: "2025-01-03T00:00:00+00:00")
     ingestion_run_id = str(uuid.uuid4())
     _insert_ingestion_run(analysis_db_path, ingestion_run_id)
+    _insert_snapshot_rows(analysis_db_path, ingestion_run_id)
     return TestClient(api_main.app), ingestion_run_id
 
 
