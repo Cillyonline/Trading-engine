@@ -21,7 +21,7 @@ import pandas as pd
 
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
-from cilly_trading.engine.data import load_ohlcv, load_ohlcv_snapshot
+from cilly_trading.engine.data import SnapshotDataError, load_ohlcv, load_ohlcv_snapshot
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 
 
@@ -281,10 +281,13 @@ def run_watchlist_analysis(
     *,
     ingestion_run_id: Optional[str] = None,
     db_path: Optional[Path] = None,
+    snapshot_only: bool = False,
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
     """
+    if snapshot_only and not ingestion_run_id:
+        raise ValueError("snapshot_only requires ingestion_run_id")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
     logger.info(
@@ -330,39 +333,59 @@ def run_watchlist_analysis(
                 ingestion_run_id,
             )
 
-            try:
-                if ingestion_run_id:
-                    df = load_ohlcv_snapshot(
-                        ingestion_run_id=ingestion_run_id,
-                        symbol=symbol,
-                        timeframe=engine_config.timeframe,
-                        db_path=db_path,
-                    )
-                else:
-                    df = load_ohlcv(
-                        symbol=symbol,
-                        timeframe=engine_config.timeframe,
-                        lookback_days=engine_config.lookback_days,
-                        market_type=engine_config.market_type,
-                    )
-            except Exception:
-                logger.error(
-                    "Error loading data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
-                    symbol,
-                    engine_config.timeframe,
-                    ingestion_run_id or "n/a",
-                    exc_info=True,
+            if snapshot_only:
+                df = load_ohlcv_snapshot(
+                    ingestion_run_id=ingestion_run_id,
+                    symbol=symbol,
+                    timeframe=engine_config.timeframe,
+                    db_path=db_path,
                 )
-                continue
+                if df is None or getattr(df, "empty", False):
+                    raise SnapshotDataError(
+                        f"snapshot_invalid ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={engine_config.timeframe}"
+                    )
+            else:
+                try:
+                    if ingestion_run_id:
+                        df = load_ohlcv_snapshot(
+                            ingestion_run_id=ingestion_run_id,
+                            symbol=symbol,
+                            timeframe=engine_config.timeframe,
+                            db_path=db_path,
+                        )
+                    else:
+                        df = load_ohlcv(
+                            symbol=symbol,
+                            timeframe=engine_config.timeframe,
+                            lookback_days=engine_config.lookback_days,
+                            market_type=engine_config.market_type,
+                        )
+                except SnapshotDataError:
+                    logger.warning(
+                        "Skipping symbol due to snapshot data error: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
+                        symbol,
+                        engine_config.timeframe,
+                        ingestion_run_id or "n/a",
+                    )
+                    continue
+                except Exception:
+                    logger.error(
+                        "Error loading data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
+                        symbol,
+                        engine_config.timeframe,
+                        ingestion_run_id or "n/a",
+                        exc_info=True,
+                    )
+                    continue
 
-            if df is None or getattr(df, "empty", False):
-                logger.warning(
-                    "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
-                    symbol,
-                    engine_config.timeframe,
-                    ingestion_run_id or "n/a",
-                )
-                continue
+                if df is None or getattr(df, "empty", False):
+                    logger.warning(
+                        "Skipping symbol due to empty OHLCV data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
+                        symbol,
+                        engine_config.timeframe,
+                        ingestion_run_id or "n/a",
+                    )
+                    continue
 
             derived_timestamp = _derive_timestamp_from_df(df)
             symbol_signals_count = 0
@@ -456,6 +479,14 @@ def run_watchlist_analysis(
                 symbol_signals_count,
             )
 
+        except SnapshotDataError:
+            logger.error(
+                "Snapshot data error while processing symbol: component=engine symbol=%s timeframe=%s",
+                symbol,
+                engine_config.timeframe,
+                exc_info=True,
+            )
+            raise
         except Exception:
             logger.error(
                 "Unexpected error while processing symbol: component=engine symbol=%s timeframe=%s",
