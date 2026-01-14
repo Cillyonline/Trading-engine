@@ -70,8 +70,8 @@ class PresetConfig(BaseModel):
 
 
 class StrategyAnalyzeRequest(BaseModel):
-    ingestion_run_id: Optional[str] = Field(
-        default=None,
+    ingestion_run_id: str = Field(
+        ...,
         min_length=1,
         description="Snapshot reference ID.",
     )
@@ -189,8 +189,8 @@ class ScreenerRequest(BaseModel):
     - Nutzt alle registrierten Strategien (RSI2 & TURTLE).
     """
 
-    ingestion_run_id: Optional[str] = Field(
-        default=None,
+    ingestion_run_id: str = Field(
+        ...,
         min_length=1,
         description="Snapshot reference ID.",
     )
@@ -586,8 +586,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         req.lookback_days,
     )
 
-    if req.ingestion_run_id:
-        _require_ingestion_run(req.ingestion_run_id)
+    _require_ingestion_run(req.ingestion_run_id)
 
     strategy_name = req.strategy.upper()
     strategy = strategy_registry.get(strategy_name)
@@ -735,8 +734,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         _require_ingestion_run(existing_run["ingestion_run_id"])
         return ManualAnalysisResponse(**existing_run["result"])
 
-    if req.ingestion_run_id:
-        _require_ingestion_run(req.ingestion_run_id)
+    _require_ingestion_run(req.ingestion_run_id)
 
     strategy_name = req.strategy.upper()
     strategy = strategy_registry.get(strategy_name)
@@ -802,8 +800,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     - Nutzt alle registrierten Strategien (RSI2 + TURTLE).
     - Gibt nur SETUP-Signale mit Score >= min_score zurück.
     """
-    if req.ingestion_run_id:
-        _require_ingestion_run(req.ingestion_run_id)
+    _require_ingestion_run(req.ingestion_run_id)
     # Default-Watchlists, MVP-Variante
     if req.symbols is None or len(req.symbols) == 0:
         if req.market_type == "stock":
