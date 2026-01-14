@@ -24,7 +24,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
-from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
+from cilly_trading.engine.core import (
+    EngineConfig,
+    compute_analysis_run_id,
+    run_watchlist_analysis,
+)
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
@@ -149,7 +153,11 @@ class StrategyAnalyzeResponse(BaseModel):
 class ManualAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    analysis_run_id: str = Field(..., min_length=1, description="Client-provided run ID.")
+    analysis_run_id: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Optional client-provided run ID (ignored).",
+    )
     ingestion_run_id: str = Field(..., min_length=1, description="Snapshot reference ID.")
     symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
     strategy: str = Field(..., description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
@@ -331,6 +339,19 @@ def _resolve_analysis_db_path() -> str:
     resolved = str(DEFAULT_DB_PATH)
     logger.debug("Analysis DB path resolved via DEFAULT_DB_PATH fallback: %s", resolved)
     return resolved
+
+
+def _normalize_for_hashing(value: Any) -> Any:
+    if isinstance(value, float):
+        return format(value, ".10g")
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {key: _normalize_for_hashing(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_normalize_for_hashing(item) for item in value]
+    return value
+
 
 strategy_registry = {
     "RSI2": Rsi2Strategy(),
@@ -729,14 +750,25 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     """
     Manuelles Triggern einer Analyse mit idempotenter Run-ID.
     """
-    existing_run = analysis_run_repo.get_run(req.analysis_run_id)
+    strategy_name = req.strategy.upper()
+    run_request_payload: Dict[str, Any] = {
+        "ingestion_run_id": req.ingestion_run_id,
+        "symbol": req.symbol,
+        "strategy": strategy_name,
+        "market_type": req.market_type,
+        "lookback_days": req.lookback_days,
+    }
+    if req.strategy_config is not None:
+        run_request_payload["strategy_config"] = _normalize_for_hashing(req.strategy_config)
+
+    computed_run_id = compute_analysis_run_id(run_request_payload)
+
+    existing_run = analysis_run_repo.get_run(computed_run_id)
     if existing_run is not None:
         _require_ingestion_run(existing_run["ingestion_run_id"])
         return ManualAnalysisResponse(**existing_run["result"])
 
     _require_ingestion_run(req.ingestion_run_id)
-
-    strategy_name = req.strategy.upper()
     strategy = strategy_registry.get(strategy_name)
     if strategy is None:
         logger.warning("Unknown strategy requested: %s", req.strategy)
@@ -772,7 +804,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     ]
 
     response_payload = {
-        "analysis_run_id": req.analysis_run_id,
+        "analysis_run_id": computed_run_id,
         "ingestion_run_id": req.ingestion_run_id,
         "symbol": req.symbol,
         "strategy": strategy_name,
@@ -780,9 +812,9 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     }
 
     analysis_run_repo.save_run(
-        analysis_run_id=req.analysis_run_id,
+        analysis_run_id=computed_run_id,
         ingestion_run_id=req.ingestion_run_id,
-        request_payload=req.model_dump(),
+        request_payload=run_request_payload,
         result_payload=response_payload,
     )
 
