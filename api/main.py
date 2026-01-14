@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
+from cilly_trading.engine.data import SnapshotDataError
 from cilly_trading.engine.core import (
     EngineConfig,
     compute_analysis_run_id,
@@ -355,6 +356,14 @@ def _resolve_analysis_db_path() -> str:
     return resolved
 
 
+def _run_snapshot_analysis(*args: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+    try:
+        return run_watchlist_analysis(*args, **kwargs, snapshot_only=True)
+    except SnapshotDataError as exc:
+        logger.error("Snapshot data invalid: component=api error=%s", exc)
+        raise HTTPException(status_code=422, detail="snapshot_data_invalid") from exc
+
+
 def _normalize_for_hashing(value: Any) -> Any:
     if isinstance(value, float):
         return format(value, ".10g")
@@ -673,7 +682,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
             }
 
             # Engine-Aufruf
-            signals = run_watchlist_analysis(
+            signals = _run_snapshot_analysis(
                 symbols=[req.symbol],
                 strategies=[strategy],
                 engine_config=engine_config,
@@ -724,7 +733,7 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
     }
 
     # Engine-Aufruf
-    signals = run_watchlist_analysis(
+    signals = _run_snapshot_analysis(
         symbols=[req.symbol],
         strategies=[strategy],
         engine_config=engine_config,
@@ -784,6 +793,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         return ManualAnalysisResponse(**existing_run["result"])
 
     _require_ingestion_run(req.ingestion_run_id)
+    _require_snapshot_ready(req.ingestion_run_id, symbols=[req.symbol], timeframe="D1")
     strategy = strategy_registry.get(strategy_name)
     if strategy is None:
         logger.warning("Unknown strategy requested: %s", req.strategy)
@@ -804,7 +814,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         strategy_name: effective_config,
     }
 
-    signals = run_watchlist_analysis(
+    signals = _run_snapshot_analysis(
         symbols=[req.symbol],
         strategies=[strategy],
         engine_config=engine_config,
@@ -880,7 +890,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     # Für den Screener nutzen wir einfach die Default-Configs
     strategy_configs = default_strategy_configs
 
-    signals = run_watchlist_analysis(
+    signals = _run_snapshot_analysis(
         symbols=symbols,
         strategies=strategies,
         engine_config=engine_config,

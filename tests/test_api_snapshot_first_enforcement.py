@@ -223,6 +223,54 @@ def test_strategy_analyze_rejects_missing_snapshot(tmp_path: Path, monkeypatch) 
     assert response.json()["detail"] == "ingestion_run_not_ready"
 
 
+def test_strategy_analyze_rejects_invalid_snapshot_rows(tmp_path: Path, monkeypatch) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+
+    ingestion_run_id = str(uuid.uuid4())
+    _insert_ingestion_run(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        symbols=["AAPL"],
+        timeframe="D1",
+    )
+
+    _insert_snapshot_rows(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        "AAPL",
+        "D1",
+        [("bad-ts", 101.0, 102.0, 100.0, 101.0, 1000.0)],
+    )
+
+    def _fail_yahoo(*args, **kwargs):
+        raise AssertionError("yfinance should not be called")
+
+    def _fail_binance(*args, **kwargs):
+        raise AssertionError("ccxt should not be called")
+
+    monkeypatch.setattr("cilly_trading.engine.data._load_stock_yahoo", _fail_yahoo)
+    monkeypatch.setattr("cilly_trading.engine.data._load_crypto_binance", _fail_binance)
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/strategy/analyze",
+        json={
+            "ingestion_run_id": ingestion_run_id,
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "snapshot_data_invalid"
+
+
 def test_screener_basic_rejects_partial_snapshots(tmp_path: Path, monkeypatch) -> None:
     signal_repo = _make_signal_repo(tmp_path)
     analysis_repo = _make_analysis_repo(tmp_path)
@@ -327,3 +375,133 @@ def test_screener_basic_accepts_ready_snapshots(tmp_path: Path, monkeypatch) -> 
     assert response.status_code == 200
     payload = response.json()
     assert payload["market_type"] == "stock"
+
+
+def test_manual_analysis_rejects_missing_snapshot(tmp_path: Path, monkeypatch) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+
+    ingestion_run_id = str(uuid.uuid4())
+    _insert_ingestion_run(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        symbols=["AAPL"],
+        timeframe="D1",
+    )
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/analysis/run",
+        json={
+            "ingestion_run_id": ingestion_run_id,
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "ingestion_run_not_ready"
+
+
+def test_manual_analysis_rejects_invalid_snapshot_rows(tmp_path: Path, monkeypatch) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+
+    ingestion_run_id = str(uuid.uuid4())
+    _insert_ingestion_run(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        symbols=["AAPL"],
+        timeframe="D1",
+    )
+
+    _insert_snapshot_rows(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        "AAPL",
+        "D1",
+        [("bad-ts", 101.0, 102.0, 100.0, 101.0, 1000.0)],
+    )
+
+    def _fail_yahoo(*args, **kwargs):
+        raise AssertionError("yfinance should not be called")
+
+    def _fail_binance(*args, **kwargs):
+        raise AssertionError("ccxt should not be called")
+
+    monkeypatch.setattr("cilly_trading.engine.data._load_stock_yahoo", _fail_yahoo)
+    monkeypatch.setattr("cilly_trading.engine.data._load_crypto_binance", _fail_binance)
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/analysis/run",
+        json={
+            "ingestion_run_id": ingestion_run_id,
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "snapshot_data_invalid"
+
+
+def test_manual_analysis_accepts_ready_snapshot(tmp_path: Path, monkeypatch) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+
+    ingestion_run_id = str(uuid.uuid4())
+    _insert_ingestion_run(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        symbols=["AAPL"],
+        timeframe="D1",
+    )
+
+    rows = [
+        (1735689600000, 101.0, 102.0, 100.0, 101.0, 1000.0),
+        (1735776000000, 100.0, 101.0, 90.0, 91.0, 1000.0),
+    ]
+    _insert_snapshot_rows(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        "AAPL",
+        "D1",
+        rows,
+    )
+
+    def _fail_yahoo(*args, **kwargs):
+        raise AssertionError("yfinance should not be called")
+
+    def _fail_binance(*args, **kwargs):
+        raise AssertionError("ccxt should not be called")
+
+    monkeypatch.setattr("cilly_trading.engine.data._load_stock_yahoo", _fail_yahoo)
+    monkeypatch.setattr("cilly_trading.engine.data._load_crypto_binance", _fail_binance)
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/analysis/run",
+        json={
+            "ingestion_run_id": ingestion_run_id,
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        },
+    )
+
+    assert response.status_code == 200

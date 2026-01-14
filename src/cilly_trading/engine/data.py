@@ -37,6 +37,10 @@ REQUIRED_COLS: Final[tuple[str, ...]] = (
 )
 
 
+class SnapshotDataError(RuntimeError):
+    """Raised when snapshot data is missing or invalid for analysis."""
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -151,7 +155,9 @@ def load_ohlcv_snapshot(
             symbol,
             timeframe,
         )
-        return _empty_ohlcv()
+        raise SnapshotDataError(
+            f"snapshot_missing ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={timeframe}"
+        )
 
     df = pd.DataFrame(
         rows,
@@ -160,7 +166,12 @@ def load_ohlcv_snapshot(
     df = df.rename(columns={"ts": "timestamp"})
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True, errors="coerce")
 
-    return _validate_and_normalize_ohlcv(df, symbol=symbol, source="snapshot")
+    df = _validate_and_normalize_ohlcv(df, symbol=symbol, source="snapshot")
+    if df.empty:
+        raise SnapshotDataError(
+            f"snapshot_invalid ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={timeframe}"
+        )
+    return df
 
 
 def load_ohlcv(
