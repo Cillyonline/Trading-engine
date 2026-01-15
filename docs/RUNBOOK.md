@@ -1,4 +1,4 @@
-# Working SOP – Cilly Trading Engine
+# Working SOP Ã¢â‚¬â€œ Cilly Trading Engine
 
 ## Default
 - MODE: EXECUTION
@@ -25,7 +25,7 @@
 
 5) CLOSE
    - PR must include: Closes #<IssueID>
-   - Merge only after APPROVED + green 	est
+   - Merge only after APPROVED + green test
    - Issue closes automatically on merge
    - Set Board status: Done
 
@@ -38,3 +38,12 @@ Always provide:
 - command executed
 - full output
 - expected vs actual
+
+## Definition of Done (DoD)
+A change is considered DONE only if:
+- Acceptance Criteria are fully met
+- Tests were run and results are recorded in the PR
+- Required status check test is green
+- PR includes Closes #<IssueID>
+- Codex A review gate result is recorded (APPROVED or CHANGES REQUIRED)
+- No scope creep beyond the linked Issue
