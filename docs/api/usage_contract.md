@@ -8,6 +8,25 @@ This document defines the stable usage contract for the MVP v1 API. It documents
 
 ## Common Conventions
 
+### Snapshot-first analysis contract
+
+All analysis entrypoints are **snapshot-only**:
+
+- **No implicit live data.** Every analysis run requires an `ingestion_run_id` that points to a snapshot in the analysis repository.
+- **Deterministic failure on missing/partial snapshots.** If the snapshot does not exist, is not ready for the requested symbols/timeframe, or contains invalid data, the request fails with a deterministic error (see Error semantics below).
+- **Deterministic identities.** Manual analysis runs return a deterministic `analysis_run_id` derived from the canonical request payload, and signals carry deterministic identities based on their stable fields. The API does not re-derive or mutate these identities on read.
+
+### Error semantics (analysis endpoints)
+
+These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener/basic`:
+
+| Status | Error detail | Meaning |
+| --- | --- | --- |
+| 422 | `invalid_ingestion_run_id` | `ingestion_run_id` is not a valid UUIDv4. |
+| 422 | `ingestion_run_not_found` | `ingestion_run_id` does not exist in the repository. |
+| 422 | `ingestion_run_not_ready` | Snapshot exists but is not ready for all required symbols/timeframe. |
+| 422 | `snapshot_data_invalid` | Snapshot data failed validation during analysis. |
+
 ### Supported strategies
 
 - `RSI2`
@@ -51,24 +70,31 @@ Exact status codes are documented per endpoint in the Errors section.
 
 ### Ingestion run validation
 
-Some endpoints accept `ingestion_run_id`. When provided, the API enforces:
+All analysis entrypoints require `ingestion_run_id`. The API enforces:
 
 - Must be a valid UUIDv4 string, otherwise `422` with `{"detail":"invalid_ingestion_run_id"}`.
 - Must exist in the analysis run repository, otherwise `422` with `{"detail":"ingestion_run_not_found"}`.
+- Must be ready for the requested symbols/timeframe, otherwise `422` with `{"detail":"ingestion_run_not_ready"}`.
 
 ---
 
-## GET `/health`
+## GET /health
 
-**Purpose:** Health check for API availability.
+### Purpose
 
-**Request parameters:**
+Purpose: Health check for API availability.
+
+### Request
+
+Request parameters:
 
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
 | N/A | N/A | N/A | N/A | No request parameters. |
 
-**Success response:**
+### Success response
+
+Success response:
 
 - **Status:** `200 OK`
 - **Body:**
@@ -82,19 +108,21 @@ Some endpoints accept `ingestion_run_id`. When provided, the API enforces:
 
 **Validation rules:** None.
 
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
 | None | None | None | No application-defined errors. |
 
-**Example request:**
+### Example
+
+Example request:
 
 ```bash
 curl -s http://localhost:8000/health
 ```
 
-**Example response:**
+Example response:
 
 ```json
 {
@@ -104,9 +132,13 @@ curl -s http://localhost:8000/health
 
 ---
 
-## GET `/signals`
+## GET /signals
 
-**Purpose:** Read stored signals with pagination and optional filtering.
+### Purpose
+
+Read stored signals with pagination and optional filtering.
+
+### Request
 
 **Query parameters:**
 
@@ -123,7 +155,14 @@ curl -s http://localhost:8000/health
 | `limit` | integer | optional | `50` | Range `1..500`. |
 | `offset` | integer | optional | `0` | Must be `>= 0`. |
 
-**Success response:**
+**Validation rules:**
+
+- `start` and `from` cannot both be present with different values.
+- `end` and `to` cannot both be present with different values.
+- Resolved `from` must be `<=` resolved `to`.
+- `limit` must be within `1..500`.
+
+### Success response
 
 - **Status:** `200 OK`
 - **Body:**
@@ -155,14 +194,7 @@ curl -s http://localhost:8000/health
 
 **Empty/no-result behavior:** Returns an empty `items` array with `total: 0` and the provided `limit/offset`.
 
-**Validation rules:**
-
-- `start` and `from` cannot both be present with different values.
-- `end` and `to` cannot both be present with different values.
-- Resolved `from` must be `<=` resolved `to`.
-- `limit` must be within `1..500`.
-
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
@@ -171,13 +203,15 @@ curl -s http://localhost:8000/health
 | 422 | `{"detail":"from must be less than or equal to to"}` | `from must be less than or equal to to` | Resolved `from` is later than resolved `to`. |
 | 422 | Pydantic validation list | varies | Invalid query parameter types or constraints (e.g., `limit` outside `1..500`). |
 
-**Example request:**
+### Example
+
+**Request:**
 
 ```bash
 curl -s "http://localhost:8000/signals?strategy=RSI2&limit=2&offset=0"
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -190,9 +224,13 @@ curl -s "http://localhost:8000/signals?strategy=RSI2&limit=2&offset=0"
 
 ---
 
-## GET `/screener/v2/results`
+## GET /screener/v2/results
 
-**Purpose:** Read screener results filtered by strategy and timeframe.
+### Purpose
+
+Read screener results filtered by strategy and timeframe.
+
+### Request
 
 **Query parameters:**
 
@@ -202,7 +240,12 @@ curl -s "http://localhost:8000/signals?strategy=RSI2&limit=2&offset=0"
 | `timeframe` | string | required | none | Timeframe filter (e.g., `D1`). |
 | `min_score` | number | optional | none | Minimum score filter (`>= 0`). |
 
-**Success response:**
+**Validation rules:**
+
+- `strategy` and `timeframe` are required.
+- `min_score` must be `>= 0` when provided.
+
+### Success response
 
 - **Status:** `200 OK`
 - **Body:**
@@ -224,24 +267,21 @@ curl -s "http://localhost:8000/signals?strategy=RSI2&limit=2&offset=0"
 
 **Empty/no-result behavior:** Returns `items: []` and `total: 0`.
 
-**Validation rules:**
-
-- `strategy` and `timeframe` are required.
-- `min_score` must be `>= 0` when provided.
-
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
 | 422 | Pydantic validation list | varies | Missing or invalid query parameters (e.g., missing `strategy`). |
 
-**Example request:**
+### Example
+
+**Request:**
 
 ```bash
 curl -s "http://localhost:8000/screener/v2/results?strategy=TURTLE&timeframe=D1"
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -252,15 +292,19 @@ curl -s "http://localhost:8000/screener/v2/results?strategy=TURTLE&timeframe=D1"
 
 ---
 
-## POST `/strategy/analyze`
+## POST /strategy/analyze
 
-**Purpose:** Run a strategy analysis for a single symbol. Returns raw signal output for the requested symbol and strategy. When presets are provided, results are grouped by preset ID.
+### Purpose
+
+Run a strategy analysis for a single symbol. Returns raw signal output for the requested symbol and strategy. When presets are provided, results are grouped by preset ID.
+
+### Request
 
 **Request body:**
 
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `ingestion_run_id` | string (UUIDv4) | optional | none | Snapshot reference ID. Validated if present. |
+| `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference ID (snapshot-only). |
 | `symbol` | string | required | none | Symbol (e.g., `AAPL`, `BTC/USDT`). |
 | `strategy` | string | required | none | Strategy name (case-insensitive). |
 | `market_type` | string | optional | `stock` | Must match `stock` or `crypto`. |
@@ -274,6 +318,15 @@ Preset object:
 | --- | --- | --- | --- |
 | `id` | string | required | Stable preset identifier. |
 | `params` | object | optional | Strategy config overrides for this preset. |
+
+**Validation rules:**
+
+- `strategy` must match a known strategy (`RSI2`, `TURTLE`), otherwise `400`.
+- `market_type` must be `stock` or `crypto`.
+- `lookback_days` must be within `30..1000`.
+- `presets` list (if provided) must have unique `id` values.
+
+### Success response
 
 **Success response (no presets):**
 
@@ -331,28 +384,26 @@ Preset object:
 
 **Empty/no-result behavior:** Returns empty `signals` or empty arrays per preset when no signals match.
 
-**Validation rules:**
-
-- `strategy` must match a known strategy (`RSI2`, `TURTLE`), otherwise `400`.
-- `market_type` must be `stock` or `crypto`.
-- `lookback_days` must be within `30..1000`.
-- `presets` list (if provided) must have unique `id` values.
-
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
 | 400 | `{"detail":"Unknown strategy: <strategy>"}` | `Unknown strategy: <strategy>` | `strategy` does not match a supported strategy. |
 | 422 | `{"detail":"invalid_ingestion_run_id"}` | `invalid_ingestion_run_id` | `ingestion_run_id` is provided but not a valid UUIDv4. |
 | 422 | `{"detail":"ingestion_run_not_found"}` | `ingestion_run_not_found` | `ingestion_run_id` is provided but not found in the repository. |
+| 422 | `{"detail":"ingestion_run_not_ready"}` | `ingestion_run_not_ready` | Snapshot exists but is not ready for the requested symbol/timeframe. |
+| 422 | `{"detail":"snapshot_data_invalid"}` | `snapshot_data_invalid` | Snapshot data failed validation during analysis. |
 | 422 | Pydantic validation list | varies | Invalid request body (e.g., `presets` with duplicate `id`, `lookback_days` outside `30..1000`). |
 
-**Example request:**
+### Example
+
+**Request:**
 
 ```bash
 curl -s -X POST http://localhost:8000/strategy/analyze \
   -H 'Content-Type: application/json' \
   -d '{
+    "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
     "symbol": "AAPL",
     "strategy": "RSI2",
     "market_type": "stock",
@@ -360,7 +411,7 @@ curl -s -X POST http://localhost:8000/strategy/analyze \
   }'
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -372,15 +423,19 @@ curl -s -X POST http://localhost:8000/strategy/analyze \
 
 ---
 
-## POST `/analysis/run`
+## POST /analysis/run
 
-**Purpose:** Manually trigger an analysis run with a client-provided idempotent run ID.
+### Purpose
+
+Manually trigger an analysis run. The API computes a deterministic run ID from the canonical request payload and returns it (idempotent). The `analysis_run_id` field in the request is optional and ignored; the server computes the deterministic ID.
+
+### Request
 
 **Request body:**
 
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `analysis_run_id` | string | required | none | Client-provided run ID (idempotent key). |
+| `analysis_run_id` | string | optional | none | Optional client-provided run ID (ignored). |
 | `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference ID. |
 | `symbol` | string | required | none | Symbol (e.g., `AAPL`, `BTC/USDT`). |
 | `strategy` | string | required | none | Strategy name (case-insensitive). |
@@ -388,7 +443,13 @@ curl -s -X POST http://localhost:8000/strategy/analyze \
 | `lookback_days` | integer | optional | `200` | Range `30..1000`. |
 | `strategy_config` | object | optional | none | Strategy config overrides. |
 
-**Success response:**
+**Validation rules:**
+
+- `strategy` must match a known strategy (`RSI2`, `TURTLE`), otherwise `400`.
+- `market_type` must be `stock` or `crypto`.
+- `lookback_days` must be within `30..1000`.
+
+### Success response
 
 - **Status:** `200 OK`
 - **Body:**
@@ -404,22 +465,20 @@ curl -s -X POST http://localhost:8000/strategy/analyze \
 
 **Empty/no-result behavior:** Returns `signals: []` when no signals match.
 
-**Validation rules:**
-
-- `strategy` must match a known strategy (`RSI2`, `TURTLE`), otherwise `400`.
-- `market_type` must be `stock` or `crypto`.
-- `lookback_days` must be within `30..1000`.
-
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
 | 400 | `{"detail":"Unknown strategy: <strategy>"}` | `Unknown strategy: <strategy>` | `strategy` does not match a supported strategy. |
 | 422 | `{"detail":"invalid_ingestion_run_id"}` | `invalid_ingestion_run_id` | `ingestion_run_id` is not a valid UUIDv4 string. |
 | 422 | `{"detail":"ingestion_run_not_found"}` | `ingestion_run_not_found` | `ingestion_run_id` does not exist in the repository. |
+| 422 | `{"detail":"ingestion_run_not_ready"}` | `ingestion_run_not_ready` | Snapshot exists but is not ready for the requested symbol/timeframe. |
+| 422 | `{"detail":"snapshot_data_invalid"}` | `snapshot_data_invalid` | Snapshot data failed validation during analysis. |
 | 422 | Pydantic validation list | varies | Invalid request body (e.g., missing required fields). |
 
-**Example request:**
+### Example
+
+**Request:**
 
 ```bash
 curl -s -X POST http://localhost:8000/analysis/run \
@@ -432,7 +491,7 @@ curl -s -X POST http://localhost:8000/analysis/run \
   }'
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -446,15 +505,19 @@ curl -s -X POST http://localhost:8000/analysis/run \
 
 ---
 
-## POST `/screener/basic`
+## POST /screener/basic
 
-**Purpose:** Run a basic screener across a set of symbols and return aggregated setup signals.
+### Purpose
+
+Run a basic screener across a set of symbols and return aggregated setup signals.
+
+### Request
 
 **Request body:**
 
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `ingestion_run_id` | string (UUIDv4) | optional | none | Snapshot reference ID. Validated if present. |
+| `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference ID (snapshot-only). |
 | `symbols` | array of strings | optional | none | If omitted or empty, a default watchlist is used. |
 | `market_type` | string | optional | `stock` | Must match `stock` or `crypto`. |
 | `lookback_days` | integer | optional | `200` | Range `30..1000`. |
@@ -465,7 +528,13 @@ Default watchlists:
 - `stock`: `AAPL`, `MSFT`, `NVDA`, `META`, `TSLA`
 - `crypto`: `BTC/USDT`, `ETH/USDT`, `SOL/USDT`, `BNB/USDT`, `XRP/USDT`
 
-**Success response:**
+**Validation rules:**
+
+- `market_type` must be `stock` or `crypto`.
+- `lookback_days` must be within `30..1000`.
+- `min_score` must be within `0..100`.
+
+### Success response
 
 - **Status:** `200 OK`
 - **Body:**
@@ -496,32 +565,31 @@ Default watchlists:
 
 **Empty/no-result behavior:** Returns `symbols: []` when no setup signals meet `min_score`.
 
-**Validation rules:**
-
-- `market_type` must be `stock` or `crypto`.
-- `lookback_days` must be within `30..1000`.
-- `min_score` must be within `0..100`.
-
-**Errors:**
+### Errors
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
 | 422 | `{"detail":"invalid_ingestion_run_id"}` | `invalid_ingestion_run_id` | `ingestion_run_id` is provided but not a valid UUIDv4. |
 | 422 | `{"detail":"ingestion_run_not_found"}` | `ingestion_run_not_found` | `ingestion_run_id` is provided but not found in the repository. |
+| 422 | `{"detail":"ingestion_run_not_ready"}` | `ingestion_run_not_ready` | Snapshot exists but is not ready for the requested symbols/timeframe. |
+| 422 | `{"detail":"snapshot_data_invalid"}` | `snapshot_data_invalid` | Snapshot data failed validation during analysis. |
 | 422 | Pydantic validation list | varies | Invalid request body (e.g., `min_score` outside `0..100`). |
 
-**Example request:**
+### Example
+
+**Request:**
 
 ```bash
 curl -s -X POST http://localhost:8000/screener/basic \
   -H 'Content-Type: application/json' \
   -d '{
+    "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
     "market_type": "stock",
     "min_score": 40
   }'
 ```
 
-**Example response:**
+**Response:**
 
 ```json
 {
@@ -529,3 +597,21 @@ curl -s -X POST http://localhost:8000/screener/basic \
   "symbols": []
 }
 ```
+
+---
+
+## Audit trail / reproducibility checklist
+
+### Inputs to capture
+
+- `ingestion_run_id` (snapshot reference ID)
+- Request payload (symbol(s), strategy, market_type, lookback_days, strategy_config/presets)
+- Strategy configuration used (defaults + overrides)
+- Timeframe (`D1` in MVP)
+
+### Outputs to store/log
+
+- `analysis_run_id` (computed deterministic run identity for `/analysis/run`)
+- `ingestion_run_id`
+- Canonical request payload reference (exact payload used to compute the run ID)
+- Timestamps used by the snapshot (as provided by the snapshot data)
