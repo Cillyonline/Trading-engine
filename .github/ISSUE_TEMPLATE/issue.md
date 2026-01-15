@@ -1,4 +1,4 @@
-﻿---
+---
 name: Issue
 about: Single unified issue template
 title: ""
