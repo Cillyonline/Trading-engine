@@ -1,3 +1,11 @@
+---
+name: Issue
+about: Single unified issue template
+title: ""
+labels: ""
+assignees: ""
+---
+
 ## Goal
 (One clear sentence. What must be true when this issue is done?)
 
