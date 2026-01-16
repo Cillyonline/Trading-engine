@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,6 +91,103 @@ class Trade(TypedDict, total=False):
     timeframe: str
     market_type: MarketType
     data_source: DataSource
+
+
+def _normalize_assets(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        raise TypeError("assets must be a list or tuple")
+
+    normalized = []
+    for item in value:
+        if not isinstance(item, str):
+            raise TypeError("assets list items must be strings")
+        normalized.append(item.strip().upper())
+
+    return sorted(normalized)
+
+
+def _normalize_canonical_value(value: Any, *, key: Optional[str] = None) -> Any:
+    if isinstance(value, float):
+        raise TypeError("floats are not supported in canonical_json")
+
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+
+    if isinstance(value, dict):
+        normalized_dict: Dict[str, Any] = {}
+        for raw_key, raw_value in value.items():
+            if not isinstance(raw_key, str):
+                raise TypeError("dict keys must be strings")
+            normalized_dict[raw_key] = _normalize_canonical_value(raw_value, key=raw_key)
+        return normalized_dict
+
+    if isinstance(value, (list, tuple)):
+        if key == "assets":
+            return _normalize_assets(value)
+        return [_normalize_canonical_value(item) for item in value]
+
+    raise TypeError(f"unsupported type for canonical_json: {type(value).__name__}")
+
+
+def canonical_json(obj: Any) -> str:
+    """Create a deterministic JSON representation of the provided object.
+
+    Args:
+        obj: Object to serialize into deterministic JSON.
+
+    Returns:
+        Canonical JSON string.
+    """
+    normalized = _normalize_canonical_value(obj)
+    return json.dumps(
+        normalized,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+
+
+def sha256_hex(text: str) -> str:
+    """Return a SHA-256 hex digest for the provided text.
+
+    Args:
+        text: String to hash.
+
+    Returns:
+        SHA-256 hex digest.
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _signal_identity_payload(signal: Mapping[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for key in (
+        "symbol",
+        "strategy",
+        "timestamp",
+        "timeframe",
+        "market_type",
+        "data_source",
+        "direction",
+        "stage",
+        "assets",
+    ):
+        if key in signal:
+            payload[key] = signal[key]
+    return payload
+
+
+def compute_signal_id(signal: Mapping[str, Any]) -> str:
+    """Compute a deterministic signal ID.
+
+    Args:
+        signal: Signal payload used to compute the ID.
+
+    Returns:
+        Deterministic signal ID.
+    """
+    return sha256_hex(canonical_json(_signal_identity_payload(signal)))
 
 
 def compute_signal_reason_id(
