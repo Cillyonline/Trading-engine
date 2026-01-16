@@ -49,6 +49,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            analysis_run_id TEXT,
+            ingestion_run_id TEXT,
             symbol TEXT NOT NULL,
             strategy TEXT NOT NULL,
             direction TEXT NOT NULL,
@@ -60,7 +62,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
             confirmation_rule TEXT,
             timeframe TEXT NOT NULL,          -- z. B. "D1"
             market_type TEXT NOT NULL,        -- "stock" | "crypto"
-            data_source TEXT NOT NULL         -- "yahoo" | "binance"
+            data_source TEXT NOT NULL,        -- "yahoo" | "binance"
+            reasons_json TEXT
         );
         """
     )
