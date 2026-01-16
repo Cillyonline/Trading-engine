@@ -43,7 +43,7 @@ def generate_reasons_for_signal(
     """
     signal_id = _require_signal_id(signal)
     timestamp = _require_timestamp(signal)
-    strategy = signal.get("strategy")
+    strategy = _require_strategy(signal)
 
     if strategy == "RSI2":
         reasons = [
@@ -65,7 +65,14 @@ def generate_reasons_for_signal(
             )
         ]
     else:
-        raise ValueError(f"Unknown strategy for reason generation: {strategy}")
+        reasons = [
+            _build_generic_reason(
+                signal_id=signal_id,
+                timestamp=timestamp,
+                strategy=strategy,
+                signal=signal,
+            )
+        ]
 
     return sorted(reasons, key=lambda reason: (reason["ordering_key"], reason["reason_id"]))
 
@@ -82,6 +89,16 @@ def _require_timestamp(signal: dict) -> str:
     if not timestamp:
         raise ValueError("timestamp is required for reason generation")
     return str(timestamp)
+
+
+def _require_strategy(signal: dict) -> str:
+    raw_strategy = signal.get("strategy")
+    if raw_strategy is None:
+        raise ValueError("strategy is required for reason generation")
+    strategy = str(raw_strategy)
+    if not strategy.strip():
+        raise ValueError("strategy is required for reason generation")
+    return strategy
 
 
 def _round_value(value: Any) -> Any:
@@ -219,6 +236,58 @@ def _build_turtle_reason(
         "rule_ref": rule_ref,
         "data_refs": data_refs,
         "ordering_key": 0,
+    }
+    reason["reason_id"] = compute_signal_reason_id(
+        signal_id=signal_id,
+        reason_type=reason["reason_type"],
+        rule_ref=reason["rule_ref"],
+        data_refs=reason["data_refs"],
+    )
+    return reason
+
+
+def _build_generic_reason(
+    *,
+    signal_id: str,
+    timestamp: str,
+    strategy: str,
+    signal: dict,
+) -> SignalReason:
+    canonical_strategy = strategy.strip().upper()
+    rule_ref: RuleRef = {
+        "rule_id": f"STRATEGY_SIGNAL::{canonical_strategy}",
+        "rule_version": "1.0.0",
+    }
+    data_refs = [
+        _build_data_ref(
+            data_type="STATE_VALUE",
+            data_id="strategy",
+            value=strategy,
+            timestamp=timestamp,
+        ),
+        _build_data_ref(
+            data_type="STATE_VALUE",
+            data_id="stage",
+            value=signal.get("stage", "n/a"),
+            timestamp=timestamp,
+        ),
+    ]
+    if "score" in signal and signal.get("score") is not None:
+        data_refs.append(
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="score",
+                value=signal.get("score"),
+                timestamp=timestamp,
+            )
+        )
+
+    reason: SignalReason = {
+        "reason_type": "STATE_TRANSITION",
+        "signal_id": signal_id,
+        "rule_ref": rule_ref,
+        "data_refs": data_refs,
+        "ordering_key": 100,
     }
     reason["reason_id"] = compute_signal_reason_id(
         signal_id=signal_id,

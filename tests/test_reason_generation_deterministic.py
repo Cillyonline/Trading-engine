@@ -79,16 +79,17 @@ def test_reason_generation_hard_failures() -> None:
     df = _build_rsi2_df()
     timestamp = df.index[-1].isoformat()
 
-    with pytest.raises(ValueError):
-        generate_reasons_for_signal(
-            signal={
-                "signal_id": "sig_unknown",
-                "strategy": "UNKNOWN",
-                "timestamp": timestamp,
-            },
-            df=df,
-            strat_config={},
-        )
+    reasons = generate_reasons_for_signal(
+        signal={
+            "signal_id": "sig_unknown",
+            "strategy": "UNKNOWN",
+            "timestamp": timestamp,
+        },
+        df=df,
+        strat_config={},
+    )
+    assert len(reasons) == 1
+    assert reasons[0]["rule_ref"]["rule_id"].startswith("STRATEGY_SIGNAL::UNKNOWN")
 
     with pytest.raises(ValueError):
         generate_reasons_for_signal(
