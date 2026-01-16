@@ -4,8 +4,9 @@ Zentrale Datenmodelle für die Cilly Trading Engine.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import List, Literal, Optional, TypedDict
+import hashlib
+import json
+from typing import List, Literal, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,11 +15,44 @@ Stage = Literal["setup", "entry_confirmed"]
 MarketType = Literal["stock", "crypto"]
 Direction = Literal["long"]
 DataSource = Literal["yahoo", "binance"]
+ReasonType = Literal[
+    "INDICATOR_THRESHOLD",
+    "INDICATOR_CROSSOVER",
+    "PATTERN_MATCH",
+    "STATE_TRANSITION",
+]
+DataType = Literal["INDICATOR_VALUE", "PRICE_VALUE", "BAR_VALUE", "STATE_VALUE"]
 
 
 class EntryZone(TypedDict):
     from_: float
     to: float
+
+
+class RuleRef(TypedDict):
+    rule_id: str
+    rule_version: str
+
+
+ReasonValue = Union[float, int, str, bool]
+
+
+class DataRef(TypedDict):
+    data_type: DataType
+    data_id: str
+    value: ReasonValue
+    timestamp: str
+
+
+class SignalReason(TypedDict):
+    """Order by (ordering_key asc, reason_id asc) for canonical sequences."""
+
+    reason_id: str
+    reason_type: ReasonType
+    signal_id: str
+    rule_ref: RuleRef
+    data_refs: List[DataRef]
+    ordering_key: int
 
 
 class Signal(TypedDict, total=False):
@@ -36,6 +70,7 @@ class Signal(TypedDict, total=False):
     timeframe: str      # z. B. "D1"
     market_type: MarketType
     data_source: DataSource
+    reasons: Optional[List[SignalReason]]
 
 
 class Trade(TypedDict, total=False):
@@ -56,6 +91,39 @@ class Trade(TypedDict, total=False):
     timeframe: str
     market_type: MarketType
     data_source: DataSource
+
+
+def compute_signal_reason_id(
+    *,
+    signal_id: str,
+    reason_type: ReasonType,
+    rule_ref: RuleRef,
+    data_refs: List[DataRef],
+) -> str:
+    canonical_data_refs = sorted(
+        data_refs,
+        key=lambda data_ref: (
+            data_ref["data_type"],
+            data_ref["data_id"],
+            data_ref["timestamp"],
+            str(data_ref["value"]),
+        ),
+    )
+    payload = {
+        "signal_id": signal_id,
+        "reason_type": reason_type,
+        "rule_id": rule_ref["rule_id"],
+        "rule_version": rule_ref["rule_version"],
+        "data_refs": canonical_data_refs,
+    }
+    serialized = json.dumps(
+        payload,
+        separators=(",", ":"),
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    return f"sr_{digest}"
 
 
 class EntryZoneDTO(BaseModel):
