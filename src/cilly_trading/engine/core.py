@@ -20,12 +20,17 @@ from pathlib import Path
 import pandas as pd
 
 from cilly_trading.models import Signal
+from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import SnapshotDataError, load_ohlcv, load_ohlcv_snapshot
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 
 
 logger = logging.getLogger(__name__)
+
+
+class ReasonGenerationError(RuntimeError):
+    """Raised when deterministic reason generation fails."""
 
 
 def _normalize_assets(value: Any) -> list[str]:
@@ -467,6 +472,29 @@ def run_watchlist_analysis(
                             exc_info=True,
                         )
                         continue
+                    try:
+                        s["signal_id"] = compute_signal_id(s)
+                        reasons = generate_reasons_for_signal(
+                            signal=s,
+                            df=df,
+                            strat_config=strat_config,
+                        )
+                        if not reasons:
+                            raise ReasonGenerationError(
+                                "Reason generation returned empty reasons list"
+                            )
+                        s["reasons"] = reasons
+                    except Exception as exc:
+                        logger.error(
+                            "Reason generation failed: component=engine strategy=%s symbol=%s timeframe=%s",
+                            strat_name,
+                            symbol,
+                            engine_config.timeframe,
+                            exc_info=True,
+                        )
+                        raise ReasonGenerationError(
+                            "Reason generation failed for signal"
+                        ) from exc
                     processed_signals.append(s)
 
                 all_signals.extend(processed_signals)
@@ -486,6 +514,8 @@ def run_watchlist_analysis(
                 engine_config.timeframe,
                 exc_info=True,
             )
+            raise
+        except ReasonGenerationError:
             raise
         except Exception:
             logger.error(
