@@ -11,6 +11,22 @@ An analyst run is deterministic only when the engine is executed against a fixed
 # Preconditions
 A snapshot exists and is complete, containing all input data and configuration required for execution. Deterministic behavior is limited to runs that use the snapshot-only path and do not consult external data or time-dependent inputs.
 
+# Snapshot ingestion lifecycle (MVP v1.1, as implemented)
+Snapshot ingestion is **not implemented** in this repository. The engine and API only consume snapshots that already exist in the SQLite database. Creation of `ingestion_runs` rows and population of `ohlcv_snapshots` rows are **out-of-band for MVP**.
+
+## Ingestion run creation (out-of-band)
+The schema defines `ingestion_runs` with required metadata fields (`ingestion_run_id`, `created_at`, `source`, `symbols_json`, `timeframe`) plus optional `fingerprint_hash`. The API checks only that a row exists for the provided `ingestion_run_id`; it does not create or update these rows.
+
+## Population of `ohlcv_snapshots` (out-of-band)
+Snapshot data is stored in `ohlcv_snapshots` with a composite primary key `(ingestion_run_id, symbol, timeframe, ts)` and a foreign key to `ingestion_runs`. Update and delete triggers reject mutation (`snapshot_immutable`), so rows are treated as immutable once inserted. The repository does not include ingestion code; external processes must insert OHLCV rows.
+
+## Snapshot readiness used by the API
+For snapshot-only API endpoints, readiness is enforced before analysis:
+- `ingestion_run_id` must be a valid UUIDv4 and must exist in `ingestion_runs`.
+- For each requested symbol, there must be **at least one** row in `ohlcv_snapshots` with the matching `ingestion_run_id`, symbol, and timeframe (`D1`).
+
+If any symbol/timeframe pair is missing, the API returns `422 ingestion_run_not_ready`. After readiness checks pass, the engine loads the snapshot via `load_ohlcv_snapshot` and validates OHLCV structure; missing or invalid data yields `SnapshotDataError`, surfaced as `422 snapshot_data_invalid`.
+
 # Define Analysis Run
 An analysis run is defined by binding the run to a specific snapshot. In the API, snapshot-only execution is enforced by:
 
