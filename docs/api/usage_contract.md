@@ -67,6 +67,17 @@ These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener
 - `RSI2`
 - `TURTLE`
 
+### Strategy configuration normalization (as implemented)
+
+- Strategy configs are optional; `null` or `{}` resolves to an empty config.
+- Configs must be mappings; non-mapping values are logged and treated as empty configs.
+- Only implemented parameters are accepted; unknown keys are ignored and logged.
+- Supported aliases:
+  - `RSI2`: `oversold` → `oversold_threshold`
+  - `TURTLE`: `entry_lookback` → `breakout_lookback`, `proximity_threshold` → `proximity_threshold_pct`
+- If both a canonical key and its alias are provided, the engine raises an error and skips the strategy.
+- Invalid types or out-of-range values for known keys raise an error and skip the strategy (no signals for that strategy).
+
 ### Market types
 
 - `stock`
@@ -641,7 +652,7 @@ curl -s -X POST http://localhost:8000/screener/basic \
 
 - `ingestion_run_id` (snapshot reference ID)
 - Request payload (symbol(s), strategy, market_type, lookback_days, strategy_config/presets)
-- Strategy configuration used (defaults + overrides)
+- Strategy configuration used (normalized config after alias resolution; unknown keys removed)
 - Timeframe (`D1` in MVP)
 
 ### Outputs to store/log
