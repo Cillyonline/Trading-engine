@@ -23,6 +23,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from api.config import SIGNALS_READ_MAX_LIMIT
+from api.v1.dtos import SignalV1ItemDTO, SignalV1ResponseDTO
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.data import SnapshotDataError
 from cilly_trading.engine.core import (
@@ -498,6 +499,83 @@ def _get_screener_results_query(
         strategy=strategy,
         timeframe=timeframe,
         min_score=min_score,
+    )
+
+
+@app.get(
+    "/api/v1/signals",
+    response_model=SignalV1ResponseDTO,
+    responses={
+        200: {"description": "Stable v1 signals read (cursor pagination)."},
+        422: {"description": "Validation error (z. B. ungültiger Cursor)."},
+    },
+)
+def read_signals_v1(
+    asset: Optional[str] = Query(
+        default=None,
+        description="Optionaler Asset-Filter (Symbol, z. B. 'AAPL' oder 'BTC/USDT').",
+    ),
+    strategy: Optional[str] = Query(
+        default=None,
+        description="Optionaler Strategie-Filter (z. B. 'RSI2' oder 'TURTLE').",
+    ),
+    run_id: Optional[str] = Query(
+        default=None,
+        description="Optionaler Analyse-Run-Filter (analysis_run_id).",
+    ),
+    time_from: Optional[datetime] = Query(
+        default=None,
+        description="Startzeit (inklusive) für signal_time im RFC3339-Format.",
+    ),
+    time_to: Optional[datetime] = Query(
+        default=None,
+        description="Endzeit (inklusive) für signal_time im RFC3339-Format.",
+    ),
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=SIGNALS_READ_MAX_LIMIT,
+        description=f"Seitenlimit für Pagination (max {SIGNALS_READ_MAX_LIMIT}).",
+    ),
+    cursor: Optional[str] = Query(
+        default=None,
+        description="Cursor für Pagination (base64 kodiert: timestamp|signal_id).",
+    ),
+) -> SignalV1ResponseDTO:
+    try:
+        items, next_cursor = signal_repo.read_signals_v1(
+            symbol=asset,
+            strategy=strategy,
+            analysis_run_id=run_id,
+            time_from=time_from,
+            time_to=time_to,
+            cursor=cursor,
+            limit=limit,
+        )
+    except ValueError as exc:
+        if str(exc) == "invalid_cursor":
+            raise HTTPException(status_code=422, detail="invalid_cursor") from exc
+        raise
+
+    response_items: List[SignalV1ItemDTO] = []
+    for item in items:
+        response_items.append(
+            SignalV1ItemDTO(
+                signal_id=item["signal_id"],
+                run_id=item.get("analysis_run_id"),
+                asset=item["symbol"],
+                strategy=item["strategy"],
+                signal_time=datetime.fromisoformat(item["signal_time"]),
+                direction=item["direction"],
+                confidence=item.get("score"),
+                metadata=None,
+            )
+        )
+
+    return SignalV1ResponseDTO(
+        items=response_items,
+        next_cursor=next_cursor,
+        count=len(response_items),
     )
 
 

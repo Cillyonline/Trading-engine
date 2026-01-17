@@ -4,10 +4,11 @@ SQLite-Implementierung des SignalRepository.
 
 from __future__ import annotations
 
+import base64
 import json
 import sqlite3
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from cilly_trading.db import init_db, DEFAULT_DB_PATH  # type: ignore
@@ -324,6 +325,146 @@ class SqliteSignalRepository(SignalRepository):
             result.append(signal)
 
         return result, total
+
+    def read_signals_v1(
+        self,
+        *,
+        symbol: Optional[str] = None,
+        strategy: Optional[str] = None,
+        analysis_run_id: Optional[str] = None,
+        time_from: Optional[datetime] = None,
+        time_to: Optional[datetime] = None,
+        cursor: Optional[str] = None,
+        limit: int = 50,
+    ) -> Tuple[List[dict], Optional[str]]:
+        where_clauses = []
+        params: List[object] = []
+
+        if symbol is not None:
+            where_clauses.append("symbol = ?")
+            params.append(symbol)
+        if strategy is not None:
+            where_clauses.append("strategy = ?")
+            params.append(strategy)
+        if analysis_run_id is not None:
+            where_clauses.append("analysis_run_id = ?")
+            params.append(analysis_run_id)
+
+        normalized_timestamp = "REPLACE(timestamp, 'Z', '+00:00')"
+        if time_from is not None:
+            where_clauses.append(f"{normalized_timestamp} >= ?")
+            params.append(time_from.isoformat())
+        if time_to is not None:
+            where_clauses.append(f"{normalized_timestamp} <= ?")
+            params.append(time_to.isoformat())
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        conn = self._get_connection()
+        cur = conn.cursor()
+        data_query = f"""
+            SELECT
+                analysis_run_id,
+                symbol,
+                strategy,
+                direction,
+                score,
+                timestamp,
+                stage,
+                timeframe,
+                market_type,
+                data_source
+            FROM signals
+            {where_sql}
+        """
+        cur.execute(data_query, params)
+        rows = cur.fetchall()
+        conn.close()
+
+        items: List[dict] = []
+        for row in rows:
+            signal_payload: Signal = {
+                "analysis_run_id": row["analysis_run_id"],
+                "symbol": row["symbol"],
+                "strategy": row["strategy"],
+                "direction": row["direction"],
+                "score": row["score"],
+                "timestamp": row["timestamp"],
+                "stage": row["stage"],
+                "timeframe": row["timeframe"],
+                "market_type": row["market_type"],
+                "data_source": row["data_source"],
+            }
+            signal_id = compute_signal_id(signal_payload)
+            parsed_time = self._parse_timestamp(row["timestamp"])
+            items.append(
+                {
+                    "signal_id": signal_id,
+                    "analysis_run_id": row["analysis_run_id"],
+                    "symbol": row["symbol"],
+                    "strategy": row["strategy"],
+                    "direction": row["direction"],
+                    "score": row["score"],
+                    "signal_time": parsed_time,
+                }
+            )
+
+        items.sort(key=lambda item: (item["signal_time"], item["signal_id"]))
+
+        if cursor is not None:
+            cursor_timestamp, cursor_signal_id = self._decode_cursor(cursor)
+            cursor_time = self._parse_timestamp(cursor_timestamp)
+            items = [
+                item
+                for item in items
+                if (item["signal_time"] > cursor_time)
+                or (item["signal_time"] == cursor_time and item["signal_id"] > cursor_signal_id)
+            ]
+
+        page_items = items[:limit]
+        response_items: List[dict] = []
+        for item in page_items:
+            response_items.append(
+                {
+                    "signal_id": item["signal_id"],
+                    "analysis_run_id": item["analysis_run_id"],
+                    "symbol": item["symbol"],
+                    "strategy": item["strategy"],
+                    "direction": item["direction"],
+                    "score": item["score"],
+                    "signal_time": item["signal_time"].isoformat(),
+                }
+            )
+
+        next_cursor = None
+        if len(items) > limit:
+            last = page_items[-1]
+            next_cursor = self._encode_cursor(
+                last["signal_time"].isoformat(), last["signal_id"]
+            )
+
+        return response_items, next_cursor
+
+    @staticmethod
+    def _encode_cursor(timestamp: str, signal_id: str) -> str:
+        raw = f"{timestamp}|{signal_id}".encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("utf-8")
+
+    @staticmethod
+    def _decode_cursor(cursor: str) -> Tuple[str, str]:
+        try:
+            padding = "=" * (-len(cursor) % 4)
+            decoded = base64.urlsafe_b64decode(cursor + padding).decode("utf-8")
+            timestamp, signal_id = decoded.split("|", 1)
+            return timestamp, signal_id
+        except (ValueError, TypeError, base64.binascii.Error) as exc:
+            raise ValueError("invalid_cursor") from exc
+
+    @staticmethod
+    def _parse_timestamp(timestamp: str) -> datetime:
+        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
     def read_screener_results(
         self,
