@@ -84,10 +84,12 @@ def test_v1_signals_pagination_cursor_stable(tmp_path: Path, monkeypatch) -> Non
 
     assert len(combined_ids) == len(set(combined_ids))
 
-    combined_order = [
-        (datetime.fromisoformat(item["signal_time"]), item["signal_id"])
-        for item in combined_items
-    ]
+    combined_order = []
+    for item in combined_items:
+        normalized_time = item["signal_time"]
+        if normalized_time.endswith("Z"):
+            normalized_time = normalized_time[:-1] + "+00:00"
+        combined_order.append((datetime.fromisoformat(normalized_time), item["signal_id"]))
     assert combined_order == sorted(combined_order)
 
 
