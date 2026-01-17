@@ -15,6 +15,18 @@ All analysis entrypoints are **snapshot-only**:
 - **No implicit live data.** Every analysis run requires an `ingestion_run_id` that points to a snapshot in the analysis repository.
 - **Deterministic failure on missing/partial snapshots.** If the snapshot does not exist, is not ready for the requested symbols/timeframe, or contains invalid data, the request fails with a deterministic error (see Error semantics below).
 - **Deterministic identities.** Manual analysis runs return a deterministic `analysis_run_id` derived from the canonical request payload, and signals carry deterministic identities based on their stable fields. The API does not re-derive or mutate these identities on read.
+### Deterministic vs non-deterministic execution paths
+
+**Deterministic (snapshot-only, API entrypoints):**
+
+- **POST `/strategy/analyze`** (`api.main.analyze_strategy`) calls `_run_snapshot_analysis`, which invokes `cilly_trading.engine.core.run_watchlist_analysis(snapshot_only=True)` and loads data via `cilly_trading.engine.data.load_ohlcv_snapshot`. Determinism is limited to the contents of the referenced `ingestion_run_id` snapshot.
+- **POST `/analysis/run`** (`api.main.manual_analysis`) follows the same snapshot-only path through `_run_snapshot_analysis` and `run_watchlist_analysis(snapshot_only=True)`.
+- **POST `/screener/basic`** (`api.main.basic_screener`) follows the same snapshot-only path through `_run_snapshot_analysis` and `run_watchlist_analysis(snapshot_only=True)`.
+
+**Non-deterministic (engine usage outside API snapshot-only guards):**
+
+- Direct engine calls to `cilly_trading.engine.core.run_watchlist_analysis` with `snapshot_only=False` (default) and without `ingestion_run_id` load data via `cilly_trading.engine.data.load_ohlcv`, which depends on current time (`_utc_now`) and external data sources (`yfinance` for stocks, `ccxt`/Binance for crypto). Results can vary over time or with upstream data changes.
+- If `snapshot_only=False` and snapshot data is missing or invalid, the engine may skip symbols instead of failing the request, which makes outcomes dependent on snapshot availability at runtime.
 
 ### Error semantics (analysis endpoints)
 

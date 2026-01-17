@@ -1,5 +1,5 @@
 # Purpose of an Analyst Run
-An analyst run produces deterministic results by executing the trading engine against a fixed snapshot of inputs, yielding signals and results that can be inspected and reasoned about without variability.
+An analyst run is deterministic only when the engine is executed against a fixed snapshot and the snapshot-only path is enforced by the API entrypoints.
 
 # Terminology
 - Snapshot: An immutable capture of all input data and configuration required for a run.
@@ -9,25 +9,32 @@ An analyst run produces deterministic results by executing the trading engine ag
 - Deterministic: The property that the same snapshot produces the same results on every run.
 
 # Preconditions
-A snapshot exists and is complete, containing all input data and configuration required for execution. Deterministic behavior is assumed for the engine and its dependencies when operating on the snapshot.
+A snapshot exists and is complete, containing all input data and configuration required for execution. Deterministic behavior is limited to runs that use the snapshot-only path and do not consult external data or time-dependent inputs.
 
 # Define Analysis Run
-An analysis run is defined by binding the run to a specific snapshot. This definition establishes the exact input state that will be used during execution.
+An analysis run is defined by binding the run to a specific snapshot. In the API, snapshot-only execution is enforced by:
+
+- `api.main.analyze_strategy` (POST `/strategy/analyze`) -> `_run_snapshot_analysis` -> `cilly_trading.engine.core.run_watchlist_analysis(snapshot_only=True)`
+- `api.main.manual_analysis` (POST `/analysis/run`) -> `_run_snapshot_analysis` -> `cilly_trading.engine.core.run_watchlist_analysis(snapshot_only=True)`
+- `api.main.basic_screener` (POST `/screener/basic`) -> `_run_snapshot_analysis` -> `cilly_trading.engine.core.run_watchlist_analysis(snapshot_only=True)`
 
 # Execute Run
-The engine executes the run strictly against the bound snapshot. No inputs outside the snapshot are consulted, and no mutable state alters the execution path.
+When the snapshot-only path is used, the engine loads data via `cilly_trading.engine.data.load_ohlcv_snapshot` and does not consult external sources.
 
 # Fetch Signals
-Signals produced by the run are retrieved from the run’s results. The signals reflect the deterministic outputs computed from the snapshot.
+Signals produced by the run are retrieved from the run’s results. When the snapshot-only path is used, the signals reflect deterministic outputs computed from the snapshot.
 
 # Inspect Results
 The results are inspected as the authoritative record of the run. They include the signals and any metadata produced by the engine during execution.
 
 # Reason About Output
-Reasoning about the output is based solely on the snapshot and the deterministic run semantics. Identical snapshots yield identical signals and results, enabling consistent interpretation.
+Reasoning about the output is based solely on the snapshot and the deterministic run semantics. Identical snapshots yield identical signals and results, assuming the snapshot-only path is used.
 
 # Guarantees
-The engine guarantees snapshot-first execution and deterministic results for a run bound to a snapshot. Signals and results are reproducible for the same snapshot.
+The API entrypoints listed above guarantee snapshot-only execution and deterministic results for the same snapshot. This guarantee does not apply to direct engine usage that bypasses the API.
+
+# Non-Deterministic Paths
+Direct calls to `cilly_trading.engine.core.run_watchlist_analysis` with `snapshot_only=False` (default) and without `ingestion_run_id` load data via `cilly_trading.engine.data.load_ohlcv`, which depends on current time (`_utc_now`) and external data sources (`yfinance` and `ccxt`/Binance). These runs can vary across time or upstream data changes.
 
 # Non-Goals
 The workflow does not cover live trading, broker integrations, backtesting, or AI-based decision logic.
