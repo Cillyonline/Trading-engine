@@ -78,6 +78,21 @@ These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener
 - If both a canonical key and its alias are provided, the engine raises an error and skips the strategy.
 - Invalid types or out-of-range values for known keys raise an error and skip the strategy (no signals for that strategy).
 
+### Strategy config invalidation and skip semantics (as implemented)
+
+Invalid `strategy_config` values do **not** fail the request. The API still returns `200 OK`, and the affected strategy is **skipped** with **no signals produced** for that strategy.
+
+**Skip causes (exactly as implemented):**
+
+- Invalid types for known strategy keys.
+- Out-of-range values for known strategy keys.
+- Alias and canonical key conflicts (both provided).
+
+**Boundary clarification:**
+
+- Snapshot/ingestion validation errors fail the request (see Error semantics).
+- Strategy config errors only skip the affected strategy; the request remains successful.
+
 ### Market types
 
 - `stock`

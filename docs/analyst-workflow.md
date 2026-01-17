@@ -43,6 +43,9 @@ Signals produced by the run are retrieved from the run’s results. When the sna
 # Inspect Results
 The results are inspected as the authoritative record of the run. They include the signals and any metadata produced by the engine during execution.
 
+# Interpret Missing or Empty Signals
+Empty or missing signals do not automatically indicate an error. A strategy may be skipped if its configuration is invalid, and skipped strategies emit no signals. Determinism includes skip behavior: identical invalid configurations result in identical skips across runs.
+
 # Reason About Output
 Reasoning about the output is based solely on the snapshot and the deterministic run semantics. Identical snapshots yield identical signals and results, assuming the snapshot-only path is used.
 
