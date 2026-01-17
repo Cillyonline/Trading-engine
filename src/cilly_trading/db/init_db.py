@@ -177,6 +177,24 @@ def init_db(db_path: Optional[Path] = None) -> None:
           ON ohlcv_snapshots(ingestion_run_id, symbol, timeframe, ts);
         """
     )
+    cur.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_ohlcv_snapshots_no_update
+        BEFORE UPDATE ON ohlcv_snapshots
+        BEGIN
+            SELECT RAISE(ABORT, 'snapshot_immutable');
+        END;
+        """
+    )
+    cur.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS trg_ohlcv_snapshots_no_delete
+        BEFORE DELETE ON ohlcv_snapshots
+        BEGIN
+            SELECT RAISE(ABORT, 'snapshot_immutable');
+        END;
+        """
+    )
 
     conn.commit()
     conn.close()
