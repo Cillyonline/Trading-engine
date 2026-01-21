@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.data_layer.ingestion_validation import (
+from data_layer.ingestion_validation import (
     SnapshotValidationError,
     validate_ohlcv_uniqueness,
     validate_snapshot_ingestion,
