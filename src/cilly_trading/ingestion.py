@@ -71,14 +71,14 @@ def _resolve_timestamp_column(df: pd.DataFrame) -> str:
 
 def _coerce_timestamp(value: object) -> int:
     if isinstance(value, pd.Timestamp):
-        return int(value.timestamp())
+        return int(value.value // 1_000_000)
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
-        return int(value.timestamp())
+        return int(value.timestamp() * 1000)
     if isinstance(value, str):
         parsed = pd.to_datetime(value, utc=True)
-        return int(parsed.timestamp())
+        return int(parsed.timestamp() * 1000)
     return int(value)
 
 

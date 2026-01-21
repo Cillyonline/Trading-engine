@@ -130,3 +130,39 @@ def test_ingest_snapshot_rejects_source_change(monkeypatch, tmp_path: Path) -> N
 
     assert called["persist"] is False
     assert _count_rows(db_path, "ohlcv_snapshots") == 0
+
+
+def test_ingest_snapshot_persists_millisecond_timestamps(tmp_path: Path) -> None:
+    db_path = tmp_path / "analysis.db"
+    df = _base_df()
+    df["source"] = ["yahoo", "yahoo"]
+    ingestion_run_id = str(uuid.uuid4())
+
+    ingest_snapshot(
+        df,
+        ingestion_run_id=ingestion_run_id,
+        source="yahoo",
+        symbols=["AAPL"],
+        timeframe="D1",
+        db_path=db_path,
+    )
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT ts
+        FROM ohlcv_snapshots
+        WHERE ingestion_run_id = ?
+          AND symbol = ?
+          AND timeframe = ?
+        ORDER BY ts ASC
+        LIMIT 1;
+        """,
+        (ingestion_run_id, "AAPL", "D1"),
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == 1704067200000
