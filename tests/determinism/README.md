@@ -4,6 +4,7 @@
 
 The determinism gate runs a fixed analysis request using the following inputs:
 
+
 - ingestion_run_id: determinism-ingestion-0001
 - symbol: AAPL
 - timeframe: D1
@@ -31,4 +32,4 @@ PASS:
 FAIL:
 - Any byte-level mismatch across JSON artifacts or DB reload output.
 - The gate prints `DETERMINISM_GATE: FAIL (runs=3)` and exits with non-zero code.
-- Deviations are written to `tests/determinism/artifacts/determinism_deviations.json`.
+- Deviations are written to <artifact_dir>/determinism_deviations.json.
