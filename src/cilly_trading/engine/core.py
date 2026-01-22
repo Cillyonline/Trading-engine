@@ -529,6 +529,16 @@ def run_watchlist_analysis(
             continue
 
     if all_signals:
+        if ingestion_run_id is None:
+            logger.info(
+                "Skipping signal persistence because ingestion_run_id is missing: component=engine signals_total=%d",
+                len(all_signals),
+            )
+            logger.info(
+                "Engine run completed: component=engine signals_total=%d",
+                len(all_signals),
+            )
+            return all_signals
         logger.info(
             "Persisting signals: component=engine signals_total=%d",
             len(all_signals),
