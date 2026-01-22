@@ -45,7 +45,7 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "signal_repo", repo)
 
     expected_timestamp = _mock_ohlcv_df()["timestamp"].iloc[-1].isoformat()
-    monkeypatch.setattr(engine_core, "load_ohlcv", lambda **_: _mock_ohlcv_df())
+    monkeypatch.setattr(engine_core, "load_ohlcv_snapshot", lambda **_: _mock_ohlcv_df())
 
     engine_config = EngineConfig(
         timeframe="D1",
@@ -60,6 +60,8 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
         engine_config=engine_config,
         strategy_configs={"RSI2": {}},
         signal_repo=repo,
+        ingestion_run_id="api-test-run-001",
+        db_path=repo._db_path,
     )
 
     assert len(signals) >= 1

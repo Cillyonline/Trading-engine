@@ -16,6 +16,7 @@ def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
 
 def _base_signal(**overrides):
     base = {
+        "ingestion_run_id": "test-run-001",
         "symbol": "AAPL",
         "strategy": "RSI2",
         "direction": "long",
@@ -204,4 +205,3 @@ def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None
     assert payload["limit"] == 50
     assert payload["total"] == 60
     assert len(payload["items"]) == 50
-

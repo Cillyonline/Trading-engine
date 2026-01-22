@@ -15,6 +15,7 @@ def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
 
 def _base_signal(**overrides):
     base = {
+        "ingestion_run_id": "test-run-001",
         "symbol": "AAPL",
         "strategy": "RSI2",
         "direction": "long",
@@ -119,6 +120,18 @@ def test_save_signals_missing_required_key_raises_keyerror(tmp_path: Path) -> No
 
     with pytest.raises(KeyError):
         repo.save_signals([invalid])
+
+
+def test_save_signals_missing_ingestion_run_id_raises(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+
+    invalid = _base_signal()
+    invalid.pop("ingestion_run_id")
+
+    with pytest.raises(ValueError, match="ingestion_run_id is required"):
+        repo.save_signals([invalid])
+
+    assert repo.list_signals(limit=10) == []
 
 
 def test_read_signals_filters_and_sorting(tmp_path: Path) -> None:
