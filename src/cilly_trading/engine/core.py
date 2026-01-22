@@ -11,20 +11,19 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Protocol, List, Dict, Any, Optional
-from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Protocol
 
 import pandas as pd
 
-from cilly_trading.models import Signal
-from cilly_trading.engine.reasons import generate_reasons_for_signal
-from cilly_trading.repositories import SignalRepository
 from cilly_trading.engine.data import SnapshotDataError, load_ohlcv, load_ohlcv_snapshot
+from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
-
+from cilly_trading.models import Signal
+from cilly_trading.repositories import SignalRepository
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +117,7 @@ class EngineConfig:
     """
     Minimale Konfiguration für die Engine.
     """
+
     timeframe: str = "D1"
     lookback_days: int = 200
     market_type: str = "stock"
@@ -290,11 +290,17 @@ def run_watchlist_analysis(
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
+
+    Semantik:
+    - snapshot_only=True -> ingestion_run_id muss gesetzt sein (Snapshot ist Pflicht)
+    - ingestion_run_id gesetzt -> db_path muss gesetzt sein (DB-Path Validierung)
+    - ingestion_run_id optional -> bei None wird live via load_ohlcv geladen
     """
     if snapshot_only and not ingestion_run_id:
         raise ValueError("snapshot_only requires ingestion_run_id")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
+
     logger.info(
         "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s ingestion_run_id=%s",
         len(symbols),
@@ -330,17 +336,19 @@ def run_watchlist_analysis(
 
         try:
             logger.debug(
-                "Loading data: component=engine symbol=%s market_type=%s lookback_days=%d timeframe=%s ingestion_run_id=%s",
+                "Loading data: component=engine symbol=%s market_type=%s lookback_days=%d timeframe=%s ingestion_run_id=%s snapshot_only=%s",
                 symbol,
                 engine_config.market_type,
                 engine_config.lookback_days,
                 engine_config.timeframe,
-                ingestion_run_id,
+                ingestion_run_id or "n/a",
+                snapshot_only,
             )
 
             if snapshot_only:
+                # Guard oben stellt sicher, dass ingestion_run_id != None ist.
                 df = load_ohlcv_snapshot(
-                    ingestion_run_id=ingestion_run_id,
+                    ingestion_run_id=ingestion_run_id,  # type: ignore[arg-type]
                     symbol=symbol,
                     timeframe=engine_config.timeframe,
                     db_path=db_path,
@@ -463,6 +471,10 @@ def run_watchlist_analysis(
                         s.setdefault("market_type", engine_config.market_type)
                         s.setdefault("data_source", engine_config.data_source)
                         s.setdefault("direction", "long")
+
+                        # Nur setzen, wenn vorhanden (optional)
+                        if ingestion_run_id:
+                            s["ingestion_run_id"] = ingestion_run_id
                     except Exception:
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
@@ -472,6 +484,7 @@ def run_watchlist_analysis(
                             exc_info=True,
                         )
                         continue
+
                     try:
                         s["signal_id"] = compute_signal_id(s)
                         reasons = generate_reasons_for_signal(
@@ -480,9 +493,7 @@ def run_watchlist_analysis(
                             strat_config=strat_config,
                         )
                         if not reasons:
-                            raise ReasonGenerationError(
-                                "Reason generation returned empty reasons list"
-                            )
+                            raise ReasonGenerationError("Reason generation returned empty reasons list")
                         s["reasons"] = reasons
                     except Exception as exc:
                         logger.error(
@@ -492,9 +503,8 @@ def run_watchlist_analysis(
                             engine_config.timeframe,
                             exc_info=True,
                         )
-                        raise ReasonGenerationError(
-                            "Reason generation failed for signal"
-                        ) from exc
+                        raise ReasonGenerationError("Reason generation failed for signal") from exc
+
                     processed_signals.append(s)
 
                 all_signals.extend(processed_signals)
@@ -527,6 +537,17 @@ def run_watchlist_analysis(
             continue
 
     if all_signals:
+        if ingestion_run_id is None:
+            logger.info(
+                "Skipping signal persistence because ingestion_run_id is missing: component=engine signals_total=%d",
+                len(all_signals),
+            )
+            logger.info(
+                "Engine run completed: component=engine signals_total=%d",
+                len(all_signals),
+            )
+            return all_signals
+
         logger.info(
             "Persisting signals: component=engine signals_total=%d",
             len(all_signals),

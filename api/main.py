@@ -244,6 +244,7 @@ class SignalsReadQuery(BaseModel):
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
     preset: Optional[str] = Field(default=None)
+    ingestion_run_id: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
     start: Optional[datetime] = Field(default=None)
@@ -420,6 +421,10 @@ def _get_signals_query(
         default=None,
         description="Optionaler Preset-Filter (z. B. 'D1' oder 'H1').",
     ),
+    ingestion_run_id: Optional[str] = Query(
+        default=None,
+        description="Optionaler Snapshot-Filter (ingestion_run_id).",
+    ),
     from_: Optional[datetime] = Query(
         default=None,
         alias="from",
@@ -475,6 +480,7 @@ def _get_signals_query(
         symbol=symbol,
         strategy=strategy,
         preset=preset,
+        ingestion_run_id=ingestion_run_id,
         from_=resolved_from,
         to=resolved_to,
         start=start,
@@ -542,6 +548,7 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
         symbol=params.symbol,
         strategy=params.strategy,
         preset=params.preset,
+        ingestion_run_id=params.ingestion_run_id,
         from_=effective_from,
         to=effective_to,
         sort=params.sort,

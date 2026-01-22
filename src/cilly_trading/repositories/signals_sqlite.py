@@ -76,6 +76,9 @@ class SqliteSignalRepository(SignalRepository):
     def save_signals(self, signals: List[Signal]) -> None:
         if not signals:
             return
+        for signal in signals:
+            if not signal.get("ingestion_run_id"):
+                raise ValueError("ingestion_run_id is required for signal persistence")
 
         conn = self._get_connection()
         cur = conn.cursor()
@@ -220,6 +223,7 @@ class SqliteSignalRepository(SignalRepository):
         symbol: Optional[str] = None,
         strategy: Optional[str] = None,
         preset: Optional[str] = None,
+        ingestion_run_id: Optional[str] = None,
         from_: Optional[datetime] = None,
         to: Optional[datetime] = None,
         sort: str = "created_at_desc",
@@ -238,6 +242,9 @@ class SqliteSignalRepository(SignalRepository):
         if preset is not None:
             where_clauses.append("timeframe = ?")
             params.append(preset)
+        if ingestion_run_id is not None:
+            where_clauses.append("ingestion_run_id = ?")
+            params.append(ingestion_run_id)
         normalized_timestamp = "REPLACE(timestamp, 'Z', '+00:00')"
         if from_ is not None:
             where_clauses.append(f"{normalized_timestamp} >= ?")

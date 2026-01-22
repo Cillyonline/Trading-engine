@@ -15,6 +15,7 @@ def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
 
 def _base_signal(**overrides):
     base = {
+        "ingestion_run_id": "test-run-001",
         "symbol": "AAPL",
         "strategy": "RSI2",
         "direction": "long",
