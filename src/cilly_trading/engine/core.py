@@ -291,8 +291,8 @@ def run_watchlist_analysis(
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
     """
-    if snapshot_only and not ingestion_run_id:
-        raise ValueError("snapshot_only requires ingestion_run_id")
+    if not ingestion_run_id:
+        raise ValueError("ingestion_run_id is required to generate signals")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
     logger.info(
@@ -463,6 +463,7 @@ def run_watchlist_analysis(
                         s.setdefault("market_type", engine_config.market_type)
                         s.setdefault("data_source", engine_config.data_source)
                         s.setdefault("direction", "long")
+                        s["ingestion_run_id"] = ingestion_run_id
                     except Exception:
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
