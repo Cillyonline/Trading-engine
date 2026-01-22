@@ -291,6 +291,8 @@ def run_watchlist_analysis(
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
     """
+    if snapshot_only and not ingestion_run_id:
+        raise ValueError("snapshot_only requires ingestion_run_id")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
     logger.info(
