@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-engine.local/schemas/signal-output.schema.json",
+  "title": "Signal Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "analysis_run_id",
+    "ingestion_run_id",
+    "symbol",
+    "strategy",
+    "signals"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0.0"
+      ]
+    },
+    "analysis_run_id": {
+      "type": "string"
+    },
+    "ingestion_run_id": {
+      "type": "string"
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "strategy": {
+      "type": "string"
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/signal"
+      }
+    }
+  },
+  "definitions": {
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal_id",
+        "ingestion_run_id",
+        "symbol",
+        "strategy",
+        "direction",
+        "score",
+        "timestamp",
+        "stage",
+        "timeframe",
+        "market_type",
+        "data_source",
+        "reasons"
+      ],
+      "properties": {
+        "signal_id": {
+          "type": "string"
+        },
+        "ingestion_run_id": {
+          "type": "string"
+        },
+        "symbol": {
+          "type": "string"
+        },
+        "strategy": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "string"
+        },
+        "timeframe": {
+          "type": "string"
+        },
+        "market_type": {
+          "type": "string"
+        },
+        "data_source": {
+          "type": "string"
+        },
+        "confirmation_rule": {
+          "type": "string"
+        },
+        "entry_zone": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from_",
+            "to"
+          ],
+          "properties": {
+            "from_": {
+              "type": "number"
+            },
+            "to": {
+              "type": "number"
+            }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/reason"
+          }
+        }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason_id",
+        "reason_type",
+        "signal_id",
+        "rule_ref",
+        "data_refs",
+        "ordering_key"
+      ],
+      "properties": {
+        "reason_id": {
+          "type": "string"
+        },
+        "reason_type": {
+          "type": "string"
+        },
+        "signal_id": {
+          "type": "string"
+        },
+        "rule_ref": {
+          "$ref": "#/definitions/rule_ref"
+        },
+        "data_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/data_ref"
+          }
+        },
+        "ordering_key": {
+          "type": "integer"
+        }
+      }
+    },
+    "rule_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "rule_version"
+      ],
+      "properties": {
+        "rule_id": {
+          "type": "string"
+        },
+        "rule_version": {
+          "type": "string"
+        }
+      }
+    },
+    "data_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_type",
+        "data_id",
+        "value",
+        "timestamp"
+      ],
+      "properties": {
+        "data_type": {
+          "type": "string"
+        },
+        "data_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "timestamp": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

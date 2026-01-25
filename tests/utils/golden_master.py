@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from cilly_trading.db import init_db
 from cilly_trading.engine.core import EngineConfig, add_signal_ids, compute_analysis_run_id, run_watchlist_analysis
@@ -122,7 +122,17 @@ def build_run_payload(ingestion_run_id: str) -> Dict[str, Any]:
     }
 
 
-def run_fixed_analysis(db_path: Path) -> Dict[str, Any]:
+def _load_schema_version() -> str:
+    schema_path = Path(__file__).resolve().parents[2] / "schemas" / "signal-output.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    version_enum = schema["properties"]["schema_version"]["enum"]
+    if not isinstance(version_enum, list) or not version_enum:
+        raise ValueError("schema_version enum must contain at least one version")
+    return str(version_enum[0])
+
+
+def run_fixed_analysis(db_path: Path, *, schema_version: Optional[str] = None) -> Dict[str, Any]:
+    resolved_schema_version = schema_version or _load_schema_version()
     signal_repo = SqliteSignalRepository(db_path=db_path)
     engine_config = EngineConfig(
         timeframe="D1",
@@ -154,6 +164,7 @@ def run_fixed_analysis(db_path: Path) -> Dict[str, Any]:
     analysis_run_id = compute_analysis_run_id(run_request_payload)
 
     return {
+        "schema_version": resolved_schema_version,
         "analysis_run_id": analysis_run_id,
         "ingestion_run_id": INGESTION_RUN_ID,
         "symbol": "AAPL",
@@ -162,7 +173,7 @@ def run_fixed_analysis(db_path: Path) -> Dict[str, Any]:
     }
 
 
-def build_canonical_output_bytes(db_path: Path) -> bytes:
-    response_payload = run_fixed_analysis(db_path)
+def build_canonical_output_bytes(db_path: Path, *, schema_version: Optional[str] = None) -> bytes:
+    response_payload = run_fixed_analysis(db_path, schema_version=schema_version)
     output_json = stable_json_dumps(response_payload)
     return output_json.encode("utf-8")
