@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_run_id": "33333333-3333-3333-3333-333333333333",
+  "ingestion_run_id": "44444444-4444-4444-4444-444444444444",
+  "symbol": "ETH-USD",
+  "strategy": "TURTLE",
+  "signals": [
+    {
+      "signal_id": "signal-3",
+      "ingestion_run_id": "44444444-4444-4444-4444-444444444444",
+      "symbol": "ETH-USD",
+      "strategy": "TURTLE",
+      "direction": "long",
+      "timestamp": "2024-01-02T00:00:00Z",
+      "stage": "confirmed",
+      "timeframe": "4h",
+      "market_type": "spot",
+      "data_source": "snapshot",
+      "reasons": [
+        {
+          "reason_id": "reason-3",
+          "reason_type": "indicator",
+          "signal_id": "signal-3",
+          "rule_ref": {
+            "rule_id": "breakout",
+            "rule_version": "1.0"
+          },
+          "data_refs": [
+            {
+              "data_type": "price",
+              "data_id": "ohlcv",
+              "value": 2500.0,
+              "timestamp": "2024-01-02T00:00:00Z"
+            }
+          ],
+          "ordering_key": 1
+        }
+      ]
+    }
+  ]
+}
