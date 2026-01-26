@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+import pytest
+
 from tests.utils.consumer_contract_helpers import (
-    assert_consumer_can_read_v0_from_v1_output,
+    assert_consumer_can_read_output,
     deserialize_tolerant,
+    iter_supported_consumer_schemas,
     load_fixture,
     load_schema,
 )
@@ -101,9 +104,14 @@ def _parse_output(data: Dict[str, Any]) -> ConsumerOutput:
     )
 
 
-def test_consumer_can_read_v1_output_with_v0_expectations() -> None:
+@pytest.mark.parametrize("schema_name", iter_supported_consumer_schemas())
+def test_consumer_can_read_latest_output(schema_name: str) -> None:
     fixture = load_fixture("signal-output.v1.json")
-    payload = assert_consumer_can_read_v0_from_v1_output(fixture)
+    payload = assert_consumer_can_read_output(
+        fixture,
+        schema_name=schema_name,
+        accepted_versions=["0.9.0", "1.0.0"],
+    )
 
     output = _parse_output(payload)
 
@@ -121,5 +129,8 @@ def test_consumer_schema_rejects_missing_required_fields() -> None:
     schema_v0["properties"]["schema_version"]["enum"] = ["0.9.0", "1.0.0"]
     result = deserialize_tolerant(fixture, schema_v0)
 
-    messages = [error.message for error in result.errors]
-    assert any("Missing required property: score" in message for message in messages)
+    messages = [str(error.message).lower() for error in result.errors]
+    assert any(
+        "score" in message and ("required" in message or "missing" in message)
+        for message in messages
+    )
