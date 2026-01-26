@@ -177,3 +177,14 @@ def build_canonical_output_bytes(db_path: Path, *, schema_version: Optional[str]
     response_payload = run_fixed_analysis(db_path, schema_version=schema_version)
     output_json = stable_json_dumps(response_payload)
     return output_json.encode("utf-8")
+
+
+def write_canonical_output_snapshot(
+    snapshot_path: Path,
+    db_path: Path,
+    *,
+    schema_version: Optional[str] = None,
+) -> bytes:
+    output_bytes = build_canonical_output_bytes(db_path, schema_version=schema_version)
+    snapshot_path.write_bytes(output_bytes)
+    return output_bytes
