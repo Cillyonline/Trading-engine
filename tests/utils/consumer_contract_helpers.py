@@ -14,7 +14,7 @@ class ConsumerReadResult:
     errors: List[SchemaError]
 
 
-FIXTURE_DIR = Path(__file__).resolve().parents[1] / "consumer" / "fixtures"
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "consumer" / "consumer_fixtures"
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
 SUPPORTED_CONSUMER_SCHEMAS = ["signal-output.schema.v0.json"]
