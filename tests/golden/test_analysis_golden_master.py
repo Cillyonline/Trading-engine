@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from tests.utils.golden_master import build_canonical_output_bytes, prepare_snapshot_db
+from tests.utils.golden_master import (
+    build_canonical_output_bytes,
+    prepare_snapshot_db,
+    write_canonical_output_snapshot,
+)
 
 
 def _format_byte(value: int | None) -> str:
@@ -58,6 +63,9 @@ def test_analysis_golden_master_snapshot(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
     prepare_snapshot_db(db_path)
     actual_bytes = build_canonical_output_bytes(db_path)
+
+    if os.environ.get("UPDATE_GOLDEN_SNAPSHOTS") == "1":
+        expected_bytes = write_canonical_output_snapshot(snapshot_path, db_path)
 
     if actual_bytes != expected_bytes:
         details = _describe_first_diff(expected_bytes, actual_bytes)
