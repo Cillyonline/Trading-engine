@@ -55,12 +55,21 @@ No validation is performed on the number of rows, date coverage, or completeness
 
 These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener/basic`:
 
-| Status | Error detail | Meaning |
-| --- | --- | --- |
-| 422 | `invalid_ingestion_run_id` | `ingestion_run_id` is not a valid UUIDv4. |
-| 422 | `ingestion_run_not_found` | `ingestion_run_id` does not exist in the repository. |
-| 422 | `ingestion_run_not_ready` | Snapshot exists but is not ready for all required symbols/timeframe. |
-| 422 | `snapshot_data_invalid` | Snapshot data failed validation during analysis. |
+#### 4xx vs 5xx responses (what they mean)
+
+- **4xx (client error):** The request could not be processed because of the request itself (missing/invalid fields, or snapshot reference problems).  
+  **What to do:** Fix the request payload or the snapshot reference, then retry.
+- **5xx (server error):** The server failed to complete a valid request.  
+  **What to do:** Retry later. If it continues, contact the API operator with the time of failure.
+
+#### Snapshot readiness and validation errors
+
+| Status | Error detail | What happened | What to do next |
+| --- | --- | --- | --- |
+| 422 | `invalid_ingestion_run_id` | The snapshot reference was not a valid UUIDv4. | Provide a valid UUIDv4 for `ingestion_run_id` and retry. |
+| 422 | `ingestion_run_not_found` | The snapshot reference does not exist. | Verify the snapshot was created and use an existing `ingestion_run_id`. |
+| 422 | `ingestion_run_not_ready` | The snapshot exists but is missing data for one or more requested symbols/timeframe. | Ensure the snapshot contains at least one row per requested symbol and timeframe, or request symbols/timeframe that exist in the snapshot. |
+| 422 | `snapshot_data_invalid` | Snapshot rows exist but failed validation during analysis. | Fix or replace the snapshot data, then retry with a valid `ingestion_run_id`. |
 
 ### Supported strategies
 
@@ -128,6 +137,13 @@ The API returns two error shapes depending on the failure mode:
      ```
 
 Exact status codes are documented per endpoint in the Errors section.
+
+### Empty results vs failures (how to interpret responses)
+
+- **Empty result (success):** A `200 OK` response with an empty `signals` array means the request succeeded but no signals were generated for that snapshot.  
+  **What to do:** Treat the response as a successful run; if you expected signals, verify snapshot coverage and strategy configuration.
+- **Failure:** A non-2xx response with an error body indicates the request could not be processed.  
+  **What to do:** Follow the guidance in the error detail above (fix the request or snapshot, then retry).
 
 ### Ingestion run validation
 
