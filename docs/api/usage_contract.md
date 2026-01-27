@@ -69,7 +69,7 @@ These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener
 
 ### Strategy configuration normalization (as implemented)
 
-- Strategy configs are optional; `null` or `{}` resolves to an empty config.
+- Strategy configs are optional; omitted, `null`, or `{}` resolves to an empty config.
 - Configs must be mappings; non-mapping values are logged and treated as empty configs.
 - Only implemented parameters are accepted; unknown keys are ignored and logged.
 - Supported aliases:
