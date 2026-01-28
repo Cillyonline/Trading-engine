@@ -9,7 +9,7 @@ import sqlite3
 import warnings
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Final, Literal, Optional
+from typing import Any, Final, Literal, Optional
 
 import ccxt
 import pandas as pd
@@ -172,6 +172,48 @@ def load_ohlcv_snapshot(
             f"snapshot_invalid ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={timeframe}"
         )
     return df
+
+
+def load_snapshot_metadata(
+    *,
+    ingestion_run_id: str,
+    db_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+            ingestion_run_id,
+            created_at,
+            source,
+            fingerprint_hash
+        FROM ingestion_runs
+        WHERE ingestion_run_id = ?
+        LIMIT 1;
+        """,
+        (ingestion_run_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if row is None:
+        raise SnapshotDataError(f"snapshot_metadata_missing ingestion_run_id={ingestion_run_id}")
+
+    metadata: dict[str, Any] = {
+        "snapshot_id": row["ingestion_run_id"],
+        "provider": "internal",
+        "source": row["source"],
+        "created_at_utc": row["created_at"],
+        "schema_version": "1",
+    }
+    if row["fingerprint_hash"]:
+        metadata["payload_checksum"] = row["fingerprint_hash"]
+    return metadata
 
 
 def load_ohlcv(

@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -19,7 +21,12 @@ from typing import Any, Dict, List, Optional, Protocol
 
 import pandas as pd
 
-from cilly_trading.engine.data import SnapshotDataError, load_ohlcv, load_ohlcv_snapshot
+from cilly_trading.engine.data import (
+    SnapshotDataError,
+    load_ohlcv,
+    load_ohlcv_snapshot,
+    load_snapshot_metadata,
+)
 from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 from cilly_trading.models import Signal
@@ -286,6 +293,8 @@ def run_watchlist_analysis(
     *,
     ingestion_run_id: Optional[str] = None,
     db_path: Optional[Path] = None,
+    run_id: Optional[str] = None,
+    audit_dir: Optional[Path] = None,
     snapshot_only: bool = False,
 ) -> List[Signal]:
     """
@@ -300,6 +309,14 @@ def run_watchlist_analysis(
         raise ValueError("snapshot_only requires ingestion_run_id")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
+
+    if snapshot_only:
+        _persist_phase6_audit(
+            ingestion_run_id=ingestion_run_id,
+            db_path=db_path,
+            run_id=run_id,
+            audit_dir=audit_dir,
+        )
 
     logger.info(
         "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s ingestion_run_id=%s",
@@ -568,3 +585,40 @@ def run_watchlist_analysis(
         logger.info("Engine run completed: component=engine signals_total=0")
 
     return all_signals
+
+
+def _persist_phase6_audit(
+    *,
+    ingestion_run_id: str | None,
+    db_path: Optional[Path],
+    run_id: Optional[str],
+    audit_dir: Optional[Path],
+) -> None:
+    if ingestion_run_id is None:
+        raise ValueError("snapshot_only requires ingestion_run_id")
+
+    if db_path is None:
+        raise ValueError("db_path is required when ingestion_run_id is provided")
+
+    snapshot_metadata = load_snapshot_metadata(
+        ingestion_run_id=ingestion_run_id,
+        db_path=db_path,
+    )
+
+    run_identifier = run_id or str(uuid.uuid4())
+    base_dir = audit_dir or Path("runs/phase6")
+    run_path = base_dir / run_identifier
+    run_path.mkdir(parents=True, exist_ok=True)
+
+    payload: Dict[str, Any] = {
+        "run_id": run_identifier,
+        "snapshot_id": ingestion_run_id,
+        "snapshot_metadata": snapshot_metadata,
+    }
+    engine_version = os.getenv("CILLY_ENGINE_VERSION")
+    if engine_version:
+        payload["engine_version"] = engine_version
+
+    audit_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    audit_path = run_path / "audit.json"
+    audit_path.write_text(audit_json, encoding="utf-8")

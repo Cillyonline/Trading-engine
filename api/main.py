@@ -829,6 +829,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
         signal_repo=signal_repo,
         ingestion_run_id=req.ingestion_run_id,
         db_path=_resolve_analysis_db_path(),
+        run_id=computed_run_id,
     )
 
     filtered_signals = [
