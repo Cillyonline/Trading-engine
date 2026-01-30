@@ -4,10 +4,14 @@ Daten-Layer für die Cilly Trading Engine.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import sqlite3
+import uuid
 import warnings
 from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal, Optional
 
@@ -15,7 +19,8 @@ import ccxt
 import pandas as pd
 import yfinance as yf
 
-from cilly_trading.db import DEFAULT_DB_PATH
+from cilly_trading.db import DEFAULT_DB_PATH, init_db
+from cilly_trading.db.init_db import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +46,285 @@ class SnapshotDataError(RuntimeError):
     """Raised when snapshot data is missing or invalid for analysis."""
 
 
+class SnapshotIngestionError(ValueError):
+    """Raised when local snapshot ingestion fails."""
+
+
+@dataclass(frozen=True)
+class SnapshotIngestionResult:
+    """Result of a local snapshot ingestion run."""
+
+    ingestion_run_id: str
+    snapshot_id: str
+    inserted_rows: int
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _load_local_snapshot_file(input_path: Path) -> pd.DataFrame:
+    if not input_path.exists():
+        logger.error("Snapshot input file missing: component=data path=%s", input_path)
+        raise SnapshotIngestionError("snapshot_input_missing")
+
+    suffix = input_path.suffix.lower()
+    try:
+        if suffix == ".csv":
+            return pd.read_csv(input_path)
+        if suffix == ".json":
+            payload = json.loads(input_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and "data" in payload:
+                payload = payload["data"]
+            if not isinstance(payload, list):
+                raise SnapshotIngestionError("snapshot_json_invalid")
+            return pd.DataFrame(payload)
+    except SnapshotIngestionError:
+        raise
+    except Exception:
+        logger.exception("Failed to read snapshot input: component=data path=%s", input_path)
+        raise SnapshotIngestionError("snapshot_input_unreadable")
+
+    logger.error("Unsupported snapshot format: component=data path=%s", input_path)
+    raise SnapshotIngestionError("snapshot_input_unsupported")
+
+
+def _validate_required_columns(df: pd.DataFrame) -> None:
+    missing = [col for col in REQUIRED_COLS if col not in df.columns]
+    if missing:
+        logger.error(
+            "Snapshot missing required columns: component=data missing=%s columns=%s",
+            missing,
+            list(df.columns),
+        )
+        raise SnapshotIngestionError("snapshot_missing_columns")
+
+
+def _normalize_local_ohlcv_rows(
+    df: pd.DataFrame,
+    *,
+    symbol: str,
+    timeframe: str,
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        logger.error("Snapshot input empty: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_empty")
+
+    _validate_required_columns(df)
+    out = df[list(REQUIRED_COLS)].copy()
+    out["timestamp"] = pd.to_datetime(out["timestamp"], utc=True, errors="coerce")
+    if out["timestamp"].isna().any():
+        logger.error("Snapshot contains invalid timestamps: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_invalid_timestamp")
+
+    for col in ("open", "high", "low", "close", "volume"):
+        out[col] = pd.to_numeric(out[col], errors="coerce")
+    if out[["open", "high", "low", "close", "volume"]].isna().any().any():
+        logger.error("Snapshot contains invalid numeric values: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_invalid_numeric")
+
+    out = out.sort_values("timestamp").reset_index(drop=True)
+    out["symbol"] = symbol
+    out["timeframe"] = timeframe
+    return out
+
+
+def _compute_snapshot_id(
+    df: pd.DataFrame,
+    *,
+    symbol: str,
+    timeframe: str,
+    source: str,
+) -> str:
+    timestamps_ms = (df["timestamp"].astype("int64") // 1_000_000).astype(int)
+    rows = []
+    for idx, row in df.iterrows():
+        rows.append(
+            {
+                "timestamp": int(timestamps_ms.iloc[idx]),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+            }
+        )
+    payload = {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "source": source,
+        "rows": rows,
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _snapshot_exists(conn: sqlite3.Connection, snapshot_id: str) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM ingestion_runs
+        WHERE fingerprint_hash = ?
+        LIMIT 1;
+        """,
+        (snapshot_id,),
+    )
+    return cur.fetchone() is not None
+
+
+def _insert_ingestion_run(
+    conn: sqlite3.Connection,
+    *,
+    ingestion_run_id: str,
+    source: str,
+    symbol: str,
+    timeframe: str,
+    snapshot_id: str,
+) -> None:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO ingestion_runs (
+            ingestion_run_id,
+            created_at,
+            source,
+            symbols_json,
+            timeframe,
+            fingerprint_hash
+        )
+        VALUES (?, ?, ?, ?, ?, ?);
+        """,
+        (
+            ingestion_run_id,
+            _utc_now().isoformat(),
+            source,
+            json.dumps([symbol]),
+            timeframe,
+            snapshot_id,
+        ),
+    )
+
+
+def _insert_snapshot_rows(
+    conn: sqlite3.Connection,
+    df: pd.DataFrame,
+    *,
+    ingestion_run_id: str,
+) -> int:
+    timestamps_ms = (df["timestamp"].astype("int64") // 1_000_000).astype(int)
+    rows = []
+    for idx, row in df.iterrows():
+        rows.append(
+            (
+                ingestion_run_id,
+                row["symbol"],
+                row["timeframe"],
+                int(timestamps_ms.iloc[idx]),
+                float(row["open"]),
+                float(row["high"]),
+                float(row["low"]),
+                float(row["close"]),
+                float(row["volume"]),
+            )
+        )
+    cur = conn.cursor()
+    cur.executemany(
+        """
+        INSERT INTO ohlcv_snapshots (
+            ingestion_run_id,
+            symbol,
+            timeframe,
+            ts,
+            open,
+            high,
+            low,
+            close,
+            volume
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """,
+        rows,
+    )
+    return len(rows)
+
+
+def ingest_local_snapshot(
+    *,
+    input_path: Path | str,
+    symbol: str,
+    timeframe: str,
+    source: str = "local",
+    db_path: Optional[Path] = None,
+) -> SnapshotIngestionResult:
+    """Ingest a local CSV/JSON OHLCV snapshot into SQLite.
+
+    Args:
+        input_path: Path to the CSV or JSON file.
+        symbol: Symbol identifier for the snapshot.
+        timeframe: Explicit timeframe label (e.g., "D1").
+        source: Stable source label for determinism.
+        db_path: Optional SQLite database path.
+
+    Returns:
+        SnapshotIngestionResult containing ingestion_run_id and snapshot_id.
+    """
+    if not timeframe or not isinstance(timeframe, str):
+        logger.error("Snapshot timeframe missing: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_timeframe_missing")
+    if not symbol or not isinstance(symbol, str):
+        logger.error("Snapshot symbol missing: component=data")
+        raise SnapshotIngestionError("snapshot_symbol_missing")
+
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+
+    init_db(db_path)
+    input_path = Path(input_path)
+    df = _load_local_snapshot_file(input_path)
+    normalized = _normalize_local_ohlcv_rows(df, symbol=symbol, timeframe=timeframe)
+    snapshot_id = _compute_snapshot_id(
+        normalized,
+        symbol=symbol,
+        timeframe=timeframe,
+        source=source,
+    )
+
+    ingestion_run_id = str(uuid.uuid4())
+    conn = get_connection(db_path)
+    try:
+        snapshot_exists = _snapshot_exists(conn, snapshot_id)
+        _insert_ingestion_run(
+            conn,
+            ingestion_run_id=ingestion_run_id,
+            source=source,
+            symbol=symbol,
+            timeframe=timeframe,
+            snapshot_id=snapshot_id,
+        )
+        inserted_rows = 0
+        if not snapshot_exists:
+            inserted_rows = _insert_snapshot_rows(
+                conn,
+                normalized,
+                ingestion_run_id=ingestion_run_id,
+            )
+        conn.commit()
+    except SnapshotIngestionError:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        logger.exception("Snapshot ingestion failed: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_ingestion_failed")
+    finally:
+        conn.close()
+
+    return SnapshotIngestionResult(
+        ingestion_run_id=ingestion_run_id,
+        snapshot_id=snapshot_id,
+        inserted_rows=inserted_rows,
+    )
 
 
 def _empty_ohlcv() -> pd.DataFrame:
@@ -211,8 +493,10 @@ def load_snapshot_metadata(
         "created_at_utc": row["created_at"],
         "schema_version": "1",
     }
-    if row["fingerprint_hash"]:
-        metadata["payload_checksum"] = row["fingerprint_hash"]
+    fingerprint_hash = row["fingerprint_hash"]
+    if fingerprint_hash:
+        metadata["payload_checksum"] = fingerprint_hash
+        metadata["deterministic_snapshot_id"] = fingerprint_hash
     return metadata
 
 
