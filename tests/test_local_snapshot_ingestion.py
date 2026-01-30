@@ -32,7 +32,7 @@ def _fetch_snapshot_ids(db_path: Path) -> list[str]:
 
 def test_local_csv_ingestion_success(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
-    fixture = Path("tests/fixtures/local_snapshot.csv")
+    fixture = Path("tests/schema/fixtures/local_snapshot.csv")
     result = ingest_local_snapshot(
         input_path=fixture,
         symbol="AAPL",
@@ -49,7 +49,7 @@ def test_local_csv_ingestion_success(tmp_path: Path) -> None:
 
 def test_local_json_ingestion_success(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
-    fixture = Path("tests/fixtures/local_snapshot.json")
+    fixture = Path("tests/schema/fixtures/local_snapshot.json")
     result = ingest_local_snapshot(
         input_path=fixture,
         symbol="AAPL",
@@ -66,7 +66,7 @@ def test_local_json_ingestion_success(tmp_path: Path) -> None:
 
 def test_local_snapshot_idempotent(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
-    fixture = Path("tests/fixtures/local_snapshot.csv")
+    fixture = Path("tests/schema/fixtures/local_snapshot.csv")
     first = ingest_local_snapshot(
         input_path=fixture,
         symbol="AAPL",
@@ -89,7 +89,7 @@ def test_local_snapshot_idempotent(tmp_path: Path) -> None:
 
 def test_local_snapshot_invalid_input(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
-    fixture = Path("tests/fixtures/local_snapshot_invalid.csv")
+    fixture = Path("tests/schema/fixtures/local_snapshot_invalid.csv")
 
     with pytest.raises(SnapshotIngestionError, match="snapshot_missing_columns"):
         ingest_local_snapshot(
@@ -106,7 +106,7 @@ def test_local_snapshot_invalid_input(tmp_path: Path) -> None:
 
 def test_local_snapshot_metadata_uses_fingerprint(tmp_path: Path) -> None:
     db_path = tmp_path / "analysis.db"
-    fixture = Path("tests/fixtures/local_snapshot.csv")
+    fixture = Path("tests/schema/fixtures/local_snapshot.csv")
     result = ingest_local_snapshot(
         input_path=fixture,
         symbol="AAPL",
@@ -120,5 +120,7 @@ def test_local_snapshot_metadata_uses_fingerprint(tmp_path: Path) -> None:
         db_path=db_path,
     )
 
-    assert metadata["snapshot_id"] == result.snapshot_id
+    assert metadata["snapshot_id"] == result.ingestion_run_id
     assert metadata["payload_checksum"] == result.snapshot_id
+    if "deterministic_snapshot_id" in metadata:
+        assert metadata["deterministic_snapshot_id"] == result.snapshot_id
