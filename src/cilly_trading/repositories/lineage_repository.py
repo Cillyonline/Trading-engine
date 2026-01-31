@@ -82,7 +82,7 @@ class SqliteLineageRepository:
             created_at_value = str(created_at)
         cur.execute(
             """
-            INSERT INTO analysis_lineage (
+            INSERT OR IGNORE INTO analysis_lineage (
                 analysis_run_id,
                 snapshot_id,
                 ingestion_run_id,
