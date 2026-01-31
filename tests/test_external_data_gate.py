@@ -56,6 +56,8 @@ def test_external_data_gate_disabled_blocks_execution(
             engine_config=EngineConfig(),
             strategy_configs={},
             signal_repo=DummyRepo(),
+            ingestion_run_id="ingest-gate-001",
+            snapshot_id="snapshot-gate-001",
         )
 
     assert "External data gate closed" in caplog.text
@@ -71,6 +73,8 @@ def test_external_data_gate_enabled_allows_execution(monkeypatch: pytest.MonkeyP
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=DummyRepo(),
+        ingestion_run_id="ingest-gate-002",
+        snapshot_id="snapshot-gate-002",
     )
 
     assert result == []

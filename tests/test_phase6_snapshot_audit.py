@@ -9,6 +9,7 @@ import pytest
 
 from cilly_trading.db import init_db
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
+from cilly_trading.engine.lineage import LineageMissingError
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 
@@ -87,7 +88,7 @@ def _prepare_snapshot_db(db_path: Path, ingestion_run_id: str) -> None:
 
 def test_phase6_snapshot_requires_ingestion_run_id(tmp_path: Path) -> None:
     signal_repo = SqliteSignalRepository(db_path=tmp_path / "signals.db")
-    with pytest.raises(ValueError, match="snapshot_only requires ingestion_run_id"):
+    with pytest.raises(LineageMissingError, match="ingestion_run_id is required"):
         run_watchlist_analysis(
             symbols=["AAPL"],
             strategies=[_NoopStrategy()],
