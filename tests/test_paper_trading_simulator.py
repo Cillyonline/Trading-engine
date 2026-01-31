@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pytest
 
@@ -17,6 +19,7 @@ def signal_fixture() -> List[Signal]:
             "symbol": "AAPL",
             "strategy": "TEST",
             "direction": "long",
+            "action": "entry",
             "timestamp": "2024-01-01T09:30:00Z",
             "stage": "entry_confirmed",
             "entry_zone": {"from_": 99.5, "to": 100.5},
@@ -29,6 +32,7 @@ def signal_fixture() -> List[Signal]:
             "symbol": "AAPL",
             "strategy": "TEST",
             "direction": "long",
+            "action": "entry",
             "timestamp": "2024-01-02T09:30:00Z",
             "stage": "entry_confirmed",
             "entry_zone": {"from_": 100.5, "to": 101.5},
@@ -41,6 +45,7 @@ def signal_fixture() -> List[Signal]:
             "symbol": "AAPL",
             "strategy": "TEST",
             "direction": "long",
+            "action": "exit",
             "timestamp": "2024-01-03T09:30:00Z",
             "stage": "setup",
             "entry_zone": {"from_": 101.0, "to": 103.0},
@@ -53,6 +58,7 @@ def signal_fixture() -> List[Signal]:
             "symbol": "MSFT",
             "strategy": "TEST",
             "direction": "long",
+            "action": "entry",
             "timestamp": "2024-01-01T09:35:00Z",
             "stage": "entry_confirmed",
             "entry_zone": {"from_": 198.0, "to": 202.0},
@@ -65,6 +71,7 @@ def signal_fixture() -> List[Signal]:
             "symbol": "MSFT",
             "strategy": "TEST",
             "direction": "long",
+            "action": "exit",
             "timestamp": "2024-01-02T09:35:00Z",
             "stage": "setup",
             "entry_zone": {"from_": 201.0, "to": 203.0},
@@ -76,6 +83,23 @@ def signal_fixture() -> List[Signal]:
     ]
 
 
+PRICE_QUANTIZER = Decimal("0.0001")
+
+
+def _format_decimal(value: Decimal) -> str:
+    return str(value.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP))
+
+
+def _format_optional_number(value: Optional[float]) -> Optional[str]:
+    if value is None:
+        return None
+    return _format_decimal(Decimal(str(value)))
+
+
+def _canonical_json(payload: Dict[str, object]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
 def _serialize_result(result) -> Dict[str, object]:
     trades = []
     for trade in result.trades:
@@ -84,12 +108,13 @@ def _serialize_result(result) -> Dict[str, object]:
                 "symbol": trade["symbol"],
                 "strategy": trade["strategy"],
                 "stage": trade["stage"],
-                "entry_price": trade.get("entry_price"),
+                "entry_price": _format_optional_number(trade.get("entry_price")),
                 "entry_date": trade.get("entry_date"),
-                "exit_price": trade.get("exit_price"),
+                "exit_price": _format_optional_number(trade.get("exit_price")),
                 "exit_date": trade.get("exit_date"),
                 "reason_entry": trade.get("reason_entry"),
                 "reason_exit": trade.get("reason_exit"),
+                "notes": trade.get("notes"),
                 "timeframe": trade.get("timeframe"),
                 "market_type": trade.get("market_type"),
                 "data_source": trade.get("data_source"),
@@ -119,18 +144,44 @@ def test_paper_trading_snapshot(signal_fixture: List[Signal]) -> None:
     simulator = PaperTradingSimulator()
     result = simulator.run(signal_fixture)
 
+    summary_payload = {
+        "positions": {
+            "AAPL": {
+                "qty": 1,
+                "avg_entry_price": "100.5000",
+                "realized_pnl": "2.0000",
+                "unrealized_pnl": "1.5000",
+                "total_pnl": "3.5000",
+            },
+            "MSFT": {
+                "qty": 0,
+                "avg_entry_price": "0.0000",
+                "realized_pnl": "2.0000",
+                "unrealized_pnl": "0.0000",
+                "total_pnl": "2.0000",
+            },
+        },
+        "pnl_by_symbol": {
+            "AAPL": {"realized": "2.0000", "unrealized": "1.5000", "total": "3.5000"},
+            "MSFT": {"realized": "2.0000", "unrealized": "0.0000", "total": "2.0000"},
+        },
+        "pnl_total": {"realized": "4.0000", "unrealized": "1.5000", "total": "5.5000"},
+    }
+    summary_notes = _canonical_json(summary_payload)
+
     snapshot = {
         "trades": [
             {
                 "symbol": "AAPL",
                 "strategy": "TEST",
                 "stage": "entry_confirmed",
-                "entry_price": 100.0,
+                "entry_price": "100.0000",
                 "entry_date": "2024-01-01T09:30:00Z",
-                "exit_price": 102.0,
+                "exit_price": "102.0000",
                 "exit_date": "2024-01-03T09:30:00Z",
                 "reason_entry": "rule-a",
                 "reason_exit": "paper_trade_exit",
+                "notes": None,
                 "timeframe": "D1",
                 "market_type": "stock",
                 "data_source": "yahoo",
@@ -139,12 +190,13 @@ def test_paper_trading_snapshot(signal_fixture: List[Signal]) -> None:
                 "symbol": "MSFT",
                 "strategy": "TEST",
                 "stage": "entry_confirmed",
-                "entry_price": 200.0,
+                "entry_price": "200.0000",
                 "entry_date": "2024-01-01T09:35:00Z",
-                "exit_price": 202.0,
+                "exit_price": "202.0000",
                 "exit_date": "2024-01-02T09:35:00Z",
                 "reason_entry": "rule-d",
                 "reason_exit": "paper_trade_exit",
+                "notes": None,
                 "timeframe": "D1",
                 "market_type": "stock",
                 "data_source": "yahoo",
@@ -153,12 +205,28 @@ def test_paper_trading_snapshot(signal_fixture: List[Signal]) -> None:
                 "symbol": "AAPL",
                 "strategy": "TEST",
                 "stage": "entry_confirmed",
-                "entry_price": 101.0,
+                "entry_price": "101.0000",
                 "entry_date": "2024-01-02T09:30:00Z",
                 "exit_price": None,
                 "exit_date": None,
                 "reason_entry": "rule-b",
                 "reason_exit": None,
+                "notes": None,
+                "timeframe": "D1",
+                "market_type": "stock",
+                "data_source": "yahoo",
+            },
+            {
+                "symbol": "__SUMMARY__",
+                "strategy": "PAPER_TRADING",
+                "stage": "setup",
+                "entry_price": None,
+                "entry_date": "2024-01-03T09:30:00Z",
+                "exit_price": None,
+                "exit_date": None,
+                "reason_entry": "paper_trade_summary",
+                "reason_exit": None,
+                "notes": summary_notes,
                 "timeframe": "D1",
                 "market_type": "stock",
                 "data_source": "yahoo",
@@ -167,24 +235,24 @@ def test_paper_trading_snapshot(signal_fixture: List[Signal]) -> None:
         "positions": {
             "AAPL": {
                 "qty": 1,
-                "avg_entry_price": 100.5,
-                "realized_pnl": 2.0,
-                "unrealized_pnl": 1.5,
-                "total_pnl": 3.5,
+                "avg_entry_price": "100.5000",
+                "realized_pnl": "2.0000",
+                "unrealized_pnl": "1.5000",
+                "total_pnl": "3.5000",
             },
             "MSFT": {
                 "qty": 0,
-                "avg_entry_price": 0.0,
-                "realized_pnl": 2.0,
-                "unrealized_pnl": 0.0,
-                "total_pnl": 2.0,
+                "avg_entry_price": "0.0000",
+                "realized_pnl": "2.0000",
+                "unrealized_pnl": "0.0000",
+                "total_pnl": "2.0000",
             },
         },
         "pnl_by_symbol": {
-            "AAPL": {"realized": 2.0, "unrealized": 1.5, "total": 3.5},
-            "MSFT": {"realized": 2.0, "unrealized": 0.0, "total": 2.0},
+            "AAPL": {"realized": "2.0000", "unrealized": "1.5000", "total": "3.5000"},
+            "MSFT": {"realized": "2.0000", "unrealized": "0.0000", "total": "2.0000"},
         },
-        "pnl_total": {"realized": 4.0, "unrealized": 1.5, "total": 5.5},
+        "pnl_total": {"realized": "4.0000", "unrealized": "1.5000", "total": "5.5000"},
     }
 
     assert _serialize_result(result) == snapshot
@@ -216,12 +284,13 @@ def test_paper_trading_repository_integration(
                 "symbol": trade["symbol"],
                 "strategy": trade["strategy"],
                 "stage": trade["stage"],
-                "entry_price": trade.get("entry_price"),
+                "entry_price": _format_optional_number(trade.get("entry_price")),
                 "entry_date": trade.get("entry_date"),
-                "exit_price": trade.get("exit_price"),
+                "exit_price": _format_optional_number(trade.get("exit_price")),
                 "exit_date": trade.get("exit_date"),
                 "reason_entry": trade.get("reason_entry"),
                 "reason_exit": trade.get("reason_exit"),
+                "notes": trade.get("notes"),
                 "timeframe": trade.get("timeframe"),
                 "market_type": trade.get("market_type"),
                 "data_source": trade.get("data_source"),
@@ -235,12 +304,13 @@ def test_paper_trading_repository_integration(
                 "symbol": trade["symbol"],
                 "strategy": trade["strategy"],
                 "stage": trade["stage"],
-                "entry_price": trade.get("entry_price"),
+                "entry_price": _format_optional_number(trade.get("entry_price")),
                 "entry_date": trade.get("entry_date"),
-                "exit_price": trade.get("exit_price"),
+                "exit_price": _format_optional_number(trade.get("exit_price")),
                 "exit_date": trade.get("exit_date"),
                 "reason_entry": trade.get("reason_entry"),
                 "reason_exit": trade.get("reason_exit"),
+                "notes": trade.get("notes"),
                 "timeframe": trade.get("timeframe"),
                 "market_type": trade.get("market_type"),
                 "data_source": trade.get("data_source"),

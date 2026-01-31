@@ -4,9 +4,10 @@ Deterministic paper trading simulator for signals.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from cilly_trading.models import Signal, Trade
 from cilly_trading.repositories import TradeRepository
@@ -31,11 +32,6 @@ def _signal_action(signal: Signal) -> str:
     action = signal.get("action")
     if isinstance(action, str) and action:
         return action.lower()
-    stage = signal.get("stage")
-    if stage == "entry_confirmed":
-        return "entry"
-    if stage == "setup":
-        return "exit"
     return "entry"
 
 
@@ -62,10 +58,10 @@ class PositionSummary:
     """Serializable summary of a position."""
 
     qty: int
-    avg_entry_price: float
-    realized_pnl: float
-    unrealized_pnl: float
-    total_pnl: float
+    avg_entry_price: str
+    realized_pnl: str
+    unrealized_pnl: str
+    total_pnl: str
 
 
 @dataclass
@@ -74,8 +70,16 @@ class SimulationResult:
 
     trades: List[Trade]
     positions: Dict[str, PositionSummary]
-    pnl_by_symbol: Dict[str, Dict[str, float]]
-    pnl_total: Dict[str, float]
+    pnl_by_symbol: Dict[str, Dict[str, str]]
+    pnl_total: Dict[str, str]
+
+
+def _format_decimal(value: Decimal) -> str:
+    return str(value.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP))
+
+
+def _canonical_json(payload: Dict[str, object]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 class PaperTradingSimulator:
@@ -174,7 +178,7 @@ class PaperTradingSimulator:
                     position.avg_entry_price = Decimal("0")
 
         positions_summary: Dict[str, PositionSummary] = {}
-        pnl_by_symbol: Dict[str, Dict[str, float]] = {}
+        pnl_by_symbol: Dict[str, Dict[str, str]] = {}
         total_realized = Decimal("0")
         total_unrealized = Decimal("0")
 
@@ -188,26 +192,59 @@ class PaperTradingSimulator:
 
             positions_summary[symbol] = PositionSummary(
                 qty=position.qty,
-                avg_entry_price=float(position.avg_entry_price),
-                realized_pnl=float(realized),
-                unrealized_pnl=float(unrealized),
-                total_pnl=float(total),
+                avg_entry_price=_format_decimal(position.avg_entry_price),
+                realized_pnl=_format_decimal(realized),
+                unrealized_pnl=_format_decimal(unrealized),
+                total_pnl=_format_decimal(total),
             )
             pnl_by_symbol[symbol] = {
-                "realized": float(realized),
-                "unrealized": float(unrealized),
-                "total": float(total),
+                "realized": _format_decimal(realized),
+                "unrealized": _format_decimal(unrealized),
+                "total": _format_decimal(total),
             }
             total_realized += realized
             total_unrealized += unrealized
 
         pnl_total = {
-            "realized": float(total_realized.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)),
-            "unrealized": float(total_unrealized.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)),
-            "total": float(
-                (total_realized + total_unrealized).quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
-            ),
+            "realized": _format_decimal(total_realized),
+            "unrealized": _format_decimal(total_unrealized),
+            "total": _format_decimal(total_realized + total_unrealized),
         }
+
+        summary_payload: Dict[str, object] = {
+            "positions": {
+                symbol: {
+                    "qty": summary.qty,
+                    "avg_entry_price": summary.avg_entry_price,
+                    "realized_pnl": summary.realized_pnl,
+                    "unrealized_pnl": summary.unrealized_pnl,
+                    "total_pnl": summary.total_pnl,
+                }
+                for symbol, summary in positions_summary.items()
+            },
+            "pnl_by_symbol": pnl_by_symbol,
+            "pnl_total": pnl_total,
+        }
+        summary_notes = _canonical_json(summary_payload)
+        summary_timestamp = ordered_signals[-1].get("timestamp") if ordered_signals else ""
+        summary_trade: Trade = {
+            "symbol": "__SUMMARY__",
+            "strategy": "PAPER_TRADING",
+            "stage": "setup",
+            "entry_price": None,
+            "entry_date": summary_timestamp,
+            "exit_price": None,
+            "exit_date": None,
+            "reason_entry": "paper_trade_summary",
+            "reason_exit": None,
+            "notes": summary_notes,
+            "timeframe": ordered_signals[-1].get("timeframe") if ordered_signals else "",
+            "market_type": ordered_signals[-1].get("market_type") if ordered_signals else "stock",
+            "data_source": ordered_signals[-1].get("data_source") if ordered_signals else "yahoo",
+        }
+        if self._trade_repository is not None:
+            summary_trade["id"] = self._trade_repository.save_trade(summary_trade)
+        trades.append(summary_trade)
 
         return SimulationResult(
             trades=trades,
