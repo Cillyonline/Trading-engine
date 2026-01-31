@@ -46,6 +46,8 @@ def _run_engine_with_config(
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs=config,
         signal_repo=repo,
+        ingestion_run_id="ingest-strategy-config",
+        snapshot_id="snapshot-strategy-config",
     )
 
 

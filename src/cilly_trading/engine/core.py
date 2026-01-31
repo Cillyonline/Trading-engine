@@ -27,10 +27,12 @@ from cilly_trading.engine.data import (
     load_ohlcv_snapshot,
     load_snapshot_metadata,
 )
+from cilly_trading.engine.lineage import LineageContext, LineageMissingError
 from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
+from cilly_trading.repositories.lineage_repository import SqliteLineageRepository
 from cilly_trading.config.external_data import EXTERNAL_DATA_ENABLED
 
 logger = logging.getLogger(__name__)
@@ -318,24 +320,69 @@ def run_watchlist_analysis(
     signal_repo: SignalRepository,
     *,
     ingestion_run_id: Optional[str] = None,
+    snapshot_id: Optional[str] = None,
     db_path: Optional[Path] = None,
     run_id: Optional[str] = None,
     audit_dir: Optional[Path] = None,
     snapshot_only: bool = False,
+    lineage_repo: Optional[SqliteLineageRepository] = None,
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
 
     Semantik:
-    - snapshot_only=True -> ingestion_run_id muss gesetzt sein (Snapshot ist Pflicht)
-    - ingestion_run_id gesetzt -> db_path muss gesetzt sein (DB-Path Validierung)
-    - ingestion_run_id optional -> bei None wird live via load_ohlcv geladen
+    - ingestion_run_id und snapshot_id sind Pflicht (Lineage-Kontext)
+    - snapshot_only=True -> db_path muss gesetzt sein (Snapshot ist Pflicht)
+    - db_path gesetzt -> Snapshot wird geladen, sonst externe Daten
     """
-    if snapshot_only and not ingestion_run_id:
-        raise ValueError("snapshot_only requires ingestion_run_id")
-    if ingestion_run_id and db_path is None:
-        raise ValueError("db_path is required when ingestion_run_id is provided")
-    if ingestion_run_id is None and not snapshot_only:
+    if ingestion_run_id is None or not str(ingestion_run_id).strip():
+        raise LineageMissingError("ingestion_run_id is required for analysis lineage")
+    if snapshot_only and db_path is None:
+        raise ValueError("db_path is required when snapshot_only is enabled")
+
+    resolved_snapshot_id = snapshot_id
+    if resolved_snapshot_id is None or not str(resolved_snapshot_id).strip():
+        if db_path is None:
+            raise LineageMissingError("snapshot_id is required for analysis lineage")
+        try:
+            metadata = load_snapshot_metadata(ingestion_run_id=ingestion_run_id, db_path=db_path)
+        except Exception as exc:
+            raise LineageMissingError("snapshot_id is required for analysis lineage") from exc
+        resolved_snapshot_id = (
+            metadata.get("deterministic_snapshot_id")
+            or metadata.get("payload_checksum")
+            or metadata.get("snapshot_id")
+        )
+
+    if resolved_snapshot_id is None or not str(resolved_snapshot_id).strip():
+        raise LineageMissingError("snapshot_id is required for analysis lineage")
+
+    ordered_symbols = sorted(symbols)
+    ordered_strategy_names = sorted(
+        getattr(strategy, "name", strategy.__class__.__name__) for strategy in strategies
+    )
+    analysis_run_payload = {
+        "symbols": ordered_symbols,
+        "strategies": ordered_strategy_names,
+        "engine_config": {
+            "timeframe": engine_config.timeframe,
+            "lookback_days": engine_config.lookback_days,
+            "market_type": engine_config.market_type,
+            "data_source": engine_config.data_source,
+        },
+        "ingestion_run_id": str(ingestion_run_id),
+        "snapshot_id": str(resolved_snapshot_id),
+        "snapshot_only": snapshot_only,
+    }
+    analysis_run_id = compute_analysis_run_id(analysis_run_payload)
+    lineage_ctx = LineageContext(
+        snapshot_id=str(resolved_snapshot_id),
+        ingestion_run_id=str(ingestion_run_id),
+        analysis_run_id=analysis_run_id,
+    )
+
+    use_snapshot_data = snapshot_only or db_path is not None
+    if not use_snapshot_data:
         _require_external_data_enabled(engine_config)
 
     if snapshot_only:
@@ -347,13 +394,14 @@ def run_watchlist_analysis(
         )
 
     logger.info(
-        "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s ingestion_run_id=%s",
+        "Engine run started: component=engine symbols=%d strategies=%d timeframe=%s lookback_days=%d market_type=%s ingestion_run_id=%s snapshot_id=%s",
         len(symbols),
         len(strategies),
         engine_config.timeframe,
         engine_config.lookback_days,
         engine_config.market_type,
         ingestion_run_id or "n/a",
+        resolved_snapshot_id or "n/a",
     )
 
     if not isinstance(strategy_configs, Mapping):
@@ -366,7 +414,6 @@ def run_watchlist_analysis(
         strategy_configs_map = strategy_configs
 
     all_signals: List[Signal] = []
-    ordered_symbols = sorted(symbols)
     ordered_strategies = sorted(
         strategies,
         key=lambda s: getattr(s, "name", s.__class__.__name__),
@@ -390,35 +437,19 @@ def run_watchlist_analysis(
                 snapshot_only,
             )
 
-            if snapshot_only:
-                # Guard oben stellt sicher, dass ingestion_run_id != None ist.
-                df = load_ohlcv_snapshot(
-                    ingestion_run_id=ingestion_run_id,  # type: ignore[arg-type]
-                    symbol=symbol,
-                    timeframe=engine_config.timeframe,
-                    db_path=db_path,
-                )
-                if df is None or getattr(df, "empty", False):
-                    raise SnapshotDataError(
-                        f"snapshot_invalid ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={engine_config.timeframe}"
-                    )
-            else:
+            if use_snapshot_data:
+                if db_path is None:
+                    raise ValueError("db_path is required for snapshot-backed analysis")
                 try:
-                    if ingestion_run_id:
-                        df = load_ohlcv_snapshot(
-                            ingestion_run_id=ingestion_run_id,
-                            symbol=symbol,
-                            timeframe=engine_config.timeframe,
-                            db_path=db_path,
-                        )
-                    else:
-                        df = load_ohlcv(
-                            symbol=symbol,
-                            timeframe=engine_config.timeframe,
-                            lookback_days=engine_config.lookback_days,
-                            market_type=engine_config.market_type,
-                        )
+                    df = load_ohlcv_snapshot(
+                        ingestion_run_id=ingestion_run_id,
+                        symbol=symbol,
+                        timeframe=engine_config.timeframe,
+                        db_path=db_path,
+                    )
                 except SnapshotDataError:
+                    if snapshot_only:
+                        raise
                     logger.warning(
                         "Skipping symbol due to snapshot data error: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
                         symbol,
@@ -426,6 +457,18 @@ def run_watchlist_analysis(
                         ingestion_run_id or "n/a",
                     )
                     continue
+                if df is None or getattr(df, "empty", False):
+                    raise SnapshotDataError(
+                        f"snapshot_invalid ingestion_run_id={ingestion_run_id} symbol={symbol} timeframe={engine_config.timeframe}"
+                    )
+            else:
+                try:
+                    df = load_ohlcv(
+                        symbol=symbol,
+                        timeframe=engine_config.timeframe,
+                        lookback_days=engine_config.lookback_days,
+                        market_type=engine_config.market_type,
+                    )
                 except Exception:
                     logger.error(
                         "Error loading data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
@@ -517,9 +560,35 @@ def run_watchlist_analysis(
                         s.setdefault("data_source", engine_config.data_source)
                         s.setdefault("direction", "long")
 
-                        # Nur setzen, wenn vorhanden (optional)
-                        if ingestion_run_id:
-                            s["ingestion_run_id"] = ingestion_run_id
+                        existing_analysis_run_id = s.get("analysis_run_id")
+                        if (
+                            existing_analysis_run_id
+                            and str(existing_analysis_run_id) != lineage_ctx.analysis_run_id
+                        ):
+                            raise LineageMissingError(
+                                "analysis_run_id mismatch for lineage context"
+                            )
+                        existing_snapshot_id = s.get("snapshot_id")
+                        if (
+                            existing_snapshot_id
+                            and str(existing_snapshot_id) != lineage_ctx.snapshot_id
+                        ):
+                            raise LineageMissingError(
+                                "snapshot_id mismatch for lineage context"
+                            )
+                        existing_ingestion_run_id = s.get("ingestion_run_id")
+                        if (
+                            existing_ingestion_run_id
+                            and str(existing_ingestion_run_id) != lineage_ctx.ingestion_run_id
+                        ):
+                            raise LineageMissingError(
+                                "ingestion_run_id mismatch for lineage context"
+                            )
+                        s["analysis_run_id"] = lineage_ctx.analysis_run_id
+                        s["snapshot_id"] = lineage_ctx.snapshot_id
+                        s["ingestion_run_id"] = lineage_ctx.ingestion_run_id
+                    except LineageMissingError:
+                        raise
                     except Exception:
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
@@ -570,6 +639,8 @@ def run_watchlist_analysis(
                 exc_info=True,
             )
             raise
+        except LineageMissingError:
+            raise
         except ReasonGenerationError:
             raise
         except Exception:
@@ -581,18 +652,11 @@ def run_watchlist_analysis(
             )
             continue
 
-    if all_signals:
-        if ingestion_run_id is None:
-            logger.info(
-                "Skipping signal persistence because ingestion_run_id is missing: component=engine signals_total=%d",
-                len(all_signals),
-            )
-            logger.info(
-                "Engine run completed: component=engine signals_total=%d",
-                len(all_signals),
-            )
-            return all_signals
+    if lineage_repo is None:
+        lineage_repo = SqliteLineageRepository(db_path=db_path)
+    lineage_repo.save_lineage(lineage_ctx)
 
+    if all_signals:
         logger.info(
             "Persisting signals: component=engine signals_total=%d",
             len(all_signals),

@@ -65,6 +65,8 @@ def test_load_ohlcv_raises_symbol_skipped(monkeypatch: pytest.MonkeyPatch) -> No
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-001",
+        snapshot_id="snapshot-robustness-001",
     )
 
     assert isinstance(result, list)
@@ -85,6 +87,8 @@ def test_strategy_raises_engine_continues(monkeypatch: pytest.MonkeyPatch) -> No
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-002",
+        snapshot_id="snapshot-robustness-002",
     )
 
     assert isinstance(result, list)
@@ -113,6 +117,8 @@ def test_repo_save_signals_raises_run_completes(monkeypatch: pytest.MonkeyPatch)
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-003",
+        snapshot_id="snapshot-robustness-003",
     )
 
     assert isinstance(result, list)
@@ -139,6 +145,8 @@ def test_strategy_returns_none_no_crash(monkeypatch: pytest.MonkeyPatch) -> None
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-004",
+        snapshot_id="snapshot-robustness-004",
     )
 
     assert isinstance(result, list)
@@ -169,6 +177,8 @@ def test_unknown_strategy_config_keys_logged(
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={"RSI2": {"unknown_key": 123}},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-005",
+        snapshot_id="snapshot-robustness-005",
     )
 
     assert isinstance(result, list)
@@ -203,6 +213,8 @@ def test_missing_strategy_config_defaults_to_empty(
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={"RSI2": None},
         signal_repo=repo,
+        ingestion_run_id="ingest-robustness-006",
+        snapshot_id="snapshot-robustness-006",
     )
 
     assert isinstance(result, list)

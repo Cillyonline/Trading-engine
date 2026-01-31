@@ -142,6 +142,8 @@ def test_run_watchlist_analysis_deterministic_order(monkeypatch) -> None:
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-screener-001",
+        snapshot_id="snapshot-screener-001",
     )
 
     assert [signal["symbol"] for signal in result] == ["AAA", "BBB", "CCC"]
@@ -163,6 +165,8 @@ def test_run_watchlist_analysis_symbol_failure_isolated(monkeypatch) -> None:
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-screener-002",
+        snapshot_id="snapshot-screener-002",
     )
 
     assert [signal["symbol"] for signal in result] == ["AAA", "BBB"]
@@ -183,6 +187,8 @@ def test_run_watchlist_analysis_deterministic_order_multiple_strategies(
         engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
+        ingestion_run_id="ingest-screener-003",
+        snapshot_id="snapshot-screener-003",
     )
 
     assert [signal["symbol"] for signal in result] == ["AAA", "AAA", "BBB", "BBB"]

@@ -61,6 +61,7 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
         strategy_configs={"RSI2": {}},
         signal_repo=repo,
         ingestion_run_id="api-test-run-001",
+        snapshot_id="snapshot-api-test-001",
         db_path=repo._db_path,
     )
 
