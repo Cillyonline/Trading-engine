@@ -145,3 +145,28 @@ class SqliteTradeRepository(TradeRepository):
             result.append(trade)
 
         return result
+
+    def update_trade_exit(
+        self, trade_id: int, exit_price: float, exit_date: str, reason_exit: str
+    ) -> None:
+        conn = self._get_connection()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            UPDATE trades
+            SET exit_price = :exit_price,
+                exit_date = :exit_date,
+                reason_exit = :reason_exit
+            WHERE id = :trade_id;
+            """,
+            {
+                "exit_price": exit_price,
+                "exit_date": exit_date,
+                "reason_exit": reason_exit,
+                "trade_id": trade_id,
+            },
+        )
+
+        conn.commit()
+        conn.close()
