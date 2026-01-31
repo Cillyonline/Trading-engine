@@ -1,4 +1,4 @@
-# Working SOP Ã¢â‚¬â€œ Cilly Trading Engine
+# Working SOP – Cilly Trading Engine
 
 ## Default
 - MODE: EXECUTION
@@ -47,3 +47,4 @@ A change is considered DONE only if:
 - PR includes Closes #<IssueID>
 - Codex A review gate result is recorded (APPROVED or CHANGES REQUIRED)
 - No scope creep beyond the linked Issue
+- Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [docs/phase-6-exit-criteria.md](docs/phase-6-exit-criteria.md), [docs/checklists/phase-6-exit-checklist.md](docs/checklists/phase-6-exit-checklist.md)
