@@ -361,19 +361,28 @@ def run_watchlist_analysis(
     ordered_strategy_names = sorted(
         getattr(strategy, "name", strategy.__class__.__name__) for strategy in strategies
     )
-    analysis_run_payload = {
-        "symbols": ordered_symbols,
-        "strategies": ordered_strategy_names,
-        "engine_config": {
-            "timeframe": engine_config.timeframe,
-            "lookback_days": engine_config.lookback_days,
+    if len(ordered_symbols) == 1 and len(ordered_strategy_names) == 1:
+        analysis_run_payload = {
+            "ingestion_run_id": str(ingestion_run_id),
+            "symbol": ordered_symbols[0],
+            "strategy": ordered_strategy_names[0],
             "market_type": engine_config.market_type,
-            "data_source": engine_config.data_source,
-        },
-        "ingestion_run_id": str(ingestion_run_id),
-        "snapshot_id": str(resolved_snapshot_id),
-        "snapshot_only": snapshot_only,
-    }
+            "lookback_days": engine_config.lookback_days,
+        }
+    else:
+        analysis_run_payload = {
+            "symbols": ordered_symbols,
+            "strategies": ordered_strategy_names,
+            "engine_config": {
+                "timeframe": engine_config.timeframe,
+                "lookback_days": engine_config.lookback_days,
+                "market_type": engine_config.market_type,
+                "data_source": engine_config.data_source,
+            },
+            "ingestion_run_id": str(ingestion_run_id),
+            "snapshot_id": str(resolved_snapshot_id),
+            "snapshot_only": snapshot_only,
+        }
     analysis_run_id = compute_analysis_run_id(analysis_run_payload)
     lineage_ctx = LineageContext(
         snapshot_id=str(resolved_snapshot_id),
