@@ -62,7 +62,7 @@ def test_load_ohlcv_raises_symbol_skipped(monkeypatch: pytest.MonkeyPatch) -> No
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyReturnsEmpty()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -82,7 +82,7 @@ def test_strategy_raises_engine_continues(monkeypatch: pytest.MonkeyPatch) -> No
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyRaises(), StrategyReturnsEmpty()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -110,7 +110,7 @@ def test_repo_save_signals_raises_run_completes(monkeypatch: pytest.MonkeyPatch)
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyReturnsOne()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -136,7 +136,7 @@ def test_strategy_returns_none_no_crash(monkeypatch: pytest.MonkeyPatch) -> None
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyReturnsNone()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -166,7 +166,7 @@ def test_unknown_strategy_config_keys_logged(
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[StrategyRecordsConfig()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={"RSI2": {"unknown_key": 123}},
         signal_repo=repo,
     )
@@ -200,7 +200,7 @@ def test_missing_strategy_config_defaults_to_empty(
     result = run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[strategy],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={"RSI2": None},
         signal_repo=repo,
     )

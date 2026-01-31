@@ -31,12 +31,37 @@ from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 from cilly_trading.models import Signal
 from cilly_trading.repositories import SignalRepository
+from cilly_trading.config.external_data import EXTERNAL_DATA_ENABLED
 
 logger = logging.getLogger(__name__)
 
 
 class ReasonGenerationError(RuntimeError):
     """Raised when deterministic reason generation fails."""
+
+
+class ExternalDataGateClosedError(RuntimeError):
+    """Raised when external data usage is attempted while the gate is closed."""
+
+
+def _require_external_data_enabled(engine_config: "EngineConfig") -> None:
+    """Require external data usage to be explicitly enabled.
+
+    Args:
+        engine_config: Engine configuration containing the external data flag.
+
+    Raises:
+        ExternalDataGateClosedError: If external data usage is disabled.
+    """
+    if engine_config.external_data_enabled:
+        return
+    logger.error(
+        "External data gate closed: external_data_enabled=%s; engine execution blocked.",
+        engine_config.external_data_enabled,
+    )
+    raise ExternalDataGateClosedError(
+        "external_data_enabled is False; external data usage is disabled"
+    )
 
 
 def _normalize_assets(value: Any) -> list[str]:
@@ -129,6 +154,7 @@ class EngineConfig:
     lookback_days: int = 200
     market_type: str = "stock"
     data_source: str = "yahoo"
+    external_data_enabled: bool = EXTERNAL_DATA_ENABLED
 
 
 @dataclass(frozen=True)
@@ -309,6 +335,8 @@ def run_watchlist_analysis(
         raise ValueError("snapshot_only requires ingestion_run_id")
     if ingestion_run_id and db_path is None:
         raise ValueError("db_path is required when ingestion_run_id is provided")
+    if ingestion_run_id is None and not snapshot_only:
+        _require_external_data_enabled(engine_config)
 
     if snapshot_only:
         _persist_phase6_audit(
