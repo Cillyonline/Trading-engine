@@ -43,7 +43,7 @@ def _run_engine_with_config(
     return run_watchlist_analysis(
         symbols=["AAPL"],
         strategies=[strategy],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs=config,
         signal_repo=repo,
     )

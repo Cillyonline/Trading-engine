@@ -139,7 +139,7 @@ def test_run_watchlist_analysis_deterministic_order(monkeypatch) -> None:
     result = run_watchlist_analysis(
         symbols=["BBB", "AAA", "CCC"],
         strategies=[StrategyReturnsOne()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -160,7 +160,7 @@ def test_run_watchlist_analysis_symbol_failure_isolated(monkeypatch) -> None:
     result = run_watchlist_analysis(
         symbols=["BAD", "AAA", "BBB"],
         strategies=[StrategyReturnsOne()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
@@ -180,7 +180,7 @@ def test_run_watchlist_analysis_deterministic_order_multiple_strategies(
     result = run_watchlist_analysis(
         symbols=["BBB", "AAA"],
         strategies=[StrategyReturnsOneBeta(), StrategyReturnsOneAlpha()],
-        engine_config=EngineConfig(),
+        engine_config=EngineConfig(external_data_enabled=True),
         strategy_configs={},
         signal_repo=repo,
     )
