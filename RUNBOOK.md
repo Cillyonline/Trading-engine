@@ -49,6 +49,10 @@ A change is considered DONE only if:
 - No scope creep beyond the linked Issue
 - Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [docs/phase-6-exit-criteria.md](docs/phase-6-exit-criteria.md), [docs/checklists/phase-6-exit-checklist.md](docs/checklists/phase-6-exit-checklist.md)
 
+## Deterministic Smoke-Run Specification
+- A deterministic smoke-run specification exists and is NOT IMPLEMENTED.
+- Reference: [docs/smoke-run.md](docs/smoke-run.md)
+
 ## Remote (Codespaces)
 
 ### Start Codespace
