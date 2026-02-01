@@ -61,5 +61,10 @@ A change is considered DONE only if:
 python -m pytest
 ```
 
+## Pull Request Testing
+- Pull Requests are automatically tested in GitHub Actions.
+- A green check allows merge.
+- A red check blocks merge until tests pass.
+
 ### Run Paper Trading (Simulation)
 Not available — Blocker: no paper-trading/simulation entrypoint is documented or implemented in the repo without touching `src/**`. No live trading, broker keys, or real orders are used.
