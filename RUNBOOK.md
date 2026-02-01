@@ -48,3 +48,18 @@ A change is considered DONE only if:
 - Codex A review gate result is recorded (APPROVED or CHANGES REQUIRED)
 - No scope creep beyond the linked Issue
 - Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [docs/phase-6-exit-criteria.md](docs/phase-6-exit-criteria.md), [docs/checklists/phase-6-exit-checklist.md](docs/checklists/phase-6-exit-checklist.md)
+
+## Remote (Codespaces)
+
+### Start Codespace
+1) Open the repository on GitHub.
+2) Select **Code → Codespaces → Create codespace on main**.
+3) Wait for the devcontainer to finish provisioning and dependency install.
+
+### Run Tests
+```bash
+python -m pytest
+```
+
+### Run Paper Trading (Simulation)
+Not available — Blocker: no paper-trading/simulation entrypoint is documented or implemented in the repo without touching `src/**`. No live trading, broker keys, or real orders are used.
