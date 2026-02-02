@@ -1,0 +1,8 @@
+{
+  "run_id": "smoke-0001",
+  "base_currency": "EUR",
+  "quote_currency": "USD",
+  "start_price": 100.0,
+  "end_price": 101.0,
+  "ticks": 3
+}
