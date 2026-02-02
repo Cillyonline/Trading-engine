@@ -5,6 +5,10 @@ from __future__ import annotations
 import csv
 import json
 import math
+import random
+import socket
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -38,7 +42,7 @@ class SmokeRunError(Exception):
 
 def run_smoke_run(
     fixtures_dir: str | Path = "fixtures/smoke-run",
-    artifacts_dir: str | Path = "artifacts/smoke-run",
+    artifacts_dir: str | Path = "artifacts",
 ) -> int:
     """Execute the deterministic smoke-run contract.
 
@@ -51,35 +55,36 @@ def run_smoke_run(
     """
 
     try:
-        fixtures_path = Path(fixtures_dir)
-        input_path = fixtures_path / "input.json"
-        expected_path = fixtures_path / "expected.csv"
-        config_path = fixtures_path / "config.yaml"
-        _ensure_fixtures_exist([input_path, expected_path, config_path])
+        with _determinism_guard():
+            fixtures_path = Path(fixtures_dir)
+            input_path = fixtures_path / "input.json"
+            expected_path = fixtures_path / "expected.csv"
+            config_path = fixtures_path / "config.yaml"
+            _ensure_fixtures_exist([input_path, expected_path, config_path])
 
-        input_payload = _load_input(input_path)
-        config_payload = _load_config(config_path)
-        expected_rows = _load_expected(expected_path)
+            input_payload = _load_input(input_path)
+            config_payload = _load_config(config_path)
+            expected_rows = _load_expected(expected_path)
 
-        _validate_constraints(input_payload, config_payload, expected_rows)
+            _validate_constraints(input_payload, config_payload, expected_rows)
 
-        result_payload = {
-            "engine_name": config_payload.engine_name,
-            "engine_version": config_payload.engine_version,
-            "precision": config_payload.precision,
-            "run_id": input_payload.run_id,
-            "status": "ok",
-            "ticks": input_payload.ticks,
-        }
-        result_bytes = json.dumps(
-            result_payload,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-        _write_result(Path(artifacts_dir), result_bytes)
+            result_payload = {
+                "engine_name": config_payload.engine_name,
+                "engine_version": config_payload.engine_version,
+                "precision": config_payload.precision,
+                "run_id": input_payload.run_id,
+                "status": "ok",
+                "ticks": input_payload.ticks,
+            }
+            result_bytes = json.dumps(
+                result_payload,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+            _write_result(Path(artifacts_dir), result_bytes)
 
-        _emit_stdout()
-        return 0
+            _emit_stdout()
+            return 0
     except SmokeRunError as exc:
         return exc.exit_code
 
@@ -256,6 +261,7 @@ def _ensure_mapping(payload: Any) -> None:
 
 
 def _write_result(artifacts_dir: Path, result_bytes: bytes) -> None:
+    artifacts_dir = artifacts_dir / "smoke-run"
     try:
         artifacts_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -285,3 +291,30 @@ def _emit_stdout() -> None:
     ]
     for line in lines:
         print(line)
+
+
+@contextmanager
+def _determinism_guard():
+    blocked_error = SmokeRunError(12, "constraints_failed")
+    original_socket = socket.socket
+    original_time = time.time
+    original_monotonic = time.monotonic
+    original_random = random.random
+    original_randint = random.randint
+
+    def _blocked(*_args, **_kwargs):
+        raise blocked_error
+
+    try:
+        socket.socket = _blocked  # type: ignore[assignment]
+        time.time = _blocked  # type: ignore[assignment]
+        time.monotonic = _blocked  # type: ignore[assignment]
+        random.random = _blocked  # type: ignore[assignment]
+        random.randint = _blocked  # type: ignore[assignment]
+        yield
+    finally:
+        socket.socket = original_socket
+        time.time = original_time
+        time.monotonic = original_monotonic
+        random.random = original_random
+        random.randint = original_randint

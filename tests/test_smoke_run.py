@@ -4,7 +4,7 @@ import shutil
 
 import pytest
 
-from cilly_trading.smoke_run import run_smoke_run
+from cilly_trading.smoke_run import SmokeRunError, _determinism_guard, run_smoke_run
 
 
 FIXTURES_DIR = Path("fixtures/smoke-run")
@@ -34,7 +34,7 @@ def test_smoke_run_success(tmp_path, capsys):
     )
     assert captured.err == ""
 
-    result_path = artifacts_dir / "result.json"
+    result_path = artifacts_dir / "smoke-run" / "result.json"
     assert result_path.exists()
     expected_payload = {
         "engine_name": "cilly-trading-engine",
@@ -103,13 +103,27 @@ def test_smoke_run_constraint_violation(tmp_path, capsys):
 
 def test_smoke_run_output_mismatch(tmp_path, capsys):
     fixtures_dir = _copy_fixtures(tmp_path)
-    artifacts_dir = tmp_path / "artifacts"
-    artifacts_dir.mkdir()
+    artifacts_root = tmp_path / "artifacts"
+    artifacts_dir = artifacts_root / "smoke-run"
+    artifacts_dir.mkdir(parents=True)
     (artifacts_dir / "result.json").write_text("{}", encoding="utf-8")
 
-    exit_code = run_smoke_run(fixtures_dir=fixtures_dir, artifacts_dir=artifacts_dir)
+    exit_code = run_smoke_run(fixtures_dir=fixtures_dir, artifacts_dir=artifacts_root)
 
     assert exit_code == 13
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_smoke_run_determinism_guard(tmp_path, capsys):
+    with pytest.raises(SmokeRunError) as excinfo:
+        with _determinism_guard():
+            import socket
+
+            socket.socket()
+
+    assert excinfo.value.exit_code == 12
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
