@@ -1,7 +1,7 @@
-# Deterministic Smoke-Run Specification (SPEC ONLY)
+# Deterministic Smoke-Run Specification
 
 ## Status
-NOT IMPLEMENTED. This document defines a deterministic smoke-run contract only; no implementation exists in this repository.
+Implemented in `src/cilly_trading/smoke_run.py` via `run_smoke_run`.
 
 ## Purpose
 Define a deterministic, offline smoke-run contract that validates fixed fixtures and produces fixed outputs so another developer can implement it without ambiguity.
@@ -19,9 +19,8 @@ Define a deterministic, offline smoke-run contract that validates fixed fixtures
 - No network: do not open sockets or make HTTP requests.
 - Input-only: results must be derived solely from the fixture files described below.
 
-## Reserved Invocation (Not Implemented)
-- Name only: `smoke-run`.
-- This is a reserved invocation name and is not implemented.
+## Invocation
+- There is no CLI entrypoint; execute via `run_smoke_run` (see `RUNBOOK.md` for the exact local command).
 
 ## Fixture Contract (Exact)
 
@@ -112,4 +111,4 @@ A UTF-8 JSON object with the following exact keys and types:
 - Any nonzero exit code not listed above.
 
 ## Implementation Note
-This is a SPEC only. It is NOT IMPLEMENTED in this repository.
+The implementation is deterministic and intentionally uses only local fixtures and artifacts.
