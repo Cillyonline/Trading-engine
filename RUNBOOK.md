@@ -49,9 +49,41 @@ A change is considered DONE only if:
 - No scope creep beyond the linked Issue
 - Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [docs/phase-6-exit-criteria.md](docs/phase-6-exit-criteria.md), [docs/checklists/phase-6-exit-checklist.md](docs/checklists/phase-6-exit-checklist.md)
 
-## Deterministic Smoke-Run Specification
-- A deterministic smoke-run specification exists and is NOT IMPLEMENTED.
-- Reference: [docs/smoke-run.md](docs/smoke-run.md)
+## Deterministic Smoke Run – Local Execution
+
+### Prerequisites
+- Python 3 available in your environment.
+- Run from the repository root so the default fixtures path (`fixtures/smoke-run/`) is available.
+- Ensure the package is importable by setting `PYTHONPATH=src` (there is no CLI entrypoint).
+
+### Command (exact)
+```bash
+PYTHONPATH=src python -c 'from cilly_trading.smoke_run import run_smoke_run; raise SystemExit(run_smoke_run())'
+```
+
+### Expected stdout on success (exact, line-by-line)
+```
+SMOKE_RUN:START
+SMOKE_RUN:FIXTURES_OK
+SMOKE_RUN:CHECKS_OK
+SMOKE_RUN:END
+```
+
+### Artifacts
+- `artifacts/smoke-run/result.json`
+
+### Exit code semantics
+- `0` — success.
+- `10` — fixtures missing (`input.json`, `expected.csv`, `config.yaml`).
+- `11` — fixtures invalid (format, missing required keys/columns, or parse errors).
+- `12` — constraints failed (validation errors or determinism guard triggered).
+- `13` — output mismatch (artifact write/read mismatch).
+
+### Determinism note
+The smoke-run is deterministic: no time access, no randomness, and no network access are permitted during execution. Any attempt to access these will fail the run via the determinism guard.
+
+### Reference
+- [docs/smoke-run.md](docs/smoke-run.md)
 
 ## Remote (Codespaces)
 
