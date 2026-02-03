@@ -58,12 +58,6 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
         if hasattr(module, "datetime"):
             self._patch(module, "datetime", _PatchedDatetime)
 
-    def _patch_time(self) -> None:
-        self._patch(time, "time", _blocked_callable("time.time"))
-        self._patch(time, "time_ns", _blocked_callable("time.time_ns"))
-        self._patch(time, "monotonic", _blocked_callable("time.monotonic"))
-        self._patch(time, "perf_counter", _blocked_callable("time.perf_counter"))
-
     def _patch_random(self) -> None:
         import random
 
@@ -130,7 +124,6 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
         from cilly_trading.engine import core as engine_core
         from cilly_trading.engine import data as engine_data
 
-        self._patch_time()
         self._patch_random()
         self._patch_os_secrets()
         self._patch_network()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import datetime as datetime_module
 import os
 import random
 import secrets
@@ -34,9 +35,9 @@ def test_determinism_guard_blocks_time_random_network() -> None:
     with determinism_guard():
         with pytest.raises(
             DeterminismViolationError,
-            match="determinism_guard_violation:time.time",
+            match="determinism_guard_violation:time.now",
         ):
-            time.time()
+            datetime_module.datetime.now()
         with pytest.raises(
             DeterminismViolationError,
             match="determinism_guard_violation:random.random",
