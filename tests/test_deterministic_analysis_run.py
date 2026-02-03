@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import random
 import secrets
 import socket
@@ -56,3 +57,8 @@ def test_determinism_guard_blocks_time_random_network() -> None:
             match="determinism_guard_violation:urllib.request.urlopen",
         ):
             urllib.request.urlopen("https://example.com")  # nosec
+        with pytest.raises(
+            DeterminismViolationError,
+            match="determinism_guard_violation:random.os.urandom",
+        ):
+            os.urandom(1)

@@ -88,7 +88,7 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
         self._patch(np.random, "default_rng", _blocked_callable("numpy.random.default_rng"))
 
     def _patch_os_secrets(self) -> None:
-        self._patch(os, "urandom", _blocked_callable("os.urandom"))
+        self._patch(os, "urandom", _blocked_callable("random.os.urandom"))
         self._patch(secrets, "token_bytes", _blocked_callable("secrets.token_bytes"))
         self._patch(secrets, "token_hex", _blocked_callable("secrets.token_hex"))
         self._patch(secrets, "token_urlsafe", _blocked_callable("secrets.token_urlsafe"))
