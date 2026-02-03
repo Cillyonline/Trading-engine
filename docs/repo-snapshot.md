@@ -30,7 +30,7 @@ Work is structured around a single active Issue with an explicit execution workf
 
 ## Key Documents
 
-- `RUNBOOK.md`: Working SOP that defines the end-to-end workflow, review gate, Definition of Done, and the local deterministic smoke-run execution steps. It also states that paper trading/simulation is not available.
+- `docs/RUNBOOK.md`: Working SOP that defines the end-to-end workflow, review gate, Definition of Done, and the local deterministic smoke-run execution steps. It also states that paper trading/simulation is not available.
 - `docs/smoke-run.md`: Deterministic smoke-run specification with exact fixtures, output, and exit codes.
 - `docs/MVP_SPEC.md`: Product scope and exclusions for MVP v1, including explicit exclusions such as live trading, broker integrations, backtesting, and AI-based signal generation.
 - `docs/mvp_v1.md`: Detailed MVP v1 system overview and component breakdown (engine, persistence, API, and trading desk) with scope and non-goals.
@@ -43,7 +43,7 @@ A new developer can start with:
 
 1. `README.md` for the high-level orientation and pointers to core documents.
 2. `docs/MVP_SPEC.md` and `docs/mvp_v1.md` for scope, architecture, and MVP boundaries.
-3. `RUNBOOK.md` and `docs/governance/*` for workflow, review gates, and test/merge rules.
+3. `docs/RUNBOOK.md` and `docs/governance/*` for workflow, review gates, and test/merge rules.
 4. `docs/local_run.md` for how the API is invoked in local development.
 5. `docs/smoke-run.md` to understand the deterministic smoke-run contract and its implementation details.
 

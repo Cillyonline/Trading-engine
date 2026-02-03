@@ -47,7 +47,7 @@ A change is considered DONE only if:
 - PR includes Closes #<IssueID>
 - Codex A review gate result is recorded (APPROVED or CHANGES REQUIRED)
 - No scope creep beyond the linked Issue
-- Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [docs/phase-6-exit-criteria.md](docs/phase-6-exit-criteria.md), [docs/checklists/phase-6-exit-checklist.md](docs/checklists/phase-6-exit-checklist.md)
+- Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [phase-6-exit-criteria.md](phase-6-exit-criteria.md), [checklists/phase-6-exit-checklist.md](checklists/phase-6-exit-checklist.md)
 
 ## Deterministic Smoke Run – Local Execution
 
@@ -83,7 +83,7 @@ SMOKE_RUN:END
 The smoke-run is deterministic: no time access, no randomness, and no network access are permitted during execution. Any attempt to access these will fail the run via the determinism guard.
 
 ### Reference
-- [docs/smoke-run.md](docs/smoke-run.md)
+- [smoke-run.md](smoke-run.md)
 
 ## Remote (Codespaces)
 

@@ -20,7 +20,7 @@ Define a deterministic, offline smoke-run contract that validates fixed fixtures
 - Input-only: results must be derived solely from the fixture files described below.
 
 ## Invocation
-- There is no CLI entrypoint; execute via `run_smoke_run` (see `RUNBOOK.md` for the exact local command).
+- There is no CLI entrypoint; execute via `run_smoke_run` (see `docs/RUNBOOK.md` for the exact local command).
 
 ## Fixture Contract (Exact)
 
