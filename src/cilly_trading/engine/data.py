@@ -173,6 +173,40 @@ def _snapshot_exists(conn: sqlite3.Connection, snapshot_id: str) -> bool:
     return cur.fetchone() is not None
 
 
+def _ingestion_run_exists(conn: sqlite3.Connection, ingestion_run_id: str) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM ingestion_runs
+        WHERE ingestion_run_id = ?
+        LIMIT 1;
+        """,
+        (ingestion_run_id,),
+    )
+    return cur.fetchone() is not None
+
+
+def _get_ingestion_run_fingerprint(
+    conn: sqlite3.Connection,
+    ingestion_run_id: str,
+) -> Optional[str]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT fingerprint_hash
+        FROM ingestion_runs
+        WHERE ingestion_run_id = ?
+        LIMIT 1;
+        """,
+        (ingestion_run_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return row["fingerprint_hash"]
+
+
 def _insert_ingestion_run(
     conn: sqlite3.Connection,
     *,
@@ -181,8 +215,11 @@ def _insert_ingestion_run(
     symbol: str,
     timeframe: str,
     snapshot_id: str,
+    created_at: Optional[str] = None,
 ) -> None:
     cur = conn.cursor()
+    if created_at is None:
+        created_at = _utc_now().isoformat()
     cur.execute(
         """
         INSERT INTO ingestion_runs (
@@ -197,7 +234,7 @@ def _insert_ingestion_run(
         """,
         (
             ingestion_run_id,
-            _utc_now().isoformat(),
+            created_at,
             source,
             json.dumps([symbol]),
             timeframe,
@@ -301,6 +338,103 @@ def ingest_local_snapshot(
             symbol=symbol,
             timeframe=timeframe,
             snapshot_id=snapshot_id,
+        )
+        inserted_rows = 0
+        if not snapshot_exists:
+            inserted_rows = _insert_snapshot_rows(
+                conn,
+                normalized,
+                ingestion_run_id=ingestion_run_id,
+            )
+        conn.commit()
+    except SnapshotIngestionError:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        logger.exception("Snapshot ingestion failed: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_ingestion_failed")
+    finally:
+        conn.close()
+
+    return SnapshotIngestionResult(
+        ingestion_run_id=ingestion_run_id,
+        snapshot_id=snapshot_id,
+        inserted_rows=inserted_rows,
+    )
+
+
+def ingest_local_snapshot_deterministic(
+    *,
+    input_path: Path | str,
+    symbol: str,
+    timeframe: str,
+    source: str = "local",
+    ingestion_run_id: str,
+    created_at: str,
+    db_path: Optional[Path] = None,
+) -> SnapshotIngestionResult:
+    """Ingest a local snapshot with deterministic identifiers.
+
+    Args:
+        input_path: Path to the CSV or JSON file.
+        symbol: Symbol identifier for the snapshot.
+        timeframe: Explicit timeframe label (e.g., "D1").
+        source: Stable source label for determinism.
+        ingestion_run_id: Deterministic ingestion run identifier.
+        created_at: Deterministic ISO-8601 timestamp for the ingestion run.
+        db_path: Optional SQLite database path.
+
+    Returns:
+        SnapshotIngestionResult containing ingestion_run_id and snapshot_id.
+    """
+    if not ingestion_run_id or not isinstance(ingestion_run_id, str):
+        logger.error("Snapshot ingestion_run_id missing: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_ingestion_run_id_missing")
+    if not created_at or not isinstance(created_at, str):
+        logger.error("Snapshot created_at missing: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_created_at_missing")
+    if not timeframe or not isinstance(timeframe, str):
+        logger.error("Snapshot timeframe missing: component=data symbol=%s", symbol)
+        raise SnapshotIngestionError("snapshot_timeframe_missing")
+    if not symbol or not isinstance(symbol, str):
+        logger.error("Snapshot symbol missing: component=data")
+        raise SnapshotIngestionError("snapshot_symbol_missing")
+
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+
+    init_db(db_path)
+    input_path = Path(input_path)
+    df = _load_local_snapshot_file(input_path)
+    normalized = _normalize_local_ohlcv_rows(df, symbol=symbol, timeframe=timeframe)
+    snapshot_id = _compute_snapshot_id(
+        normalized,
+        symbol=symbol,
+        timeframe=timeframe,
+        source=source,
+    )
+
+    conn = get_connection(db_path)
+    try:
+        if _ingestion_run_exists(conn, ingestion_run_id):
+            existing_fingerprint = _get_ingestion_run_fingerprint(conn, ingestion_run_id)
+            if existing_fingerprint and existing_fingerprint != snapshot_id:
+                raise SnapshotIngestionError("snapshot_ingestion_conflict")
+            return SnapshotIngestionResult(
+                ingestion_run_id=ingestion_run_id,
+                snapshot_id=snapshot_id,
+                inserted_rows=0,
+            )
+        snapshot_exists = _snapshot_exists(conn, snapshot_id)
+        _insert_ingestion_run(
+            conn,
+            ingestion_run_id=ingestion_run_id,
+            source=source,
+            symbol=symbol,
+            timeframe=timeframe,
+            snapshot_id=snapshot_id,
+            created_at=created_at,
         )
         inserted_rows = 0
         if not snapshot_exists:
@@ -486,14 +620,15 @@ def load_snapshot_metadata(
     if row is None:
         raise SnapshotDataError(f"snapshot_metadata_missing ingestion_run_id={ingestion_run_id}")
 
+    fingerprint_hash = row["fingerprint_hash"]
+    snapshot_id = fingerprint_hash or row["ingestion_run_id"]
     metadata: dict[str, Any] = {
-        "snapshot_id": row["ingestion_run_id"],
+        "snapshot_id": snapshot_id,
         "provider": "internal",
         "source": row["source"],
         "created_at_utc": row["created_at"],
         "schema_version": "1",
     }
-    fingerprint_hash = row["fingerprint_hash"]
     if fingerprint_hash:
         metadata["payload_checksum"] = fingerprint_hash
         metadata["deterministic_snapshot_id"] = fingerprint_hash

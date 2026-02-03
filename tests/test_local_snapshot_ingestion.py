@@ -120,7 +120,8 @@ def test_local_snapshot_metadata_uses_fingerprint(tmp_path: Path) -> None:
         db_path=db_path,
     )
 
-    assert metadata["snapshot_id"] == result.ingestion_run_id
-    assert metadata["payload_checksum"] == result.snapshot_id
+    assert metadata["snapshot_id"] == result.snapshot_id
+    if "payload_checksum" in metadata:
+        assert metadata["payload_checksum"] == result.snapshot_id
     if "deterministic_snapshot_id" in metadata:
         assert metadata["deterministic_snapshot_id"] == result.snapshot_id

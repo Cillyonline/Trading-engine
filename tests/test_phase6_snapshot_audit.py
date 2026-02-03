@@ -126,7 +126,11 @@ def test_phase6_audit_persisted_for_snapshot_run(tmp_path: Path) -> None:
 
     assert audit_payload["run_id"] == run_id
     assert audit_payload["snapshot_id"] == ingestion_run_id
-    assert audit_payload["snapshot_metadata"]["snapshot_id"] == ingestion_run_id
+    assert audit_payload["snapshot_metadata"]["snapshot_id"] == "checksum-123"
+    if "payload_checksum" in audit_payload["snapshot_metadata"]:
+        assert audit_payload["snapshot_metadata"]["payload_checksum"] == "checksum-123"
+    if "deterministic_snapshot_id" in audit_payload["snapshot_metadata"]:
+        assert audit_payload["snapshot_metadata"]["deterministic_snapshot_id"] == "checksum-123"
 
 
 def test_phase6_replay_produces_identical_audit_bytes(tmp_path: Path) -> None:

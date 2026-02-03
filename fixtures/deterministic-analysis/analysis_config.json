@@ -1,0 +1,23 @@
+{
+  "symbols": ["AAPL"],
+  "strategies": ["RSI2"],
+  "engine_config": {
+    "timeframe": "D1",
+    "lookback_days": 200,
+    "market_type": "stock",
+    "data_source": "fixture"
+  },
+  "snapshot": {
+    "file": "aapl_d1.csv",
+    "ingestion_run_id": "fixture-ingestion-aapl-d1-0001",
+    "created_at": "2025-01-01T00:00:00+00:00",
+    "source": "fixture"
+  },
+  "strategy_configs": {
+    "RSI2": {
+      "rsi_period": 2,
+      "oversold_threshold": 10.0,
+      "min_score": 20.0
+    }
+  }
+}
