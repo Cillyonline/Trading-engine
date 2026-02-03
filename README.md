@@ -6,6 +6,7 @@ MVP v1 – Engine → SQLite → API → Trading Desk
 - Strategy configuration schema (RSI2, Turtle): `docs/strategy-configs.md`
 - Local run & test commands: `docs/local_run.md`
 - Canonical output snapshots (golden masters): `docs/snapshot-testing.md`
+- Documentation index: `docs/index.md`
 
 ## Local CI checks
 

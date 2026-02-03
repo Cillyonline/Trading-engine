@@ -43,7 +43,7 @@ Repository-wide audit for duplicate/conflicting directories and data artifacts, 
 - **Category:** duplicate file
 - **Paths:**
   - `README.md`
-  - `tests/determinism/README.md`
+  - `docs/testing/determinism.md`
 - **Evidence:**
   - Command (PowerShell/CMD safe):
     ```bash
@@ -52,7 +52,7 @@ Repository-wide audit for duplicate/conflicting directories and data artifacts, 
   - Output excerpt:
     - `README.md`
     - `  ./README.md`
-    - `  ./tests/determinism/README.md`
+    - `  ./docs/testing/determinism.md`
 - **Risk:** low
 - **Proposed Action:** keep (distinct documentation contexts)
 
