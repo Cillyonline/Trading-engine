@@ -187,6 +187,26 @@ def _ingestion_run_exists(conn: sqlite3.Connection, ingestion_run_id: str) -> bo
     return cur.fetchone() is not None
 
 
+def _get_ingestion_run_fingerprint(
+    conn: sqlite3.Connection,
+    ingestion_run_id: str,
+) -> Optional[str]:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT fingerprint_hash
+        FROM ingestion_runs
+        WHERE ingestion_run_id = ?
+        LIMIT 1;
+        """,
+        (ingestion_run_id,),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return row["fingerprint_hash"]
+
+
 def _insert_ingestion_run(
     conn: sqlite3.Connection,
     *,
@@ -398,6 +418,9 @@ def ingest_local_snapshot_deterministic(
     conn = get_connection(db_path)
     try:
         if _ingestion_run_exists(conn, ingestion_run_id):
+            existing_fingerprint = _get_ingestion_run_fingerprint(conn, ingestion_run_id)
+            if existing_fingerprint and existing_fingerprint != snapshot_id:
+                raise SnapshotIngestionError("snapshot_ingestion_conflict")
             return SnapshotIngestionResult(
                 ingestion_run_id=ingestion_run_id,
                 snapshot_id=snapshot_id,
