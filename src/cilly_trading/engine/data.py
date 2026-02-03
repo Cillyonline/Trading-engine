@@ -577,14 +577,15 @@ def load_snapshot_metadata(
     if row is None:
         raise SnapshotDataError(f"snapshot_metadata_missing ingestion_run_id={ingestion_run_id}")
 
+    fingerprint_hash = row["fingerprint_hash"]
+    snapshot_id = fingerprint_hash or row["ingestion_run_id"]
     metadata: dict[str, Any] = {
-        "snapshot_id": row["ingestion_run_id"],
+        "snapshot_id": snapshot_id,
         "provider": "internal",
         "source": row["source"],
         "created_at_utc": row["created_at"],
         "schema_version": "1",
     }
-    fingerprint_hash = row["fingerprint_hash"]
     if fingerprint_hash:
         metadata["payload_checksum"] = fingerprint_hash
         metadata["deterministic_snapshot_id"] = fingerprint_hash

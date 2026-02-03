@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 import datetime as datetime_module
+import os
+import secrets
 import socket
 import time
 import types
+import urllib.request
 import uuid
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -71,7 +74,6 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
         self._patch(random, "shuffle", _blocked_callable("random.shuffle"))
         self._patch(random, "uniform", _blocked_callable("random.uniform"))
         self._patch(random, "gauss", _blocked_callable("random.gauss"))
-        self._patch(random, "SystemRandom", _blocked_callable("random.SystemRandom"))
         self._patch(uuid, "uuid4", _blocked_callable("uuid.uuid4"))
 
         try:
@@ -85,9 +87,21 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
         self._patch(np.random, "normal", _blocked_callable("numpy.random.normal"))
         self._patch(np.random, "default_rng", _blocked_callable("numpy.random.default_rng"))
 
+    def _patch_os_secrets(self) -> None:
+        self._patch(os, "urandom", _blocked_callable("os.urandom"))
+        self._patch(secrets, "token_bytes", _blocked_callable("secrets.token_bytes"))
+        self._patch(secrets, "token_hex", _blocked_callable("secrets.token_hex"))
+        self._patch(secrets, "token_urlsafe", _blocked_callable("secrets.token_urlsafe"))
+        self._patch(secrets, "choice", _blocked_callable("secrets.choice"))
+
     def _patch_network(self) -> None:
         self._patch(socket, "socket", _blocked_callable("socket.socket"))
         self._patch(socket, "create_connection", _blocked_callable("socket.create_connection"))
+        self._patch(
+            urllib.request,
+            "urlopen",
+            _blocked_callable("urllib.request.urlopen"),
+        )
 
         try:
             import requests
@@ -118,6 +132,7 @@ class DeterminismGuard(AbstractContextManager["DeterminismGuard"]):
 
         self._patch_time()
         self._patch_random()
+        self._patch_os_secrets()
         self._patch_network()
         self._patch_module_datetime(engine_core)
         self._patch_module_datetime(engine_data)
