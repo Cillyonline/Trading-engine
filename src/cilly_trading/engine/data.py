@@ -173,6 +173,20 @@ def _snapshot_exists(conn: sqlite3.Connection, snapshot_id: str) -> bool:
     return cur.fetchone() is not None
 
 
+def _ingestion_run_exists(conn: sqlite3.Connection, ingestion_run_id: str) -> bool:
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT 1
+        FROM ingestion_runs
+        WHERE ingestion_run_id = ?
+        LIMIT 1;
+        """,
+        (ingestion_run_id,),
+    )
+    return cur.fetchone() is not None
+
+
 def _insert_ingestion_run(
     conn: sqlite3.Connection,
     *,
@@ -383,6 +397,12 @@ def ingest_local_snapshot_deterministic(
 
     conn = get_connection(db_path)
     try:
+        if _ingestion_run_exists(conn, ingestion_run_id):
+            return SnapshotIngestionResult(
+                ingestion_run_id=ingestion_run_id,
+                snapshot_id=snapshot_id,
+                inserted_rows=0,
+            )
         snapshot_exists = _snapshot_exists(conn, snapshot_id)
         _insert_ingestion_run(
             conn,

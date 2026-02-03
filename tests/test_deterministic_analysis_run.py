@@ -31,6 +31,27 @@ def test_deterministic_run_repeats(tmp_path: Path) -> None:
     assert outputs[0] == outputs[1] == outputs[2]
 
 
+def test_deterministic_run_repeats_same_db(tmp_path: Path) -> None:
+    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures" / "deterministic-analysis"
+    output_path = tmp_path / "run.json"
+    db_path = tmp_path / "run.db"
+
+    run_deterministic_analysis(
+        fixtures_dir=fixtures_dir,
+        output_path=output_path,
+        db_path=db_path,
+    )
+    first = output_path.read_bytes()
+    run_deterministic_analysis(
+        fixtures_dir=fixtures_dir,
+        output_path=output_path,
+        db_path=db_path,
+    )
+    second = output_path.read_bytes()
+
+    assert first == second
+
+
 def test_determinism_guard_blocks_time_random_network() -> None:
     with determinism_guard():
         with pytest.raises(
