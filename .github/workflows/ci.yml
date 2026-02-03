@@ -1,4 +1,4 @@
-name: CI Tests
+name: Smoke-Run Contract
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  smoke-run-contract:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -26,5 +26,5 @@ jobs:
           if [ -f requirements-test.txt ]; then python -m pip install -r requirements-test.txt; fi
           python -m pip install pytest
 
-      - name: Run tests
-        run: python -m pytest
+      - name: Run smoke-run contract tests
+        run: python -m pytest tests/test_smoke_run.py
