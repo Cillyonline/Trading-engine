@@ -1,4 +1,5 @@
-﻿# Testing
+
+# Testing
 
 ## Setup
 
@@ -23,6 +24,6 @@ python -m pytest
 
 ## Notes
 
-- Deterministic smoke-run contract: see docs/smoke-run.md.
-- Determinism gate: see docs/testing/determinism.md.
-- Golden snapshot updates: see docs/snapshot-testing.md.
+- Deterministic smoke-run contract: see `docs/smoke-run.md`.
+- Determinism gate: see `docs/testing/determinism.md`.
+- Golden snapshot updates: see `docs/snapshot-testing.md`.

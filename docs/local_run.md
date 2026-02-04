@@ -177,3 +177,5 @@ Safety note: this deletes all local signals and analysis runs.
 ```bash
 python -m pytest
 ```
+
+See `docs/testing.md` for the canonical test setup and command.
