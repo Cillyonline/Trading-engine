@@ -85,6 +85,36 @@ The smoke-run is deterministic: no time access, no randomness, and no network ac
 ### Reference
 - [smoke-run.md](smoke-run.md)
 
+## Quality Gate: Deterministic Smoke Run (Mandatory)
+
+### Gate name
+Deterministic Smoke Run
+
+### Execution command (exact)
+```bash
+PYTHONPATH=src python -c 'from cilly_trading.smoke_run import run_smoke_run; raise SystemExit(run_smoke_run())'
+```
+
+### PASS conditions (explicit)
+- Exit code == 0.
+- Stdout contains EXACTLY (line-by-line, in order, no extra output):
+  ```
+  SMOKE_RUN:START
+  SMOKE_RUN:FIXTURES_OK
+  SMOKE_RUN:CHECKS_OK
+  SMOKE_RUN:END
+  ```
+
+### FAIL conditions (explicit)
+- Exit code != 0.
+- Exit codes:
+  - 10 (fixtures missing)
+  - 11 (fixtures invalid)
+  - 12 (constraints failed)
+  - 13 (output mismatch)
+- OR stdout deviates from the required success lines.
+- Failure cases do NOT require specific stdout markers; failure is determined by exit code and/or deviation from the success stdout contract.
+
 ## Remote (Codespaces)
 
 ### Start Codespace
