@@ -30,14 +30,13 @@ The application is running when the endpoint returns exactly:
 ```
 
 ## F. Clean Stop Procedure
-1. Stop `uvicorn`.
-2. Optional confirmation:
+1. In the terminal where `uvicorn` is running, press `Ctrl+C` once.
+2. Wait until the shutdown completes and the terminal prompt returns.
+3. Optional confirmation:
 
 ```bash
 curl http://127.0.0.1:8000/health
-```
-
-After stopping `uvicorn`, the endpoint no longer responds.
+After stopping uvicorn, the endpoint is no longer reachable.
 
 ## G. Troubleshooting
 - If `uvicorn: command not found` appears, activate the virtual environment again:
