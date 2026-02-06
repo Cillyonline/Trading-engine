@@ -36,7 +36,9 @@ The application is running when the endpoint returns exactly:
 
 ```bash
 curl http://127.0.0.1:8000/health
-After stopping uvicorn, the endpoint is no longer reachable.
+```
+
+After stopping `uvicorn`, the endpoint is no longer reachable.
 
 ## G. Troubleshooting
 - If `uvicorn: command not found` appears, activate the virtual environment again:
