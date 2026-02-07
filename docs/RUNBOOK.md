@@ -54,7 +54,7 @@ A change is considered DONE only if:
 ### Prerequisites
 - Python 3 available in your environment.
 - Run from the repository root so the default fixtures path (`fixtures/smoke-run/`) is available.
-- Ensure the package is importable by setting `PYTHONPATH=src` (there is no CLI entrypoint).
+- Ensure the package is importable by setting `PYTHONPATH=src`. There is no installed top-level CLI command, so use the documented Python module command.
 
 ### Command (exact)
 ```bash
@@ -133,4 +133,4 @@ python -m pytest
 - A red check blocks merge until tests pass.
 
 ### Run Paper Trading (Simulation)
-Not available — Blocker: no paper-trading/simulation entrypoint is documented or implemented in the repo without touching `src/**`. No live trading, broker keys, or real orders are used.
+No dedicated CLI endpoint is documented for paper-trading simulation in this runbook. The repository contains a simulator module (`src/cilly_trading/engine/paper_trading.py`), but no owner-facing run command is defined here. No live trading, broker keys, or real orders are used.
