@@ -27,6 +27,7 @@ from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.data import SnapshotDataError
 from cilly_trading.engine.runtime_controller import (
     LifecycleTransitionError,
+    get_runtime_controller,
     shutdown_engine_runtime,
     start_engine_runtime,
 )
@@ -301,13 +302,22 @@ app = FastAPI(
 logger.info("Cilly Trading Engine API starting up")
 
 
+ENGINE_RUNTIME_NOT_RUNNING_STATUS = 503
+ENGINE_RUNTIME_NOT_RUNNING_CODE = "engine_runtime_not_running"
+ENGINE_RUNTIME_GUARD_ACTIVE = False
+
+
 @app.on_event("startup")
 def _startup_runtime() -> None:
+    global ENGINE_RUNTIME_GUARD_ACTIVE
     start_engine_runtime()
+    ENGINE_RUNTIME_GUARD_ACTIVE = True
 
 
 @app.on_event("shutdown")
 def _shutdown_runtime() -> None:
+    global ENGINE_RUNTIME_GUARD_ACTIVE
+    ENGINE_RUNTIME_GUARD_ACTIVE = False
     try:
         shutdown_engine_runtime()
     except LifecycleTransitionError:
@@ -377,6 +387,7 @@ def _resolve_analysis_db_path() -> str:
 
 
 def _run_snapshot_analysis(*args: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+    _require_engine_runtime_running()
     try:
         return run_watchlist_analysis(*args, **kwargs, snapshot_only=True)
     except SnapshotDataError as exc:
@@ -425,6 +436,21 @@ def health() -> Dict[str, str]:
     Einfacher Health-Check-Endpoint.
     """
     return {"status": "ok"}
+
+
+def _require_engine_runtime_running() -> None:
+    if not ENGINE_RUNTIME_GUARD_ACTIVE:
+        return
+
+    runtime_state = get_runtime_controller().state
+    if runtime_state != "running":
+        raise HTTPException(
+            status_code=ENGINE_RUNTIME_NOT_RUNNING_STATUS,
+            detail={
+                "code": ENGINE_RUNTIME_NOT_RUNNING_CODE,
+                "state": runtime_state,
+            },
+        )
 
 
 def _get_signals_query(
