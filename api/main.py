@@ -25,6 +25,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.data import SnapshotDataError
+from cilly_trading.engine.runtime_controller import (
+    LifecycleTransitionError,
+    shutdown_engine_runtime,
+    start_engine_runtime,
+)
 from cilly_trading.engine.core import (
     EngineConfig,
     compute_analysis_run_id,
@@ -294,6 +299,20 @@ app = FastAPI(
 )
 
 logger.info("Cilly Trading Engine API starting up")
+
+
+@app.on_event("startup")
+def _startup_runtime() -> None:
+    start_engine_runtime()
+
+
+@app.on_event("shutdown")
+def _shutdown_runtime() -> None:
+    try:
+        shutdown_engine_runtime()
+    except LifecycleTransitionError:
+        logger.exception("Engine runtime shutdown failed")
+
 
 # Analysis DB Path (test-patchable)
 ANALYSIS_DB_PATH: Optional[str] = None
