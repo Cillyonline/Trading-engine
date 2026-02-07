@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Final
 
 
@@ -110,3 +111,64 @@ class EngineRuntimeController:
             raise LifecycleTransitionError(
                 f"Cannot {action}() while in state '{self._state}'. Expected '{expected}'."
             )
+
+
+_RUNTIME_LOCK: Final[Lock] = Lock()
+_RUNTIME_CONTROLLER: EngineRuntimeController | None = None
+
+
+def _get_or_create_runtime_controller() -> EngineRuntimeController:
+    global _RUNTIME_CONTROLLER
+
+    if _RUNTIME_CONTROLLER is None:
+        _RUNTIME_CONTROLLER = EngineRuntimeController()
+
+    return _RUNTIME_CONTROLLER
+
+
+def get_runtime_controller() -> EngineRuntimeController:
+    """Return the single process-wide runtime controller owned by the engine."""
+
+    with _RUNTIME_LOCK:
+        return _get_or_create_runtime_controller()
+
+
+def start_engine_runtime() -> str:
+    """Initialize and start the process-wide engine runtime."""
+
+    with _RUNTIME_LOCK:
+        runtime = _get_or_create_runtime_controller()
+
+        if runtime.state == "init":
+            runtime.init()
+
+        if runtime.state == "ready":
+            runtime.start()
+
+        if runtime.state != "running":
+            raise LifecycleTransitionError(
+                f"Cannot ensure running runtime from state '{runtime.state}'."
+            )
+
+        return runtime.state
+
+
+def shutdown_engine_runtime() -> str:
+    """Best-effort shutdown for the process-wide engine runtime."""
+
+    with _RUNTIME_LOCK:
+        runtime = _get_or_create_runtime_controller()
+
+        if runtime.state in {"init", "ready"}:
+            return runtime.state
+
+        return runtime.shutdown()
+
+
+def _reset_runtime_controller_for_tests() -> None:
+    """Reset process-wide runtime controller singleton for test isolation."""
+
+    global _RUNTIME_CONTROLLER
+
+    with _RUNTIME_LOCK:
+        _RUNTIME_CONTROLLER = None
