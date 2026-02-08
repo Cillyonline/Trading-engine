@@ -23,3 +23,8 @@ def pytest_load_initial_conftests(early_config, parser, args) -> None:
         while entry in sys.path:
             sys.path.remove(entry)
         sys.path.append(entry)
+
+    # Remove any previously cached wrong 'api' modules so they reload from src/
+    for name in list(sys.modules.keys()):
+        if name == "api" or name.startswith("api."):
+            del sys.modules[name]
