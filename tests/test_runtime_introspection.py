@@ -1,27 +1,7 @@
 from __future__ import annotations
 
-import importlib.machinery
-import importlib.util
-import sys
-from pathlib import Path
-
 from fastapi.testclient import TestClient
-
-_SRC_PATH = Path(__file__).resolve().parents[1] / "src"
-
-_api_spec = importlib.machinery.PathFinder.find_spec("api", [str(_SRC_PATH)])
-if _api_spec is None or _api_spec.loader is None:
-    raise RuntimeError("Unable to resolve package 'api' under src/")
-_api_module = importlib.util.module_from_spec(_api_spec)
-sys.modules[_api_spec.name] = _api_module
-_api_spec.loader.exec_module(_api_module)
-
-_main_spec = importlib.machinery.PathFinder.find_spec("api.main", _api_module.__path__)
-if _main_spec is None or _main_spec.loader is None:
-    raise RuntimeError("Unable to resolve module 'api.main' under src/")
-api_main = importlib.util.module_from_spec(_main_spec)
-sys.modules[_main_spec.name] = api_main
-_main_spec.loader.exec_module(api_main)
+import api.main as api_main
 
 
 class _RuntimeStateStub:
