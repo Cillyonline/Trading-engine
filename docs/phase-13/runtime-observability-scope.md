@@ -19,6 +19,29 @@ Phase 13 introduces runtime observability interfaces only. This phase exposes cu
 - The API contract **WILL NOT** expose operator command surfaces.
 - Exposed fields are intentionally minimal and stable.
 
+## Phase-13 Endpoint Invariants (Issue #284 Guardrails)
+
+### Endpoints in Scope
+- `GET /health`
+- `GET /runtime/introspection`
+
+### Forbidden Side Effects
+The endpoints above are read-only and must not produce side effects. The following are explicitly forbidden:
+- Runtime lifecycle/state mutation (start/stop/pause/resume/restart/transition calls).
+- Event emission or command dispatch into runtime/event buses.
+- Persistence writes (for example signal/analysis save operations).
+- External write I/O (filesystem/network/db writes initiated by endpoint handling).
+- In-memory mutation of runtime controller state as part of the request.
+
+### Enforcement
+- Endpoint-layer guard markers (`_assert_phase_13_read_only_endpoint`) make the Phase-13 read-only intent explicit.
+- Test-level `Phase13SideEffectDetector` snapshots endpoint-adjacent state before and after each call and asserts:
+  - before/after snapshots are equal,
+  - no lifecycle transition calls,
+  - no persistence writes,
+  - no event emissions.
+- A deterministic detector-failure test proves violations are caught.
+
 ## Runtime Status
 Runtime status reports current engine identity, lifecycle snapshot, and timing metadata without defining or changing lifecycle transitions.
 

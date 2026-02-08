@@ -333,6 +333,17 @@ logger.info("Cilly Trading Engine API starting up")
 ENGINE_RUNTIME_NOT_RUNNING_STATUS = 503
 ENGINE_RUNTIME_NOT_RUNNING_CODE = "engine_runtime_not_running"
 ENGINE_RUNTIME_GUARD_ACTIVE = False
+PHASE_13_READ_ONLY_ENDPOINTS = frozenset({"/health", "/runtime/introspection"})
+
+
+def _assert_phase_13_read_only_endpoint(endpoint_path: str) -> None:
+    """
+    Explicit marker for the Phase-13 contract: these endpoints are read-only.
+
+    The assertion is intentionally side-effect free and exists to make the
+    invariant visible at the endpoint layer and test-detectable.
+    """
+    assert endpoint_path in PHASE_13_READ_ONLY_ENDPOINTS
 
 
 @app.on_event("startup")
@@ -460,6 +471,7 @@ default_strategy_configs: Dict[str, Dict[str, Any]] = {
 
 @app.get("/health")
 def health() -> Dict[str, str]:
+    _assert_phase_13_read_only_endpoint("/health")
     payload = get_runtime_introspection_payload()
     snapshot: RuntimeHealthSnapshot = {
         "mode": payload["mode"],
@@ -482,6 +494,7 @@ def _health_now() -> datetime:
 
 @app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
 def runtime_introspection() -> RuntimeIntrospectionResponse:
+    _assert_phase_13_read_only_endpoint("/runtime/introspection")
     return RuntimeIntrospectionResponse(**get_runtime_introspection_payload())
 
 
