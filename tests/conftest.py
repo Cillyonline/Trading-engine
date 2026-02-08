@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def pytest_sessionstart(session) -> None:
+def pytest_load_initial_conftests(early_config, parser, args) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     src_path = repo_root / "src"
 
