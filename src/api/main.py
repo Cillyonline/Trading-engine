@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -32,6 +32,10 @@ from cilly_trading.engine.runtime_controller import (
     start_engine_runtime,
 )
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
+from cilly_trading.engine.health.evaluator import (
+    RuntimeHealthSnapshot,
+    evaluate_runtime_health,
+)
 from cilly_trading.engine.core import (
     EngineConfig,
     compute_analysis_run_id,
@@ -456,10 +460,24 @@ default_strategy_configs: Dict[str, Dict[str, Any]] = {
 
 @app.get("/health")
 def health() -> Dict[str, str]:
-    """
-    Einfacher Health-Check-Endpoint.
-    """
-    return {"status": "ok"}
+    payload = get_runtime_introspection_payload()
+    snapshot: RuntimeHealthSnapshot = {
+        "mode": payload["mode"],
+        "updated_at": datetime.fromisoformat(payload["timestamps"]["updated_at"]),
+    }
+    checked_at = _health_now()
+    evaluation = evaluate_runtime_health(snapshot, now=checked_at)
+
+    return {
+        "status": evaluation.status,
+        "mode": payload["mode"],
+        "reason": evaluation.reason,
+        "checked_at": checked_at.isoformat(),
+    }
+
+
+def _health_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
