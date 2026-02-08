@@ -31,7 +31,6 @@ from cilly_trading.engine.runtime_controller import (
     shutdown_engine_runtime,
     start_engine_runtime,
 )
-from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.core import (
     EngineConfig,
     compute_analysis_run_id,
@@ -291,29 +290,6 @@ class ScreenerResultsResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-
-class RuntimeIntrospectionTimestampsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    started_at: str
-    updated_at: str
-
-
-class RuntimeIntrospectionOwnershipResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    owner_tag: str
-
-
-class RuntimeIntrospectionResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: str
-    runtime_id: str
-    mode: str
-    timestamps: RuntimeIntrospectionTimestampsResponse
-    ownership: RuntimeIntrospectionOwnershipResponse
-
 # --- FastAPI-App initialisieren ---
 
 
@@ -460,11 +436,6 @@ def health() -> Dict[str, str]:
     Einfacher Health-Check-Endpoint.
     """
     return {"status": "ok"}
-
-
-@app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
-def runtime_introspection() -> RuntimeIntrospectionResponse:
-    return RuntimeIntrospectionResponse(**get_runtime_introspection_payload())
 
 
 def _require_engine_runtime_running() -> None:
