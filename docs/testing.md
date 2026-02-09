@@ -1,4 +1,3 @@
-
 # Testing
 
 ## Setup
@@ -19,7 +18,7 @@ pip install -r requirements-dev.txt
 ## Run the test suite
 
 ```bash
-python -m pytest
+pytest -q
 ```
 
 ## Notes
@@ -27,3 +26,5 @@ python -m pytest
 - Deterministic smoke-run contract: see `docs/smoke-run.md`.
 - Determinism gate: see `docs/testing/determinism.md`.
 - Golden snapshot updates: see `docs/snapshot-testing.md`.
+- Canonical API entry point is the `api` package under `src/api/` (via src layout).
+- Test imports resolve this package through repo-controlled pytest config (`pytest.ini` sets `pythonpath = .` and `src`).
