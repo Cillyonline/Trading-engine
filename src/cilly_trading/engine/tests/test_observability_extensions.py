@@ -4,9 +4,12 @@ from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta, timezone
 from time import sleep
 
+import pytest
+
 from cilly_trading.engine.observability_extensions import (
     ObservabilityContext,
     RuntimeObservabilityRegistry,
+    build_observability_context,
 )
 
 
@@ -53,11 +56,16 @@ def test_extension_points_return_dto_only_payloads() -> None:
     health_result = registry.execute("health", context=_context())
     introspection_result = registry.execute("introspection", context=_context())
 
-    assert status_result.executions[0].error is None
+    assert status_result.executions[0].error_code is None
+    assert status_result.executions[0].error_detail is None
     assert status_result.executions[0].payload["runtime_id"] == "runtime-1"
-    assert health_result.executions[0].error is None
+
+    assert health_result.executions[0].error_code is None
+    assert health_result.executions[0].error_detail is None
     assert health_result.executions[0].payload["level"] == "healthy"
-    assert introspection_result.executions[0].error is None
+
+    assert introspection_result.executions[0].error_code is None
+    assert introspection_result.executions[0].error_detail is None
     assert introspection_result.executions[0].payload["schema_version"] == "v1"
 
 
@@ -88,8 +96,10 @@ def test_engine_stability_when_extension_raises() -> None:
     result = registry.execute("health", context=_context())
 
     assert len(result.executions) == 2
-    assert result.executions[0].error == "extension_failed:RuntimeError"
-    assert result.executions[1].error is None
+    assert result.executions[0].error_code == "extension_failed"
+    assert result.executions[0].error_detail == "RuntimeError"
+    assert result.executions[1].error_code is None
+    assert result.executions[1].error_detail is None
     assert result.executions[1].payload["level"] == "degraded"
 
 
@@ -104,6 +114,62 @@ def test_budget_is_enforced() -> None:
 
     result = registry.execute("status", context=_context(), budget_seconds=0.001)
 
-    assert result.executions[0].error is not None
-    assert result.executions[0].error.startswith("budget_exceeded:")
+    assert result.executions[0].error_code == "budget_exceeded"
+    assert result.executions[0].error_detail is not None
+    assert result.executions[0].error_detail.startswith("elapsed_seconds=")
     assert result.executions[0].payload == {}
+
+
+def test_non_serializable_payload_is_rejected() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register(
+        "status",
+        name="bad_datetime",
+        extension=lambda _context: {"updated_at": datetime.now(timezone.utc)},  # type: ignore[return-value]
+    )
+
+    result = registry.execute("status", context=_context())
+
+    assert result.executions[0].payload == {}
+    assert result.executions[0].error_code == "extension_failed"
+    assert result.executions[0].error_detail == "TypeError"
+
+
+def test_non_dto_payload_is_rejected() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register(
+        "introspection",
+        name="bad_object",
+        extension=lambda _context: {"value": object()},  # type: ignore[return-value]
+    )
+
+    result = registry.execute("introspection", context=_context())
+
+    assert result.executions[0].payload == {}
+    assert result.executions[0].error_code == "extension_failed"
+    assert result.executions[0].error_detail == "TypeError"
+
+
+def test_duplicate_extension_name_rejected() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register("status", name="dup", extension=lambda _context: {"ok": True})
+
+    with pytest.raises(ValueError):
+        registry.register("status", name="dup", extension=lambda _context: {"ok": False})
+
+
+def test_build_observability_context_uses_provided_now() -> None:
+    now = datetime(2026, 2, 10, 12, 34, 56, tzinfo=timezone.utc)
+    started_at = datetime(2026, 2, 10, 10, 0, 0)
+
+    context = build_observability_context(
+        runtime_id="runtime-2",
+        mode="running",
+        started_at=started_at,
+        now=now,
+    )
+
+    assert context.runtime_id == "runtime-2"
+    assert context.started_at == datetime(2026, 2, 10, 10, 0, 0, tzinfo=timezone.utc)
+    assert context.updated_at == now
+    assert context.now == now

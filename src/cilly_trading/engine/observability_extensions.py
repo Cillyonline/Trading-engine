@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import monotonic
-from typing import Callable, Literal, Protocol, TypeAlias
-import json
+from typing import Literal, Protocol, TypeAlias
 
 ObservabilityExtensionPoint: TypeAlias = Literal["status", "health", "introspection"]
+ExtensionErrorCode: TypeAlias = Literal["extension_failed", "budget_exceeded"]
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 ExtensionPayload: TypeAlias = dict[str, JsonValue]
@@ -32,7 +33,8 @@ class ObservabilityContext:
 class ExtensionExecution:
     extension_name: str
     payload: ExtensionPayload
-    error: str | None = None
+    error_code: ExtensionErrorCode | None = None
+    error_detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -60,13 +62,11 @@ class RuntimeObservabilityRegistry:
         name: str,
         extension: ObservabilityExtension,
     ) -> None:
-        if point == "status":
-            self._status_extensions.append((name, extension))
-            return
-        if point == "health":
-            self._health_extensions.append((name, extension))
-            return
-        self._introspection_extensions.append((name, extension))
+        extensions = self._extensions_for_point(point)
+        if any(existing_name == name for existing_name, _ in extensions):
+            raise ValueError(f"Duplicate extension name for point '{point}': {name}")
+
+        extensions.append((name, extension))
 
     def execute(
         self,
@@ -88,7 +88,8 @@ class RuntimeObservabilityRegistry:
                         ExtensionExecution(
                             extension_name=name,
                             payload={},
-                            error=f"budget_exceeded:{elapsed:.6f}",
+                            error_code="budget_exceeded",
+                            error_detail=f"elapsed_seconds={elapsed:.6f}",
                         )
                     )
                     continue
@@ -98,7 +99,8 @@ class RuntimeObservabilityRegistry:
                     ExtensionExecution(
                         extension_name=name,
                         payload={},
-                        error=f"extension_failed:{type(exc).__name__}",
+                        error_code="extension_failed",
+                        error_detail=type(exc).__name__,
                     )
                 )
 
@@ -109,20 +111,26 @@ class RuntimeObservabilityRegistry:
         point: ObservabilityExtensionPoint,
     ) -> list[tuple[str, ObservabilityExtension]]:
         if point == "status":
-            return list(self._status_extensions)
+            return self._status_extensions
         if point == "health":
-            return list(self._health_extensions)
-        return list(self._introspection_extensions)
+            return self._health_extensions
+        return self._introspection_extensions
 
 
-def build_observability_context(*, runtime_id: str, mode: str, started_at: datetime) -> ObservabilityContext:
-    now = datetime.now(timezone.utc)
+def build_observability_context(
+    *,
+    runtime_id: str,
+    mode: str,
+    started_at: datetime,
+    now: datetime | None = None,
+) -> ObservabilityContext:
+    resolved_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
     return ObservabilityContext(
         runtime_id=runtime_id,
         mode=mode,
         started_at=_as_utc(started_at),
-        updated_at=now,
-        now=now,
+        updated_at=resolved_now,
+        now=resolved_now,
     )
 
 
