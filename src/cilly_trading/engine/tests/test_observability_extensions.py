@@ -106,7 +106,6 @@ def test_engine_stability_when_extension_raises() -> None:
     assert result.executions[1].failure_type == "none"
 
 
-
 def test_budget_is_enforced_with_timeout_guard() -> None:
     registry = RuntimeObservabilityRegistry()
     blocker = Event()
@@ -183,6 +182,27 @@ def test_build_observability_context_uses_provided_now() -> None:
     assert context.started_at == datetime(2026, 2, 10, 10, 0, 0, tzinfo=timezone.utc)
     assert context.updated_at == now
     assert context.now == now
+
+
+def test_failure_then_success_resets_execution_failure_count() -> None:
+    registry = RuntimeObservabilityRegistry()
+    state = {"should_fail": True}
+
+    def flappy(_context: ObservabilityContext) -> dict[str, str]:
+        if state["should_fail"]:
+            raise RuntimeError("boom")
+        return {"status": "ok"}
+
+    registry.register("status", name="flappy", extension=flappy)
+
+    first = registry.execute("status", context=_context())
+    assert first.executions[0].failure_type != "none"
+    assert first.executions[0].failure_count == 1
+
+    state["should_fail"] = False
+    second = registry.execute("status", context=_context())
+    assert second.executions[0].failure_type == "none"
+    assert second.executions[0].failure_count == 0
 
 
 def test_failure_snapshot_exposes_last_failure_and_counter() -> None:

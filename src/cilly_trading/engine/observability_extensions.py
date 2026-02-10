@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from threading import Event, Thread
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from threading import Event, Thread
 from typing import Any, Literal, Protocol, TypeAlias
 
 ObservabilityExtensionPoint: TypeAlias = Literal["status", "health", "introspection"]
@@ -97,7 +97,7 @@ class RuntimeObservabilityRegistry:
                         extension_name=name,
                         payload=payload,
                         failure_type="none",
-                        failure_count=self._failure_counters[extension_key],
+                        failure_count=0,
                     )
                 )
             except TimeoutError:
@@ -210,6 +210,15 @@ def _run_extension_with_timeout(
     context: ObservabilityContext,
     timeout_seconds: float,
 ) -> ExtensionPayload:
+    """Run one extension with a timeout by waiting on a worker thread.
+
+    The timeout is implemented by ending the caller wait only. If the timeout is
+    reached, the worker thread may continue running in the background and this is
+    intentional for a simple, predictable boundary.
+
+    There is no cancellation and no retry logic here; only the wait is
+    terminated and a timeout is surfaced to the caller.
+    """
     ready = Event()
     result: dict[str, Any] = {}
 
