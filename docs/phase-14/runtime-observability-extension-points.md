@@ -21,8 +21,8 @@ Define explicit extension points for runtime observability (`status`, `health`, 
 - Output: JSON-serializable DTO payload.
 - Guarantees:
   - read-only execution,
-  - deterministic behavior based on provided context,
-  - exceptions are isolated and converted into contract errors.
+  - deterministic behavior relative to the provided `ObservabilityContext`,
+  - exceptions are isolated and converted into structured contract errors.
 
 ### 3) `introspection`
 - Purpose: expose safe runtime metadata and diagnostics.
@@ -37,18 +37,38 @@ Define explicit extension points for runtime observability (`status`, `health`, 
 
 ### Input Contract
 - Extensions receive **only** `ObservabilityContext`.
-- `ObservabilityContext` is a frozen dataclass, preventing mutation by design.
+- `ObservabilityContext` is immutable (`@dataclass(frozen=True)`), read-only by design.
 - Context fields are metadata snapshots (`runtime_id`, `mode`, timestamps, schema version).
+- Extensions must be deterministic relative to the provided `ObservabilityContext`.
 
 ### Output Contract
 - Extensions must return DTO-only payloads (`dict[str, JsonValue]`).
 - Payloads are validated through JSON serialization (`json.dumps`).
-- Non-serializable outputs are rejected as extension failures.
+- Non-serializable or non-DTO outputs are rejected and surfaced as a structured extension failure.
+
+### Error Contract (Structured)
+- `error_code`: `"extension_failed" | "budget_exceeded" | None`
+- `error_detail`:
+  - when `error_code == "extension_failed"`: exception type name (for example `TypeError`, `RuntimeError`),
+  - when `error_code == "budget_exceeded"`: `"elapsed_seconds=<float>"`,
+  - otherwise `None`.
 
 ### Runtime Guarantees
 - Extension execution is isolated per extension.
-- Extension exceptions do not crash the engine path; they are captured as `extension_failed:<ExceptionType>`.
-- Budget enforcement marks slow extensions as `budget_exceeded:<seconds>`.
+- Extension exceptions do not crash the engine path.
+- Budget enforcement includes extension execution time **and** JSON serialization validation time.
+- Slow extensions are marked with:
+  - `error_code="budget_exceeded"`
+  - `error_detail="elapsed_seconds=<float>"`
+
+### Registration Guarantees
+- Extension names must be unique per extension point.
+- Registering a duplicate extension name for the same extension point raises `ValueError`.
+
+### Deterministic Context Construction
+- `build_observability_context` supports deterministic usage with `now: datetime | None = None`.
+- If `now` is provided, it is used for both `updated_at` and `now` fields.
+- If `now` is `None`, current UTC time is used.
 
 ### Forbidden by Contract
 - Runtime lifecycle control (`init/start/shutdown/pause/resume/restart`).
