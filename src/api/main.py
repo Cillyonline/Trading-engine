@@ -309,6 +309,16 @@ class RuntimeIntrospectionOwnershipResponse(BaseModel):
     owner_tag: str
 
 
+
+class RuntimeIntrospectionExtensionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    point: Literal["status", "health", "introspection"]
+    enabled: bool
+    source: Literal["core", "extension"]
+
+
 class RuntimeIntrospectionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -317,6 +327,7 @@ class RuntimeIntrospectionResponse(BaseModel):
     mode: str
     timestamps: RuntimeIntrospectionTimestampsResponse
     ownership: RuntimeIntrospectionOwnershipResponse
+    extensions: List[RuntimeIntrospectionExtensionResponse]
 
 # --- FastAPI-App initialisieren ---
 
