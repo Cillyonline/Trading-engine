@@ -7,6 +7,7 @@ from threading import Event, Thread
 from typing import Any, Literal, Protocol, TypeAlias
 
 ObservabilityExtensionPoint: TypeAlias = Literal["status", "health", "introspection"]
+ExtensionMetadataSource: TypeAlias = Literal["core", "extension"]
 ExtensionErrorCode: TypeAlias = Literal["extension_failed", "budget_exceeded"]
 ExtensionFailureType: TypeAlias = Literal["none", "exception", "timeout", "invalid_output"]
 JsonScalar: TypeAlias = str | int | float | bool | None
@@ -46,6 +47,20 @@ class ExtensionPointExecution:
     executions: tuple[ExtensionExecution, ...]
 
 
+@dataclass(frozen=True)
+class ExtensionMetadata:
+    name: str
+    point: ObservabilityExtensionPoint
+    enabled: bool
+    source: ExtensionMetadataSource
+
+
+@dataclass(frozen=True)
+class _RegisteredExtension:
+    metadata: ExtensionMetadata
+    extension: ObservabilityExtension
+
+
 class ObservabilityExtension(Protocol):
     def __call__(self, context: ObservabilityContext) -> ExtensionPayload: ...
 
@@ -54,9 +69,9 @@ class ObservabilityExtension(Protocol):
 class RuntimeObservabilityRegistry:
     """Registry and executor for runtime observability extension points."""
 
-    _status_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
-    _health_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
-    _introspection_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
+    _status_extensions: list[_RegisteredExtension] = field(default_factory=list)
+    _health_extensions: list[_RegisteredExtension] = field(default_factory=list)
+    _introspection_extensions: list[_RegisteredExtension] = field(default_factory=list)
     _failure_counters: dict[str, int] = field(default_factory=dict)
     _last_failure_type: dict[str, ExtensionFailureType] = field(default_factory=dict)
 
@@ -66,12 +81,36 @@ class RuntimeObservabilityRegistry:
         *,
         name: str,
         extension: ObservabilityExtension,
+        enabled: bool = True,
+        source: ExtensionMetadataSource = "extension",
     ) -> None:
         extensions = self._extensions_for_point(point)
-        if any(existing_name == name for existing_name, _ in extensions):
+        if any(registered.metadata.name == name for registered in extensions):
             raise ValueError(f"Duplicate extension name for point '{point}': {name}")
 
-        extensions.append((name, extension))
+        extensions.append(
+            _RegisteredExtension(
+                metadata=ExtensionMetadata(
+                    name=name,
+                    point=point,
+                    enabled=enabled,
+                    source=source,
+                ),
+                extension=extension,
+            )
+        )
+
+    def list_extensions_metadata(self) -> tuple[ExtensionMetadata, ...]:
+        all_metadata = [
+            registered.metadata
+            for registered in (
+                *self._status_extensions,
+                *self._health_extensions,
+                *self._introspection_extensions,
+            )
+        ]
+        sorted_metadata = sorted(all_metadata, key=lambda metadata: (metadata.point, metadata.name))
+        return tuple(sorted_metadata)
 
     def execute(
         self,
@@ -82,7 +121,12 @@ class RuntimeObservabilityRegistry:
     ) -> ExtensionPointExecution:
         executions: list[ExtensionExecution] = []
 
-        for name, extension in self._extensions_for_point(point):
+        for registered in self._extensions_for_point(point):
+            if not registered.metadata.enabled:
+                continue
+
+            name = registered.metadata.name
+            extension = registered.extension
             extension_key = _extension_key(point=point, name=name)
             try:
                 payload = _run_extension_with_timeout(
@@ -142,7 +186,7 @@ class RuntimeObservabilityRegistry:
     def _extensions_for_point(
         self,
         point: ObservabilityExtensionPoint,
-    ) -> list[tuple[str, ObservabilityExtension]]:
+    ) -> list[_RegisteredExtension]:
         if point == "status":
             return self._status_extensions
         if point == "health":

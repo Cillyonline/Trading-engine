@@ -261,3 +261,56 @@ def test_failure_handling_is_deterministic_for_same_inputs() -> None:
 
     assert first == second
     assert first_snapshot == second_snapshot
+
+
+def test_list_extensions_metadata_is_sorted_and_includes_disabled() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register("status", name="zeta", extension=lambda _context: {"ok": True})
+    registry.register(
+        "health",
+        name="alpha",
+        extension=lambda _context: {"ok": True},
+        enabled=False,
+        source="extension",
+    )
+    registry.register(
+        "status",
+        name="core.status",
+        extension=lambda _context: {"ok": True},
+        source="core",
+    )
+
+    assert registry.list_extensions_metadata() == (
+        registry.list_extensions_metadata()[0],
+        registry.list_extensions_metadata()[1],
+        registry.list_extensions_metadata()[2],
+    )
+    assert [
+        (entry.point, entry.name, entry.enabled, entry.source)
+        for entry in registry.list_extensions_metadata()
+    ] == [
+        ("health", "alpha", False, "extension"),
+        ("status", "core.status", True, "core"),
+        ("status", "zeta", True, "extension"),
+    ]
+
+
+def test_disabled_extension_does_not_execute() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register(
+        "status",
+        name="disabled_boom",
+        extension=lambda _context: (_ for _ in ()).throw(RuntimeError("must_not_run")),
+        enabled=False,
+    )
+    registry.register(
+        "status",
+        name="safe",
+        extension=lambda _context: {"status": "ok"},
+    )
+
+    result = registry.execute("status", context=_context())
+
+    assert len(result.executions) == 1
+    assert result.executions[0].extension_name == "safe"
+    assert all(execution.extension_name != "disabled_boom" for execution in result.executions)
