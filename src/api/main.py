@@ -24,7 +24,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
+from cilly_trading.engine.core import (
+    EngineConfig,
+    compute_analysis_run_id,
+    run_watchlist_analysis,
+)
 from cilly_trading.engine.data import SnapshotDataError
+from cilly_trading.engine.health.evaluator import (
+    RuntimeHealthSnapshot,
+    evaluate_runtime_health,
+)
 from cilly_trading.engine.runtime_controller import (
     LifecycleTransitionError,
     get_runtime_controller,
@@ -32,15 +41,6 @@ from cilly_trading.engine.runtime_controller import (
     start_engine_runtime,
 )
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
-from cilly_trading.engine.health.evaluator import (
-    RuntimeHealthSnapshot,
-    evaluate_runtime_health,
-)
-from cilly_trading.engine.core import (
-    EngineConfig,
-    compute_analysis_run_id,
-    run_watchlist_analysis,
-)
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
@@ -309,7 +309,6 @@ class RuntimeIntrospectionOwnershipResponse(BaseModel):
     owner_tag: str
 
 
-
 class RuntimeIntrospectionExtensionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -327,7 +326,9 @@ class RuntimeIntrospectionResponse(BaseModel):
     mode: str
     timestamps: RuntimeIntrospectionTimestampsResponse
     ownership: RuntimeIntrospectionOwnershipResponse
-    extensions: List[RuntimeIntrospectionExtensionResponse]
+    # Wichtig: default_factory verhindert "Field required" wenn payload kein extensions enthält.
+    extensions: List[RuntimeIntrospectionExtensionResponse] = Field(default_factory=list)
+
 
 # --- FastAPI-App initialisieren ---
 
@@ -507,6 +508,7 @@ def _health_now() -> datetime:
 def runtime_introspection() -> RuntimeIntrospectionResponse:
     _assert_phase_13_read_only_endpoint("/runtime/introspection")
     payload = get_runtime_introspection_payload()
+main
     payload.setdefault("extensions", [])
     return RuntimeIntrospectionResponse(**payload)
 
@@ -656,7 +658,7 @@ def _get_screener_results_query(
                 }
             },
         },
-        422: {"description": "Validation error (z. B. ungültiger Zeitraum oder limit > max)."}
+        422: {"description": "Validation error (z. B. ungültiger Zeitraum oder limit > max)."},
     },
 )
 def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
@@ -970,7 +972,6 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     )
 
     return ManualAnalysisResponse(**response_payload)
-
 
 
 @app.post("/screener/basic", response_model=ScreenerResponse)
