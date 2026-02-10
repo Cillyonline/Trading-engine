@@ -60,7 +60,16 @@ def test_limit_is_applied_deterministically() -> None:
     assert batch.bars[0].timestamp == "2024-01-01T00:00:00Z"
 
 def test_adapter_source_passes_guardrails() -> None:
-    adapter_path = Path(__file__).parents[1] / "adapter" / "impl" / "local_replay_reader.py"
+    adapter_path = (
+        Path(__file__).resolve().parents[4]
+        / "src"
+        / "cilly_trading"
+        / "engine"
+        / "marketdata"
+        / "adapter"
+        / "impl"
+        / "local_replay_reader.py"
+    )
     source = adapter_path.read_text(encoding="utf-8")
     assert_no_forbidden_references(source, origin=str(adapter_path))
 

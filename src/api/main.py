@@ -506,7 +506,9 @@ def _health_now() -> datetime:
 @app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
 def runtime_introspection() -> RuntimeIntrospectionResponse:
     _assert_phase_13_read_only_endpoint("/runtime/introspection")
-    return RuntimeIntrospectionResponse(**get_runtime_introspection_payload())
+    payload = get_runtime_introspection_payload()
+    payload.setdefault("extensions", [])
+    return RuntimeIntrospectionResponse(**payload)
 
 
 def _require_engine_runtime_running() -> None:

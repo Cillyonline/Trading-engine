@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from tests.utils.json_schema_validator import SchemaError, validate_json_schema
 
-FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "schema"
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
 
