@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta, timezone
-from time import sleep
+from threading import Event
 
 import pytest
 
@@ -98,29 +98,35 @@ def test_engine_stability_when_extension_raises() -> None:
     assert len(result.executions) == 2
     assert result.executions[0].error_code == "extension_failed"
     assert result.executions[0].error_detail == "RuntimeError"
+    assert result.executions[0].failure_type == "exception"
+    assert result.executions[0].failure_count == 1
     assert result.executions[1].error_code is None
     assert result.executions[1].error_detail is None
     assert result.executions[1].payload["level"] == "degraded"
+    assert result.executions[1].failure_type == "none"
 
 
-def test_budget_is_enforced() -> None:
+
+def test_budget_is_enforced_with_timeout_guard() -> None:
     registry = RuntimeObservabilityRegistry()
+    blocker = Event()
 
-    def slow_extension(_context: ObservabilityContext) -> dict[str, str]:
-        sleep(0.02)
+    def blocking_extension(_context: ObservabilityContext) -> dict[str, str]:
+        blocker.wait(timeout=0.5)
         return {"status": "ok"}
 
-    registry.register("status", name="slow", extension=slow_extension)
+    registry.register("status", name="slow", extension=blocking_extension)
 
     result = registry.execute("status", context=_context(), budget_seconds=0.001)
 
     assert result.executions[0].error_code == "budget_exceeded"
-    assert result.executions[0].error_detail is not None
-    assert result.executions[0].error_detail.startswith("elapsed_seconds=")
+    assert result.executions[0].error_detail == "execution_timeout"
+    assert result.executions[0].failure_type == "timeout"
+    assert result.executions[0].failure_count == 1
     assert result.executions[0].payload == {}
 
 
-def test_non_serializable_payload_is_rejected() -> None:
+def test_non_serializable_payload_is_rejected_as_invalid_output() -> None:
     registry = RuntimeObservabilityRegistry()
     registry.register(
         "status",
@@ -132,10 +138,12 @@ def test_non_serializable_payload_is_rejected() -> None:
 
     assert result.executions[0].payload == {}
     assert result.executions[0].error_code == "extension_failed"
-    assert result.executions[0].error_detail == "TypeError"
+    assert result.executions[0].error_detail == "invalid_output"
+    assert result.executions[0].failure_type == "invalid_output"
+    assert result.executions[0].failure_count == 1
 
 
-def test_non_dto_payload_is_rejected() -> None:
+def test_non_dto_payload_is_rejected_as_invalid_output() -> None:
     registry = RuntimeObservabilityRegistry()
     registry.register(
         "introspection",
@@ -147,7 +155,9 @@ def test_non_dto_payload_is_rejected() -> None:
 
     assert result.executions[0].payload == {}
     assert result.executions[0].error_code == "extension_failed"
-    assert result.executions[0].error_detail == "TypeError"
+    assert result.executions[0].error_detail == "invalid_output"
+    assert result.executions[0].failure_type == "invalid_output"
+    assert result.executions[0].failure_count == 1
 
 
 def test_duplicate_extension_name_rejected() -> None:
@@ -173,3 +183,61 @@ def test_build_observability_context_uses_provided_now() -> None:
     assert context.started_at == datetime(2026, 2, 10, 10, 0, 0, tzinfo=timezone.utc)
     assert context.updated_at == now
     assert context.now == now
+
+
+def test_failure_snapshot_exposes_last_failure_and_counter() -> None:
+    registry = RuntimeObservabilityRegistry()
+    registry.register(
+        "status",
+        name="unstable",
+        extension=lambda _context: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    registry.execute("status", context=_context())
+    registry.execute("status", context=_context())
+
+    assert registry.get_extension_failure_snapshot() == {
+        "status:unstable": {
+            "failure_count": 2,
+            "last_failure_type": "exception",
+        }
+    }
+
+
+def test_failure_handling_is_deterministic_for_same_inputs() -> None:
+    blocker = Event()
+
+    def build_registry() -> RuntimeObservabilityRegistry:
+        registry = RuntimeObservabilityRegistry()
+        registry.register(
+            "status",
+            name="exception_case",
+            extension=lambda _context: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        registry.register(
+            "status",
+            name="timeout_case",
+            extension=lambda _context: blocker.wait(timeout=0.5) or {"status": "ok"},
+        )
+        registry.register(
+            "status",
+            name="invalid_case",
+            extension=lambda _context: {"value": object()},  # type: ignore[return-value]
+        )
+        registry.register(
+            "status",
+            name="safe_case",
+            extension=lambda _context: {"status": "ok"},
+        )
+        return registry
+
+    first_registry = build_registry()
+    first = first_registry.execute("status", context=_context(), budget_seconds=0.001)
+    first_snapshot = first_registry.get_extension_failure_snapshot()
+
+    second_registry = build_registry()
+    second = second_registry.execute("status", context=_context(), budget_seconds=0.001)
+    second_snapshot = second_registry.get_extension_failure_snapshot()
+
+    assert first == second
+    assert first_snapshot == second_snapshot

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from threading import Event, Thread
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from time import monotonic
-from typing import Literal, Protocol, TypeAlias
+from typing import Any, Literal, Protocol, TypeAlias
 
 ObservabilityExtensionPoint: TypeAlias = Literal["status", "health", "introspection"]
 ExtensionErrorCode: TypeAlias = Literal["extension_failed", "budget_exceeded"]
+ExtensionFailureType: TypeAlias = Literal["none", "exception", "timeout", "invalid_output"]
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | list["JsonValue"] | dict[str, "JsonValue"]
 ExtensionPayload: TypeAlias = dict[str, JsonValue]
@@ -33,6 +34,8 @@ class ObservabilityContext:
 class ExtensionExecution:
     extension_name: str
     payload: ExtensionPayload
+    failure_type: ExtensionFailureType = "none"
+    failure_count: int = 0
     error_code: ExtensionErrorCode | None = None
     error_detail: str | None = None
 
@@ -54,6 +57,8 @@ class RuntimeObservabilityRegistry:
     _status_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
     _health_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
     _introspection_extensions: list[tuple[str, ObservabilityExtension]] = field(default_factory=list)
+    _failure_counters: dict[str, int] = field(default_factory=dict)
+    _last_failure_type: dict[str, ExtensionFailureType] = field(default_factory=dict)
 
     def register(
         self,
@@ -78,27 +83,55 @@ class RuntimeObservabilityRegistry:
         executions: list[ExtensionExecution] = []
 
         for name, extension in self._extensions_for_point(point):
-            started = monotonic()
+            extension_key = _extension_key(point=point, name=name)
             try:
-                payload = extension(context)
+                payload = _run_extension_with_timeout(
+                    extension=extension,
+                    context=context,
+                    timeout_seconds=budget_seconds,
+                )
                 _validate_serializable_payload(payload)
-                elapsed = monotonic() - started
-                if elapsed > budget_seconds:
-                    executions.append(
-                        ExtensionExecution(
-                            extension_name=name,
-                            payload={},
-                            error_code="budget_exceeded",
-                            error_detail=f"elapsed_seconds={elapsed:.6f}",
-                        )
+                self._mark_success(extension_key)
+                executions.append(
+                    ExtensionExecution(
+                        extension_name=name,
+                        payload=payload,
+                        failure_type="none",
+                        failure_count=self._failure_counters[extension_key],
                     )
-                    continue
-                executions.append(ExtensionExecution(extension_name=name, payload=payload))
-            except Exception as exc:
+                )
+            except TimeoutError:
+                failure_count = self._mark_failure(extension_key, "timeout")
                 executions.append(
                     ExtensionExecution(
                         extension_name=name,
                         payload={},
+                        failure_type="timeout",
+                        failure_count=failure_count,
+                        error_code="budget_exceeded",
+                        error_detail="execution_timeout",
+                    )
+                )
+            except (TypeError, ValueError):
+                failure_count = self._mark_failure(extension_key, "invalid_output")
+                executions.append(
+                    ExtensionExecution(
+                        extension_name=name,
+                        payload={},
+                        failure_type="invalid_output",
+                        failure_count=failure_count,
+                        error_code="extension_failed",
+                        error_detail="invalid_output",
+                    )
+                )
+            except Exception as exc:
+                failure_count = self._mark_failure(extension_key, "exception")
+                executions.append(
+                    ExtensionExecution(
+                        extension_name=name,
+                        payload={},
+                        failure_type="exception",
+                        failure_count=failure_count,
                         error_code="extension_failed",
                         error_detail=type(exc).__name__,
                     )
@@ -115,6 +148,30 @@ class RuntimeObservabilityRegistry:
         if point == "health":
             return self._health_extensions
         return self._introspection_extensions
+
+    def get_extension_failure_snapshot(self) -> dict[str, dict[str, str | int]]:
+        snapshot: dict[str, dict[str, str | int]] = {}
+        extension_keys = set(self._failure_counters) | set(self._last_failure_type)
+        for extension_key in sorted(extension_keys):
+            snapshot[extension_key] = {
+                "failure_count": self._failure_counters.get(extension_key, 0),
+                "last_failure_type": self._last_failure_type.get(extension_key, "none"),
+            }
+        return snapshot
+
+    def _mark_success(self, extension_key: str) -> None:
+        self._failure_counters.setdefault(extension_key, 0)
+        self._last_failure_type[extension_key] = "none"
+
+    def _mark_failure(
+        self,
+        extension_key: str,
+        failure_type: ExtensionFailureType,
+    ) -> int:
+        next_count = self._failure_counters.get(extension_key, 0) + 1
+        self._failure_counters[extension_key] = next_count
+        self._last_failure_type[extension_key] = failure_type
+        return next_count
 
 
 def build_observability_context(
@@ -141,4 +198,40 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _validate_serializable_payload(payload: ExtensionPayload) -> None:
+    if not isinstance(payload, dict):
+        raise TypeError("payload must be a dictionary")
+
     json.dumps(payload)
+
+
+def _run_extension_with_timeout(
+    *,
+    extension: ObservabilityExtension,
+    context: ObservabilityContext,
+    timeout_seconds: float,
+) -> ExtensionPayload:
+    ready = Event()
+    result: dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            result["payload"] = extension(context)
+        except Exception as exc:  # pragma: no cover - propagated to caller
+            result["exception"] = exc
+        finally:
+            ready.set()
+
+    worker = Thread(target=_target, daemon=True)
+    worker.start()
+
+    if not ready.wait(timeout_seconds):
+        raise TimeoutError("extension execution timed out")
+
+    if "exception" in result:
+        raise result["exception"]
+
+    return result["payload"]
+
+
+def _extension_key(*, point: ObservabilityExtensionPoint, name: str) -> str:
+    return f"{point}:{name}"
