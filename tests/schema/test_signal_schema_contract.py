@@ -6,7 +6,6 @@ from typing import Any, Dict, List
 
 from tests.utils.json_schema_validator import SchemaError, validate_json_schema
 
-# Canonical fixtures location: tests/fixtures/schema/*
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "schema"
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
@@ -82,3 +81,4 @@ def test_signal_schema_rejects_additional_fields() -> None:
     assert errors, "Expected schema validation to fail when additional fields are present"
     msg = _format_errors(errors).lower()
     assert "unexpected" in msg or "additional" in msg
+main
