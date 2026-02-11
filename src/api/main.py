@@ -508,7 +508,6 @@ def _health_now() -> datetime:
 def runtime_introspection() -> RuntimeIntrospectionResponse:
     _assert_phase_13_read_only_endpoint("/runtime/introspection")
     payload = get_runtime_introspection_payload()
-main
     payload.setdefault("extensions", [])
     return RuntimeIntrospectionResponse(**payload)
 
