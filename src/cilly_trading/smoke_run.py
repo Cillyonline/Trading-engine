@@ -293,6 +293,13 @@ def _emit_stdout() -> None:
         print(line)
 
 
+def main(argv: list[str] | None = None) -> int:
+    """Run the smoke-run module entry point."""
+
+    _ = argv
+    return run_smoke_run()
+
+
 @contextmanager
 def _determinism_guard():
     blocked_error = SmokeRunError(12, "constraints_failed")
@@ -318,3 +325,7 @@ def _determinism_guard():
         time.monotonic = original_monotonic
         random.random = original_random
         random.randint = original_randint
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
