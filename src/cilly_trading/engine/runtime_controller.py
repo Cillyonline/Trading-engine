@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Final
 
+from cilly_trading.engine.invariants import (
+    assert_can_init,
+    assert_can_shutdown,
+    assert_can_start,
+    assert_postcondition_running,
+)
+
 
 class LifecycleTransitionError(RuntimeError):
     """Raised when a runtime lifecycle transition is not allowed."""
@@ -49,7 +56,7 @@ class EngineRuntimeController:
             LifecycleTransitionError: If called when not in ``init`` state.
         """
 
-        self._assert_state("init", action="init")
+        assert_can_init(self._state)
         self._state = "ready"
         return self._state
 
@@ -63,7 +70,7 @@ class EngineRuntimeController:
             LifecycleTransitionError: If called when not in ``ready`` state.
         """
 
-        self._assert_state("ready", action="start")
+        assert_can_start(self._state)
         self._state = "running"
         return self._state
 
@@ -87,31 +94,11 @@ class EngineRuntimeController:
             self._state = "stopped"
             return self._state
 
-        if self._state != "running":
-            raise LifecycleTransitionError(
-                f"Cannot shutdown() while in state '{self._state}'. Expected 'running', 'stopping', or 'stopped'."
-            )
+        assert_can_shutdown(self._state)
 
         self._state = "stopping"
         self._state = "stopped"
         return self._state
-
-    def _assert_state(self, expected: str, *, action: str) -> None:
-        """Validate current state for transition actions.
-
-        Args:
-            expected: Required current state.
-            action: Action being executed.
-
-        Raises:
-            LifecycleTransitionError: If current state does not match expected.
-        """
-
-        if self._state != expected:
-            raise LifecycleTransitionError(
-                f"Cannot {action}() while in state '{self._state}'. Expected '{expected}'."
-            )
-
 
 _RUNTIME_LOCK: Final[Lock] = Lock()
 _RUNTIME_CONTROLLER: EngineRuntimeController | None = None
@@ -145,10 +132,7 @@ def start_engine_runtime() -> str:
         if runtime.state == "ready":
             runtime.start()
 
-        if runtime.state != "running":
-            raise LifecycleTransitionError(
-                f"Cannot ensure running runtime from state '{runtime.state}'."
-            )
+        assert_postcondition_running(runtime.state)
 
         return runtime.state
 
