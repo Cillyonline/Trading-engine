@@ -81,4 +81,3 @@ def test_signal_schema_rejects_additional_fields() -> None:
     assert errors, "Expected schema validation to fail when additional fields are present"
     msg = _format_errors(errors).lower()
     assert "unexpected" in msg or "additional" in msg
-main
