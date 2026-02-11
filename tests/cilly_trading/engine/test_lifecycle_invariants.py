@@ -2,6 +2,7 @@
 
 import pytest
 
+import cilly_trading.engine.runtime_controller as runtime_controller_module
 from cilly_trading.engine.invariants import (
     assert_can_init,
     assert_can_shutdown,
@@ -41,3 +42,25 @@ def test_postcondition_failure_raises() -> None:
         match=r"Cannot ensure running runtime from state 'stopped'\.",
     ):
         assert_postcondition_running("stopped")
+
+
+def test_shutdown_from_stopping_calls_invariant_and_transitions() -> None:
+    controller = runtime_controller_module.EngineRuntimeController()
+    controller._state = "stopping"
+
+    calls: list[str] = []
+
+    def _spy_assert_can_shutdown(state: str) -> None:
+        calls.append(state)
+        assert state == "stopping"
+        assert controller.state == "stopping"
+
+    original_assert = runtime_controller_module.assert_can_shutdown
+    runtime_controller_module.assert_can_shutdown = _spy_assert_can_shutdown
+    try:
+        assert controller.shutdown() == "stopped"
+    finally:
+        runtime_controller_module.assert_can_shutdown = original_assert
+
+    assert calls == ["stopping"]
+    assert controller.state == "stopped"

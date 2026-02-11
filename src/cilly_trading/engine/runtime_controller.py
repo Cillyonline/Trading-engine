@@ -87,14 +87,14 @@ class EngineRuntimeController:
             LifecycleTransitionError: If called before runtime reaches ``running``.
         """
 
+        assert_can_shutdown(self._state)
+
         if self._state == "stopped":
             return self._state
 
         if self._state == "stopping":
             self._state = "stopped"
             return self._state
-
-        assert_can_shutdown(self._state)
 
         self._state = "stopping"
         self._state = "stopped"
