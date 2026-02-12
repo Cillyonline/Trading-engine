@@ -1,70 +1,101 @@
 # Branch Protection and Required CI Checks (Maintenance Mode)
 
-## 1) Purpose (maintenance mode governance)
-This document records the **current, observed governance controls** for the default branch so maintainers can verify merge-gating behavior during maintenance mode.
+## 1) Purpose
+This document records the currently observed branch protection and merge-gating configuration for maintenance mode, while separating:
+- settings that are directly verifiable via read-only API/ruleset data, and
+- settings that require explicit manual confirmation in the GitHub Settings UI.
 
-Source of truth used for this snapshot:
-- GitHub REST API (public, read-only):
+Evidence sources used for this snapshot:
+- GitHub REST API (read-only):
   - `GET /repos/Cillyonline/Trading-engine`
   - `GET /repos/Cillyonline/Trading-engine/rules/branches/main`
   - `GET /repos/Cillyonline/Trading-engine/rulesets`
   - `GET /repos/Cillyonline/Trading-engine/rulesets/11431120`
-- Workflow inventory from this repository: `.github/workflows/`
+- Repository workflow inventory: `.github/workflows/ci.yml`
 
-> Note: Classic branch-protection endpoint (`/branches/main/protection`) requires authenticated admin access and was not used as the primary source. The active **repository ruleset** for the default branch is used here.
-
-## 2) Protected branch: `main` (exact)
+## 2) Protected branch
 - Default branch: `main`
-- Ruleset target condition: `~DEFAULT_BRANCH` (therefore applies to `main`)
-- Active ruleset name: `main-required-checks`
+- Active branch ruleset name: `main-required-checks`
+- Ruleset target include condition: `~DEFAULT_BRANCH` (applies to `main`)
 - Ruleset enforcement: `active`
 
-## 3) Required status checks (exact list of names)
-Required status check contexts from active ruleset:
+## 3) Required status checks
+Required status check contexts (exact values from active ruleset):
 - `smoke-run-contract`
 
-Additional setting for required checks:
-- Require branches to be up to date before merging: **No** (`strict_required_status_checks_policy: false`)
+Related required-check setting (exact value from ruleset parameters):
+- `strict_required_status_checks_policy: false`
+  - Interpretation: branch does **not** need to be up to date with base before merge.
 
-## 4) Merge policy
-Observed policy from the active branch ruleset:
+## 4) Merge policy (verified vs. UI verification needed)
+### A) Verified via active ruleset/API
+- Branch scope pattern: `~DEFAULT_BRANCH` (effective branch: `main`)
+- Require status checks: **Enabled**
+  - Required contexts: `smoke-run-contract`
+  - Strict policy (`up to date before merging`): **Disabled** (`false`)
+- Force pushes: **Blocked** (ruleset contains `non_fast_forward`)
+- Branch deletions: **Blocked** (ruleset contains `deletion`)
 
-- Branch name pattern / scope: **Default branch only** (`~DEFAULT_BRANCH` → `main`)
-- PRs required before merging: **No explicit rule configured** (no `pull_request` rule present)
-- Required approving review count: **Not configured**
-- Code owner reviews required: **Not configured**
-- Dismiss stale reviews: **Not configured**
-- Require conversation resolution: **Not configured**
-- Require linear history: **No** (no `required_linear_history` rule present)
-- Require signed commits: **No** (no `required_signatures` rule present)
-- Require status checks: **Yes** (`required_status_checks` rule present)
-- Include administrators: **Not explicitly discoverable from public ruleset payload**
-- Allow force pushes: **No** (`non_fast_forward` rule present = block force pushes)
-- Allow deletions: **No** (`deletion` rule present = restrict deletions)
-- Push restrictions (who can push): **No explicit restrict-updates / push-allowlist rule present**
+### B) Requires manual confirmation in GitHub Settings UI
+The following values are not asserted from the current public ruleset payload alone and must be confirmed manually:
+- Pull request requirement before merging
+- Required reviews / approvals count
+- Code owner review requirement
+- Dismiss stale approvals
+- Require conversation resolution
+- Include administrators enforcement
+- Push restrictions / actor allowlists (if configured in classic branch protection)
 
-## 5) Expected CI behavior (what must pass before merge)
-Workflow files currently present:
+Exact UI path to verify:
+1. Open repository: `https://github.com/Cillyonline/Trading-engine`.
+2. Go to `Settings` → `Branches`.
+3. In **Branch protection rules**, open the rule that matches `main`.
+4. Confirm and record:
+   - “Require a pull request before merging” (enabled/disabled)
+   - Required approving review count (exact number)
+   - “Require review from Code Owners” (enabled/disabled)
+   - “Dismiss stale pull request approvals when new commits are pushed” (enabled/disabled)
+   - “Require conversation resolution before merging” (enabled/disabled)
+   - “Require status checks to pass before merging” and exact check names
+   - “Require branches to be up to date before merging” (enabled/disabled)
+   - “Include administrators” (enabled/disabled)
+   - Push restrictions (who can push), if present
+
+## 5) Expected CI behavior
+Workflow inventory in repository:
 - `ci.yml`
 
-Best-effort mapping of required status checks to workflows/jobs:
-- Required check context `smoke-run-contract` maps to workflow file `ci.yml`, job id `smoke-run-contract`.
-- Workflow name is `Smoke-Run Contract`; required merge gate uses the check context listed above.
+Workflow/job mapping for required checks (from `.github/workflows/ci.yml`):
+- Workflow name: `Smoke-Run Contract`
+- Job id: `smoke-run-contract`
+- Required status check context: `smoke-run-contract`
 
-Expected PR-time behavior:
-- On pull requests, the CI workflow runs.
+PR-time behavior statement:
+- If the workflow file defines `on: pull_request`, then the required status check context `smoke-run-contract` will run during PR evaluation.
 - Merge to `main` is blocked until required check context `smoke-run-contract` reports success.
-- Branch up-to-date with base is **not** required by ruleset (`strict_required_status_checks_policy: false`).
 
-## 6) Verification checklist (manual steps to confirm settings)
-1. Open repository settings: `Settings` → `Rules` (or `Branches` if using classic view).
-2. Open active ruleset `main-required-checks` targeting `~DEFAULT_BRANCH`.
-3. Confirm these active rules are present:
-   - `Require status checks to pass` with `smoke-run-contract`
-   - `Block force pushes`
-   - `Restrict deletions`
-4. Confirm no additional merge-gating rules are enabled (PR review/conversation/signature/linear-history), unless intentionally changed.
-5. Cross-check workflow inventory in `.github/workflows/` and ensure required check context still maps to an existing CI job.
+## 6) Enhanced manual verification checklist
+1. Open `Settings` → `Branches` in the repository.
+2. Open the branch protection rule for `main`.
+3. Verify PR and review gating values exactly:
+   - PR requirement enabled/disabled
+   - Required approvals count
+   - Code owner review requirement
+   - Dismiss stale reviews setting
+   - Conversation resolution requirement
+4. Verify required checks exactly:
+   - “Require status checks to pass before merging” enabled
+   - Required check list contains exactly `smoke-run-contract` (spelling and hyphenation must match)
+   - “Require branches to be up to date before merging” setting value
+5. Verify governance enforcement and access controls:
+   - “Include administrators” enabled/disabled
+   - Force pushes allowed/blocked
+   - Deletions allowed/blocked
+   - Push restrictions (if present)
+6. Cross-check workflow file `.github/workflows/ci.yml` still contains:
+   - `on: pull_request`
+   - job id `smoke-run-contract`
+7. Record verification timestamp and reviewer.
 
 ---
-Last verified snapshot: 2026-02-12 (UTC), via read-only GitHub API and repository workflow inspection.
+Last verified snapshot (API + repository file inspection): 2026-02-12 (UTC).
