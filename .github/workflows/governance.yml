@@ -1,0 +1,17 @@
+name: Governance Enforcement
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  governance-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR body issue reference
+        shell: bash
+        run: |
+          if ! echo "${{ github.event.pull_request.body }}" | grep -E "Closes #[0-9]+"; then
+            echo "Missing Closes #<IssueID> reference"
+            exit 1
+          fi
