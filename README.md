@@ -14,3 +14,17 @@ MVP v1 – Engine → SQLite → API → Trading Desk
 python -m compileall .
 pytest
 ```
+
+## Public API
+
+The Python package-level public API for `src/api` is frozen to a single supported symbol:
+
+- `from api import app`
+
+Boundary policy:
+
+- Only symbols exported via `src/api/__init__.py` are considered public/stable.
+- All other modules and symbols under `src/api/**` are internal and may change without notice.
+
+See `docs/api/public_api_boundary.md` for the full boundary definition.
+
