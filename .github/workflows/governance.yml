@@ -10,9 +10,20 @@ jobs:
     steps:
       - name: Validate PR body references issue
         run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-          echo "$PR_BODY" | grep -E "Closes #[0-9]+" > /dev/null
-          if [ $? -ne 0 ]; then
-            echo "Missing Closes #<IssueID> reference"
-            exit 1
-          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          event_path = os.environ["GITHUB_EVENT_PATH"]
+
+          with open(event_path, "r", encoding="utf-8") as f:
+              event = json.load(f)
+
+          body = (event.get("pull_request") or {}).get("body") or ""
+
+          if not re.search(r"Closes #[0-9]+", body):
+              print("Missing Closes #<IssueID> reference")
+              sys.exit(1)
+          PY
