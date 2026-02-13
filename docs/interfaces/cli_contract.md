@@ -1,7 +1,7 @@
 # CLI Contract – Cilly Trading Engine
 
 ## 1. Purpose
-- This document defines the deterministic command-line contract for the engine’s documented offline analysis CLI surface.
+- This document defines a deterministic, bounded command-line interface contract for this repository.
 - This contract is documentation-only and does not introduce runtime behavior changes.
 - Non-goals:
   - No new features.
@@ -9,81 +9,79 @@
   - No expansion of public API surface.
 
 ## 2. Authoritative CLI Entrypoint
-- The single authoritative CLI entrypoint for deterministic engine execution is:
-  - `python -m cilly_trading.engine.deterministic_run`
-- No alternative entrypoints are supported as part of this CLI contract.
-- Invocation context:
-  - Module invocation (`python -m ...`) is required by this contract.
-  - Script-path invocation support is not guaranteed.
+- The authoritative CLI entrypoint is only the one explicitly documented as supported elsewhere in this repository.
+- If no authoritative CLI entrypoint is explicitly documented, the entrypoint is unspecified and not guaranteed by this contract.
+- No alternative entrypoints are supported as part of this contract.
+- Invocation context (module invocation, script invocation, installed command) is unspecified unless explicitly documented.
 
 ## 3. Command Structure
 
 ### 3.1 Base Command
-- Canonical form:
-  - `python -m cilly_trading.engine.deterministic_run [--fixtures-dir <path>] [--output <path>] [--db-path <path>]`
+- Canonical invocation syntax is only what is explicitly documented as supported elsewhere in this repository.
+- If exact command syntax is not explicitly documented, it is unspecified and not guaranteed by this contract.
 - Deterministic invocation requirement:
-  - Callers MUST use the canonical module entrypoint and documented arguments only.
+  - Callers MUST use only the documented supported invocation form and documented arguments.
 
 ### 3.2 Subcommands (if applicable)
-- This CLI defines no subcommands.
-- Any subcommand-style usage is unsupported.
+- Subcommand behavior is only guaranteed if explicitly documented.
+- If subcommands are not explicitly documented as supported, subcommand usage is unsupported.
 
 ### 3.3 Arguments
 - Positional arguments:
-  - No positional arguments are defined.
+  - Only explicitly documented positional arguments are supported.
+  - Undocumented positional arguments are unsupported.
 - Named arguments:
-  - `--fixtures-dir <path>`: optional path to deterministic fixtures directory.
-  - `--output <path>`: optional JSON output artifact path.
-  - `--db-path <path>`: optional SQLite database path.
+  - Only explicitly documented named arguments are supported.
+  - Undocumented named arguments are unsupported.
 - Mutually exclusive flags:
-  - None are documented; no mutually exclusive flag behavior is guaranteed.
+  - Mutually exclusive behavior is guaranteed only when explicitly documented.
+  - If not explicitly documented, no mutual-exclusion guarantees are provided.
 - Unsupported patterns:
-  - Undocumented flags.
-  - Positional-only invocation patterns.
-  - Subcommand syntax.
+  - Undocumented flags or arguments.
+  - Invocation shapes not explicitly documented as supported.
+  - Ambiguous argument forms that rely on undocumented parsing behavior.
 
 ## 4. Argument Validation Rules
 - Required vs optional:
-  - All documented flags are optional at parse time.
-  - If omitted, implementation defaults are used.
+  - Required/optional status is guaranteed only for arguments explicitly documented as such.
+  - If requirement level is not explicitly documented, it is unspecified and not guaranteed.
 - Type validation:
-  - CLI values are parsed as strings and interpreted as filesystem paths.
+  - Argument type expectations are guaranteed only when explicitly documented.
 - Invalid input handling:
-  - Invalid CLI syntax/unknown arguments MUST be treated as usage/validation errors.
-  - Syntactically valid arguments that fail at runtime (for example, missing fixture files or invalid fixture content) MUST be treated as runtime failures.
+  - Invalid syntax or unsupported arguments MUST be treated as validation/usage errors.
+  - Inputs that pass parsing but fail during execution MUST be treated as runtime failures.
 - Parsing determinism:
-  - Parsing MUST be deterministic and must not rely on ambiguous argument interpretation.
+  - Parsing MUST be deterministic and must not rely on ambiguous interpretation.
 
 ## 5. Exit Code Contract
 - `0` → success.
 - Non-zero → failure.
 - Failure categories:
-  - Validation / usage error (argument parsing or unsupported CLI usage).
-  - Runtime failure (unexpected execution error, configuration/fixture/data failures during execution).
-- Configuration-specific exit code categories beyond the above are not guaranteed.
-- No undocumented success code is allowed (`0` is the only success code).
-- Stdout/stderr behavior:
-  - On success, printing the output artifact path to stdout is expected.
-  - Detailed formatting of stderr/stdout for failure cases is not guaranteed.
+  - Validation / usage error.
+  - Runtime failure (unexpected execution error).
+- Configuration-error category is not separately guaranteed unless explicitly documented.
+- Rule: no undocumented success codes (`0` is the only success code).
+- stdout/stderr expectations:
+  - stdout/stderr formatting is not guaranteed unless explicitly documented as machine-stable.
 
 ## 6. Determinism Requirements
-- The deterministic CLI run MUST execute without implicit randomness.
-- The deterministic CLI run MUST NOT depend on network access.
+- CLI behavior covered by this contract MUST be deterministic for the same documented inputs.
+- No implicit randomness is guaranteed.
 - Environment-dependent behavior is not guaranteed unless explicitly documented.
-- Config resolution order beyond explicit CLI flags and in-fixture configuration is not specified.
-- Time, locale, and filesystem ordering guarantees are limited to documented deterministic behavior only; additional guarantees are not specified.
+- Configuration resolution order is not specified unless explicitly documented.
+- Time, locale, and filesystem-ordering behavior are not guaranteed unless explicitly documented.
 
 ## 7. Unsupported CLI Usage
-- Direct execution of internal modules as a supported interface (other than the authoritative entrypoint above).
-- Any undocumented flags or invocation shapes.
-- Interactive prompts; interactive CLI behavior is not supported.
-- Treating side effects or internal implementation details as stable contract.
+- Treating direct internal module execution as a supported interface unless explicitly documented as supported.
+- Any undocumented flags, arguments, or invocation shapes.
+- Interactive prompts; interactive behavior is unsupported unless explicitly documented.
+- Assuming side effects or internal implementation behavior as stable contract.
 
 ## 8. Stability Guarantees
 - Stable:
-  - The documented authoritative entrypoint.
-  - The documented named arguments in this file.
-  - The documented success/failure exit code contract categories.
+  - The documented authoritative entrypoint concept.
+  - Documented arguments and documented invocation forms only.
+  - Documented exit-code success/failure category behavior.
 - May change without contract guarantee:
   - Undocumented behavior.
   - Internal implementation details.
