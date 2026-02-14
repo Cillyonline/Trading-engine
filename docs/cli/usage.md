@@ -37,7 +37,8 @@ python -m cilly_trading --version
 ```
 
 This command prints the authoritative package version and exits with code `0`.
-The output value equals `cilly_trading.version`.
+The output value equals `cilly_trading.__version__`.
+It is returned by the authoritative source defined in `src/cilly_trading/version.py`.
 Do not treat documentation examples as a hard-coded version string.
 
 ## 3. Help Behavior
