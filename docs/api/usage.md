@@ -41,11 +41,26 @@ Uvicorn running on http://127.0.0.1:8000
 
 Use only `GET` requests for local, non-mutating checks.
 
+### Example 1 (curl)
+
 ```bash
 curl http://127.0.0.1:8000/openapi.json
-curl http://127.0.0.1:8000/health
-curl "http://127.0.0.1:8000/signals?limit=2&offset=0"
 ```
+
+### Example 2 (Swagger UI)
+
+1. Open http://127.0.0.1:8000/docs.
+2. Select any `GET` endpoint from the list.
+3. Click **Try it out**.
+4. Click **Execute**.
+5. Observe the HTTP status (`200` or `422`, depending on required parameters).
+
+### Example 3 (Swagger UI with optional query parameters)
+
+1. In Swagger UI, choose a `GET` endpoint that supports optional query parameters.
+2. Enter one or more optional query parameter values.
+3. Click **Execute**.
+4. Observe the returned JSON payload.
 
 ## 5. Expected HTTP status codes
 
