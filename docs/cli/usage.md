@@ -4,13 +4,13 @@
 
 Invoke the CLI by executing the package module.
 
-### Bash
+Bash:
 
 ```bash
 PYTHONPATH=src python -m cilly_trading
 ```
 
-### PowerShell
+PowerShell:
 
 ```powershell
 $env:PYTHONPATH="src"
@@ -23,13 +23,13 @@ When run without flags, the CLI prints argparse help output and exits with code 
 
 The CLI exposes a version flag.
 
-### Bash
+Bash:
 
 ```bash
 PYTHONPATH=src python -m cilly_trading --version
 ```
 
-### PowerShell
+PowerShell:
 
 ```powershell
 $env:PYTHONPATH="src"
