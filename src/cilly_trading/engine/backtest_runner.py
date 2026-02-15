@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
+
+from cilly_trading.engine.result_artifact import write_artifact
 
 
 class BacktestStrategy(Protocol):
@@ -39,6 +39,11 @@ class BacktestRunnerConfig:
     output_dir: Path
     artifact_name: str = "backtest-result.json"
     hash_name: str = "backtest-result.sha256"
+    run_id: str = "deterministic"
+    strategy_name: str = "strategy"
+    strategy_params: Mapping[str, Any] = field(default_factory=dict)
+    engine_name: str = "cilly_trading_engine"
+    engine_version: str | None = None
 
 
 class BacktestRunner:
@@ -112,25 +117,78 @@ class BacktestRunner:
         invocation_log: List[str],
         config: BacktestRunnerConfig,
     ) -> tuple[Path, str]:
-        payload = {
+        payload = self._build_payload(
+            processed_snapshots=processed_snapshots,
+            invocation_log=invocation_log,
+            config=config,
+        )
+        return write_artifact(
+            output_dir=config.output_dir,
+            payload=payload,
+            artifact_name=config.artifact_name,
+            hash_name=config.hash_name,
+        )
+
+    def _build_payload(
+        self,
+        *,
+        processed_snapshots: List[Dict[str, Any]],
+        invocation_log: List[str],
+        config: BacktestRunnerConfig,
+    ) -> Dict[str, Any]:
+        if not processed_snapshots:
+            snapshot_mode = "timestamp"
+            start = None
+            end = None
+        else:
+            all_have_timestamp = all("timestamp" in snapshot for snapshot in processed_snapshots)
+            all_have_snapshot_key = all("snapshot_key" in snapshot for snapshot in processed_snapshots)
+            if all_have_timestamp:
+                snapshot_mode = "timestamp"
+            elif all_have_snapshot_key:
+                snapshot_mode = "snapshot_key"
+            else:
+                raise ValueError("Snapshots must consistently define either 'timestamp' or 'snapshot_key'")
+            start, end = self._snapshot_boundaries(processed_snapshots, snapshot_mode)
+
+        return {
+            "artifact_version": "1",
+            "engine": {
+                "name": config.engine_name,
+                "version": config.engine_version,
+            },
+            "run": {
+                "run_id": config.run_id,
+                "created_at": None,
+                "deterministic": True,
+            },
+            "snapshot_linkage": {
+                "mode": snapshot_mode,
+                "start": start,
+                "end": end,
+                "count": len(processed_snapshots),
+            },
+            "strategy": {
+                "name": config.strategy_name,
+                "version": None,
+                "params": dict(config.strategy_params),
+            },
             "invocation_log": invocation_log,
             "processed_snapshots": processed_snapshots,
+            "orders": [],
+            "fills": [],
+            "positions": [],
         }
-        artifact_text = json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ) + "\n"
 
-        config.output_dir.mkdir(parents=True, exist_ok=True)
+    def _snapshot_boundaries(
+        self,
+        processed_snapshots: List[Dict[str, Any]],
+        snapshot_mode: str,
+    ) -> Tuple[str | None, str | None]:
+        if not processed_snapshots:
+            return None, None
 
-        artifact_path = config.output_dir / config.artifact_name
-        artifact_path.write_text(artifact_text, encoding="utf-8", newline="\n")
-
-        artifact_sha256 = hashlib.sha256(artifact_text.encode("utf-8")).hexdigest()
-        hash_path = config.output_dir / config.hash_name
-        hash_path.write_text(f"{artifact_sha256}\n", encoding="utf-8", newline="\n")
-
-        return artifact_path, artifact_sha256
+        boundary_key = "timestamp" if snapshot_mode == "timestamp" else "snapshot_key"
+        start = processed_snapshots[0].get(boundary_key)
+        end = processed_snapshots[-1].get(boundary_key)
+        return str(start) if start is not None else None, str(end) if end is not None else None

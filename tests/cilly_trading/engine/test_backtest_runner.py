@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
+
+import pytest
 
 from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
 
@@ -105,3 +108,67 @@ def test_backtest_runner_smoke_artifact_created(tmp_path: Path) -> None:
 
     assert result.artifact_path.exists()
     assert result.artifact_path.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_snapshot_linkage_timestamp_mode(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {"id": "b", "timestamp": "2024-01-02T00:00:00Z"},
+            {"id": "a", "timestamp": "2024-01-01T00:00:00Z"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "timestamp-mode"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    linkage = payload["snapshot_linkage"]
+    assert linkage["mode"] == "timestamp"
+    assert linkage["start"] == "2024-01-01T00:00:00Z"
+    assert linkage["end"] == "2024-01-02T00:00:00Z"
+
+
+def test_snapshot_linkage_snapshot_key_mode(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {"id": "b", "snapshot_key": "snap-002"},
+            {"id": "a", "snapshot_key": "snap-001"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "snapshot-key-mode"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    linkage = payload["snapshot_linkage"]
+    assert linkage["mode"] == "snapshot_key"
+    assert linkage["start"] == "snap-001"
+    assert linkage["end"] == "snap-002"
+
+
+def test_snapshot_linkage_mixed_error(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    with pytest.raises(
+        ValueError,
+        match="Snapshots must consistently define either 'timestamp' or 'snapshot_key'",
+    ):
+        runner.run(
+            snapshots=[
+                {"id": "a", "timestamp": "2024-01-01T00:00:00Z"},
+                {"id": "b"},
+            ],
+            strategy_factory=strategy_factory,
+            config=BacktestRunnerConfig(output_dir=tmp_path / "mixed-mode"),
+        )
