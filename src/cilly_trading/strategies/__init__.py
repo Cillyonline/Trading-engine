@@ -8,7 +8,10 @@ Im MVP enthalten:
 
 from __future__ import annotations
 
+from .registry import initialize_default_registry
 from .rsi2 import Rsi2Strategy
 from .turtle import TurtleStrategy
+
+initialize_default_registry()
 
 __all__ = ["Rsi2Strategy", "TurtleStrategy"]
