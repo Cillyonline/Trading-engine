@@ -44,7 +44,13 @@ from cilly_trading.engine.runtime_introspection import get_runtime_introspection
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
-from cilly_trading.strategies import Rsi2Strategy, TurtleStrategy
+from cilly_trading.strategies.registry import (
+    StrategyNotRegisteredError,
+    create_registered_strategies,
+    create_strategy,
+    initialize_default_registry,
+    run_registry_smoke,
+)
 
 
 def configure_logging() -> None:
@@ -458,10 +464,7 @@ def _normalize_for_hashing(value: Any) -> Any:
     return value
 
 
-strategy_registry = {
-    "RSI2": Rsi2Strategy(),
-    "TURTLE": TurtleStrategy(),
-}
+initialize_default_registry()
 
 # Standard-Strategie-Konfigurationen
 default_strategy_configs: Dict[str, Dict[str, Any]] = {
@@ -476,6 +479,12 @@ default_strategy_configs: Dict[str, Dict[str, Any]] = {
         "min_score": 30.0,
     },
 }
+
+
+def get_registered_strategy_keys() -> List[str]:
+    """Return deterministic strategy keys used by API smoke checks."""
+
+    return run_registry_smoke()
 
 
 # --- Endpunkte ---
@@ -760,10 +769,11 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
     _require_snapshot_ready(req.ingestion_run_id, symbols=[req.symbol], timeframe="D1")
 
     strategy_name = req.strategy.upper()
-    strategy = strategy_registry.get(strategy_name)
-    if strategy is None:
+    try:
+        strategy = create_strategy(strategy_name)
+    except StrategyNotRegisteredError:
         logger.warning("Unknown strategy requested: %s", req.strategy)
-        raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}") from None
 
     engine_config = EngineConfig(
         timeframe="D1",
@@ -920,10 +930,11 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
 
     _require_ingestion_run(req.ingestion_run_id)
     _require_snapshot_ready(req.ingestion_run_id, symbols=[req.symbol], timeframe="D1")
-    strategy = strategy_registry.get(strategy_name)
-    if strategy is None:
+    try:
+        strategy = create_strategy(strategy_name)
+    except StrategyNotRegisteredError:
         logger.warning("Unknown strategy requested: %s", req.strategy)
-        raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}")
+        raise HTTPException(status_code=400, detail=f"Unknown strategy: {req.strategy}") from None
 
     engine_config = EngineConfig(
         timeframe="D1",
@@ -1011,7 +1022,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
     )
 
     # Alle Strategien nutzen
-    strategies = list(strategy_registry.values())
+    strategies = create_registered_strategies()
 
     # Für den Screener nutzen wir einfach die Default-Configs
     strategy_configs = default_strategy_configs

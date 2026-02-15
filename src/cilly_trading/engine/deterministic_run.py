@@ -11,7 +11,11 @@ from cilly_trading.engine.core import EngineConfig, compute_analysis_run_id, run
 from cilly_trading.engine.data import ingest_local_snapshot_deterministic
 from cilly_trading.engine.deterministic_guard import determinism_guard
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
-from cilly_trading.strategies.rsi2 import Rsi2Strategy
+from cilly_trading.strategies.registry import (
+    StrategyNotRegisteredError,
+    create_strategy,
+    initialize_default_registry,
+)
 
 DEFAULT_FIXTURES_DIR = Path("fixtures/deterministic-analysis")
 DEFAULT_OUTPUT_PATH = Path("tests/output/deterministic-analysis.json")
@@ -32,9 +36,11 @@ def _load_run_config(fixtures_dir: Path) -> Dict[str, Any]:
 
 
 def _resolve_strategy(name: str):
-    if name.upper() == "RSI2":
-        return Rsi2Strategy()
-    raise DeterministicRunConfigError(f"deterministic_strategy_unknown:{name}")
+    initialize_default_registry()
+    try:
+        return create_strategy(name)
+    except StrategyNotRegisteredError as exc:
+        raise DeterministicRunConfigError(f"deterministic_strategy_unknown:{name}") from exc
 
 
 def _build_output_payload(
