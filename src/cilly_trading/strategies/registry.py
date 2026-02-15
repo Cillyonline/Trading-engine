@@ -95,6 +95,7 @@ def get_registered_strategies() -> list[RegisteredStrategy]:
 def create_strategy(strategy_key: str) -> BaseStrategy:
     """Create a strategy instance for a registered key."""
 
+    initialize_default_registry()
     normalized_key = _normalize_key(strategy_key)
     factory = _REGISTRY.get(normalized_key)
     if factory is None:
@@ -105,6 +106,7 @@ def create_strategy(strategy_key: str) -> BaseStrategy:
 def create_registered_strategies() -> list[BaseStrategy]:
     """Create all registered strategies in deterministic order."""
 
+    initialize_default_registry()
     return [entry.factory() for entry in get_registered_strategies()]
 
 
