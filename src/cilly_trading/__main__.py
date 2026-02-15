@@ -2,31 +2,26 @@
 
 from __future__ import annotations
 
-import argparse
+import sys
 
 from .version import get_version
 
 
-def main() -> int:
-    """Run the package CLI.
+USAGE = "usage: python -m cilly_trading --version"
 
-    Returns:
-        int: Process exit code.
-    """
-    parser = argparse.ArgumentParser(prog="cilly_trading")
-    parser.add_argument(
-        "--version",
-        action="store_true",
-        help="Print the cilly_trading package version and exit.",
-    )
-    args = parser.parse_args()
 
-    if args.version:
+def main(argv: list[str] | None = None) -> int:
+    """Run the package CLI and return process exit code."""
+    args = list(sys.argv[1:] if argv is None else argv)
+
+    if args == ["--version"]:
         print(get_version())
         return 0
 
-    parser.print_help()
-    return 0
+    if args:
+        print("unknown arguments", file=sys.stderr)
+    print(USAGE, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
