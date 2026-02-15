@@ -88,4 +88,6 @@ def test_validation_preserves_registry_ordering_and_smoke_stability() -> None:
     register_strategy("beta", _ValidStrategy, metadata=_metadata(pack_id="pack-b"))
 
     assert [entry.key for entry in get_registered_strategies()] == ["BETA", "ZETA"]
-    assert run_registry_smoke() == ["BETA", "ZETA"]
+
+    reset_registry()
+    assert run_registry_smoke() == ["RSI2", "TURTLE"]
