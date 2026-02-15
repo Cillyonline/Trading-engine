@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cilly-trading"
+dynamic = ["version"]
+description = "Cilly Trading engine"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["cilly_trading*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "cilly_trading.version.__version__"}
