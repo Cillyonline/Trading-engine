@@ -72,15 +72,15 @@ def test_smoke_run_is_deterministic_and_uses_registry_only() -> None:
     first = run_registry_smoke()
     second = run_registry_smoke()
 
-    assert first == ["RSI2", "TURTLE"]
-    assert second == ["RSI2", "TURTLE"]
+    assert first == ["REFERENCE", "RSI2", "TURTLE"]
+    assert second == ["REFERENCE", "RSI2", "TURTLE"]
 
     strategy_names = [strategy.name for strategy in create_registered_strategies()]
-    assert strategy_names == ["RSI2", "TURTLE"]
+    assert strategy_names == ["REFERENCE", "RSI2", "TURTLE"]
 
 
 def test_initialize_default_registry_idempotent() -> None:
     initialize_default_registry()
     initialize_default_registry()
 
-    assert [entry.key for entry in get_registered_strategies()] == ["RSI2", "TURTLE"]
+    assert [entry.key for entry in get_registered_strategies()] == ["REFERENCE", "RSI2", "TURTLE"]

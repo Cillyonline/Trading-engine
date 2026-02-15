@@ -1,0 +1,8 @@
+pack_id: reference-pack
+version: 1.0.0
+description: Canonical deterministic reference strategy pack with a no-op strategy.
+author: Trading Engine Team
+created_at: 2026-01-01T00:00:00Z
+deterministic_hash: reference-pack-v1-hash
+engine_compatibility: ">=1.0.0"
+dependencies: []
