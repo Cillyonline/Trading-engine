@@ -125,9 +125,20 @@ def initialize_default_registry() -> None:
     if _REGISTRY:
         return
 
+    from cilly_trading.strategies.reference import ReferenceStrategy
     from cilly_trading.strategies.rsi2 import Rsi2Strategy
     from cilly_trading.strategies.turtle import TurtleStrategy
 
+    register_strategy(
+        "REFERENCE",
+        lambda: ReferenceStrategy(),
+        metadata={
+            "pack_id": "reference-pack",
+            "version": "1.0.0",
+            "deterministic_hash": "reference-pack-v1-hash",
+            "dependencies": [],
+        },
+    )
     register_strategy(
         "RSI2",
         lambda: Rsi2Strategy(),

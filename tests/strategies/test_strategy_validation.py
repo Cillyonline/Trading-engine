@@ -90,4 +90,4 @@ def test_validation_preserves_registry_ordering_and_smoke_stability() -> None:
     assert [entry.key for entry in get_registered_strategies()] == ["BETA", "ZETA"]
 
     reset_registry()
-    assert run_registry_smoke() == ["RSI2", "TURTLE"]
+    assert run_registry_smoke() == ["REFERENCE", "RSI2", "TURTLE"]
