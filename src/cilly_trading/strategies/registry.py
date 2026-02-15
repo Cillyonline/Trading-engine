@@ -19,6 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from cilly_trading.engine.core import BaseStrategy
+from cilly_trading.strategies.validation import validate_before_registration, validate_strategy_key
 
 
 class DuplicateStrategyRegistrationError(ValueError):
@@ -49,12 +50,14 @@ _REGISTRY: dict[str, StrategyFactory] = {}
 
 
 def _normalize_key(strategy_key: str) -> str:
-    if not isinstance(strategy_key, str) or not strategy_key.strip():
-        raise ValueError("strategy_key must be a non-empty string")
-    return strategy_key.strip().upper()
+    return validate_strategy_key(strategy_key)
 
 
-def register_strategy(strategy_key: str, factory: StrategyFactory) -> None:
+def register_strategy(
+    strategy_key: str,
+    factory: StrategyFactory,
+    metadata: dict | None = None,
+) -> None:
     """Register one strategy factory explicitly.
 
     Args:
@@ -62,18 +65,16 @@ def register_strategy(strategy_key: str, factory: StrategyFactory) -> None:
         factory: Factory that returns a strategy instance.
 
     Raises:
-        DuplicateStrategyRegistrationError: If the key already exists.
-        ValueError: If key/factory are invalid.
+        ValueError: If key/factory/metadata are invalid.
     """
 
-    normalized_key = _normalize_key(strategy_key)
-    if not callable(factory):
-        raise ValueError("factory must be callable")
+    normalized_key, _ = validate_before_registration(
+        strategy_key,
+        factory,
+        metadata,
+        registry_keys=set(_REGISTRY.keys()),
+    )
 
-    if normalized_key in _REGISTRY:
-        raise DuplicateStrategyRegistrationError(
-            f"strategy already registered: {normalized_key}"
-        )
     _REGISTRY[normalized_key] = factory
 
 
@@ -94,6 +95,7 @@ def get_registered_strategies() -> list[RegisteredStrategy]:
 def create_strategy(strategy_key: str) -> BaseStrategy:
     """Create a strategy instance for a registered key."""
 
+    initialize_default_registry()
     normalized_key = _normalize_key(strategy_key)
     factory = _REGISTRY.get(normalized_key)
     if factory is None:
@@ -104,6 +106,7 @@ def create_strategy(strategy_key: str) -> BaseStrategy:
 def create_registered_strategies() -> list[BaseStrategy]:
     """Create all registered strategies in deterministic order."""
 
+    initialize_default_registry()
     return [entry.factory() for entry in get_registered_strategies()]
 
 
@@ -125,8 +128,26 @@ def initialize_default_registry() -> None:
     from cilly_trading.strategies.rsi2 import Rsi2Strategy
     from cilly_trading.strategies.turtle import TurtleStrategy
 
-    register_strategy("RSI2", Rsi2Strategy)
-    register_strategy("TURTLE", TurtleStrategy)
+    register_strategy(
+        "RSI2",
+        lambda: Rsi2Strategy(),
+        metadata={
+            "pack_id": "core-default",
+            "version": "1.0.0",
+            "deterministic_hash": "rsi2-default-pack-hash",
+            "dependencies": [],
+        },
+    )
+    register_strategy(
+        "TURTLE",
+        lambda: TurtleStrategy(),
+        metadata={
+            "pack_id": "core-default",
+            "version": "1.0.0",
+            "deterministic_hash": "turtle-default-pack-hash",
+            "dependencies": [],
+        },
+    )
 
 
 def run_registry_smoke() -> list[str]:

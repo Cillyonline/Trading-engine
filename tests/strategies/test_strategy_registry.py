@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from cilly_trading.strategies.registry import (
-    DuplicateStrategyRegistrationError,
     create_registered_strategies,
     create_strategy,
     get_registered_strategies,
@@ -12,6 +11,7 @@ from cilly_trading.strategies.registry import (
     reset_registry,
     run_registry_smoke,
 )
+from cilly_trading.strategies.validation import StrategyValidationError
 
 
 class _StrategyA:
@@ -28,12 +28,21 @@ class _StrategyB:
         return []
 
 
+def _metadata(pack_id: str) -> dict:
+    return {
+        "pack_id": pack_id,
+        "version": "1.0.0",
+        "deterministic_hash": f"{pack_id}-hash",
+        "dependencies": [],
+    }
+
+
 def setup_function() -> None:
     reset_registry()
 
 
 def test_registration_succeeds() -> None:
-    register_strategy("alpha", _StrategyA)
+    register_strategy("alpha", _StrategyA, metadata=_metadata("pack-a"))
 
     strategy = create_strategy("ALPHA")
 
@@ -41,18 +50,18 @@ def test_registration_succeeds() -> None:
 
 
 def test_duplicate_registration_raises_specific_error() -> None:
-    register_strategy("alpha", _StrategyA)
+    register_strategy("alpha", _StrategyA, metadata=_metadata("pack-a"))
 
     with pytest.raises(
-        DuplicateStrategyRegistrationError,
+        StrategyValidationError,
         match="strategy already registered: ALPHA",
     ):
-        register_strategy("ALPHA", _StrategyB)
+        register_strategy("ALPHA", _StrategyB, metadata=_metadata("pack-b"))
 
 
 def test_registered_strategies_are_returned_in_stable_sorted_order() -> None:
-    register_strategy("zeta", _StrategyA)
-    register_strategy("beta", _StrategyB)
+    register_strategy("zeta", _StrategyA, metadata=_metadata("pack-z"))
+    register_strategy("beta", _StrategyB, metadata=_metadata("pack-b"))
 
     keys = [entry.key for entry in get_registered_strategies()]
 
