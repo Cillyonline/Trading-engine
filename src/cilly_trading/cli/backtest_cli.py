@@ -43,31 +43,13 @@ def _load_snapshots(path: Path) -> list[dict[str, Any]]:
 
 
 def _resolve_strategy_factory(strategy_name: str) -> Callable[[], BacktestStrategy]:
-    try:
-        create_strategy(strategy_name)
-    except StrategyNotRegisteredError as exc:
-        raise StrategySelectionError("Unknown strategy") from exc
+    def _factory() -> BacktestStrategy:
+        try:
+            return create_strategy(strategy_name)
+        except StrategyNotRegisteredError as exc:
+            raise StrategySelectionError("Unknown strategy") from exc
 
-    class _RegistryBacktestStrategy:
-        def __init__(self) -> None:
-            self._strategy = create_strategy(strategy_name)
-
-        def on_run_start(self, config: Mapping[str, Any]) -> None:
-            callback = getattr(self._strategy, "on_run_start", None)
-            if callable(callback):
-                callback(config)
-
-        def on_snapshot(self, snapshot: Mapping[str, Any], config: Mapping[str, Any]) -> None:
-            callback = getattr(self._strategy, "on_snapshot", None)
-            if callable(callback):
-                callback(snapshot, config)
-
-        def on_run_end(self, config: Mapping[str, Any]) -> None:
-            callback = getattr(self._strategy, "on_run_end", None)
-            if callable(callback):
-                callback(config)
-
-    return _RegistryBacktestStrategy
+    return _factory
 
 
 def run_backtest(
@@ -88,14 +70,36 @@ def run_backtest(
             for module_name in strategy_modules:
                 try:
                     importlib.import_module(module_name)
-                except ImportError as exc:
+                except Exception as exc:
                     raise StrategySelectionError("Unknown strategy") from exc
 
         strategy_factory = _resolve_strategy_factory(strategy_name)
+
+        def _backtest_strategy_factory() -> BacktestStrategy:
+            strategy = strategy_factory()
+
+            class _StrategyAdapter:
+                def on_run_start(self, config: Mapping[str, Any]) -> None:
+                    callback = getattr(strategy, "on_run_start", None)
+                    if callable(callback):
+                        callback(config)
+
+                def on_snapshot(self, snapshot: Mapping[str, Any], config: Mapping[str, Any]) -> None:
+                    callback = getattr(strategy, "on_snapshot", None)
+                    if callable(callback):
+                        callback(snapshot, config)
+
+                def on_run_end(self, config: Mapping[str, Any]) -> None:
+                    callback = getattr(strategy, "on_run_end", None)
+                    if callable(callback):
+                        callback(config)
+
+            return _StrategyAdapter()
+
         runner = BacktestRunner()
         runner.run(
             snapshots=snapshots,
-            strategy_factory=strategy_factory,
+            strategy_factory=_backtest_strategy_factory,
             config=BacktestRunnerConfig(
                 output_dir=out_dir,
                 run_id=run_id,

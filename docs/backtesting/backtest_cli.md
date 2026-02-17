@@ -3,13 +3,15 @@
 ## Command
 
 ```bash
-python -m cilly_trading backtest --snapshots <PATH> --strategy <NAME> --out <DIR> [--run-id <STR>]
+python -m cilly_trading backtest --snapshots <PATH> --strategy <NAME> --out <DIR> [--run-id <STR>] [--strategy-module <PYMOD>]...
 ```
 
 - `--snapshots`: Path to a JSON file with snapshot data.
 - `--strategy`: Registered strategy name.
 - `--out`: Output directory for artifacts.
 - `--run-id`: Optional run identifier. Default is `deterministic`.
+- `--strategy-module`: Optional Python module to import before resolving the strategy.
+  May be provided multiple times.
 
 ## Snapshot JSON format
 
