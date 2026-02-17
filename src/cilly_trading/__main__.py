@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .cli.backtest_cli import run_backtest
 from .version import get_version
 
 
@@ -32,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "backtest":
+        from .cli.backtest_cli import run_backtest
+
         return run_backtest(
             snapshots_path=Path(args.snapshots),
             strategy_name=args.strategy,

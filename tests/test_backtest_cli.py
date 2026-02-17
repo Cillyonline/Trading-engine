@@ -78,6 +78,26 @@ def test_cli_backtest_invalid_snapshot_file_exit_20(tmp_path: Path) -> None:
     assert result.returncode == 20
 
 
+
+
+def test_cli_backtest_malformed_snapshot_item_exit_20(tmp_path: Path) -> None:
+    snapshots_path = tmp_path / "invalid-item.json"
+    snapshots_path.write_text('[{"id":"x"}]', encoding="utf-8")
+
+    result = _run_cli(
+        [
+            "backtest",
+            "--snapshots",
+            str(snapshots_path),
+            "--strategy",
+            "REFERENCE",
+            "--out",
+            str(tmp_path / "out"),
+        ]
+    )
+
+    assert result.returncode == 20
+
 def test_cli_backtest_unknown_strategy_exit_30(tmp_path: Path) -> None:
     snapshots_path = tmp_path / "snapshots.json"
     snapshots_path.write_text("[]", encoding="utf-8")

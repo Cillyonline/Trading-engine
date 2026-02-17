@@ -38,6 +38,14 @@ def _load_snapshots(path: Path) -> list[dict[str, Any]]:
     for item in payload:
         if not isinstance(item, Mapping):
             raise SnapshotInputError("Invalid snapshots input")
+
+        snapshot_id = item.get("id")
+        snapshot_timestamp = item.get("timestamp")
+        if not isinstance(snapshot_id, str) or not snapshot_id.strip():
+            raise SnapshotInputError("Invalid snapshots input")
+        if not isinstance(snapshot_timestamp, str) or not snapshot_timestamp.strip():
+            raise SnapshotInputError("Invalid snapshots input")
+
         snapshots.append(dict(item))
     return snapshots
 
