@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -16,9 +15,6 @@ from cilly_trading.engine.determinism_guard import (
     uninstall_guard,
 )
 from cilly_trading.strategies.registry import StrategyNotRegisteredError, create_strategy
-
-
-TEST_STRATEGY_IMPORT_ENV = "CILLY_BACKTEST_TEST_STRATEGY_IMPORT"
 
 
 class SnapshotInputError(ValueError):
@@ -46,71 +42,55 @@ def _load_snapshots(path: Path) -> list[dict[str, Any]]:
     return snapshots
 
 
-def _resolve_test_strategy_factory(strategy_name: str) -> Callable[[], BacktestStrategy] | None:
-    """Resolve an opt-in test strategy factory via environment variable.
-
-    This branch is intentionally disabled by default and only used in tests to
-    validate deterministic guard behavior without changing production registry.
-    """
-
-    import_spec = os.environ.get(TEST_STRATEGY_IMPORT_ENV)
-    if not import_spec:
-        return None
-
-    try:
-        strategy_key, target = import_spec.split("=", 1)
-        module_name, object_name = target.split(":", 1)
-    except ValueError as exc:
-        raise StrategySelectionError("Unknown strategy") from exc
-
-    if strategy_name != strategy_key:
-        return None
-
-    try:
-        module = importlib.import_module(module_name)
-        factory_obj = getattr(module, object_name)
-    except (ImportError, AttributeError) as exc:
-        raise StrategySelectionError("Unknown strategy") from exc
-
-    if not callable(factory_obj):
-        raise StrategySelectionError("Unknown strategy")
-
-    def _factory() -> BacktestStrategy:
-        return factory_obj()
-
-    return _factory
-
-
 def _resolve_strategy_factory(strategy_name: str) -> Callable[[], BacktestStrategy]:
-    test_factory = _resolve_test_strategy_factory(strategy_name)
-    if test_factory is not None:
-        return test_factory
-
     try:
-        # Validate strategy selection via central registry mechanism.
         create_strategy(strategy_name)
     except StrategyNotRegisteredError as exc:
         raise StrategySelectionError("Unknown strategy") from exc
 
-    class _NoOpBacktestStrategy:
+    class _RegistryBacktestStrategy:
+        def __init__(self) -> None:
+            self._strategy = create_strategy(strategy_name)
+
         def on_run_start(self, config: Mapping[str, Any]) -> None:
-            del config
+            callback = getattr(self._strategy, "on_run_start", None)
+            if callable(callback):
+                callback(config)
 
         def on_snapshot(self, snapshot: Mapping[str, Any], config: Mapping[str, Any]) -> None:
-            del snapshot, config
+            callback = getattr(self._strategy, "on_snapshot", None)
+            if callable(callback):
+                callback(snapshot, config)
 
         def on_run_end(self, config: Mapping[str, Any]) -> None:
-            del config
+            callback = getattr(self._strategy, "on_run_end", None)
+            if callable(callback):
+                callback(config)
 
-    return _NoOpBacktestStrategy
+    return _RegistryBacktestStrategy
 
 
-def run_backtest(*, snapshots_path: Path, strategy_name: str, out_dir: Path, run_id: str) -> int:
+def run_backtest(
+    *,
+    snapshots_path: Path,
+    strategy_name: str,
+    out_dir: Path,
+    run_id: str,
+    strategy_modules: list[str] | None = None,
+) -> int:
     """Run deterministic backtest command and return deterministic exit code."""
 
     install_guard()
     try:
         snapshots = _load_snapshots(snapshots_path)
+
+        if strategy_modules is not None:
+            for module_name in strategy_modules:
+                try:
+                    importlib.import_module(module_name)
+                except ImportError as exc:
+                    raise StrategySelectionError("Unknown strategy") from exc
+
         strategy_factory = _resolve_strategy_factory(strategy_name)
         runner = BacktestRunner()
         runner.run(

@@ -101,22 +101,18 @@ def test_cli_backtest_determinism_violation_exit_10(tmp_path: Path) -> None:
     snapshots_path = tmp_path / "snapshots.json"
     snapshots_path.write_text("[]", encoding="utf-8")
 
-    env = dict(os.environ)
-    env["CILLY_BACKTEST_TEST_STRATEGY_IMPORT"] = (
-        "TEST_TIME_VIOLATION=tests.backtest_test_strategies:create_determinism_violation_strategy"
-    )
-
     result = _run_cli(
         [
             "backtest",
             "--snapshots",
             str(snapshots_path),
+            "--strategy-module",
+            "tests.backtest_test_strategies",
             "--strategy",
             "TEST_TIME_VIOLATION",
             "--out",
             str(tmp_path / "out"),
         ],
-        env=env,
     )
 
     assert result.returncode == 10

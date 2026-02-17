@@ -20,6 +20,7 @@ def _build_parser() -> argparse.ArgumentParser:
     backtest_parser.add_argument("--strategy", required=True)
     backtest_parser.add_argument("--out", required=True)
     backtest_parser.add_argument("--run-id", default="deterministic")
+    backtest_parser.add_argument("--strategy-module", action="append", default=None)
 
     return parser
 
@@ -36,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
             strategy_name=args.strategy,
             out_dir=Path(args.out),
             run_id=args.run_id,
+            strategy_modules=args.strategy_module,
         )
 
     parser.print_usage()
