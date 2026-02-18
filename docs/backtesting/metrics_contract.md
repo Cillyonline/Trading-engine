@@ -17,27 +17,33 @@ Out of scope:
 - ML-based evaluation.
 
 ## 2. Inputs (Phase 22 deterministic artifacts)
-The metrics computation consumes deterministic artifacts produced by Phase 22.
+The metrics computation MUST consume deterministic artifacts produced by Phase 22.
 
 Required inputs:
 1. `summary` artifact
    - `start_equity` (number, account currency)
    - `end_equity` (number, account currency)
-   - Optional deterministic run metadata (only forwarded if present)
+   - Deterministic run metadata fields are permitted only if present in Phase 22 artifacts and copied without transformation.
 
 2. `equity_curve` artifact
    - Ordered or orderable points containing:
-     - `timestamp` (ISO 8601, UTC)
+     - `timestamp` (ISO 8601, UTC, `Z` suffix)
      - `equity` (number, account currency)
 
 3. `trades` artifact
    - Trade records containing at minimum:
-     - `trade_id` (string or integer convertible to canonical string)
-     - `exit_ts` (ISO 8601, UTC)
+     - `trade_id` (string or integer converted to canonical string)
+     - `exit_ts` (ISO 8601, UTC, `Z` suffix)
      - `pnl` (number, account currency)
 
-If `equity_curve` is unavailable, risk metrics defined in this contract MUST be `null`.
-If `trades` is unavailable, trade-level metrics defined in this contract MUST be `null`.
+Object-presence rule:
+- `metrics.returns` MUST always exist.
+- `metrics.risk` MUST always exist.
+- `metrics.trade_level` MUST always exist.
+
+Missing-input rule:
+- If `equity_curve` is unavailable, all `metrics.risk.*` fields MUST be `null`.
+- If `trades` is unavailable, `metrics.trade_level.trade_count` MUST be `0`, and `win_rate`, `avg_trade_pnl`, `median_trade_pnl`, `profit_factor`, and `expectancy` MUST be `null`.
 
 ## 3. Artifact Invariants
 The following invariants MUST hold for inputs before metrics computation:
@@ -53,7 +59,7 @@ The following invariants MUST hold for inputs before metrics computation:
 3. Canonical ordering
    - Equity points MUST be sorted by `(timestamp)` ascending.
    - Trades MUST be sorted by `(exit_ts, trade_id)` ascending.
-   - If multiple records share the same sort key, original artifact order MUST NOT be used; tie-break resolution MUST be deterministic by canonical string comparison of `trade_id`.
+   - If multiple records share the same sort key, tie-break resolution MUST be deterministic by canonical string comparison of `trade_id`.
 
 4. Numeric domain
    - Inputs used for numeric computation MUST be finite JSON numbers.
@@ -71,9 +77,16 @@ The following invariants MUST hold for inputs before metrics computation:
    - Compute trade-level metrics.
 
 2. Precision and output representation
-   - Internal arithmetic uses exact deterministic language/runtime numeric semantics.
-   - Final JSON output MUST serialize numbers without rounding beyond runtime numeric value.
-   - No presentation rounding is allowed in contract output.
+   - Numeric type for all computed metrics MUST be IEEE-754 double precision.
+   - All metric values in JSON MUST be serialized as JSON numbers and MUST NOT be serialized as JSON strings.
+   - All division results MUST use round-half-to-even to 12 fractional digits before serialization.
+   - Canonical JSON number formatting MUST follow all rules below:
+     1. Exponent notation is forbidden.
+     2. Decimal representation only.
+     3. Trailing decimal point is forbidden.
+     4. Trailing zeros after decimal point are forbidden.
+     5. At least one digit before decimal point is required.
+     6. `-0` is forbidden and MUST serialize as `0`.
 
 3. Null handling
    - Output MUST NOT contain NaN or Infinity.
@@ -82,7 +95,7 @@ The following invariants MUST hold for inputs before metrics computation:
 
 4. Time and frequency assumptions
    - This contract makes no implied sampling-frequency assumptions.
-   - Volatility-derived metrics (e.g., Sharpe) are out of scope unless sampling frequency is explicitly provided by input artifacts; when absent they are omitted from this schema.
+   - Volatility-derived metrics (for example Sharpe) are out of scope unless sampling frequency is explicitly provided by input artifacts; absent explicit sampling frequency, such metrics MUST be omitted.
 
 5. Deterministic median for even counts
    - For even `N`, median is `(x[N/2 - 1] + x[N/2]) / 2` after ascending sort of values.
@@ -106,11 +119,14 @@ All monetary values are in account currency.
    - Edge case: if `start_equity == 0`, `net_profit_pct = null`.
 
 5. `cagr`
-   - Formula (only when deterministic year span is derivable):
+   - Deterministic time source:
+     - `t_start` MUST be the first `equity_curve.timestamp` after canonical sort.
+     - `t_end` MUST be the last `equity_curve.timestamp` after canonical sort.
+   - Formula:
      - `years = (t_end - t_start) / 31557600` seconds
      - `cagr = (end_equity / start_equity)^(1 / years) - 1`
    - Required conditions:
-     - Deterministic `t_start` and `t_end` provided by artifacts.
+     - `equity_curve` is available.
      - `years > 0`.
      - `start_equity > 0`.
      - `end_equity >= 0`.
@@ -125,7 +141,7 @@ Define running peak `p_t = max(e_0..e_t)`.
 1. `max_drawdown_abs`
    - Per-point drawdown: `dd_abs_t = p_t - e_t`.
    - Formula: `max_drawdown_abs = max(dd_abs_t)` for all points.
-   - Edge case: if no equity points exist, `max_drawdown_abs = null`.
+   - Edge case: if no equity points exist or `equity_curve` is unavailable, `max_drawdown_abs = null`.
 
 2. `max_drawdown_pct`
    - Per-point drawdown percent:
@@ -133,7 +149,7 @@ Define running peak `p_t = max(e_0..e_t)`.
      - if `p_t == 0`: `dd_pct_t = null` for that point
    - Formula: maximum of non-null `dd_pct_t` values.
    - Edge cases:
-     - if no equity points exist, `max_drawdown_pct = null`.
+     - if no equity points exist or `equity_curve` is unavailable, `max_drawdown_pct = null`.
      - if all `dd_pct_t` are null (all peaks are zero), `max_drawdown_pct = null`.
 
 ### 5.3 Trade-level Metrics
@@ -144,26 +160,32 @@ Define:
 - wins: `W = {p_i | p_i > 0}`
 - losses: `L = {p_i | p_i < 0}`
 
+Unavailable-trades rule:
+- If `trades` is unavailable, `trade_count` MUST be `0`.
+- If `trades` is unavailable, `win_rate`, `avg_trade_pnl`, `median_trade_pnl`, `profit_factor`, and `expectancy` MUST be `null`.
+
 1. `trade_count`
    - Formula: number of trades, `n`.
+   - Edge case: if `trades` is unavailable, `trade_count = 0`.
 
 2. `win_rate`
    - Formula: `|W| / n`.
-   - Edge case: if `n == 0`, `win_rate = null`.
+   - Edge case: if `n == 0` or `trades` is unavailable, `win_rate = null`.
 
 3. `avg_trade_pnl`
    - Formula: `sum(P) / n`.
-   - Edge case: if `n == 0`, `avg_trade_pnl = null`.
+   - Edge case: if `n == 0` or `trades` is unavailable, `avg_trade_pnl = null`.
 
 4. `median_trade_pnl`
    - Formula: deterministic median of sorted `P` ascending.
-   - Edge case: if `n == 0`, `median_trade_pnl = null`.
+   - Edge case: if `n == 0` or `trades` is unavailable, `median_trade_pnl = null`.
 
 5. `profit_factor`
    - Formula: `sum(W) / abs(sum(L))`.
    - Deterministic zero-loss rule:
      - if `sum(L) == 0` and `sum(W) > 0`, `profit_factor = null`.
      - if `sum(L) == 0` and `sum(W) == 0`, `profit_factor = null`.
+   - Edge case: if `trades` is unavailable, `profit_factor = null`.
 
 6. `expectancy`
    - Definitions:
@@ -171,7 +193,7 @@ Define:
      - `avg_loss = sum(L) / |L|` if `|L| > 0`, else `0`
      - `win_rate` as above
    - Formula: `expectancy = (win_rate * avg_win) - ((1 - win_rate) * abs(avg_loss))`
-   - Edge case: if `n == 0`, `expectancy = null`.
+   - Edge case: if `n == 0` or `trades` is unavailable, `expectancy = null`.
 
 ## 6. Output Schema (JSON Schema)
 Draft version: **JSON Schema Draft 2020-12**.
@@ -179,7 +201,8 @@ Draft version: **JSON Schema Draft 2020-12**.
 Policy:
 - Top-level `additionalProperties` is `false`.
 - `schema_version` and `metrics` are required.
-- `metadata` is optional and may be included only when source artifacts provide deterministic metadata.
+- `metadata` is optional and is allowed only if deterministically provided by input artifacts.
+- `metrics.returns`, `metrics.risk`, and `metrics.trade_level` are required objects and MUST always be present.
 
 ```json
 {
@@ -204,8 +227,7 @@ Policy:
           "format": "date-time"
         }
       },
-      "required": [],
-      "description": "Optional; include only if deterministically provided by input artifacts."
+      "required": []
     },
     "metrics": {
       "type": "object",
@@ -251,7 +273,7 @@ Policy:
             "expectancy"
           ],
           "properties": {
-            "trade_count": { "type": ["integer", "null"], "minimum": 0 },
+            "trade_count": { "type": "integer", "minimum": 0 },
             "win_rate": { "type": ["number", "null"] },
             "avg_trade_pnl": { "type": ["number", "null"] },
             "median_trade_pnl": { "type": ["number", "null"] },
@@ -276,23 +298,23 @@ Example output (conforming):
   },
   "metrics": {
     "returns": {
-      "start_equity": 10000.0,
-      "end_equity": 11250.0,
-      "net_profit": 1250.0,
+      "start_equity": 10000,
+      "end_equity": 11250,
+      "net_profit": 1250,
       "net_profit_pct": 0.125,
       "cagr": null
     },
     "risk": {
-      "max_drawdown_abs": 420.0,
-      "max_drawdown_pct": 0.03733333333333333
+      "max_drawdown_abs": null,
+      "max_drawdown_pct": null
     },
     "trade_level": {
-      "trade_count": 10,
-      "win_rate": 0.6,
-      "avg_trade_pnl": 125.0,
-      "median_trade_pnl": 80.0,
-      "profit_factor": 1.8,
-      "expectancy": 125.0
+      "trade_count": 0,
+      "win_rate": null,
+      "avg_trade_pnl": null,
+      "median_trade_pnl": null,
+      "profit_factor": null,
+      "expectancy": null
     }
   }
 }
@@ -302,6 +324,7 @@ Example output (conforming):
 1. Schema validation test
    - Given a produced metrics artifact, validate against the JSON Schema in Section 6.
    - Test passes only when validation succeeds with no additional properties and all required fields present.
+   - Test passes only when `metrics.returns`, `metrics.risk`, and `metrics.trade_level` exist.
 
 2. Determinism assertion test
    - Given identical input artifacts (`summary`, `equity_curve`, `trades`), run metrics computation at least twice.
@@ -309,14 +332,23 @@ Example output (conforming):
      1. UTF-8 encoding.
      2. Object keys sorted lexicographically at every level.
      3. Arrays preserved in contract-defined canonical order.
-     4. Numbers serialized with stable runtime JSON formatting (no locale dependence, no scientific notation rewriting between runs).
-     5. No trailing whitespace, newline normalization to `\n`.
+     4. Numbers serialized as canonical decimal JSON numbers with no exponent notation.
+     5. No trailing decimal point.
+     6. No trailing zeros after decimal point.
+     7. At least one digit before decimal point.
+     8. `-0` normalized to `0`.
+     9. Division results rounded with round-half-to-even to 12 fractional digits before serialization.
+     10. No trailing whitespace; newline normalization to `\n`.
    - Test passes only when canonicalized byte streams are identical.
 
 3. Undefined/edge-case conformance test set
    - `start_equity == 0` => `net_profit_pct = null`.
+   - `equity_curve` unavailable => `risk.max_drawdown_abs = null` and `risk.max_drawdown_pct = null`.
+   - `equity_curve` unavailable => `cagr = null`.
    - Empty equity series => risk metrics are `null`.
    - Peak equity always `0` => `max_drawdown_pct = null`.
+   - `trades` unavailable => `trade_count = 0` and `win_rate`, `avg_trade_pnl`, `median_trade_pnl`, `profit_factor`, `expectancy` are `null`.
    - `trade_count == 0` => `win_rate`, `avg_trade_pnl`, `median_trade_pnl`, `profit_factor`, `expectancy` are `null` and `trade_count = 0`.
    - `sum_losses == 0` => `profit_factor = null`.
    - No output field contains NaN/Infinity.
+```
