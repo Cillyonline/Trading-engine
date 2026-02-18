@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trading-engine.local/schemas/metrics-result.schema.json",
+  "title": "Metrics Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "total_return",
+    "cagr",
+    "max_drawdown",
+    "sharpe_ratio",
+    "win_rate",
+    "profit_factor"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": [
+        "1.0.0"
+      ]
+    },
+    "total_return": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "cagr": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "max_drawdown": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "sharpe_ratio": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "win_rate": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "profit_factor": {
+      "type": [
+        "number",
+        "null"
+      ]
+    }
+  }
+}
