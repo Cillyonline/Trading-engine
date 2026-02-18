@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_EVEN
 import math
-from statistics import stdev
 from typing import Any, Mapping, Sequence
 
 
@@ -19,6 +18,12 @@ def _normalize_negative_zero(value: float) -> float:
 def _round_12(value: float) -> float:
     rounded = float(Decimal(str(value)).quantize(_QUANT, rounding=ROUND_HALF_EVEN))
     return _normalize_negative_zero(rounded)
+
+
+def _safe_divide(numerator: float, denominator: float) -> float | None:
+    if denominator == 0.0:
+        return None
+    return _round_12(numerator / denominator)
 
 
 def _to_numeric(value: Any) -> float | None:
@@ -118,9 +123,9 @@ def _extract_trade_pnls(trades: Sequence[Mapping[str, Any]] | None) -> list[floa
 
 
 def _compute_total_return(start_equity: float | None, end_equity: float | None) -> float | None:
-    if start_equity is None or end_equity is None or start_equity == 0.0:
+    if start_equity is None or end_equity is None:
         return None
-    return _round_12((end_equity - start_equity) / start_equity)
+    return _safe_divide(end_equity - start_equity, start_equity)
 
 
 def _compute_cagr(equity_points: list[tuple[float, float]]) -> float | None:
@@ -133,8 +138,8 @@ def _compute_cagr(equity_points: list[tuple[float, float]]) -> float | None:
     if start_equity <= 0.0 or end_equity < 0.0:
         return None
 
-    years = (end_ts - start_ts) / (365.25 * 24 * 60 * 60)
-    if years <= 0.0:
+    years = _safe_divide(end_ts - start_ts, 365.25 * 24 * 60 * 60)
+    if years is None or years <= 0.0:
         return None
 
     return _round_12((end_equity / start_equity) ** (1.0 / years) - 1.0)
@@ -153,8 +158,8 @@ def _compute_max_drawdown(equity_points: list[tuple[float, float]]) -> float | N
             peak = equity
         if peak > 0.0:
             found_positive_peak = True
-            drawdown = (peak - equity) / peak
-            if drawdown > max_drawdown:
+            drawdown = _safe_divide(peak - equity, peak)
+            if drawdown is not None and drawdown > max_drawdown:
                 max_drawdown = drawdown
 
     if not found_positive_peak:
@@ -171,19 +176,55 @@ def _compute_sharpe_ratio(equity_points: list[tuple[float, float]]) -> float | N
     for idx in range(1, len(equity_points)):
         previous = equity_points[idx - 1][1]
         current = equity_points[idx][1]
-        if previous == 0.0:
+        rtn = _safe_divide(current - previous, previous)
+        if rtn is None:
             continue
-        returns.append((current - previous) / previous)
+        returns.append(rtn)
 
-    if len(returns) < 2:
+    count = len(returns)
+    if count < 2:
         return None
 
-    volatility = stdev(returns)
-    if volatility == 0.0:
+    mean_return = _safe_divide(sum(returns), float(count))
+    if mean_return is None:
         return None
 
-    avg_return = sum(returns) / len(returns)
-    return _round_12(avg_return / volatility)
+    variance_sum = 0.0
+    for value in returns:
+        diff = value - mean_return
+        variance_sum = _round_12(variance_sum + (diff * diff))
+
+    variance = _safe_divide(variance_sum, float(count - 1))
+    if variance is None or variance <= 0.0:
+        return None
+
+    volatility = _round_12(math.sqrt(variance))
+    sharpe = _safe_divide(mean_return, volatility)
+    if sharpe is None:
+        return None
+    return _round_12(sharpe)
+
+
+def _compute_win_rate(trade_pnls: list[float]) -> float | None:
+    if not trade_pnls:
+        return None
+    wins = float(sum(1 for pnl in trade_pnls if pnl > 0.0))
+    return _safe_divide(wins, float(len(trade_pnls)))
+
+
+def _compute_profit_factor(trade_pnls: list[float]) -> float | None:
+    if not trade_pnls:
+        return None
+
+    gross_profit = 0.0
+    gross_loss = 0.0
+    for pnl in trade_pnls:
+        if pnl > 0.0:
+            gross_profit = _round_12(gross_profit + pnl)
+        elif pnl < 0.0:
+            gross_loss = _round_12(gross_loss + abs(pnl))
+
+    return _safe_divide(gross_profit, gross_loss)
 
 
 def compute_backtest_metrics(
@@ -215,15 +256,16 @@ def compute_backtest_metrics(
         sharpe_ratio = _compute_sharpe_ratio(sorted_equity_curve)
 
     trade_pnls = _extract_trade_pnls(trades)
+    win_rate = _compute_win_rate(trade_pnls)
+    profit_factor = _compute_profit_factor(trade_pnls)
 
     return {
-        "start_equity": _round_12(start_equity) if start_equity is not None else None,
-        "end_equity": _round_12(end_equity) if end_equity is not None else None,
         "total_return": total_return,
         "cagr": cagr,
         "max_drawdown": max_drawdown,
         "sharpe_ratio": sharpe_ratio,
-        "trade_pnls": trade_pnls,
+        "win_rate": win_rate,
+        "profit_factor": profit_factor,
     }
 
 
