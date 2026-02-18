@@ -21,6 +21,10 @@ def _build_parser() -> argparse.ArgumentParser:
     backtest_parser.add_argument("--run-id", default="deterministic")
     backtest_parser.add_argument("--strategy-module", action="append", default=None)
 
+    evaluate_parser = subparsers.add_parser("evaluate")
+    evaluate_parser.add_argument("--artifact", required=True)
+    evaluate_parser.add_argument("--out", required=True)
+
     return parser
 
 
@@ -39,6 +43,14 @@ def main(argv: list[str] | None = None) -> int:
             out_dir=Path(args.out),
             run_id=args.run_id,
             strategy_modules=args.strategy_module,
+        )
+
+    if args.command == "evaluate":
+        from .cli.evaluate_cli import run_evaluate
+
+        return run_evaluate(
+            artifact_path=Path(args.artifact),
+            out_dir=Path(args.out),
         )
 
     parser.print_usage()
