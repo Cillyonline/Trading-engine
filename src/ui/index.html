@@ -21,7 +21,7 @@
       }
 
       main {
-        width: min(640px, calc(100% - 2rem));
+        width: min(720px, calc(100% - 2rem));
         border: 1px solid #334155;
         border-radius: 12px;
         padding: 1.5rem;
@@ -30,11 +30,51 @@
 
       h1 {
         margin-top: 0;
+        margin-bottom: 0.25rem;
       }
 
       p {
-        margin-bottom: 0;
         color: #cbd5e1;
+      }
+
+      .panel {
+        margin-top: 1.25rem;
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 1rem;
+        background: #0b1220;
+      }
+
+      .panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        color: #bfdbfe;
+      }
+
+      dl {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        row-gap: 0.5rem;
+      }
+
+      dt {
+        color: #93c5fd;
+      }
+
+      dd {
+        margin: 0;
+        color: #e2e8f0;
+        word-break: break-word;
+      }
+
+      .status-message {
+        margin-top: 1rem;
+        min-height: 1.5rem;
+      }
+
+      .status-message.offline {
+        color: #fca5a5;
       }
     </style>
   </head>
@@ -42,6 +82,128 @@
     <main>
       <h1>Owner Dashboard</h1>
       <p>Trading Engine owner dashboard UI is available at <code>/ui</code>.</p>
+
+      <section class="panel" aria-live="polite">
+        <h2>Runtime Status</h2>
+        <dl>
+          <dt>Status</dt>
+          <dd id="status">Loading...</dd>
+
+          <dt>Mode</dt>
+          <dd id="mode">Loading...</dd>
+
+          <dt>Runtime ID</dt>
+          <dd id="runtime_id">Loading...</dd>
+
+          <dt>Started At</dt>
+          <dd id="started_at">Loading...</dd>
+
+          <dt>Updated At</dt>
+          <dd id="updated_at">Loading...</dd>
+        </dl>
+        <p id="status_message" class="status-message"></p>
+      </section>
     </main>
+
+    <script>
+      (function () {
+        const defaults = {
+          status: "Unavailable",
+          mode: "Unavailable",
+          runtime_id: "Unavailable",
+          started_at: "Unavailable",
+          updated_at: "Unavailable",
+        };
+
+        const fields = {
+          status: document.getElementById("status"),
+          mode: document.getElementById("mode"),
+          runtime_id: document.getElementById("runtime_id"),
+          started_at: document.getElementById("started_at"),
+          updated_at: document.getElementById("updated_at"),
+        };
+
+        const statusMessage = document.getElementById("status_message");
+
+        function setValues(values) {
+          Object.keys(fields).forEach(function (key) {
+            const target = fields[key];
+            const rawValue = values[key];
+            target.textContent =
+              rawValue === undefined || rawValue === null || rawValue === ""
+                ? defaults[key]
+                : String(rawValue);
+          });
+        }
+
+        function setMessage(message, isOffline) {
+          statusMessage.textContent = message;
+          statusMessage.classList.toggle("offline", Boolean(isOffline));
+        }
+
+        function parseJsonSafe(response) {
+          if (!response.ok) {
+            return null;
+          }
+
+          return response
+            .json()
+            .then(function (json) {
+              return json;
+            })
+            .catch(function () {
+              return null;
+            });
+        }
+
+        Promise.all([
+          fetch("/health")
+            .then(parseJsonSafe)
+            .catch(function () {
+              return null;
+            }),
+          fetch("/runtime/introspection")
+            .then(parseJsonSafe)
+            .catch(function () {
+              return null;
+            }),
+        ])
+          .then(function (results) {
+            const healthData = results[0] || {};
+            const runtimeData = results[1] || {};
+
+            setValues({
+              status: healthData.status,
+              mode: runtimeData.mode || healthData.mode,
+              runtime_id: runtimeData.runtime_id,
+              started_at:
+                runtimeData.timestamps && runtimeData.timestamps.started_at,
+              updated_at:
+                runtimeData.timestamps && runtimeData.timestamps.updated_at,
+            });
+
+            if (!results[0] && !results[1]) {
+              setMessage(
+                "Runtime endpoints are currently unavailable. Displaying fallback values.",
+                true
+              );
+            } else if (!results[0] || !results[1]) {
+              setMessage(
+                "Some runtime details could not be loaded. Showing available data.",
+                true
+              );
+            } else {
+              setMessage("Runtime details loaded.", false);
+            }
+          })
+          .catch(function () {
+            setValues(defaults);
+            setMessage(
+              "Runtime endpoints are currently unavailable. Displaying fallback values.",
+              true
+            );
+          });
+      })();
+    </script>
   </body>
 </html>
