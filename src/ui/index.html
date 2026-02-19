@@ -174,10 +174,12 @@
 
             setValues({
               status: healthData.status,
-              mode: runtimeData.mode,
+              mode: runtimeData.mode || healthData.mode,
               runtime_id: runtimeData.runtime_id,
-              started_at: runtimeData.started_at,
-              updated_at: runtimeData.updated_at,
+              started_at:
+                runtimeData.timestamps && runtimeData.timestamps.started_at,
+              updated_at:
+                runtimeData.timestamps && runtimeData.timestamps.updated_at,
             });
 
             if (!results[0] && !results[1]) {
