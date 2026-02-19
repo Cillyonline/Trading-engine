@@ -191,3 +191,41 @@ class SqliteAnalysisRunRepository:
             request_payload=analysis_run.request_payload,
             result_payload=result_payload,
         )
+
+    def list_ingestion_runs(self, *, limit: int) -> list[Dict[str, Any]]:
+        conn = self._get_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                ingestion_run_id,
+                created_at,
+                symbols_json
+            FROM ingestion_runs
+            ORDER BY created_at DESC, ingestion_run_id ASC
+            LIMIT ?;
+            """,
+            (limit,),
+        )
+        rows = cur.fetchall()
+        conn.close()
+
+        result: list[Dict[str, Any]] = []
+        for row in rows:
+            symbols_count = 0
+            try:
+                symbols = json.loads(row["symbols_json"])
+                if isinstance(symbols, list):
+                    symbols_count = len(symbols)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                symbols_count = 0
+
+            result.append(
+                {
+                    "ingestion_run_id": row["ingestion_run_id"],
+                    "created_at": row["created_at"],
+                    "symbols_count": symbols_count,
+                }
+            )
+
+        return result

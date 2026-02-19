@@ -304,6 +304,14 @@ class ScreenerResultsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class IngestionRunItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ingestion_run_id: str
+    created_at: str
+    symbols_count: int
+
+
 class RuntimeIntrospectionTimestampsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -624,6 +632,16 @@ def _get_signals_query(
     )
 
 
+def _get_ingestion_runs_limit(
+    limit: int = Query(
+        default=20,
+        ge=1,
+        description="Anzahl der Einträge (1-100; Werte >100 werden auf 100 begrenzt).",
+    ),
+) -> int:
+    return min(limit, 100)
+
+
 def _get_screener_results_query(
     strategy: str = Query(..., description="Strategie-Name für den Screener-Filter."),
     timeframe: str = Query(..., description="Timeframe-Filter (z. B. 'D1')."),
@@ -638,6 +656,12 @@ def _get_screener_results_query(
         timeframe=timeframe,
         min_score=min_score,
     )
+
+
+@app.get("/ingestion/runs", response_model=List[IngestionRunItemResponse])
+def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List[IngestionRunItemResponse]:
+    rows = analysis_run_repo.list_ingestion_runs(limit=limit)
+    return [IngestionRunItemResponse(**row) for row in rows]
 
 
 @app.get(
