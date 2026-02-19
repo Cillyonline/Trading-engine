@@ -131,3 +131,17 @@ def test_health_endpoint_reports_unavailable_boundary(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "unavailable"
     assert response.json()["reason"] == "runtime_running_timeout"
+
+
+def test_ui_endpoint_serves_html(monkeypatch) -> None:
+    def _start() -> str:
+        return "running"
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", _start)
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/ui")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "Owner Dashboard" in response.text

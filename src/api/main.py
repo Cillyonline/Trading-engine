@@ -16,10 +16,12 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .config import SIGNALS_READ_MAX_LIMIT
@@ -344,6 +346,9 @@ app = FastAPI(
     version="0.1.0",
     description="MVP-API für die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
 )
+
+UI_DIRECTORY = Path(__file__).resolve().parent.parent / "ui"
+app.mount("/ui", StaticFiles(directory=UI_DIRECTORY, html=True), name="ui")
 
 logger.info("Cilly Trading Engine API starting up")
 
