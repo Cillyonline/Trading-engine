@@ -21,7 +21,7 @@
       }
 
       main {
-        width: min(720px, calc(100% - 2rem));
+        width: min(980px, calc(100% - 2rem));
         border: 1px solid #334155;
         border-radius: 12px;
         padding: 1.5rem;
@@ -76,6 +76,107 @@
       .status-message.offline {
         color: #fca5a5;
       }
+
+      .screener-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .field label {
+        color: #93c5fd;
+      }
+
+      .field input,
+      .field select {
+        border: 1px solid #334155;
+        border-radius: 6px;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.5rem;
+      }
+
+      .form-actions {
+        grid-column: span 2;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .form-actions button {
+        border: 1px solid #2563eb;
+        border-radius: 6px;
+        background: #1d4ed8;
+        color: #ffffff;
+        padding: 0.5rem 0.85rem;
+        cursor: pointer;
+      }
+
+      .form-actions button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .loading-indicator {
+        color: #bfdbfe;
+      }
+
+      .error-box {
+        margin-top: 0.75rem;
+        border: 1px solid #dc2626;
+        border-radius: 6px;
+        padding: 0.75rem;
+        background: rgba(127, 29, 29, 0.35);
+        color: #fecaca;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .table-wrap {
+        margin-top: 0.9rem;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #334155;
+        padding: 0.55rem;
+        text-align: left;
+      }
+
+      th button {
+        border: 0;
+        background: transparent;
+        color: #93c5fd;
+        font-weight: 600;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .muted {
+        color: #94a3b8;
+      }
+
+      @media (max-width: 700px) {
+        .screener-form {
+          grid-template-columns: 1fr;
+        }
+
+        .form-actions {
+          grid-column: span 1;
+        }
+      }
     </style>
   </head>
   <body>
@@ -102,6 +203,70 @@
           <dd id="updated_at">Loading...</dd>
         </dl>
         <p id="status_message" class="status-message"></p>
+      </section>
+
+      <section class="panel" aria-live="polite">
+        <h2>Screener</h2>
+        <form id="screener_form" class="screener-form">
+          <div class="field">
+            <label for="ingestion_run_id">Ingestion Run ID</label>
+            <input id="ingestion_run_id" name="ingestion_run_id" type="text" required />
+          </div>
+
+          <div class="field">
+            <label for="market_type">Market Type</label>
+            <select id="market_type" name="market_type">
+              <option value="stock" selected>stock</option>
+              <option value="crypto">crypto</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="lookback_days">Lookback Days</label>
+            <input
+              id="lookback_days"
+              name="lookback_days"
+              type="number"
+              min="1"
+              value="200"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="min_score">Min Score</label>
+            <input id="min_score" name="min_score" type="number" value="30" required />
+          </div>
+
+          <div class="form-actions">
+            <button id="run_screener_btn" type="submit">Run</button>
+            <span id="screener_loading" class="loading-indicator" hidden>Running screener...</span>
+          </div>
+        </form>
+
+        <div id="screener_error" class="error-box" hidden></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><button type="button" data-sort-key="symbol">Symbol</button></th>
+                <th><button type="button" data-sort-key="score">Score</button></th>
+                <th>
+                  <button type="button" data-sort-key="signal_strength">Signal Strength</button>
+                </th>
+                <th><button type="button" data-sort-key="strategy">Strategy</button></th>
+                <th><button type="button" data-sort-key="timeframe">Timeframe</button></th>
+                <th><button type="button" data-sort-key="stage">Stage</button></th>
+              </tr>
+            </thead>
+            <tbody id="screener_results_body">
+              <tr>
+                <td colspan="6" class="muted">No screener results yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </main>
 
@@ -203,6 +368,233 @@
               true
             );
           });
+
+        const screenerForm = document.getElementById("screener_form");
+        const runButton = document.getElementById("run_screener_btn");
+        const loadingIndicator = document.getElementById("screener_loading");
+        const errorBox = document.getElementById("screener_error");
+        const resultsBody = document.getElementById("screener_results_body");
+        const sortHeaderButtons = Array.prototype.slice.call(
+          document.querySelectorAll("th button[data-sort-key]")
+        );
+
+        let resultRows = [];
+        let sortState = {
+          key: "score",
+          direction: "desc",
+        };
+
+        function setLoading(isLoading) {
+          runButton.disabled = isLoading;
+          loadingIndicator.hidden = !isLoading;
+        }
+
+        function showError(message) {
+          errorBox.textContent = message;
+          errorBox.hidden = false;
+        }
+
+        function clearError() {
+          errorBox.textContent = "";
+          errorBox.hidden = true;
+        }
+
+        function normalizeNumber(value) {
+          const num = Number(value);
+          return Number.isFinite(num) ? num : null;
+        }
+
+        function getSortValue(row, key) {
+          if (key === "score" || key === "signal_strength") {
+            const numericValue = normalizeNumber(row[key]);
+            if (numericValue !== null) {
+              return numericValue;
+            }
+          }
+          if (row[key] === undefined || row[key] === null) {
+            return "";
+          }
+          return String(row[key]).toLowerCase();
+        }
+
+        function stableSortRows(rows, key, direction) {
+          const directionFactor = direction === "asc" ? 1 : -1;
+
+          return rows
+            .map(function (row, index) {
+              return { row: row, index: index };
+            })
+            .sort(function (left, right) {
+              const leftValue = getSortValue(left.row, key);
+              const rightValue = getSortValue(right.row, key);
+
+              if (leftValue < rightValue) {
+                return -1 * directionFactor;
+              }
+              if (leftValue > rightValue) {
+                return 1 * directionFactor;
+              }
+              return left.index - right.index;
+            })
+            .map(function (item) {
+              return item.row;
+            });
+        }
+
+        function flattenRows(payload) {
+          const symbols = payload && Array.isArray(payload.symbols) ? payload.symbols : [];
+          const rows = [];
+
+          symbols.forEach(function (symbolItem) {
+            const setups = Array.isArray(symbolItem.setups) ? symbolItem.setups : [];
+            setups.forEach(function (setupItem) {
+              rows.push({
+                symbol: symbolItem.symbol || "",
+                score: symbolItem.score,
+                signal_strength: symbolItem.signal_strength,
+                strategy: setupItem.strategy || "",
+                timeframe: setupItem.timeframe || "",
+                stage: setupItem.stage || "",
+              });
+            });
+          });
+
+          return rows;
+        }
+
+        function renderRows() {
+          resultsBody.innerHTML = "";
+
+          if (resultRows.length === 0) {
+            const emptyRow = document.createElement("tr");
+            const emptyCell = document.createElement("td");
+            emptyCell.colSpan = 6;
+            emptyCell.className = "muted";
+            emptyCell.textContent = "No screener results available.";
+            emptyRow.appendChild(emptyCell);
+            resultsBody.appendChild(emptyRow);
+            return;
+          }
+
+          resultRows.forEach(function (row) {
+            const tr = document.createElement("tr");
+            [
+              row.symbol,
+              row.score,
+              row.signal_strength,
+              row.strategy,
+              row.timeframe,
+              row.stage,
+            ].forEach(function (value) {
+              const td = document.createElement("td");
+              td.textContent =
+                value === undefined || value === null || value === "" ? "-" : String(value);
+              tr.appendChild(td);
+            });
+            resultsBody.appendChild(tr);
+          });
+        }
+
+        function applySorting() {
+          resultRows = stableSortRows(resultRows, sortState.key, sortState.direction);
+          renderRows();
+        }
+
+        function updateSortHeaderLabels() {
+          sortHeaderButtons.forEach(function (button) {
+            const key = button.getAttribute("data-sort-key");
+            const baseLabel = button.textContent.replace(/\s[↑↓]$/, "");
+            if (key === sortState.key) {
+              button.textContent = baseLabel + (sortState.direction === "asc" ? " ↑" : " ↓");
+            } else {
+              button.textContent = baseLabel;
+            }
+          });
+        }
+
+        sortHeaderButtons.forEach(function (button) {
+          button.addEventListener("click", function () {
+            const key = button.getAttribute("data-sort-key");
+            if (sortState.key === key) {
+              sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+            } else {
+              sortState.key = key;
+              sortState.direction = key === "score" ? "desc" : "asc";
+            }
+            applySorting();
+            updateSortHeaderLabels();
+          });
+        });
+
+        function parseErrorPayload(textPayload) {
+          if (!textPayload) {
+            return "Request failed with empty error response.";
+          }
+          try {
+            const parsed = JSON.parse(textPayload);
+            return JSON.stringify(parsed, null, 2);
+          } catch (error) {
+            return textPayload;
+          }
+        }
+
+        screenerForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          clearError();
+
+          const ingestionRunId = document.getElementById("ingestion_run_id").value.trim();
+          const marketType = document.getElementById("market_type").value;
+          const lookbackDays = Number(document.getElementById("lookback_days").value);
+          const minScore = Number(document.getElementById("min_score").value);
+
+          if (!ingestionRunId) {
+            showError("ingestion_run_id is required.");
+            return;
+          }
+
+          const requestBody = {
+            ingestion_run_id: ingestionRunId,
+            market_type: marketType,
+            lookback_days: lookbackDays,
+            min_score: minScore,
+          };
+
+          setLoading(true);
+
+          fetch("/screener/basic", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          })
+            .then(function (response) {
+              if (!response.ok) {
+                return response.text().then(function (errorText) {
+                  throw new Error(
+                    "Screener request failed (" +
+                      response.status +
+                      "): " +
+                      parseErrorPayload(errorText)
+                  );
+                });
+              }
+              return response.json();
+            })
+            .then(function (payload) {
+              resultRows = flattenRows(payload);
+              applySorting();
+              updateSortHeaderLabels();
+            })
+            .catch(function (error) {
+              showError(error && error.message ? error.message : "Screener request failed.");
+            })
+            .finally(function () {
+              setLoading(false);
+            });
+        });
+
+        updateSortHeaderLabels();
       })();
     </script>
   </body>
