@@ -123,6 +123,27 @@
         cursor: not-allowed;
       }
 
+      .pagination-controls {
+        margin-top: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      .pagination-controls button {
+        border: 1px solid #334155;
+        border-radius: 6px;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.35rem 0.7rem;
+        cursor: pointer;
+      }
+
+      .pagination-controls button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
       .loading-indicator {
         color: #bfdbfe;
       }
@@ -247,7 +268,7 @@
         <div id="screener_error" class="error-box" hidden></div>
 
         <div class="table-wrap">
-          <table>
+          <table id="screener_table">
             <thead>
               <tr>
                 <th><button type="button" data-sort-key="symbol">Symbol</button></th>
@@ -266,6 +287,54 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-live="polite">
+        <h2>Signals</h2>
+        <form id="signals_form" class="screener-form">
+          <div class="field">
+            <label for="signals_ingestion_run_id">Ingestion Run ID</label>
+            <input
+              id="signals_ingestion_run_id"
+              name="signals_ingestion_run_id"
+              type="text"
+              required
+            />
+          </div>
+
+          <div class="field">
+            <label for="signals_limit">Limit</label>
+            <input id="signals_limit" name="signals_limit" type="number" min="1" value="50" />
+          </div>
+
+          <div class="form-actions">
+            <button id="load_signals_btn" type="submit">Load Signals</button>
+            <span id="signals_loading" class="loading-indicator" hidden>Loading signals...</span>
+          </div>
+        </form>
+
+        <div id="signals_error" class="error-box" hidden></div>
+
+        <div class="table-wrap">
+          <table id="signals_table">
+            <thead>
+              <tr id="signals_head_row">
+                <th>Signals</th>
+              </tr>
+            </thead>
+            <tbody id="signals_results_body">
+              <tr>
+                <td class="muted">No signals loaded.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination-controls">
+          <button id="signals_prev_btn" type="button" disabled>Prev</button>
+          <button id="signals_next_btn" type="button" disabled>Next</button>
+          <span id="signals_pagination" class="muted">Showing 0-0 of 0</span>
         </div>
       </section>
     </main>
@@ -375,7 +444,7 @@
         const errorBox = document.getElementById("screener_error");
         const resultsBody = document.getElementById("screener_results_body");
         const sortHeaderButtons = Array.prototype.slice.call(
-          document.querySelectorAll("th button[data-sort-key]")
+          document.querySelectorAll("#screener_table th button[data-sort-key]")
         );
 
         let resultRows = [];
@@ -595,6 +664,283 @@
         });
 
         updateSortHeaderLabels();
+
+        const signalsForm = document.getElementById("signals_form");
+        const signalsLoadButton = document.getElementById("load_signals_btn");
+        const signalsLoadingIndicator = document.getElementById("signals_loading");
+        const signalsErrorBox = document.getElementById("signals_error");
+        const signalsHeadRow = document.getElementById("signals_head_row");
+        const signalsBody = document.getElementById("signals_results_body");
+        const signalsPrevButton = document.getElementById("signals_prev_btn");
+        const signalsNextButton = document.getElementById("signals_next_btn");
+        const signalsPagination = document.getElementById("signals_pagination");
+
+        let signalsState = {
+          ingestionRunId: "",
+          limit: 50,
+          offset: 0,
+          total: 0,
+          items: [],
+          columns: [],
+          sortKey: null,
+          sortDirection: "asc",
+        };
+
+        function setSignalsLoading(isLoading) {
+          signalsLoadButton.disabled = isLoading;
+          signalsPrevButton.disabled = isLoading || signalsState.offset === 0;
+          signalsNextButton.disabled =
+            isLoading || signalsState.offset + signalsState.limit >= signalsState.total;
+          signalsLoadingIndicator.hidden = !isLoading;
+        }
+
+        function showSignalsError(message) {
+          signalsErrorBox.textContent = message;
+          signalsErrorBox.hidden = false;
+        }
+
+        function clearSignalsError() {
+          signalsErrorBox.textContent = "";
+          signalsErrorBox.hidden = true;
+        }
+
+        function compareValues(leftValue, rightValue) {
+          if (leftValue < rightValue) {
+            return -1;
+          }
+          if (leftValue > rightValue) {
+            return 1;
+          }
+          return 0;
+        }
+
+        function normalizeSortValue(value) {
+          if (value === null || value === undefined) {
+            return "";
+          }
+          const numericValue = Number(value);
+          if (Number.isFinite(numericValue) && String(value).trim() !== "") {
+            return numericValue;
+          }
+          return String(value).toLowerCase();
+        }
+
+        function sortSignalsItems(items) {
+          if (!signalsState.sortKey) {
+            return items.slice();
+          }
+
+          const directionFactor = signalsState.sortDirection === "asc" ? 1 : -1;
+
+          return items
+            .map(function (item, index) {
+              return { item: item, index: index };
+            })
+            .sort(function (left, right) {
+              const leftValue = normalizeSortValue(left.item[signalsState.sortKey]);
+              const rightValue = normalizeSortValue(right.item[signalsState.sortKey]);
+              const comparison = compareValues(leftValue, rightValue);
+              if (comparison !== 0) {
+                return comparison * directionFactor;
+              }
+              return left.index - right.index;
+            })
+            .map(function (entry) {
+              return entry.item;
+            });
+        }
+
+        function updateSignalsPagination() {
+          const pageStart = signalsState.total === 0 ? 0 : signalsState.offset + 1;
+          const pageEnd = Math.min(signalsState.offset + signalsState.limit, signalsState.total);
+          signalsPagination.textContent =
+            "Showing " + pageStart + "-" + pageEnd + " of " + signalsState.total;
+          signalsPrevButton.disabled = signalsState.offset === 0;
+          signalsNextButton.disabled = signalsState.offset + signalsState.limit >= signalsState.total;
+        }
+
+        function buildSignalsColumns(items) {
+          if (!items.length) {
+            return [];
+          }
+          const seenKeys = {};
+          const columns = [];
+          items.forEach(function (item) {
+            Object.keys(item).forEach(function (key) {
+              if (!seenKeys[key]) {
+                seenKeys[key] = true;
+                columns.push(key);
+              }
+            });
+          });
+          return columns;
+        }
+
+        function toHeaderLabel(key) {
+          return key.replace(/_/g, " ").replace(/\b\w/g, function (char) {
+            return char.toUpperCase();
+          });
+        }
+
+        function renderSignalsHeaders() {
+          signalsHeadRow.innerHTML = "";
+          const columns = signalsState.columns.length ? signalsState.columns : ["signals"];
+          columns.forEach(function (column) {
+            const th = document.createElement("th");
+            if (signalsState.columns.length) {
+              const button = document.createElement("button");
+              button.type = "button";
+              const arrow =
+                signalsState.sortKey === column
+                  ? signalsState.sortDirection === "asc"
+                    ? " ↑"
+                    : " ↓"
+                  : "";
+              button.textContent = toHeaderLabel(column) + arrow;
+              button.addEventListener("click", function () {
+                if (signalsState.sortKey === column) {
+                  signalsState.sortDirection =
+                    signalsState.sortDirection === "asc" ? "desc" : "asc";
+                } else {
+                  signalsState.sortKey = column;
+                  signalsState.sortDirection = "asc";
+                }
+                renderSignalsHeaders();
+                renderSignalsRows();
+              });
+              th.appendChild(button);
+            } else {
+              th.textContent = "Signals";
+            }
+            signalsHeadRow.appendChild(th);
+          });
+        }
+
+        function renderSignalsRows() {
+          signalsBody.innerHTML = "";
+          if (!signalsState.items.length) {
+            const emptyRow = document.createElement("tr");
+            const emptyCell = document.createElement("td");
+            emptyCell.className = "muted";
+            emptyCell.colSpan = Math.max(signalsState.columns.length, 1);
+            emptyCell.textContent = "No signals available for this ingestion run.";
+            emptyRow.appendChild(emptyCell);
+            signalsBody.appendChild(emptyRow);
+            return;
+          }
+
+          const sortedItems = sortSignalsItems(signalsState.items);
+          sortedItems.forEach(function (item) {
+            const tr = document.createElement("tr");
+            signalsState.columns.forEach(function (column) {
+              const td = document.createElement("td");
+              const value = item[column];
+              if (value === null || value === undefined || value === "") {
+                td.textContent = "-";
+              } else if (typeof value === "object") {
+                td.textContent = JSON.stringify(value);
+              } else {
+                td.textContent = String(value);
+              }
+              tr.appendChild(td);
+            });
+            signalsBody.appendChild(tr);
+          });
+        }
+
+        function fetchSignals() {
+          clearSignalsError();
+          setSignalsLoading(true);
+
+          const query =
+            "?ingestion_run_id=" +
+            encodeURIComponent(signalsState.ingestionRunId) +
+            "&limit=" +
+            encodeURIComponent(String(signalsState.limit)) +
+            "&offset=" +
+            encodeURIComponent(String(signalsState.offset));
+
+          fetch("/signals" + query)
+            .then(function (response) {
+              if (!response.ok) {
+                return response.text().then(function (errorText) {
+                  throw new Error(
+                    "Signals request failed (" +
+                      response.status +
+                      "): " +
+                      parseErrorPayload(errorText)
+                  );
+                });
+              }
+              return response.json();
+            })
+            .then(function (payload) {
+              signalsState.items = Array.isArray(payload.items) ? payload.items : [];
+              signalsState.total = Number(payload.total) || 0;
+              signalsState.limit = Number(payload.limit) || signalsState.limit;
+              signalsState.offset = Number(payload.offset) || 0;
+              signalsState.columns = buildSignalsColumns(signalsState.items);
+              if (signalsState.columns.length && !signalsState.sortKey) {
+                signalsState.sortKey = signalsState.columns[0];
+                signalsState.sortDirection = "asc";
+              }
+              renderSignalsHeaders();
+              renderSignalsRows();
+              updateSignalsPagination();
+            })
+            .catch(function (error) {
+              showSignalsError(error && error.message ? error.message : "Signals request failed.");
+              signalsState.items = [];
+              signalsState.columns = [];
+              signalsState.total = 0;
+              renderSignalsHeaders();
+              renderSignalsRows();
+              updateSignalsPagination();
+            })
+            .finally(function () {
+              setSignalsLoading(false);
+            });
+        }
+
+        signalsForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+
+          const ingestionRunId = document.getElementById("signals_ingestion_run_id").value.trim();
+          const limitValue = Number(document.getElementById("signals_limit").value);
+
+          if (!ingestionRunId) {
+            showSignalsError("ingestion_run_id is required.");
+            return;
+          }
+
+          signalsState.ingestionRunId = ingestionRunId;
+          signalsState.limit = Number.isFinite(limitValue) && limitValue > 0 ? limitValue : 50;
+          signalsState.offset = 0;
+          fetchSignals();
+        });
+
+        signalsPrevButton.addEventListener("click", function () {
+          if (signalsState.offset === 0 || !signalsState.ingestionRunId) {
+            return;
+          }
+          signalsState.offset = Math.max(0, signalsState.offset - signalsState.limit);
+          fetchSignals();
+        });
+
+        signalsNextButton.addEventListener("click", function () {
+          if (!signalsState.ingestionRunId) {
+            return;
+          }
+          if (signalsState.offset + signalsState.limit >= signalsState.total) {
+            return;
+          }
+          signalsState.offset = signalsState.offset + signalsState.limit;
+          fetchSignals();
+        });
+
+        renderSignalsHeaders();
+        renderSignalsRows();
+        updateSignalsPagination();
       })();
     </script>
   </body>
