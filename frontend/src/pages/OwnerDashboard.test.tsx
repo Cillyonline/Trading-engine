@@ -3,6 +3,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OwnerDashboard from './OwnerDashboard';
 
+type MockFetchResponse = Pick<Response, 'ok' | 'json'>;
+
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -28,7 +30,7 @@ afterEach(() => {
 
 describe('OwnerDashboard', () => {
   it('sends manual analysis request and renders results', async () => {
-    const deferredResponse = createDeferred<Response>();
+    const deferredResponse = createDeferred<MockFetchResponse>();
     const fetchMock = vi.fn().mockReturnValue(deferredResponse.promise);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -55,19 +57,14 @@ describe('OwnerDashboard', () => {
     expect(runButton).toBeDisabled();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
 
-    deferredResponse.resolve(
-      new Response(
-        JSON.stringify({
-          symbol: 'ETHUSDT',
-          generated_at: '2026-01-01T00:00:00Z',
-          signals: [{ strategy: 'ema_cross', signal: 'BUY', confidence: 0.87 }],
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      )
-    );
+    deferredResponse.resolve({
+      ok: true,
+      json: async () => ({
+        symbol: 'ETHUSDT',
+        generated_at: '2026-01-01T00:00:00Z',
+        signals: [{ strategy: 'ema_cross', signal: 'BUY', confidence: 0.87 }],
+      }),
+    } as unknown as MockFetchResponse);
 
     await waitFor(() => {
       expect(screen.getByText('Generated At: 2026-01-01T00:00:00Z')).toBeInTheDocument();
@@ -80,12 +77,10 @@ describe('OwnerDashboard', () => {
   });
 
   it('renders API error and re-enables button', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: 'Bad request' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    );
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Bad request' }),
+    } as unknown as MockFetchResponse);
     vi.stubGlobal('fetch', fetchMock);
 
     render(
