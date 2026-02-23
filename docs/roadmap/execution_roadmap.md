@@ -41,6 +41,10 @@ Define and track the Owner Dashboard phase based on repository-verified artifact
 ### Goal
 Define Phase 23 status using only repository-verified evidence.
 
+> Governance Note  
+> The implementation status of Phase 23 is explicitly documented in:  
+> docs/phases/phase-23-status.md
+
 ### Explicit Deliverables
 - Explicit status declaration: Research Dashboard implementation artifact not confirmed in repository.
 - Phase 23 tracking issue/PR references this canonical roadmap entry when changing status.
