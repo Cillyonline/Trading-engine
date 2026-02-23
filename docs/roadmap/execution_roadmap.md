@@ -83,19 +83,27 @@ Define and track Paper Trading Runtime status from repository-verified implement
 ## Phase 27
 
 ### Goal
-Define Phase 27 status using repository evidence that distinguishes framework-level implementation from related but non-framework artifacts.
+Explicitly distinguish risk-related artifacts from a standalone Risk Framework implementation.
 
-### Explicit Deliverables
-- Explicit status declaration: standalone phase-scoped risk framework module not verified.
-- Catalog of related risk artifacts (config schema, tests, metrics contract) recognized as adjacent evidence.
+> Governance Note  
+> The implementation status of Phase 27 is explicitly documented in:  
+> docs/phases/phase-27-status.md
+
+### Verified Existing Artifacts
+- Risk-related configuration fields exist.
+- Risk-related metrics and tests exist.
+
+### Framework Status
+No standalone Phase 27 Risk Framework module was verified.
 
 ### Explicitly Out of Scope
-- Treating existing risk-related fields/artifacts as proof of a completed standalone risk framework.
-- Declaring implementation completion without phase-scoped framework artifact evidence.
+- Treating config fields or metrics as proof of a completed framework.
+- Declaring framework completion without standalone artifact evidence.
 
 ### Acceptance Evidence Requirements
-- Any completion claim includes repository-verifiable standalone framework artifact(s).
-- PR/issue references clearly separate adjacent risk artifacts from framework-level deliverables.
+- Standalone repository-verifiable framework module(s).
+- Explicit policy logic definition.
+- Documentation and tests mapped directly to Phase 27 framework scope.
 
 ---
 
