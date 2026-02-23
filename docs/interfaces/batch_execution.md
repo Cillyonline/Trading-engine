@@ -1,5 +1,10 @@
 # Batch Execution Workflow – Cilly Trading Engine
 
+> Governance Note  
+> Snapshot scheduling status and ownership boundary  
+> are explicitly documented in:  
+> docs/runtime/snapshot_runtime.md
+
 ## 1. Purpose
 - This document defines a deterministic, bounded batch execution workflow contract for automation usage in this repository.
 - Scope is limited to invocation pattern, input/output contract boundaries, and logging expectations for batch usage.
