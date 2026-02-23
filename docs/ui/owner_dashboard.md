@@ -24,6 +24,15 @@ The following are explicitly **not included** in this scope:
 - Optimization workflows
 - Deployment workflows
 
+## Routes
+- **Runtime route:** `/ui`
+  - Served by the backend runtime (FastAPI static mount).
+  - This is the authoritative operator-facing Owner Dashboard path.
+- **Dev-only route:** `/owner` (frontend development server context)
+  - Used only when running the frontend dev server locally.
+  - Not served by the backend in production/runtime.
+  - Must not be used as evidence of backend route implementation.
+
 ## Local Development Setup
 ### Prerequisites
 - Node.js and npm installed for frontend development.
@@ -38,9 +47,9 @@ npm install
 npm run dev
 ```
 
-Then open the Owner Dashboard at:
+Then open the frontend dev route at:
 
-- `/owner`
+- `/owner` (dev-only)
 
 ### Backend requirement for analysis endpoint
 The Owner Dashboard triggers `POST /analysis/run`, so the backend must be running for successful analysis responses.
@@ -59,7 +68,7 @@ How to find the module path:
 If the frontend and backend are not configured for the same origin (or a development proxy is not configured), requests to `/analysis/run` may fail due to origin/port mismatch.
 
 ## Manual Test Checklist
-1. Start frontend (`npm run dev`) and open `/owner`.
+1. Start frontend (`npm run dev`) and open `/owner` (dev-only route).
 2. Confirm the symbol input defaults to `BTCUSDT`.
 3. With backend **down**, trigger analysis and verify:
    - The button enters loading state (`Loading...`) and is disabled during the request.
@@ -70,6 +79,10 @@ If the frontend and backend are not configured for the same origin (or a develop
    - `generated_at` is displayed.
    - Signal rows appear in the table when signals are returned.
 6. Verify empty-result handling by using a case that returns no signals, and confirm `No signals returned.` is shown.
+
+## Verification
+- Smoke test expectation remains `/ui` for the backend-served runtime Owner Dashboard route.
+- Do not treat `/owner` as equivalent to `/ui` in runtime/backend verification.
 
 ## Related Issues
 - #419 – feature implementation described by this document.
