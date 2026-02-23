@@ -133,4 +133,4 @@ python -m pytest
 - A red check blocks merge until tests pass.
 
 ### Run Paper Trading (Simulation)
-No dedicated CLI endpoint is documented for paper-trading simulation in this runbook. The repository contains a simulator module (`src/cilly_trading/engine/paper_trading.py`), but no owner-facing run command is defined here. No live trading, broker keys, or real orders are used.
+No production operator CLI/runtime entrypoint is documented for paper-trading simulation in this runbook. The repository contains an engine-level deterministic simulator module (`src/cilly_trading/engine/paper_trading.py`) that is test-verified, but no owner-facing run command is defined here. It does not provide live trading or broker integration, and no real orders are used.

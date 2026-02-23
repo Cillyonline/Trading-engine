@@ -6,7 +6,7 @@ This repository describes a trading analysis engine intended to support a websit
 
 ## High-Level Project State
 
-Current materials include detailed scope, architecture, workflow, and deterministic contracts captured in markdown files. The documentation defines what the MVP should cover and what it excludes, while the deterministic smoke-run is defined and implemented. Documentation states that paper trading/simulation is not available. Trading and simulation execution are explicitly not implemented.
+Current materials include detailed scope, architecture, workflow, and deterministic contracts captured in markdown files. The documentation defines what the MVP should cover and what it excludes, while the deterministic smoke-run is defined and implemented. An engine-level deterministic paper-trading simulator artifact is implemented and test-verified. This simulator does not provide live trading, broker integration, or a production operator runtime entrypoint.
 
 ## Repository Structure Overview
 
@@ -30,7 +30,7 @@ Work is structured around a single active Issue with an explicit execution workf
 
 ## Key Documents
 
-- `docs/RUNBOOK.md`: Working SOP that defines the end-to-end workflow, review gate, Definition of Done, and the local deterministic smoke-run execution steps. It also states that paper trading/simulation is not available.
+- `docs/RUNBOOK.md`: Working SOP that defines the end-to-end workflow, review gate, Definition of Done, and the local deterministic smoke-run execution steps. It also documents that an engine-level deterministic paper-trading simulator artifact exists without introducing live trading, broker integrations, or a production operator runtime entrypoint.
 - `docs/smoke-run.md`: Deterministic smoke-run specification with exact fixtures, output, and exit codes.
 - `docs/MVP_SPEC.md`: Product scope and exclusions for MVP v1, including explicit exclusions such as live trading, broker integrations, backtesting, and AI-based signal generation.
 - `docs/mvp_v1.md`: Detailed MVP v1 system overview and component breakdown (engine, persistence, API, and trading desk) with scope and non-goals.
@@ -47,13 +47,13 @@ A new developer can start with:
 4. `docs/local_run.md` for how the API is invoked in local development.
 5. `docs/smoke-run.md` to understand the deterministic smoke-run contract and its implementation details.
 
-They should not expect to run a paper-trading or simulation entrypoint, or a live trading workflow, because these are explicitly not implemented. There is no CLI entrypoint documented; API usage via `uvicorn` is the described path, and the smoke-run is executed via the documented local command. The documentation provides the scope and operational workflow; implementation specifics are in `src/` and `api/` and are outside the scope of this snapshot.
+They should not expect a production operator CLI/entrypoint for paper-trading simulation, and they should not expect a live trading workflow. The deterministic paper-trading simulator exists as an engine-level, test-verified artifact only, with no broker connectivity or real-capital execution path. There is no CLI entrypoint documented; API usage via `uvicorn` is the described path, and the smoke-run is executed via the documented local command. The documentation provides the scope and operational workflow; implementation specifics are in `src/` and `api/` and are outside the scope of this snapshot.
 
 ## Known Gaps / Non-Implemented Areas
 
 The following components are explicitly absent or described as not implemented in the current repository state:
 
-- Paper trading or simulation execution.
+- A production operator CLI/runtime entrypoint for paper-trading simulation (the engine-level deterministic simulator artifact exists and is test-verified).
 - Live trading, broker integrations, or order execution.
 - Backtesting frameworks.
 - AI-based signal generation or automated decision-making.

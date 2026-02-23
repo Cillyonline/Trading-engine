@@ -9,13 +9,14 @@ Phase 9 is formally closed.
 ## MVP Capabilities
 - View market price data in the application.
 - Review historical price data in the application.
-- Run paper trading simulations in the application.
+- Use the engine-level deterministic paper-trading simulator artifact (test-verified) for non-live simulation workflows.
 - View stored signals and alerts in the application.
 - Manage strategies and related settings in the application.
 
 ## Explicit Non-Goals / Exclusions
 - No live trading.
 - No broker integrations.
+- No production operator CLI/runtime entrypoint for paper-trading execution.
 - No backtesting.
 - No AI decision-making.
 - No automated execution of real orders.
