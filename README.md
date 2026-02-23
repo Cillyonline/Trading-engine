@@ -7,6 +7,7 @@ MVP v1 – Engine → SQLite → API → Trading Desk
 - Local run & test commands: `docs/local_run.md`
 - Canonical output snapshots (golden masters): `docs/snapshot-testing.md`
 - Documentation index: `docs/index.md`
+- Execution Roadmap (Canonical): `docs/roadmap/execution_roadmap.md`
 
 ## Local CI checks
 
