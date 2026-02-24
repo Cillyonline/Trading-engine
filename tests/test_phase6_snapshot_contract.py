@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from cilly_trading.engine.phase6_snapshot_contract import (
+    SnapshotChecksumError,
     SnapshotNotFoundError,
     execute_snapshot_runtime,
     run_phase6_snapshot,
@@ -98,16 +99,73 @@ def test_phase6_replay_is_deterministic(tmp_path: Path) -> None:
     assert first_hash == second_hash
 
 
-def test_execute_snapshot_runtime_is_deterministic(tmp_path: Path) -> None:
+def test_execute_snapshot_runtime_structure_smoke(tmp_path: Path) -> None:
     snapshot_dir = _create_snapshot_fixture(tmp_path)
 
-    first = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
-    second = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
+    payload = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
 
-    assert first == second
-    assert first["snapshot_id"] == SNAPSHOT_ID
-    assert first["snapshot_consistent"] is True
-    assert first["snapshot_metadata"]["snapshot_id"] == SNAPSHOT_ID
+    assert set(payload.keys()) == {
+        "snapshot_consistent",
+        "snapshot_id",
+        "snapshot_metadata",
+    }
+    assert isinstance(payload["snapshot_consistent"], bool)
+    assert isinstance(payload["snapshot_id"], str)
+    assert set(payload["snapshot_metadata"].keys()) == {
+        "snapshot_id",
+        "provider",
+        "source",
+        "created_at_utc",
+        "payload_checksum",
+        "schema_version",
+    }
+    assert isinstance(payload["snapshot_metadata"]["snapshot_id"], str)
+    assert isinstance(payload["snapshot_metadata"]["provider"], str)
+    assert isinstance(payload["snapshot_metadata"]["source"], str)
+    assert isinstance(payload["snapshot_metadata"]["created_at_utc"], str)
+    assert isinstance(payload["snapshot_metadata"]["payload_checksum"], str)
+    assert isinstance(payload["snapshot_metadata"]["schema_version"], str | int)
+
+
+def test_execute_snapshot_runtime_is_deterministic_across_runs(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+
+    runs = [execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir) for _ in range(5)]
+    hashes = {
+        hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        for payload in runs
+    }
+
+    assert all(payload == runs[0] for payload in runs[1:])
+    assert len(hashes) == 1
+
+
+def test_execute_snapshot_runtime_snapshot_id_required() -> None:
+    with pytest.raises(ValueError, match="snapshot_id is required"):
+        execute_snapshot_runtime("")
+
+
+def test_execute_snapshot_runtime_fails_on_corrupted_payload_checksum(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+    payload_path = snapshot_dir / SNAPSHOT_ID / "payload.json"
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    payload["rows"][0]["close"] = 999.99
+    payload_path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SnapshotChecksumError, match="snapshot_checksum_mismatch"):
+        execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
+
+
+def test_execute_snapshot_runtime_fails_when_metadata_missing(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+    metadata_path = snapshot_dir / SNAPSHOT_ID / "metadata.json"
+    metadata_path.unlink()
+
+    with pytest.raises(SnapshotNotFoundError, match="snapshot_metadata_missing"):
+        execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
 
 
 def test_execute_snapshot_runtime_logs_execution_event(
