@@ -10,6 +10,7 @@ from cilly_trading.engine.phase6_snapshot_contract import (
     SnapshotChecksumError,
     SnapshotNotFoundError,
     execute_snapshot_runtime,
+    get_snapshot_runtime_status,
     run_phase6_snapshot,
 )
 
@@ -182,3 +183,72 @@ def test_execute_snapshot_runtime_logs_execution_event(
         record.message.startswith("snapshot_runtime_executed snapshot_id=test-snapshot-0001 payload=")
         for record in caplog.records
     )
+
+
+def test_get_snapshot_runtime_status_defaults_when_missing(tmp_path: Path) -> None:
+    runtime_status_path = tmp_path / "runs" / "phase6" / "runtime_status.json"
+
+    status = get_snapshot_runtime_status(runtime_status_path=runtime_status_path)
+
+    assert status == {
+        "last_execution_timestamp": None,
+        "last_snapshot_id": None,
+        "last_status": "never",
+        "last_error": None,
+    }
+
+
+def test_execute_snapshot_runtime_success_updates_status(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path / "snapshots")
+    runtime_status_path = tmp_path / "runs" / "phase6" / "runtime_status.json"
+
+    execute_snapshot_runtime(
+        SNAPSHOT_ID,
+        snapshot_dir=snapshot_dir,
+        runtime_status_path=runtime_status_path,
+    )
+
+    status = get_snapshot_runtime_status(runtime_status_path=runtime_status_path)
+    assert status["last_snapshot_id"] == SNAPSHOT_ID
+    assert status["last_status"] == "success"
+    assert status["last_error"] is None
+    assert isinstance(status["last_execution_timestamp"], str)
+
+
+def test_execute_snapshot_runtime_failure_updates_status(tmp_path: Path) -> None:
+    runtime_status_path = tmp_path / "runs" / "phase6" / "runtime_status.json"
+
+    with pytest.raises(SnapshotNotFoundError):
+        execute_snapshot_runtime(
+            "missing-snapshot",
+            snapshot_dir=tmp_path / "snapshots",
+            runtime_status_path=runtime_status_path,
+        )
+
+    status = get_snapshot_runtime_status(runtime_status_path=runtime_status_path)
+    assert status["last_snapshot_id"] == "missing-snapshot"
+    assert status["last_status"] == "failure"
+    assert status["last_error"] == "snapshot_metadata_missing snapshot_id=missing-snapshot"
+    assert isinstance(status["last_execution_timestamp"], str)
+
+
+def test_runtime_status_file_uses_deterministic_structure(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path / "snapshots")
+    runtime_status_path = tmp_path / "runs" / "phase6" / "runtime_status.json"
+
+    execute_snapshot_runtime(
+        SNAPSHOT_ID,
+        snapshot_dir=snapshot_dir,
+        runtime_status_path=runtime_status_path,
+    )
+
+    raw = runtime_status_path.read_text(encoding="utf-8")
+    payload = json.loads(raw)
+
+    assert list(payload.keys()) == [
+        "last_error",
+        "last_execution_timestamp",
+        "last_snapshot_id",
+        "last_status",
+    ]
+    assert raw == json.dumps(payload, sort_keys=True, separators=(",", ":"))
