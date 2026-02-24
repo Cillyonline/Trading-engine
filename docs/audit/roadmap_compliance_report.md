@@ -12,7 +12,7 @@ Paper-trading simulator code and tests are present, but documentation artifacts 
 
 No live trading endpoint, broker integration runtime, or AI decision engine implementation was verified.
 
-Snapshot ingestion creation/scheduling is documented as out-of-band and no in-repo scheduler runtime was verified.
+Snapshot runtime execution capability is implemented in-repo, while scheduling remains external and no in-repo scheduler runtime was verified.
 
 Documentation and implementation are therefore only partially aligned.
 
@@ -25,7 +25,7 @@ Documentation and implementation are therefore only partially aligned.
 | Phase | Status | Evidence | Notes |
 |-------|--------|----------|-------|
 | Phase 17b – Owner Dashboard | Partially Implemented | Backend UI mount in `src/api/main.py` (`app.mount("/ui", StaticFiles(..., html=True), name="ui")`); HTML marker in `src/ui/index.html` (`<title>Owner Dashboard</title>`); tests in `tests/health_endpoint.py`; manual trigger endpoint `POST /analysis/run` in `src/api/main.py`; test in `tests/test_api_manual_analysis_trigger.py`; documentation in `docs/ui/owner_dashboard.md`. | `/ui` is confirmed backend-served. `/owner` appears in documentation but no backend route definition was verified. |
-| Hourly Snapshot Runtime | Not Implemented | `docs/interfaces/batch_execution.md` states no scheduler implementation; `docs/api/usage_contract.md` and `docs/analyst-workflow.md` state ingestion is out-of-band; no scheduler/cron endpoint verified in `src/api/main.py`. | Snapshot consumption exists; hourly runtime scheduling not verified in-repo. |
+| Hourly Snapshot Runtime | Partially Implemented | `docs/runtime/snapshot_runtime.md` declares in-repo execution capability and external scheduling boundary; `docs/interfaces/batch_execution.md` states no scheduler implementation; no scheduler/cron endpoint verified in `src/api/main.py`. | Runtime execution capability exists in-repo; hourly scheduling is external and not provided by this repository. |
 | Phase 24 – Paper Trading Runtime | Partially Implemented | Simulator in `src/cilly_trading/engine/paper_trading.py`; tests in `tests/test_paper_trading_simulator.py`; documentation reference in `docs/RUNBOOK.md`. | Engine-level simulation exists; documentation still partially misaligned. |
 | Phase 23 – Research Dashboard | Not Implemented | Research Dashboard implementation artifact: Not confirmed (no verified code/docs/tests). | No repository-verified artifact found. |
 | Phase 27 – Risk Framework | Not Implemented | No standalone phase-scoped risk framework module verified; related artifacts include `src/cilly_trading/strategies/config_schema.py`, `tests/strategies/test_strategy_config_schema.py`, `docs/backtesting/metrics_contract.md`. | Risk-related fields exist but no framework-level artifact verified. |
@@ -98,7 +98,7 @@ Documentation and implementation are therefore only partially aligned.
    - **Phase classification:** Phase 24  
 
 4. **Proposed Issue:** `Hourly Snapshot Runtime status declaration`  
-   - Explicitly declare whether runtime scheduling remains out-of-band or is planned in-repo.  
+   - Formally declare the operational boundary: in-repo runtime execution capability with external scheduling ownership.  
    - **Phase classification:** Snapshot Runtime  
 
 5. **Proposed Issue:** `Phase 23 status artifact`  
