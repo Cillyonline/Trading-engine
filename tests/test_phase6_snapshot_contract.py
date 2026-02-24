@@ -8,12 +8,41 @@ import pytest
 
 from cilly_trading.engine.phase6_snapshot_contract import (
     SnapshotNotFoundError,
+    execute_snapshot_runtime,
     run_phase6_snapshot,
 )
 
 
 SNAPSHOT_ID = "test-snapshot-0001"
-SNAPSHOT_DIR = Path("data/phase6_snapshots")
+
+
+def _create_snapshot_fixture(snapshot_root: Path, snapshot_id: str = SNAPSHOT_ID) -> Path:
+    payload = {
+        "rows": [
+            {"close": 101.25, "high": 102.0, "low": 100.9, "symbol": "AAPL", "ts": "2025-01-01"},
+            {"close": 101.6, "high": 102.1, "low": 101.2, "symbol": "AAPL", "ts": "2025-01-02"},
+        ]
+    }
+    payload_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    payload_checksum = hashlib.sha256(payload_bytes).hexdigest()
+
+    snapshot_dir = snapshot_root / snapshot_id
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    (snapshot_dir / "payload.json").write_bytes(payload_bytes)
+
+    metadata = {
+        "created_at_utc": "2025-01-01T00:00:00Z",
+        "payload_checksum": payload_checksum,
+        "provider": "test-provider",
+        "schema_version": "1",
+        "snapshot_id": snapshot_id,
+        "source": "unit-test",
+    }
+    (snapshot_dir / "metadata.json").write_text(
+        json.dumps(metadata, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    return snapshot_root
 
 
 def test_phase6_snapshot_id_required() -> None:
@@ -27,9 +56,11 @@ def test_phase6_unknown_snapshot_id_fails(tmp_path: Path) -> None:
 
 
 def test_phase6_snapshot_audit_persisted(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+
     result = run_phase6_snapshot(
         SNAPSHOT_ID,
-        snapshot_dir=SNAPSHOT_DIR,
+        snapshot_dir=snapshot_dir,
         run_output_dir=tmp_path,
     )
 
@@ -47,14 +78,16 @@ def test_phase6_snapshot_audit_persisted(tmp_path: Path) -> None:
 
 
 def test_phase6_replay_is_deterministic(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+
     first = run_phase6_snapshot(
         SNAPSHOT_ID,
-        snapshot_dir=SNAPSHOT_DIR,
+        snapshot_dir=snapshot_dir,
         run_output_dir=tmp_path,
     )
     second = run_phase6_snapshot(
         SNAPSHOT_ID,
-        snapshot_dir=SNAPSHOT_DIR,
+        snapshot_dir=snapshot_dir,
         run_output_dir=tmp_path,
     )
 
@@ -63,3 +96,31 @@ def test_phase6_replay_is_deterministic(tmp_path: Path) -> None:
 
     assert first.result_bytes == second.result_bytes
     assert first_hash == second_hash
+
+
+def test_execute_snapshot_runtime_is_deterministic(tmp_path: Path) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+
+    first = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
+    second = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
+
+    assert first == second
+    assert first["snapshot_id"] == SNAPSHOT_ID
+    assert first["snapshot_consistent"] is True
+    assert first["snapshot_metadata"]["snapshot_id"] == SNAPSHOT_ID
+
+
+def test_execute_snapshot_runtime_logs_execution_event(
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+) -> None:
+    snapshot_dir = _create_snapshot_fixture(tmp_path)
+
+    with caplog.at_level("INFO"):
+        payload = execute_snapshot_runtime(SNAPSHOT_ID, snapshot_dir=snapshot_dir)
+
+    assert payload["snapshot_consistent"] is True
+    assert any(
+        record.message.startswith("snapshot_runtime_executed snapshot_id=test-snapshot-0001 payload=")
+        for record in caplog.records
+    )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ DEFAULT_SNAPSHOT_DIR = Path("data/phase6_snapshots")
 DEFAULT_RUN_DIR = Path("runs/phase6")
 SNAPSHOT_METADATA_FILENAME = "metadata.json"
 SNAPSHOT_PAYLOAD_FILENAME = "payload.json"
+_LOGGER = logging.getLogger(__name__)
 
 
 class SnapshotContractError(RuntimeError):
@@ -218,6 +220,52 @@ def run_phase6_snapshot(
         result_path=result_path,
         result_bytes=result_json.encode("utf-8"),
     )
+
+
+def execute_snapshot_runtime(
+    snapshot_id: str,
+    *,
+    snapshot_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Execute a deterministic snapshot runtime entrypoint.
+
+    Args:
+        snapshot_id: Snapshot identifier (required).
+        snapshot_dir: Optional base directory for snapshots.
+
+    Returns:
+        Deterministic runtime execution payload.
+
+    Raises:
+        ValueError: If snapshot_id is missing.
+        SnapshotContractError: If snapshot validation fails.
+    """
+    if not snapshot_id or not str(snapshot_id).strip():
+        raise ValueError("snapshot_id is required for snapshot runtime execution")
+
+    resolved = resolve_snapshot(snapshot_id, snapshot_dir=snapshot_dir)
+    snapshot_consistent = _sha256_bytes(resolved.payload_bytes) == resolved.metadata.payload_checksum
+
+    execution_payload: dict[str, Any] = {
+        "snapshot_consistent": snapshot_consistent,
+        "snapshot_id": resolved.snapshot_id,
+        "snapshot_metadata": {
+            "created_at_utc": resolved.metadata.created_at_utc,
+            "payload_checksum": resolved.metadata.payload_checksum,
+            "provider": resolved.metadata.provider,
+            "schema_version": resolved.metadata.schema_version,
+            "source": resolved.metadata.source,
+            "snapshot_id": resolved.metadata.snapshot_id,
+        },
+    }
+
+    _LOGGER.info(
+        "snapshot_runtime_executed snapshot_id=%s payload=%s",
+        resolved.snapshot_id,
+        json.dumps(execution_payload, sort_keys=True, separators=(",", ":")),
+    )
+
+    return execution_payload
 
 
 def persist_phase6_audit(
