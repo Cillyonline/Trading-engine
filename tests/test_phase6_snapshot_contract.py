@@ -124,7 +124,7 @@ def test_execute_snapshot_runtime_structure_smoke(tmp_path: Path) -> None:
     assert isinstance(payload["snapshot_metadata"]["source"], str)
     assert isinstance(payload["snapshot_metadata"]["created_at_utc"], str)
     assert isinstance(payload["snapshot_metadata"]["payload_checksum"], str)
-    assert isinstance(payload["snapshot_metadata"]["schema_version"], str | int)
+    assert isinstance(payload["snapshot_metadata"]["schema_version"], (str, int))
 
 
 def test_execute_snapshot_runtime_is_deterministic_across_runs(tmp_path: Path) -> None:
