@@ -8,6 +8,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -16,6 +17,7 @@ SchemaVersion = str | int
 
 DEFAULT_SNAPSHOT_DIR = Path("data/phase6_snapshots")
 DEFAULT_RUN_DIR = Path("runs/phase6")
+DEFAULT_RUNTIME_STATUS_PATH = DEFAULT_RUN_DIR / "runtime_status.json"
 SNAPSHOT_METADATA_FILENAME = "metadata.json"
 SNAPSHOT_PAYLOAD_FILENAME = "payload.json"
 _LOGGER = logging.getLogger(__name__)
@@ -226,12 +228,14 @@ def execute_snapshot_runtime(
     snapshot_id: str,
     *,
     snapshot_dir: Optional[Path] = None,
+    runtime_status_path: Optional[Path] = None,
 ) -> dict[str, Any]:
     """Execute a deterministic snapshot runtime entrypoint.
 
     Args:
         snapshot_id: Snapshot identifier (required).
         snapshot_dir: Optional base directory for snapshots.
+        runtime_status_path: Optional path for runtime status persistence.
 
     Returns:
         Deterministic runtime execution payload.
@@ -243,29 +247,67 @@ def execute_snapshot_runtime(
     if not snapshot_id or not str(snapshot_id).strip():
         raise ValueError("snapshot_id is required for snapshot runtime execution")
 
-    resolved = resolve_snapshot(snapshot_id, snapshot_dir=snapshot_dir)
-    snapshot_consistent = _sha256_bytes(resolved.payload_bytes) == resolved.metadata.payload_checksum
+    status_path = runtime_status_path or DEFAULT_RUNTIME_STATUS_PATH
+    try:
+        resolved = resolve_snapshot(snapshot_id, snapshot_dir=snapshot_dir)
+        snapshot_consistent = _sha256_bytes(resolved.payload_bytes) == resolved.metadata.payload_checksum
 
-    execution_payload: dict[str, Any] = {
-        "snapshot_consistent": snapshot_consistent,
-        "snapshot_id": resolved.snapshot_id,
-        "snapshot_metadata": {
-            "created_at_utc": resolved.metadata.created_at_utc,
-            "payload_checksum": resolved.metadata.payload_checksum,
-            "provider": resolved.metadata.provider,
-            "schema_version": resolved.metadata.schema_version,
-            "source": resolved.metadata.source,
-            "snapshot_id": resolved.metadata.snapshot_id,
-        },
+        execution_payload: dict[str, Any] = {
+            "snapshot_consistent": snapshot_consistent,
+            "snapshot_id": resolved.snapshot_id,
+            "snapshot_metadata": {
+                "created_at_utc": resolved.metadata.created_at_utc,
+                "payload_checksum": resolved.metadata.payload_checksum,
+                "provider": resolved.metadata.provider,
+                "schema_version": resolved.metadata.schema_version,
+                "source": resolved.metadata.source,
+                "snapshot_id": resolved.metadata.snapshot_id,
+            },
+        }
+
+        _persist_snapshot_runtime_status(
+            status_path,
+            snapshot_id=snapshot_id,
+            status="success",
+            error=None,
+        )
+
+        _LOGGER.info(
+            "snapshot_runtime_executed snapshot_id=%s payload=%s",
+            resolved.snapshot_id,
+            json.dumps(execution_payload, sort_keys=True, separators=(",", ":")),
+        )
+
+        return execution_payload
+    except Exception as exc:
+        _persist_snapshot_runtime_status(
+            status_path,
+            snapshot_id=snapshot_id,
+            status="failure",
+            error=str(exc),
+        )
+        raise
+
+
+def get_snapshot_runtime_status(
+    *,
+    runtime_status_path: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Return persisted runtime status for snapshot execution."""
+    status_path = runtime_status_path or DEFAULT_RUNTIME_STATUS_PATH
+    if not status_path.exists():
+        return _default_runtime_status()
+
+    status_payload = json.loads(status_path.read_text(encoding="utf-8"))
+    if not isinstance(status_payload, dict):
+        return _default_runtime_status()
+
+    return {
+        "last_execution_timestamp": status_payload.get("last_execution_timestamp"),
+        "last_snapshot_id": status_payload.get("last_snapshot_id"),
+        "last_status": status_payload.get("last_status", "never"),
+        "last_error": status_payload.get("last_error"),
     }
-
-    _LOGGER.info(
-        "snapshot_runtime_executed snapshot_id=%s payload=%s",
-        resolved.snapshot_id,
-        json.dumps(execution_payload, sort_keys=True, separators=(",", ":")),
-    )
-
-    return execution_payload
 
 
 def persist_phase6_audit(
@@ -355,3 +397,36 @@ def _sha256_bytes(payload: bytes) -> str:
 
 def _get_engine_version() -> Optional[str]:
     return os.getenv("CILLY_ENGINE_VERSION")
+
+
+def _persist_snapshot_runtime_status(
+    status_path: Path,
+    *,
+    snapshot_id: str,
+    status: str,
+    error: Optional[str],
+) -> None:
+    status_payload: dict[str, Any] = {
+        "last_execution_timestamp": _utc_timestamp(),
+        "last_snapshot_id": snapshot_id,
+        "last_status": status,
+        "last_error": error,
+    }
+    status_path.parent.mkdir(parents=True, exist_ok=True)
+    status_path.write_text(
+        json.dumps(status_payload, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+
+def _default_runtime_status() -> dict[str, Any]:
+    return {
+        "last_execution_timestamp": None,
+        "last_snapshot_id": None,
+        "last_status": "never",
+        "last_error": None,
+    }
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
