@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal, Mapping, Sequence
 
+from risk.contracts import RiskDecision
+
+from cilly_trading.engine.risk import enforce_approved_risk_decision
+
 
 @dataclass(frozen=True)
 class Order:
@@ -93,6 +97,7 @@ class DeterministicExecutionModel:
         snapshot: Mapping[str, Any],
         position: Position,
         config: DeterministicExecutionConfig,
+        risk_decision: RiskDecision | None,
     ) -> tuple[list[Fill], Position]:
         """Executes ready orders for a snapshot in deterministic order.
 
@@ -101,6 +106,7 @@ class DeterministicExecutionModel:
             snapshot: Market snapshot providing ``open`` or ``price``.
             position: Existing position state.
             config: Deterministic execution settings.
+            risk_decision: Mandatory explicit pre-execution risk decision.
 
         Returns:
             A tuple containing ordered fills and updated position.
@@ -109,6 +115,8 @@ class DeterministicExecutionModel:
             ValueError: If a required price is missing, a quantity is invalid,
                 or an order attempts to sell more than current position.
         """
+
+        enforce_approved_risk_decision(risk_decision)
 
         snapshot_key = self._snapshot_key(snapshot)
         base_price = self._extract_fill_price(snapshot, config)
