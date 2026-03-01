@@ -5,6 +5,7 @@ from __future__ import annotations
 from engine.risk_framework.allocation_rules import RiskLimits
 from engine.risk_framework.contract import RiskEvaluationRequest, RiskEvaluationResponse
 from engine.risk_framework.exposure_model import compute_exposure_metrics
+from engine.risk_framework.kill_switch import is_kill_switch_enabled
 
 
 def _safe_pct(numerator: float, denominator: float) -> float:
@@ -20,6 +21,7 @@ def evaluate_risk(
     limits: RiskLimits,
     strategy_exposure: float,
     symbol_exposure: float,
+    config: dict[str, object] | None = None,
 ) -> RiskEvaluationResponse:
     """Evaluate a risk request deterministically.
 
@@ -32,6 +34,14 @@ def evaluate_risk(
     Returns:
         RiskEvaluationResponse: Deterministic evaluation result.
     """
+
+    if is_kill_switch_enabled(config=config):
+        return RiskEvaluationResponse(
+            approved=False,
+            reason="rejected: kill_switch_enabled",
+            adjusted_position_size=0.0,
+            risk_score=float("inf"),
+        )
 
     absolute_equity = abs(request.account_equity)
     absolute_proposed_size = abs(request.proposed_position_size)
