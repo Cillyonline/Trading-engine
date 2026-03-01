@@ -29,12 +29,12 @@ def collect_forbidden_execution_import_violations(repo_root: Path) -> list[str]:
 
         for import_name in _iter_static_imports(tree):
             if _matches_forbidden_root(import_name, forbidden_roots):
-                relative_path = path.resolve().relative_to(repo_root)
+                relative_path = _to_project_relative_posix(path, repo_root)
                 violations.append(f"{relative_path}: static import {import_name}")
 
         for module_name in _iter_dynamic_import_calls(tree):
             if _matches_forbidden_root(module_name, forbidden_roots):
-                relative_path = path.resolve().relative_to(repo_root)
+                relative_path = _to_project_relative_posix(path, repo_root)
                 violations.append(f"{relative_path}: dynamic import {module_name}")
 
     return sorted(set(violations))
@@ -48,6 +48,10 @@ def _resolve_forbidden_import_roots(repo_root: Path) -> tuple[str, ...]:
             forbidden_roots.append(module_path)
 
     return tuple(forbidden_roots)
+
+
+def _to_project_relative_posix(path: Path, project_root: Path) -> str:
+    return Path(path).resolve().relative_to(project_root.resolve()).as_posix()
 
 
 def _iter_python_files(repo_root: Path) -> list[Path]:
