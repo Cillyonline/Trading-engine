@@ -14,6 +14,8 @@ from cilly_trading.engine.order_execution_model import (
     Position,
     _execute_order,
 )
+from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
+from cilly_trading.engine.strategy_lifecycle.service import StrategyLifecycleStore
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,7 @@ def run_pipeline(
     signal: Mapping[str, object],
     *,
     risk_gate: RiskGate,
+    lifecycle_store: StrategyLifecycleStore,
     risk_request: RiskEvaluationRequest,
     position: Position,
     execution_config: DeterministicExecutionConfig,
@@ -39,8 +42,9 @@ def run_pipeline(
     The risk gate is always evaluated before any execution attempt.
     """
 
+    state = lifecycle_store.get_state(risk_request.strategy_id)
     risk_decision = risk_gate.evaluate(risk_request)
-    if risk_decision.decision != "APPROVED":
+    if state != StrategyLifecycleState.PRODUCTION or risk_decision.decision != "APPROVED":
         return PipelineResult(
             status="rejected",
             fills=[],
