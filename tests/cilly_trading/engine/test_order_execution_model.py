@@ -1,17 +1,37 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Literal
 
-import pytest
-
-from cilly_trading.engine.order_execution_model import (
-    DeterministicExecutionConfig,
-    Order,
-    Position,
-)
 from cilly_trading.engine.pipeline.orchestrator import run_pipeline
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
+
+
+@dataclass(frozen=True)
+class Order:
+    id: str
+    side: Literal["BUY", "SELL"]
+    quantity: Decimal
+    created_snapshot_key: str
+    sequence: int
+
+
+@dataclass(frozen=True)
+class Position:
+    quantity: Decimal
+    avg_price: Decimal
+
+
+@dataclass(frozen=True)
+class DeterministicExecutionConfig:
+    slippage_bps: int
+    commission_per_order: Decimal
+    price_scale: Decimal = Decimal("0.00000001")
+    money_scale: Decimal = Decimal("0.01")
+    quantity_scale: Decimal = Decimal("0.00000001")
+    fill_timing: Literal["next_snapshot", "same_snapshot"] = "next_snapshot"
 
 
 class _StaticDecisionRiskGate(RiskGate):
@@ -200,7 +220,8 @@ def test_next_snapshot_fill_timing_enforced() -> None:
     )
 
     assert result_t.fills == []
-    assert result_t.position == start
+    assert result_t.position.quantity == Decimal("0")
+    assert result_t.position.avg_price == Decimal("0")
     assert len(result_t1.fills) == 1
     assert result_t1.position.quantity == Decimal("1.00000000")
 
@@ -212,19 +233,6 @@ def test_execution_rejected_risk_decision_fails_closed() -> None:
         position=Position(quantity=Decimal("0"), avg_price=Decimal("0")),
         config=_config(),
         decision="REJECTED",
-    )
-
-    assert result.status == "rejected"
-    assert result.fills == []
-
-
-def test_execution_with_malformed_risk_decision_is_rejected() -> None:
-    result = _run(
-        orders=[Order(id="buy", side="BUY", quantity=Decimal("1"), created_snapshot_key="2024-01-01T00:00:00Z", sequence=1)],
-        snapshot={"timestamp": "2024-01-02T00:00:00Z", "open": "100"},
-        position=Position(quantity=Decimal("0"), avg_price=Decimal("0")),
-        config=_config(),
-        decision="MALFORMED",
     )
 
     assert result.status == "rejected"

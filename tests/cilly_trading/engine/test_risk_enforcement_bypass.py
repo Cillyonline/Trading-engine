@@ -1,18 +1,40 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Literal
 
 import pytest
 
-import cilly_trading.engine.order_execution_model as order_execution_model
-from cilly_trading.engine.order_execution_model import (
-    DeterministicExecutionConfig,
-    Order,
-    Position,
-)
+import cilly_trading.engine.pipeline.orchestrator as orchestrator
 from cilly_trading.engine.pipeline.orchestrator import run_pipeline
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
+
+
+@dataclass(frozen=True)
+class Order:
+    id: str
+    side: Literal["BUY", "SELL"]
+    quantity: Decimal
+    created_snapshot_key: str
+    sequence: int
+
+
+@dataclass(frozen=True)
+class Position:
+    quantity: Decimal
+    avg_price: Decimal
+
+
+@dataclass(frozen=True)
+class DeterministicExecutionConfig:
+    slippage_bps: int
+    commission_per_order: Decimal
+    price_scale: Decimal = Decimal("0.00000001")
+    money_scale: Decimal = Decimal("0.01")
+    quantity_scale: Decimal = Decimal("0.00000001")
+    fill_timing: Literal["next_snapshot", "same_snapshot"] = "next_snapshot"
 
 
 class _TrackingRiskGate(RiskGate):
@@ -73,13 +95,13 @@ def test_execute_via_orchestrator_succeeds_and_orders_risk_before_execution(monk
 
     gate = _TrackingRiskGate(_approved_or_rejected_decision("APPROVED"), events)
 
-    original = order_execution_model._DeterministicExecutionModel._execute
+    original_execute_order = orchestrator._execute_order
 
-    def _tracked_execute(self, **kwargs):
+    def _tracked_execute_order(**kwargs):
         events.append("execution")
-        return original(self, **kwargs)
+        return original_execute_order(**kwargs)
 
-    monkeypatch.setattr(order_execution_model._DeterministicExecutionModel, "_execute", _tracked_execute)
+    monkeypatch.setattr(orchestrator, "_execute_order", _tracked_execute_order)
 
     result = run_pipeline(
         {"orders": [_single_buy_order()], "snapshot": snapshot},
@@ -96,13 +118,12 @@ def test_execute_via_orchestrator_succeeds_and_orders_risk_before_execution(monk
 
 def test_direct_execution_call_is_forbidden_outside_orchestrator() -> None:
     snapshot, position, config = _execution_inputs()
-    execute_order = getattr(order_execution_model, "_execute_order")
 
     with pytest.raises(
         RuntimeError,
         match="restricted to cilly_trading.engine.pipeline.orchestrator",
     ):
-        execute_order(
+        orchestrator._execute_order(
             orders=[_single_buy_order()],
             snapshot=snapshot,
             position=position,
