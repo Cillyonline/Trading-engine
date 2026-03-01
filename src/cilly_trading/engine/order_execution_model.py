@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
+import inspect
 from typing import Any, Literal, Mapping, Sequence
 
 from risk.contracts import RiskDecision
@@ -87,10 +88,39 @@ class DeterministicExecutionConfig:
     fill_timing: Literal["next_snapshot", "same_snapshot"] = "next_snapshot"
 
 
-class DeterministicExecutionModel:
+def _enforce_orchestrator_caller() -> None:
+    for frame_info in inspect.stack()[1:]:
+        caller_module = frame_info.frame.f_globals.get("__name__")
+        if caller_module == "cilly_trading.engine.pipeline.orchestrator":
+            return
+    raise RuntimeError(
+        "Execution entrypoint is restricted to cilly_trading.engine.pipeline.orchestrator"
+    )
+
+
+def _execute_order(
+    *,
+    orders: Sequence[Order],
+    snapshot: Mapping[str, Any],
+    position: Position,
+    config: DeterministicExecutionConfig,
+    risk_decision: RiskDecision | None,
+) -> tuple[list[Fill], Position]:
+    _enforce_orchestrator_caller()
+    model = _DeterministicExecutionModel()
+    return model._execute(
+        orders=orders,
+        snapshot=snapshot,
+        position=position,
+        config=config,
+        risk_decision=risk_decision,
+    )
+
+
+class _DeterministicExecutionModel:
     """Executes market orders with deterministic semantics."""
 
-    def execute(
+    def _execute(
         self,
         *,
         orders: Sequence[Order],
@@ -221,7 +251,6 @@ class DeterministicExecutionModel:
 
 __all__ = [
     "DeterministicExecutionConfig",
-    "DeterministicExecutionModel",
     "Fill",
     "Order",
     "Position",
