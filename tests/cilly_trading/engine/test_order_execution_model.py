@@ -6,7 +6,16 @@ from decimal import Decimal
 from typing import Literal
 
 from cilly_trading.engine.pipeline.orchestrator import run_pipeline
+from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
+
+
+class _ProductionLifecycleStore:
+    def get_state(self, strategy_id: str) -> StrategyLifecycleState:
+        return StrategyLifecycleState.PRODUCTION
+
+    def set_state(self, strategy_id: str, new_state: StrategyLifecycleState) -> None:
+        return None
 
 
 @dataclass(frozen=True)
@@ -82,6 +91,7 @@ def _run(
     return run_pipeline(
         {"orders": orders, "snapshot": snapshot},
         risk_gate=_StaticDecisionRiskGate(_risk_decision(decision=decision)),
+        lifecycle_store=_ProductionLifecycleStore(),
         risk_request=_risk_request(),
         position=position,
         execution_config=config,

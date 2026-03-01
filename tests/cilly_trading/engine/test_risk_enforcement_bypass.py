@@ -9,7 +9,16 @@ import pytest
 
 import cilly_trading.engine.pipeline.orchestrator as orchestrator
 from cilly_trading.engine.pipeline.orchestrator import run_pipeline
+from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
+
+
+class _ProductionLifecycleStore:
+    def get_state(self, strategy_id: str) -> StrategyLifecycleState:
+        return StrategyLifecycleState.PRODUCTION
+
+    def set_state(self, strategy_id: str, new_state: StrategyLifecycleState) -> None:
+        return None
 
 
 @dataclass(frozen=True)
@@ -106,6 +115,7 @@ def test_execute_via_orchestrator_succeeds_and_orders_risk_before_execution(monk
     result = run_pipeline(
         {"orders": [_single_buy_order()], "snapshot": snapshot},
         risk_gate=gate,
+        lifecycle_store=_ProductionLifecycleStore(),
         risk_request=_risk_request(),
         position=position,
         execution_config=config,
