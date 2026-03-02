@@ -8,6 +8,7 @@ from pathlib import Path
 
 MODULES = [
     "engine.portfolio_framework",
+    "engine.portfolio_framework.capital_allocation_policy",
     "engine.portfolio_framework.contract",
     "engine.portfolio_framework.exposure_aggregator",
 ]
