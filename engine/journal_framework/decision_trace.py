@@ -8,6 +8,9 @@ import json
 from types import MappingProxyType
 from typing import Any, Mapping
 
+from engine.portfolio_framework.capital_allocation_policy import CapitalAllocationAssessment
+from engine.portfolio_framework.exposure_aggregator import PortfolioExposureSummary
+
 
 
 def _deep_freeze(value: Any) -> Any:
@@ -31,41 +34,12 @@ def _deep_freeze(value: Any) -> Any:
 
 
 @dataclass(frozen=True)
-class PortfolioDecisionSnapshot:
-    """Immutable snapshot of strategy decision inputs.
-
-    Attributes:
-        strategy_id: Stable strategy identifier.
-        symbol: Traded symbol.
-        signal: Strategy signal label.
-        confidence: Optional confidence scalar.
-        allocation: Optional target allocation scalar.
-        inputs: Deterministic input values used for the decision.
-    """
-
-    strategy_id: str
-    symbol: str
-    signal: str
-    confidence: float | None
-    allocation: float | None
-    inputs: Mapping[str, Any]
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "inputs", _deep_freeze(self.inputs))
-
-
-@dataclass(frozen=True)
 class DecisionTrace:
-    """Immutable deterministic trace of a portfolio decision.
-
-    Attributes:
-        trace_id: SHA256 digest of canonical trace input.
-        snapshot: Decision snapshot captured at decision time.
-        decision_context: Additional deterministic context payload.
-    """
+    """Immutable deterministic trace of a portfolio decision."""
 
     trace_id: str
-    snapshot: PortfolioDecisionSnapshot
+    exposure: PortfolioExposureSummary
+    allocation: CapitalAllocationAssessment
     decision_context: Mapping[str, Any]
 
     def __post_init__(self) -> None:
@@ -93,32 +67,79 @@ def _canonicalize(value: Any) -> Any:
 
 
 
+def _exposure_payload(exposure: PortfolioExposureSummary) -> dict[str, Any]:
+    return {
+        "total_absolute_notional": exposure.total_absolute_notional,
+        "net_notional": exposure.net_notional,
+        "gross_exposure_pct": exposure.gross_exposure_pct,
+        "net_exposure_pct": exposure.net_exposure_pct,
+        "strategy_exposures": [
+            {
+                "strategy_id": row.strategy_id,
+                "total_absolute_notional": row.total_absolute_notional,
+                "net_notional": row.net_notional,
+                "gross_exposure_pct": row.gross_exposure_pct,
+                "net_exposure_pct": row.net_exposure_pct,
+            }
+            for row in sorted(exposure.strategy_exposures, key=lambda item: item.strategy_id)
+        ],
+        "symbol_exposures": [
+            {
+                "symbol": row.symbol,
+                "total_absolute_notional": row.total_absolute_notional,
+                "net_notional": row.net_notional,
+                "gross_exposure_pct": row.gross_exposure_pct,
+                "net_exposure_pct": row.net_exposure_pct,
+            }
+            for row in sorted(exposure.symbol_exposures, key=lambda item: item.symbol)
+        ],
+    }
+
+
+
+def _allocation_payload(allocation: CapitalAllocationAssessment) -> dict[str, Any]:
+    return {
+        "approved": allocation.approved,
+        "reasons": list(allocation.reasons),
+        "total_absolute_notional": allocation.total_absolute_notional,
+        "global_cap_notional": allocation.global_cap_notional,
+        "global_within_cap": allocation.global_within_cap,
+        "strategy_assessments": [
+            {
+                "strategy_id": row.strategy_id,
+                "allocation_score": row.allocation_score,
+                "deterministic_score_weight": row.deterministic_score_weight,
+                "current_absolute_notional": row.current_absolute_notional,
+                "capital_cap_notional": row.capital_cap_notional,
+                "score_weighted_notional": row.score_weighted_notional,
+                "effective_allowed_notional": row.effective_allowed_notional,
+                "within_cap": row.within_cap,
+            }
+            for row in sorted(allocation.strategy_assessments, key=lambda item: item.strategy_id)
+        ],
+    }
+
+
+
 def generate_decision_trace(
-    snapshot: PortfolioDecisionSnapshot,
+    *,
+    exposure: PortfolioExposureSummary,
+    allocation: CapitalAllocationAssessment,
     decision_context: Mapping[str, Any] | None = None,
 ) -> DecisionTrace:
-    """Create a deterministic, side-effect free decision trace.
-
-    Args:
-        snapshot: Immutable strategy decision snapshot.
-        decision_context: Optional deterministic context values.
-
-    Returns:
-        DecisionTrace with deterministic SHA256 trace id.
-    """
+    """Create a deterministic, side-effect free decision trace."""
 
     context_payload: Mapping[str, Any] = _deep_freeze(decision_context or {})
     payload = {
-        "snapshot": {
-            "strategy_id": snapshot.strategy_id,
-            "symbol": snapshot.symbol,
-            "signal": snapshot.signal,
-            "confidence": snapshot.confidence,
-            "allocation": snapshot.allocation,
-            "inputs": _canonicalize(snapshot.inputs),
-        },
+        "exposure": _exposure_payload(exposure),
+        "allocation": _allocation_payload(allocation),
         "decision_context": _canonicalize(context_payload),
     }
     serialized = json.dumps(payload, separators=(",", ":"), sort_keys=True, ensure_ascii=True)
     trace_id = sha256(serialized.encode("utf-8")).hexdigest()
-    return DecisionTrace(trace_id=trace_id, snapshot=snapshot, decision_context=context_payload)
+    return DecisionTrace(
+        trace_id=trace_id,
+        exposure=exposure,
+        allocation=allocation,
+        decision_context=context_payload,
+    )
