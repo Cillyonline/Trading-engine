@@ -24,4 +24,4 @@ jobs:
           uv sync --frozen --extra test
 
       - name: Run smoke-run contract tests
-        run: python -m pytest --import-mode=importlib
+        run: uv run -- python -m pytest --import-mode=importlib
