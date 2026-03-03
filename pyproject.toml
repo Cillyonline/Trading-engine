@@ -8,6 +8,23 @@ dynamic = ["version"]
 description = "Cilly Trading engine"
 readme = "README.md"
 requires-python = ">=3.12"
+dependencies = [
+  "pandas",
+  "numpy",
+  "requests",
+  "fastapi",
+  "uvicorn",
+  "sqlalchemy",
+  "aiosqlite",
+  "yfinance",
+  "ccxt",
+  "httpx",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
