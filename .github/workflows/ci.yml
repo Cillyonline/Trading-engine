@@ -27,4 +27,4 @@ jobs:
           python -m pip install pytest
 
       - name: Run smoke-run contract tests
-        run: python -m pytest tests/test_smoke_run.py
+        run: python -m pytest --import-mode=importlib
