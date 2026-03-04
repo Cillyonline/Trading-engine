@@ -1,208 +1,60 @@
-\# AGENTS.md — Codex Test Guard \& Branch Discipline
+﻿# AGENTS.md
 
+Codex and other AI coding agents must follow these repository rules.
 
+## Scope and authority
 
-This file defines the working rules for AI agents (Codex) operating in this repository.
+AI agents are implementation assistants. They MUST NOT:
+- change repository architecture or boundaries
+- introduce new subsystems
+- expand feature scope beyond the active task/issue
+- perform refactors outside the current task
+- "improve" unrelated code
 
+Architecture decisions belong to the repository owner.
 
+## Issue governance
 
----
+If a GitHub issue is referenced (e.g. `#521`), the agent MUST implement strictly within that issue.
 
+Required in the issue context before writing code:
+- Goal
+- Acceptance Criteria
+- Allowed files / allowed paths
 
+Issue title/type may be inferred from the issue context.
+If Goal / Acceptance Criteria / Allowed files are missing or unclear → STOP and ask for clarification.
 
-\# Definition of Done (HARD)
+If NO issue is referenced, agents may only do:
+- debugging
+- test fixes
+- code analysis
+- small bug fixes
 
+No feature work without an issue.
 
+## Change policy
 
-Do NOT claim completion unless the full test suite is executed and passes.
+- Make minimal, localized changes.
+- Modify only files required by the task scope.
+- Avoid formatting-only diffs.
+- Preserve public interfaces unless explicitly required.
 
+If multiple files must change:
+1) present a file list first
+2) then implement
 
+## Test policy
 
-Required command:
+After code changes:
+- run existing tests OR
+- add tests for new behavior
 
+Do not knowingly break the test suite.
 
+## Output expectations (for agent responses)
 
-python -m uv run -- python -m pytest --import-mode=importlib
-
-
-
-All tests must pass before finishing any task.
-
-
-
----
-
-
-
-\# Environment
-
-
-
-Ensure dependencies are installed via:
-
-
-
-python -m uv sync --frozen --extra test
-
-
-
-Agents must verify the environment before running tests.
-
-
-
----
-
-
-
-\# Standard Issue Workflow
-
-
-
-When implementing a GitHub Issue follow this process:
-
-
-
-1\. Analyze the GitHub issue and the repository structure.
-
-2\. Produce a short implementation plan.
-
-3\. Wait for approval before writing code.
-
-4\. Implement only the files allowed by the issue.
-
-5\. Avoid changes outside the issue scope.
-
-6\. Run the full test suite.
-
-7\. Only report completion when tests pass.
-
-
-
----
-
-
-
-\# Branch Rules
-
-
-
-\- Never commit directly to `main`.
-
-\- Work only on a feature branch or Codex worktree branch.
-
-\- Keep changes strictly inside the GitHub Issue scope and allowed files.
-
-
-
-Typical workflow:
-
-
-
-git checkout main  
-
-git pull  
-
-git checkout -b feature/<issue-name>
-
-
-
----
-
-
-
-\# Safety Rules
-
-
-
-\- No scope expansion.
-
-\- No refactors outside the issue.
-
-\- No architectural changes unless explicitly requested.
-
-\- Preserve determinism, governance, and compliance guarantees.
-
-
-
----
-
-
-
-\# Architecture Respect
-
-
-
-Agents must respect existing module boundaries and repository structure.
-
-
-
-Do NOT:
-
-
-
-\- move modules
-
-\- rename core components
-
-\- change interfaces
-
-
-
-unless the GitHub issue explicitly requires it.
-
-
-
----
-
-
-
-\# Testing Requirements
-
-
-
-Before finishing any implementation the agent must run:
-
-
-
-python -m uv run -- python -m pytest --import-mode=importlib
-
-
-
-Completion is invalid if tests are not executed.
-
-
-
----
-
-
-
-\# Determinism Requirement
-
-
-
-All implementations must preserve deterministic behavior.
-
-
-
-No hidden state, randomness, or environment-dependent logic may be introduced.
-
-
-
----
-
-
-
-\# Commit Discipline
-
-
-
-Commits must:
-
-
-
-\- be minimal
-
-\- stay inside the issue scope
-
-\- not modify unrelated files
-
+- list all modified files
+- list all new files
+- provide full contents of changed files
+- short explanation only (no out-of-scope suggestions)
