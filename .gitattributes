@@ -1,2 +1,1 @@
-﻿# Enforce LF in repository (stable diffs across OS)
 * text=auto eol=lf
