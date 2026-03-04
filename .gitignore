@@ -12,3 +12,7 @@ scripts/
 runs/
 # Python build metadata
 *.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
