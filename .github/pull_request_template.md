@@ -1,29 +1,28 @@
-## Linked Issue
-Closes #<ISSUE_ID>
+## Issue
+Closes #<IssueID>
 
-## Goal
-(One sentence. What does this PR achieve?)
+---
 
-## Changes
-- 
+## Acceptance Criteria
+- [ ] AC1 satisfied
+- [ ] AC2 satisfied
+- [ ] AC3 satisfied
 
-## How to Test (required)
-Steps to verify locally:
-1)
-2)
-3)
+---
 
-## Checklist
-- [ ] Linked issue is correct (Closes #...)
-- [ ] Acceptance Criteria from the issue are met
-- [ ] Tests added/updated (or explicitly not applicable)
-- [ ] 	est status check is green
-- [ ] No architecture boundary violations
-- [ ] No scope creep beyond the linked issue
+## Constraints
+- [ ] Only Acceptance Criteria implemented
+- [ ] No architecture changes introduced
+- [ ] No new features introduced
+- [ ] Only allowed files modified
 
-## Files Changed
-(Codex B must list all modified/new files here)
--
+---
 
-## Notes / Risks
-(optional)
+## Test Evidence
+
+Command used:
+<paste test command here> `
+
+Result:
+
+<paste full output or CI link here>
