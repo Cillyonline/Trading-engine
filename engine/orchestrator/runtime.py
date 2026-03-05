@@ -32,15 +32,19 @@ def execute_request(
     execute_adapter: ExecutionAdapter,
     config: dict[str, object] | None = None,
 ) -> Any:
-    """Execute a request unless blocked by the global kill switch.
+    """Execute a request unless blocked by compliance guards.
 
-    The compliance gate is evaluated before the adapter is called.
+    Guard evaluation order (deterministic):
+    1. Global Kill Switch
+    2. Emergency Execution Block
     """
 
-    if is_emergency_block_active(config=config):
-        raise ExecutionBlockedError("blocked: emergency_execution_block_active")
-
+    # Guard 1 — Global kill switch (highest priority)
     if is_kill_switch_active(config=config):
         raise ExecutionBlockedError("blocked: global_kill_switch_active")
+
+    # Guard 2 — Emergency execution block
+    if is_emergency_block_active(config=config):
+        raise ExecutionBlockedError("blocked: emergency_execution_block_active")
 
     return execute_adapter(request)
