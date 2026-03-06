@@ -7,6 +7,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from engine.performance_report import (
+    build_performance_report_from_trade_ledger,
+    write_performance_report_artifact,
+)
 from engine.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
 from engine.trade_attribution import build_trade_attribution
 
@@ -154,6 +158,7 @@ def build_trade_ledger_from_paper_trades(
         "trades": canonical_trades,
     }
     payload["risk_adjusted_metrics"] = compute_risk_adjusted_metrics_from_trade_ledger(payload)
+    payload["performance_report"] = build_performance_report_from_trade_ledger(payload)
     if signals is not None:
         attribution_payload = build_trade_attribution(trades=trades, signals=signals)
         payload["attributions"] = attribution_payload["attributions"]
@@ -173,6 +178,11 @@ def write_trade_ledger_artifact(output_dir: Path, payload: Mapping[str, Any]) ->
 
     sha_value = hashlib.sha256(canonical_bytes).hexdigest()
     (output_dir / "trade-ledger.sha256").write_text(f"{sha_value}\n", encoding="utf-8")
+
+    performance_report = payload.get("performance_report")
+    if isinstance(performance_report, Mapping):
+        write_performance_report_artifact(output_dir, performance_report)
+
     return artifact_path, sha_value
 
 
@@ -233,6 +243,14 @@ def load_trade_ledger_artifact(path: Path) -> dict[str, object]:
             metric_value = risk_adjusted_metrics.get(metric_name)
             if metric_value is not None and not isinstance(metric_value, (int, float)):
                 raise ValueError(f"trade ledger risk_adjusted_metrics field {metric_name} must be numeric or null")
+
+    performance_report = payload.get("performance_report")
+    if performance_report is not None:
+        if not isinstance(performance_report, dict):
+            raise ValueError("trade ledger performance_report must be an object when present")
+        for field in ("artifact", "artifact_version", "performance_summary", "strategy_comparison", "key_metrics_overview"):
+            if field not in performance_report:
+                raise ValueError(f"trade ledger performance_report missing field: {field}")
 
     return payload
 
