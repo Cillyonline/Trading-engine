@@ -99,6 +99,41 @@ def test_trade_ledger_generation_from_paper_trading_runtime() -> None:
         "profit_factor": None,
         "win_rate": 1.0,
     }
+    assert ledger["performance_report"] == {
+        "artifact": "performance_report",
+        "artifact_version": "1",
+        "performance_summary": {
+            "total_trades": 2,
+            "strategies_analyzed": 1,
+            "total_pnl": 4.0,
+            "winning_trades": 2,
+            "losing_trades": 0,
+            "breakeven_trades": 0,
+        },
+        "strategy_comparison": [
+            {
+                "strategy_id": "TEST",
+                "trade_count": 2,
+                "total_pnl": 4.0,
+                "average_pnl": 2.0,
+                "win_rate": 1.0,
+            }
+        ],
+        "key_metrics_overview": {
+            "overall_win_rate": 1.0,
+            "average_pnl_per_trade": 2.0,
+            "average_holding_time_seconds": 129600.0,
+            "best_strategy_id": "TEST",
+            "worst_strategy_id": "TEST",
+            "risk_adjusted_metrics": {
+                "sharpe_ratio": 2.12132034356,
+                "sortino_ratio": None,
+                "calmar_ratio": None,
+                "profit_factor": None,
+                "win_rate": 1.0,
+            },
+        },
+    }
 
     expected_first = {
         "strategy_id": "TEST",
@@ -148,6 +183,7 @@ def test_trade_ledger_serialization_is_deterministic() -> None:
     assert bytes_a.endswith(b"\n")
     assert b"\r\n" not in bytes_a
     assert b'"risk_adjusted_metrics"' in bytes_a
+    assert b'"performance_report"' in bytes_a
 
 
 def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path) -> None:
@@ -166,6 +202,8 @@ def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path)
         "win_rate": 1.0,
     }
     assert (tmp_path / "trade-ledger.sha256").read_text(encoding="utf-8") == f"{sha_value}\n"
+    assert (tmp_path / "performance-report.json").exists()
+    assert (tmp_path / "performance-report.sha256").exists()
 
 
 def test_trade_ledger_v1_legacy_payload_without_risk_metrics_loads(tmp_path: Path) -> None:
