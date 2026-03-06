@@ -7,6 +7,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from engine.trade_attribution import build_trade_attribution
+
 _PRICE_QUANTIZER = Decimal("0.0001")
 
 
@@ -56,6 +58,8 @@ def _build_trade_id(
 
 def build_trade_ledger_from_paper_trades(
     trades: Sequence[Mapping[str, object]],
+    *,
+    signals: Sequence[Mapping[str, object]] | None = None,
 ) -> dict[str, object]:
     """Build canonical deterministic ledger from paper-trading trades."""
     ledger_trades: list[dict[str, object]] = []
@@ -143,11 +147,15 @@ def build_trade_ledger_from_paper_trades(
             }
         )
 
-    return {
+    payload: dict[str, object] = {
         "artifact": "trade_ledger",
         "artifact_version": "1",
         "trades": canonical_trades,
     }
+    if signals is not None:
+        attribution_payload = build_trade_attribution(trades=trades, signals=signals)
+        payload["attributions"] = attribution_payload["attributions"]
+    return payload
 
 
 def canonical_trade_ledger_json_bytes(payload: Mapping[str, Any]) -> bytes:
@@ -193,6 +201,17 @@ def load_trade_ledger_artifact(path: Path) -> dict[str, object]:
         missing = required_fields.difference(trade.keys())
         if missing:
             raise ValueError(f"trade ledger entry missing fields: {sorted(missing)}")
+
+    attributions = payload.get("attributions")
+    if attributions is not None:
+        if not isinstance(attributions, list):
+            raise ValueError("trade ledger attributions must be a list")
+        for attribution in attributions:
+            if not isinstance(attribution, dict):
+                raise ValueError("trade ledger attribution entry must be an object")
+            for field in ("trade_ref", "strategy_id", "originating_signal", "market_context"):
+                if field not in attribution:
+                    raise ValueError(f"trade ledger attribution missing field: {field}")
 
     return payload
 

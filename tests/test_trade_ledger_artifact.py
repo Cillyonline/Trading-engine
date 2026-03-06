@@ -85,7 +85,7 @@ def _signals() -> list[dict[str, object]]:
 def test_trade_ledger_generation_from_paper_trading_runtime() -> None:
     result = PaperTradingSimulator().run(_signals())
 
-    ledger = build_trade_ledger_from_paper_trades(result.trades)
+    ledger = build_trade_ledger_from_paper_trades(result.trades, signals=_signals())
     trades = ledger["trades"]
 
     assert ledger["artifact"] == "trade_ledger"
@@ -128,8 +128,11 @@ def test_trade_ledger_generation_from_paper_trading_runtime() -> None:
 def test_trade_ledger_serialization_is_deterministic() -> None:
     result = PaperTradingSimulator().run(_signals())
 
-    ledger_a = build_trade_ledger_from_paper_trades(result.trades)
-    ledger_b = build_trade_ledger_from_paper_trades(list(reversed(result.trades)))
+    ledger_a = build_trade_ledger_from_paper_trades(result.trades, signals=_signals())
+    ledger_b = build_trade_ledger_from_paper_trades(
+        list(reversed(result.trades)),
+        signals=list(reversed(_signals())),
+    )
 
     bytes_a = canonical_trade_ledger_json_bytes(ledger_a)
     bytes_b = canonical_trade_ledger_json_bytes(ledger_b)
@@ -141,10 +144,38 @@ def test_trade_ledger_serialization_is_deterministic() -> None:
 
 def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path) -> None:
     result = PaperTradingSimulator().run(_signals())
-    ledger = build_trade_ledger_from_paper_trades(result.trades)
+    ledger = build_trade_ledger_from_paper_trades(result.trades, signals=_signals())
 
     artifact_path, sha_value = write_trade_ledger_artifact(tmp_path, ledger)
     loaded = load_trade_ledger_artifact(artifact_path)
 
     assert loaded == ledger
     assert (tmp_path / "trade-ledger.sha256").read_text(encoding="utf-8") == f"{sha_value}\n"
+
+
+def test_trade_ledger_includes_attribution_via_existing_artifact_path() -> None:
+    result = PaperTradingSimulator().run(_signals())
+    ledger = build_trade_ledger_from_paper_trades(result.trades, signals=_signals())
+
+    attributions = ledger.get("attributions")
+    assert isinstance(attributions, list)
+    assert len(attributions) == 2
+
+    first = attributions[0]
+    second = attributions[1]
+
+    assert first["strategy_id"] == "TEST"
+    assert first["originating_signal"]["reason"] == "rule-d"
+    assert first["market_context"] == {
+        "timeframe": "D1",
+        "market_type": "stock",
+        "data_source": "yahoo",
+    }
+
+    assert second["strategy_id"] == "TEST"
+    assert second["originating_signal"]["reason"] == "rule-a"
+    assert second["market_context"] == {
+        "timeframe": "D1",
+        "market_type": "stock",
+        "data_source": "yahoo",
+    }
