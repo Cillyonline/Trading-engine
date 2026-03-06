@@ -134,6 +134,19 @@ def test_trade_ledger_generation_from_paper_trading_runtime() -> None:
             },
         },
     }
+    assert ledger["equity_curve_analysis"] == {
+        "artifact": "equity_curve",
+        "artifact_version": "1",
+        "equity_curve": [
+            {"timestamp": "2024-01-02T09:35:00Z", "equity": 2.0},
+            {"timestamp": "2024-01-03T09:30:00Z", "equity": 4.0},
+        ],
+        "drawdown_stats": {
+            "max_drawdown": 0.0,
+            "recovery_time_steps": None,
+            "drawdown_distribution": [],
+        },
+    }
 
     expected_first = {
         "strategy_id": "TEST",
@@ -184,6 +197,7 @@ def test_trade_ledger_serialization_is_deterministic() -> None:
     assert b"\r\n" not in bytes_a
     assert b'"risk_adjusted_metrics"' in bytes_a
     assert b'"performance_report"' in bytes_a
+    assert b'"equity_curve_analysis"' in bytes_a
 
 
 def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path) -> None:
@@ -204,6 +218,8 @@ def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path)
     assert (tmp_path / "trade-ledger.sha256").read_text(encoding="utf-8") == f"{sha_value}\n"
     assert (tmp_path / "performance-report.json").exists()
     assert (tmp_path / "performance-report.sha256").exists()
+    assert (tmp_path / "equity-curve.json").exists()
+    assert (tmp_path / "equity-curve.sha256").exists()
 
 
 def test_trade_ledger_v1_legacy_payload_without_risk_metrics_loads(tmp_path: Path) -> None:
