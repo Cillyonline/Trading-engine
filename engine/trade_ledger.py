@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from engine.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
 from engine.trade_attribution import build_trade_attribution
 
 _PRICE_QUANTIZER = Decimal("0.0001")
@@ -152,6 +153,7 @@ def build_trade_ledger_from_paper_trades(
         "artifact_version": "1",
         "trades": canonical_trades,
     }
+    payload["risk_adjusted_metrics"] = compute_risk_adjusted_metrics_from_trade_ledger(payload)
     if signals is not None:
         attribution_payload = build_trade_attribution(trades=trades, signals=signals)
         payload["attributions"] = attribution_payload["attributions"]
@@ -212,6 +214,25 @@ def load_trade_ledger_artifact(path: Path) -> dict[str, object]:
             for field in ("trade_ref", "strategy_id", "originating_signal", "market_context"):
                 if field not in attribution:
                     raise ValueError(f"trade ledger attribution missing field: {field}")
+
+    risk_adjusted_metrics = payload.get("risk_adjusted_metrics")
+    if risk_adjusted_metrics is not None:
+        if not isinstance(risk_adjusted_metrics, dict):
+            raise ValueError("trade ledger risk_adjusted_metrics must be an object when present")
+        required_metric_fields = {
+            "sharpe_ratio",
+            "sortino_ratio",
+            "calmar_ratio",
+            "profit_factor",
+            "win_rate",
+        }
+        missing_metric_fields = required_metric_fields.difference(risk_adjusted_metrics.keys())
+        if missing_metric_fields:
+            raise ValueError(f"trade ledger risk_adjusted_metrics missing fields: {sorted(missing_metric_fields)}")
+        for metric_name in required_metric_fields:
+            metric_value = risk_adjusted_metrics.get(metric_name)
+            if metric_value is not None and not isinstance(metric_value, (int, float)):
+                raise ValueError(f"trade ledger risk_adjusted_metrics field {metric_name} must be numeric or null")
 
     return payload
 
