@@ -92,6 +92,13 @@ def test_trade_ledger_generation_from_paper_trading_runtime() -> None:
     assert ledger["artifact_version"] == "1"
     assert isinstance(trades, list)
     assert len(trades) == 2
+    assert ledger["risk_adjusted_metrics"] == {
+        "sharpe_ratio": 2.12132034356,
+        "sortino_ratio": None,
+        "calmar_ratio": None,
+        "profit_factor": None,
+        "win_rate": 1.0,
+    }
 
     expected_first = {
         "strategy_id": "TEST",
@@ -140,6 +147,7 @@ def test_trade_ledger_serialization_is_deterministic() -> None:
     assert bytes_a == bytes_b
     assert bytes_a.endswith(b"\n")
     assert b"\r\n" not in bytes_a
+    assert b'"risk_adjusted_metrics"' in bytes_a
 
 
 def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path) -> None:
@@ -150,7 +158,42 @@ def test_trade_ledger_artifact_can_be_loaded_by_analysis_modules(tmp_path: Path)
     loaded = load_trade_ledger_artifact(artifact_path)
 
     assert loaded == ledger
+    assert loaded["risk_adjusted_metrics"] == {
+        "sharpe_ratio": 2.12132034356,
+        "sortino_ratio": None,
+        "calmar_ratio": None,
+        "profit_factor": None,
+        "win_rate": 1.0,
+    }
     assert (tmp_path / "trade-ledger.sha256").read_text(encoding="utf-8") == f"{sha_value}\n"
+
+
+def test_trade_ledger_v1_legacy_payload_without_risk_metrics_loads(tmp_path: Path) -> None:
+    legacy_payload = {
+        "artifact": "trade_ledger",
+        "artifact_version": "1",
+        "trades": [
+            {
+                "trade_id": "trade-legacy-1",
+                "strategy_id": "LEGACY",
+                "symbol": "AAPL",
+                "entry_timestamp": "2024-01-01T09:30:00Z",
+                "exit_timestamp": "2024-01-02T09:30:00Z",
+                "entry_price": "100.0000",
+                "exit_price": "101.0000",
+                "quantity": "1.0000",
+                "pnl": "1.0000",
+                "holding_time": 86400,
+            }
+        ],
+    }
+
+    artifact_text = canonical_trade_ledger_json_bytes(legacy_payload).decode("utf-8")
+    artifact_path = tmp_path / "trade-ledger-legacy-v1.json"
+    artifact_path.write_text(artifact_text, encoding="utf-8")
+    loaded = load_trade_ledger_artifact(artifact_path)
+
+    assert loaded == legacy_payload
 
 
 def test_trade_ledger_includes_attribution_via_existing_artifact_path() -> None:
