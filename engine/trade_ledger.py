@@ -11,6 +11,7 @@ from engine.performance_report import (
     build_performance_report_from_trade_ledger,
     write_performance_report_artifact,
 )
+from engine.equity_curve import build_equity_curve_from_trade_ledger, write_equity_curve_artifact
 from engine.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
 from engine.trade_attribution import build_trade_attribution
 
@@ -159,6 +160,7 @@ def build_trade_ledger_from_paper_trades(
     }
     payload["risk_adjusted_metrics"] = compute_risk_adjusted_metrics_from_trade_ledger(payload)
     payload["performance_report"] = build_performance_report_from_trade_ledger(payload)
+    payload["equity_curve_analysis"] = build_equity_curve_from_trade_ledger(payload)
     if signals is not None:
         attribution_payload = build_trade_attribution(trades=trades, signals=signals)
         payload["attributions"] = attribution_payload["attributions"]
@@ -182,6 +184,10 @@ def write_trade_ledger_artifact(output_dir: Path, payload: Mapping[str, Any]) ->
     performance_report = payload.get("performance_report")
     if isinstance(performance_report, Mapping):
         write_performance_report_artifact(output_dir, performance_report)
+
+    equity_curve_analysis = payload.get("equity_curve_analysis")
+    if isinstance(equity_curve_analysis, Mapping):
+        write_equity_curve_artifact(output_dir, equity_curve_analysis)
 
     return artifact_path, sha_value
 
@@ -251,6 +257,14 @@ def load_trade_ledger_artifact(path: Path) -> dict[str, object]:
         for field in ("artifact", "artifact_version", "performance_summary", "strategy_comparison", "key_metrics_overview"):
             if field not in performance_report:
                 raise ValueError(f"trade ledger performance_report missing field: {field}")
+
+    equity_curve_analysis = payload.get("equity_curve_analysis")
+    if equity_curve_analysis is not None:
+        if not isinstance(equity_curve_analysis, dict):
+            raise ValueError("trade ledger equity_curve_analysis must be an object when present")
+        for field in ("artifact", "artifact_version", "equity_curve", "drawdown_stats"):
+            if field not in equity_curve_analysis:
+                raise ValueError(f"trade ledger equity_curve_analysis missing field: {field}")
 
     return payload
 
