@@ -54,6 +54,7 @@ from cilly_trading.engine.runtime_controller import (
     shutdown_engine_runtime,
     start_engine_runtime,
 )
+from .order_events_sqlite import SqliteOrderEventRepository
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
@@ -290,6 +291,38 @@ class SignalsReadQuery(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class ExecutionOrdersReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: Optional[str] = Field(default=None)
+    strategy: Optional[str] = Field(default=None)
+    run_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class ExecutionOrderEventItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    order_id: str
+    symbol: str
+    strategy: str
+    state: Literal["created", "submitted", "filled", "partially_filled", "cancelled"]
+    event_timestamp: str
+    event_sequence: int
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ExecutionOrdersReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[ExecutionOrderEventItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
 class ScreenerResultsQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -518,6 +551,7 @@ def _shutdown_runtime() -> None:
 ANALYSIS_DB_PATH: Optional[str] = None
 
 signal_repo = SqliteSignalRepository()
+order_event_repo = SqliteOrderEventRepository(db_path=DEFAULT_DB_PATH)
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 
 
@@ -837,6 +871,22 @@ def _get_ingestion_runs_limit(
     return min(limit, 100)
 
 
+def _get_execution_orders_query(
+    symbol: Optional[str] = Query(default=None),
+    strategy: Optional[str] = Query(default=None),
+    run_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> ExecutionOrdersReadQuery:
+    return ExecutionOrdersReadQuery(
+        symbol=symbol,
+        strategy=strategy,
+        run_id=run_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
 def _get_screener_results_query(
     strategy: str = Query(...),
     timeframe: str = Query(...),
@@ -1043,6 +1093,27 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
         )
 
     return SignalReadResponseDTO(
+        items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get("/execution/orders", response_model=ExecutionOrdersReadResponse)
+def read_execution_orders(
+    params: ExecutionOrdersReadQuery = Depends(_get_execution_orders_query),
+) -> ExecutionOrdersReadResponse:
+    items, total = order_event_repo.read_order_events(
+        symbol=params.symbol,
+        strategy=params.strategy,
+        run_id=params.run_id,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+    response_items = [ExecutionOrderEventItemResponse(**item) for item in items]
+    return ExecutionOrdersReadResponse(
         items=response_items,
         limit=params.limit,
         offset=params.offset,
