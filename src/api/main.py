@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
@@ -439,6 +440,41 @@ class SystemStateResponse(BaseModel):
     metadata: SystemStateMetadataResponse
 
 
+class JournalArtifactItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    artifact_name: str
+    size_bytes: int
+    modified_at: str
+
+
+class JournalArtifactListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[JournalArtifactItemResponse]
+    total: int
+
+
+class JournalArtifactContentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    artifact_name: str
+    content_type: Literal["json", "text"]
+    content: Any
+
+
+class DecisionTraceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    artifact_name: str
+    trace_id: Optional[str] = None
+    entries: List[Dict[str, Any]]
+    total_entries: int
+
+
 app = FastAPI(
     title="Cilly Trading Engine API",
     version="0.1.0",
@@ -446,6 +482,7 @@ app = FastAPI(
 )
 
 UI_DIRECTORY = Path(__file__).resolve().parent.parent / "ui"
+JOURNAL_ARTIFACTS_ROOT = Path(__file__).resolve().parents[2] / "runs" / "phase6"
 app.mount("/ui", StaticFiles(directory=UI_DIRECTORY, html=True), name="ui")
 
 logger.info("Cilly Trading Engine API starting up")
@@ -811,10 +848,147 @@ def _get_screener_results_query(
     )
 
 
+def _iter_journal_artifact_files() -> List[tuple[str, Path]]:
+    if not JOURNAL_ARTIFACTS_ROOT.exists() or not JOURNAL_ARTIFACTS_ROOT.is_dir():
+        return []
+
+    artifact_files: List[tuple[str, Path]] = []
+    for run_dir in JOURNAL_ARTIFACTS_ROOT.iterdir():
+        if not run_dir.is_dir():
+            continue
+        run_id = run_dir.name
+        for artifact_file in run_dir.iterdir():
+            if artifact_file.is_file():
+                artifact_files.append((run_id, artifact_file))
+    return artifact_files
+
+
+def _resolve_journal_artifact_path(run_id: str, artifact_name: str) -> Path:
+    if "/" in run_id or "\\" in run_id:
+        raise HTTPException(status_code=404, detail="journal_artifact_not_found")
+    if "/" in artifact_name or "\\" in artifact_name:
+        raise HTTPException(status_code=404, detail="journal_artifact_not_found")
+
+    candidate = JOURNAL_ARTIFACTS_ROOT / run_id / artifact_name
+    try:
+        resolved = candidate.resolve(strict=True)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="journal_artifact_not_found") from None
+
+    expected_parent = (JOURNAL_ARTIFACTS_ROOT / run_id).resolve()
+    if resolved.parent != expected_parent or not resolved.is_file():
+        raise HTTPException(status_code=404, detail="journal_artifact_not_found")
+
+    return resolved
+
+
+def _read_journal_artifact_content(path: Path) -> tuple[Literal["json", "text"], Any]:
+    raw_text = path.read_text(encoding="utf-8")
+    try:
+        return "json", json.loads(raw_text)
+    except json.JSONDecodeError:
+        return "text", raw_text
+
+
+def _extract_trace_entries(content: Any) -> tuple[Optional[str], List[Dict[str, Any]]]:
+    trace_id: Optional[str] = None
+    entries: list[Any] = []
+
+    if isinstance(content, dict):
+        trace_id_value = content.get("trace_id")
+        if isinstance(trace_id_value, str):
+            trace_id = trace_id_value
+
+        candidate = None
+        if "decision_trace" in content:
+            candidate = content.get("decision_trace")
+        elif "trace_entries" in content:
+            candidate = content.get("trace_entries")
+        elif "entries" in content:
+            candidate = content.get("entries")
+
+        if isinstance(candidate, dict):
+            maybe_trace_id = candidate.get("trace_id")
+            if isinstance(maybe_trace_id, str):
+                trace_id = maybe_trace_id
+            maybe_entries = candidate.get("entries")
+            if isinstance(maybe_entries, list):
+                entries = maybe_entries
+        elif isinstance(candidate, list):
+            entries = candidate
+    elif isinstance(content, list):
+        entries = content
+
+    normalized_entries: List[Dict[str, Any]] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            normalized_entries.append(entry)
+        else:
+            normalized_entries.append({"value": entry})
+    return trace_id, normalized_entries
+
+
 @app.get("/ingestion/runs", response_model=List[IngestionRunItemResponse])
 def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List[IngestionRunItemResponse]:
     rows = analysis_run_repo.list_ingestion_runs(limit=limit)
     return [IngestionRunItemResponse(**row) for row in rows]
+
+
+@app.get("/journal/artifacts", response_model=JournalArtifactListResponse)
+def read_journal_artifacts(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> JournalArtifactListResponse:
+    files = _iter_journal_artifact_files()
+    files.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+
+    total = len(files)
+    page = files[offset : offset + limit]
+    items: List[JournalArtifactItemResponse] = []
+    for run_id, path in page:
+        stat = path.stat()
+        items.append(
+            JournalArtifactItemResponse(
+                run_id=run_id,
+                artifact_name=path.name,
+                size_bytes=stat.st_size,
+                modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            )
+        )
+
+    return JournalArtifactListResponse(items=items, total=total)
+
+
+@app.get(
+    "/journal/artifacts/{run_id}/{artifact_name}",
+    response_model=JournalArtifactContentResponse,
+)
+def read_journal_artifact_content(run_id: str, artifact_name: str) -> JournalArtifactContentResponse:
+    path = _resolve_journal_artifact_path(run_id=run_id, artifact_name=artifact_name)
+    content_type, content = _read_journal_artifact_content(path)
+    return JournalArtifactContentResponse(
+        run_id=run_id,
+        artifact_name=artifact_name,
+        content_type=content_type,
+        content=content,
+    )
+
+
+@app.get("/journal/decision-trace", response_model=DecisionTraceResponse)
+def read_decision_trace(
+    run_id: str = Query(..., min_length=1),
+    artifact_name: str = Query(default="audit.json", min_length=1),
+) -> DecisionTraceResponse:
+    path = _resolve_journal_artifact_path(run_id=run_id, artifact_name=artifact_name)
+    _, content = _read_journal_artifact_content(path)
+    trace_id, entries = _extract_trace_entries(content)
+    return DecisionTraceResponse(
+        run_id=run_id,
+        artifact_name=artifact_name,
+        trace_id=trace_id,
+        entries=entries,
+        total_entries=len(entries),
+    )
 
 
 @app.get("/strategies", response_model=StrategyMetadataResponse)
