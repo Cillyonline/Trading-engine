@@ -210,6 +210,8 @@
               <li><a href="#analysis">Analysis Runs</a></li>
               <li><a href="#strategies">Strategies</a></li>
               <li><a href="#signals">Signals</a></li>
+              <li><a href="#journal">Journal Artifacts</a></li>
+              <li><a href="#decision-trace">Decision Trace</a></li>
               <li><a href="#screener">Screener</a></li>
               <li><a href="#audit">Audit Trail</a></li>
             </ul>
@@ -273,6 +275,51 @@
               </article>
             </section>
 
+            <section class="panel-grid" aria-label="Journal and decision trace visibility">
+              <article id="journal" class="panel">
+                <h3>Journal Artifacts Panel</h3>
+                <p>Read-only artifact list fetched from <code>/journal/artifacts</code>.</p>
+                <p class="status" id="journal-status">Loading journal artifacts...</p>
+                <div class="table-wrap">
+                  <table aria-label="Journal artifact browser table">
+                    <thead>
+                      <tr>
+                        <th>Run ID</th>
+                        <th>Artifact</th>
+                        <th>Size</th>
+                        <th>Modified</th>
+                      </tr>
+                    </thead>
+                    <tbody id="journal-artifact-list"></tbody>
+                  </table>
+                </div>
+                <p class="status" id="artifact-content-status">Waiting for artifact selection...</p>
+                <pre
+                  id="artifact-content-preview"
+                  style="margin-top: 0.65rem; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; background: var(--surface-muted)"
+                ></pre>
+              </article>
+
+              <article id="decision-trace" class="panel">
+                <h3>Decision Trace Panel</h3>
+                <p>Trace entries fetched from <code>/journal/decision-trace</code> (read-only).</p>
+                <p class="status" id="decision-trace-status">Waiting for artifact selection...</p>
+                <div class="table-wrap">
+                  <table aria-label="Decision trace entry table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Step</th>
+                        <th>Reason</th>
+                        <th>Payload</th>
+                      </tr>
+                    </thead>
+                    <tbody id="decision-trace-list"></tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
+
             <article id="screener" class="panel">
               <h3>Screener Panel</h3>
               <p>Reserved for future screener workflow navigation.</p>
@@ -291,6 +338,12 @@
       const strategyList = document.getElementById("strategy-list");
       const signalStatus = document.getElementById("signal-status");
       const signalList = document.getElementById("signal-list");
+      const journalStatus = document.getElementById("journal-status");
+      const journalArtifactList = document.getElementById("journal-artifact-list");
+      const artifactContentStatus = document.getElementById("artifact-content-status");
+      const artifactContentPreview = document.getElementById("artifact-content-preview");
+      const decisionTraceStatus = document.getElementById("decision-trace-status");
+      const decisionTraceList = document.getElementById("decision-trace-list");
 
       function createRow(cells) {
         const row = document.createElement("tr");
@@ -365,7 +418,112 @@
         }
       }
 
-      void Promise.all([loadStrategies(), loadSignals()]);
+      function summarizeEntry(entry) {
+        const step = entry.step || entry.phase || entry.name || "";
+        const reason = entry.reason || entry.decision || "";
+        return { step, reason };
+      }
+
+      function previewContent(contentType, content) {
+        if (contentType === "json") {
+          return JSON.stringify(content, null, 2);
+        }
+        return String(content || "");
+      }
+
+      async function loadArtifactContent(runId, artifactName) {
+        artifactContentStatus.textContent = `Loading ${artifactName}...`;
+        artifactContentPreview.textContent = "";
+        try {
+          const response = await fetch(`/journal/artifacts/${encodeURIComponent(runId)}/${encodeURIComponent(artifactName)}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          artifactContentPreview.textContent = previewContent(payload.content_type, payload.content);
+          artifactContentStatus.textContent = `Loaded ${payload.artifact_name} for run ${payload.run_id}.`;
+        } catch (error) {
+          artifactContentStatus.textContent = `Failed to load artifact content: ${error.message}`;
+        }
+      }
+
+      async function loadDecisionTrace(runId, artifactName) {
+        decisionTraceStatus.textContent = "Loading decision trace entries...";
+        decisionTraceList.innerHTML = "";
+        try {
+          const query = `run_id=${encodeURIComponent(runId)}&artifact_name=${encodeURIComponent(artifactName)}`;
+          const response = await fetch(`/journal/decision-trace?${query}`);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          const entries = payload.entries || [];
+          if (entries.length === 0) {
+            decisionTraceStatus.textContent = "No decision trace entries found for selected artifact.";
+            return;
+          }
+
+          entries.forEach((entry, index) => {
+            const summary = summarizeEntry(entry || {});
+            decisionTraceList.appendChild(
+              createRow([
+                String(index + 1),
+                summary.step,
+                summary.reason,
+                JSON.stringify(entry),
+              ])
+            );
+          });
+          decisionTraceStatus.textContent = `Loaded ${payload.total_entries} decision trace entries.`;
+        } catch (error) {
+          decisionTraceStatus.textContent = `Failed to load decision trace: ${error.message}`;
+        }
+      }
+
+      async function loadJournalArtifacts() {
+        journalStatus.textContent = "Loading journal artifacts from /journal/artifacts...";
+        journalArtifactList.innerHTML = "";
+        try {
+          const response = await fetch("/journal/artifacts?limit=50");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          const items = payload.items || [];
+          if (items.length === 0) {
+            journalStatus.textContent = "No journal artifacts found.";
+            artifactContentStatus.textContent = "No artifacts available.";
+            decisionTraceStatus.textContent = "No artifacts available.";
+            return;
+          }
+
+          items.forEach((item) => {
+            const row = createRow([
+              item.run_id || "",
+              item.artifact_name || "",
+              item.size_bytes != null ? String(item.size_bytes) : "",
+              item.modified_at || "",
+            ]);
+            row.style.cursor = "pointer";
+            row.addEventListener("click", () => {
+              void loadArtifactContent(item.run_id, item.artifact_name);
+              void loadDecisionTrace(item.run_id, item.artifact_name);
+            });
+            journalArtifactList.appendChild(row);
+          });
+
+          const first = items[0];
+          void loadArtifactContent(first.run_id, first.artifact_name);
+          void loadDecisionTrace(first.run_id, first.artifact_name);
+          journalStatus.textContent = `Loaded ${items.length} of ${payload.total} artifacts.`;
+        } catch (error) {
+          journalStatus.textContent = `Failed to load journal artifacts: ${error.message}`;
+          artifactContentStatus.textContent = "Artifact content unavailable.";
+          decisionTraceStatus.textContent = "Decision trace unavailable.";
+        }
+      }
+
+      void Promise.all([loadStrategies(), loadSignals(), loadJournalArtifacts()]);
     </script>
   </body>
 </html>
