@@ -25,6 +25,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from cilly_trading.engine.analysis import trigger_operator_analysis_run
 from engine.compliance.daily_loss_guard import (
     configured_daily_loss_limit,
     should_block_execution_for_daily_loss,
@@ -1185,6 +1186,13 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
 
     existing_run = analysis_run_repo.get_run(computed_run_id)
     if existing_run is not None:
+        logger.info(
+            "Operator analysis run reused: component=control_plane analysis_run_id=%s ingestion_run_id=%s symbol=%s strategy=%s",
+            computed_run_id,
+            existing_run["ingestion_run_id"],
+            req.symbol,
+            strategy_name,
+        )
         _require_ingestion_run(existing_run["ingestion_run_id"])
         return ManualAnalysisResponse(**existing_run["result"])
 
@@ -1209,15 +1217,21 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
 
     strategy_configs = {strategy_name: effective_config}
 
-    signals = _run_snapshot_analysis(
-        symbols=[req.symbol],
-        strategies=[strategy],
-        engine_config=engine_config,
-        strategy_configs=strategy_configs,
-        signal_repo=signal_repo,
+    signals = trigger_operator_analysis_run(
+        execute=_run_snapshot_analysis,
+        symbol=req.symbol,
+        strategy=strategy_name,
         ingestion_run_id=req.ingestion_run_id,
-        db_path=_resolve_analysis_db_path(),
-        run_id=computed_run_id,
+        execute_kwargs={
+            "symbols": [req.symbol],
+            "strategies": [strategy],
+            "engine_config": engine_config,
+            "strategy_configs": strategy_configs,
+            "signal_repo": signal_repo,
+            "ingestion_run_id": req.ingestion_run_id,
+            "db_path": _resolve_analysis_db_path(),
+            "run_id": computed_run_id,
+        },
     )
 
     filtered_signals = [
