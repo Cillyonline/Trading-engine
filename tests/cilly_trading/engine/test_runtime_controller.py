@@ -7,6 +7,8 @@ from cilly_trading.engine.runtime_controller import (
     LifecycleTransitionError,
     _reset_runtime_controller_for_tests,
     get_runtime_controller,
+    pause_engine_runtime,
+    resume_engine_runtime,
     shutdown_engine_runtime,
     start_engine_runtime,
 )
@@ -67,6 +69,28 @@ def test_shutdown_before_running_is_rejected() -> None:
         controller.shutdown()
 
 
+def test_pause_and_resume_transitions_succeed() -> None:
+    controller = EngineRuntimeController()
+
+    controller.init()
+    controller.start()
+
+    assert controller.pause_execution() == "paused"
+    assert controller.resume_execution() == "running"
+    assert controller.state == "running"
+
+
+def test_pause_and_resume_invalid_transitions_are_rejected() -> None:
+    controller = EngineRuntimeController()
+
+    with pytest.raises(LifecycleTransitionError):
+        controller.pause_execution()
+
+    controller.init()
+    with pytest.raises(LifecycleTransitionError):
+        controller.resume_execution()
+
+
 def test_process_runtime_is_singleton_and_started_once() -> None:
     runtime_a = get_runtime_controller()
     runtime_b = get_runtime_controller()
@@ -89,3 +113,16 @@ def test_process_runtime_shutdown_is_best_effort() -> None:
     assert shutdown_engine_runtime() == "stopped"
     assert shutdown_engine_runtime() == "stopped"
     assert runtime.state == "stopped"
+
+
+def test_process_runtime_pause_and_resume_are_idempotent() -> None:
+    runtime = get_runtime_controller()
+
+    start_engine_runtime()
+    assert pause_engine_runtime() == "paused"
+    assert pause_engine_runtime() == "paused"
+    assert runtime.state == "paused"
+
+    assert resume_engine_runtime() == "running"
+    assert resume_engine_runtime() == "running"
+    assert runtime.state == "running"

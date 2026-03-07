@@ -75,3 +75,19 @@ def test_system_state_endpoint_is_documented(monkeypatch) -> None:
     get_spec = openapi["paths"]["/system/state"]["get"]
     assert get_spec["summary"] == "System State"
     assert "Read-only system runtime state for operator inspection." in get_spec["description"]
+
+
+def test_system_state_reflects_paused_runtime_mode(monkeypatch) -> None:
+    payload = _build_system_state_payload()
+    payload["status"] = "paused"
+    payload["runtime"]["mode"] = "paused"
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "get_system_state_payload", lambda: payload)
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/system/state")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "paused"
+    assert response.json()["runtime"]["mode"] == "paused"

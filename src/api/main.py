@@ -51,6 +51,8 @@ from cilly_trading.engine.health.evaluator import (
 from cilly_trading.engine.runtime_controller import (
     LifecycleTransitionError,
     get_runtime_controller,
+    pause_engine_runtime,
+    resume_engine_runtime,
     shutdown_engine_runtime,
     start_engine_runtime,
 )
@@ -495,6 +497,12 @@ class SystemStateResponse(BaseModel):
     metadata: SystemStateMetadataResponse
 
 
+class ExecutionControlResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    state: str
+
+
 class JournalArtifactItemResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -830,6 +838,34 @@ def system_state() -> SystemStateResponse:
     payload = get_system_state_payload()
     payload["runtime"].setdefault("extensions", [])
     return SystemStateResponse(**payload)
+
+
+@app.post(
+    "/execution/pause",
+    response_model=ExecutionControlResponse,
+    summary="Pause Execution",
+    description="Pause engine execution while preserving runtime ownership and introspection state.",
+)
+def pause_execution() -> ExecutionControlResponse:
+    try:
+        state = pause_engine_runtime()
+    except LifecycleTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ExecutionControlResponse(state=state)
+
+
+@app.post(
+    "/execution/resume",
+    response_model=ExecutionControlResponse,
+    summary="Resume Execution",
+    description="Resume engine execution after an operator pause.",
+)
+def resume_execution() -> ExecutionControlResponse:
+    try:
+        state = resume_engine_runtime()
+    except LifecycleTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ExecutionControlResponse(state=state)
 
 
 def _portfolio_position_response(
