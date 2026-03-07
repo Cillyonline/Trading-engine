@@ -6,942 +6,208 @@
     <title>Owner Dashboard</title>
     <style>
       :root {
-        color-scheme: dark;
-        font-family: Arial, sans-serif;
+        --bg-a: #f3f5f8;
+        --bg-b: #e7ebf1;
+        --surface: #ffffff;
+        --surface-muted: #f8fafc;
+        --line: #d9e0ea;
+        --text: #1e293b;
+        --text-soft: #4b5563;
+        --accent: #0f766e;
+        --accent-soft: #e0f2f1;
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       body {
         margin: 0;
+        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 10% 10%, var(--bg-a), var(--bg-b));
+      }
+
+      .shell {
         min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #0f172a;
-        color: #e2e8f0;
+        padding: 1.25rem;
       }
 
-      main {
-        width: min(980px, calc(100% - 2rem));
-        border: 1px solid #334155;
-        border-radius: 12px;
-        padding: 1.5rem;
-        background: #111827;
+      .frame {
+        margin: 0 auto;
+        max-width: 1100px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--surface);
+        overflow: hidden;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
       }
 
-      h1 {
-        margin-top: 0;
-        margin-bottom: 0.25rem;
+      .header {
+        padding: 1.1rem 1.25rem;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(90deg, #f9fafb, #f4f6f9);
       }
 
-      p {
-        color: #cbd5e1;
+      .header h1 {
+        margin: 0;
+        font-size: 1.35rem;
+      }
+
+      .header p {
+        margin: 0.35rem 0 0;
+        color: var(--text-soft);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        min-height: 520px;
+      }
+
+      .nav {
+        border-right: 1px solid var(--line);
+        background: var(--surface-muted);
+        padding: 1rem;
+      }
+
+      .nav h2 {
+        margin: 0 0 0.75rem;
+        font-size: 0.9rem;
+        color: var(--text-soft);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .nav ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .nav a {
+        display: block;
+        text-decoration: none;
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.55rem 0.65rem;
+        background: #fff;
+      }
+
+      .nav a.active {
+        border-color: #97d3ce;
+        background: var(--accent-soft);
+        color: #115e59;
+        font-weight: 600;
+      }
+
+      .content {
+        padding: 1rem;
+        display: grid;
+        gap: 0.85rem;
       }
 
       .panel {
-        margin-top: 1.25rem;
-        border: 1px solid #334155;
+        border: 1px solid var(--line);
         border-radius: 10px;
-        padding: 1rem;
-        background: #0b1220;
+        padding: 0.9rem;
       }
 
-      .panel h2 {
-        margin: 0 0 0.75rem;
+      .panel h3 {
+        margin: 0;
         font-size: 1rem;
-        color: #bfdbfe;
       }
 
-      dl {
-        margin: 0;
-        display: grid;
-        grid-template-columns: 180px 1fr;
-        row-gap: 0.5rem;
+      .panel p {
+        margin: 0.4rem 0 0;
+        color: var(--text-soft);
       }
 
-      dt {
-        color: #93c5fd;
-      }
-
-      dd {
-        margin: 0;
-        color: #e2e8f0;
-        word-break: break-word;
-      }
-
-      .status-message {
-        margin-top: 1rem;
-        min-height: 1.5rem;
-      }
-
-      .status-message.offline {
-        color: #fca5a5;
-      }
-
-      .screener-form {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.75rem;
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-      }
-
-      .field label {
-        color: #93c5fd;
-      }
-
-      .field input,
-      .field select {
-        border: 1px solid #334155;
-        border-radius: 6px;
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 0.5rem;
-      }
-
-      .form-actions {
-        grid-column: span 2;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-      }
-
-      .form-actions button {
-        border: 1px solid #2563eb;
-        border-radius: 6px;
-        background: #1d4ed8;
-        color: #ffffff;
-        padding: 0.5rem 0.85rem;
-        cursor: pointer;
-      }
-
-      .form-actions button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .pagination-controls {
-        margin-top: 0.75rem;
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-      }
-
-      .pagination-controls button {
-        border: 1px solid #334155;
-        border-radius: 6px;
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 0.35rem 0.7rem;
-        cursor: pointer;
-      }
-
-      .pagination-controls button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .loading-indicator {
-        color: #bfdbfe;
-      }
-
-      .error-box {
-        margin-top: 0.75rem;
-        border: 1px solid #dc2626;
-        border-radius: 6px;
-        padding: 0.75rem;
-        background: rgba(127, 29, 29, 0.35);
-        color: #fecaca;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
-      .table-wrap {
-        margin-top: 0.9rem;
-        overflow-x: auto;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      th,
-      td {
-        border-bottom: 1px solid #334155;
-        padding: 0.55rem;
-        text-align: left;
-      }
-
-      th button {
-        border: 0;
-        background: transparent;
-        color: #93c5fd;
+      .pill {
+        display: inline-block;
+        margin-top: 0.5rem;
+        border-radius: 999px;
+        border: 1px solid #b7d7d3;
+        background: #ecfdf8;
+        color: var(--accent);
+        padding: 0.2rem 0.55rem;
+        font-size: 0.75rem;
         font-weight: 600;
-        padding: 0;
-        cursor: pointer;
       }
 
-      .muted {
-        color: #94a3b8;
-      }
-
-      @media (max-width: 700px) {
-        .screener-form {
+      @media (max-width: 860px) {
+        .workspace {
           grid-template-columns: 1fr;
         }
 
-        .form-actions {
-          grid-column: span 1;
+        .nav {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
         }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>Owner Dashboard</h1>
-      <p>Trading Engine owner dashboard UI is available at <code>/ui</code>.</p>
+    <div class="shell">
+      <main class="frame">
+        <header class="header">
+          <h1>Operator Workbench</h1>
+          <p>
+            Control-plane surface for the Cilly Trading Engine. Served by FastAPI static mount at
+            <code>/ui</code>.
+          </p>
+        </header>
 
-      <section class="panel" aria-live="polite">
-        <h2>Runtime Status</h2>
-        <dl>
-          <dt>Status</dt>
-          <dd id="status">Loading...</dd>
+        <section class="workspace" aria-label="Operator workbench workspace">
+          <nav class="nav" aria-label="Workbench navigation">
+            <h2>Navigation</h2>
+            <ul>
+              <li><a class="active" href="#overview">Overview</a></li>
+              <li><a href="#runtime">Runtime Status</a></li>
+              <li><a href="#analysis">Analysis Runs</a></li>
+              <li><a href="#signals">Signals</a></li>
+              <li><a href="#screener">Screener</a></li>
+              <li><a href="#audit">Audit Trail</a></li>
+            </ul>
+          </nav>
 
-          <dt>Mode</dt>
-          <dd id="mode">Loading...</dd>
+          <div class="content">
+            <article id="overview" class="panel">
+              <h3>Overview Panel</h3>
+              <p>Entry point for operator workflows and high-level environment orientation.</p>
+              <span class="pill">Base Surface</span>
+            </article>
 
-          <dt>Runtime ID</dt>
-          <dd id="runtime_id">Loading...</dd>
+            <article id="runtime" class="panel">
+              <h3>Runtime Status Panel</h3>
+              <p>Reserved for runtime state inspection. No engine or strategy logic is embedded.</p>
+            </article>
 
-          <dt>Started At</dt>
-          <dd id="started_at">Loading...</dd>
+            <article id="analysis" class="panel">
+              <h3>Analysis Runs Panel</h3>
+              <p>Reserved for future run history and trigger actions exposed by API endpoints.</p>
+            </article>
 
-          <dt>Updated At</dt>
-          <dd id="updated_at">Loading...</dd>
-        </dl>
-        <p id="status_message" class="status-message"></p>
-      </section>
+            <article id="signals" class="panel">
+              <h3>Signals Panel</h3>
+              <p>Reserved for future signal inspection views.</p>
+            </article>
 
-      <section class="panel" aria-live="polite">
-        <h2>Screener</h2>
-        <form id="screener_form" class="screener-form">
-          <div class="field">
-            <label for="ingestion_run_id">Ingestion Run ID</label>
-            <input id="ingestion_run_id" name="ingestion_run_id" type="text" required />
+            <article id="screener" class="panel">
+              <h3>Screener Panel</h3>
+              <p>Reserved for future screener workflow navigation.</p>
+            </article>
+
+            <article id="audit" class="panel">
+              <h3>Audit Trail Panel</h3>
+              <p>Reserved for traceability and operational audit interfaces.</p>
+            </article>
           </div>
-
-          <div class="field">
-            <label for="market_type">Market Type</label>
-            <select id="market_type" name="market_type">
-              <option value="stock" selected>stock</option>
-              <option value="crypto">crypto</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label for="lookback_days">Lookback Days</label>
-            <input
-              id="lookback_days"
-              name="lookback_days"
-              type="number"
-              min="1"
-              value="200"
-              required
-            />
-          </div>
-
-          <div class="field">
-            <label for="min_score">Min Score</label>
-            <input id="min_score" name="min_score" type="number" value="30" required />
-          </div>
-
-          <div class="form-actions">
-            <button id="run_screener_btn" type="submit">Run Screener</button>
-            <span id="screener_loading" class="loading-indicator" hidden>Running screener...</span>
-          </div>
-        </form>
-
-        <div id="screener_error" class="error-box" hidden></div>
-
-        <div class="table-wrap">
-          <table id="screener_table">
-            <thead>
-              <tr>
-                <th><button type="button" data-sort-key="symbol">Symbol</button></th>
-                <th><button type="button" data-sort-key="score">Score</button></th>
-                <th>
-                  <button type="button" data-sort-key="signal_strength">Signal Strength</button>
-                </th>
-                <th><button type="button" data-sort-key="strategy">Strategy</button></th>
-                <th><button type="button" data-sort-key="timeframe">Timeframe</button></th>
-                <th><button type="button" data-sort-key="stage">Stage</button></th>
-              </tr>
-            </thead>
-            <tbody id="screener_results_body">
-              <tr>
-                <td colspan="6" class="muted">No screener results yet.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel" aria-live="polite">
-        <h2>Signals</h2>
-        <form id="signals_form" class="screener-form">
-          <div class="field">
-            <label for="signals_ingestion_run_id">Ingestion Run ID</label>
-            <input
-              id="signals_ingestion_run_id"
-              name="signals_ingestion_run_id"
-              type="text"
-              required
-            />
-          </div>
-
-          <div class="field">
-            <label for="signals_limit">Limit</label>
-            <input id="signals_limit" name="signals_limit" type="number" min="1" value="50" />
-          </div>
-
-          <div class="form-actions">
-            <button id="load_signals_btn" type="submit">Load Signals</button>
-            <span id="signals_loading" class="loading-indicator" hidden>Loading signals...</span>
-          </div>
-        </form>
-
-        <div id="signals_error" class="error-box" hidden></div>
-
-        <div class="table-wrap">
-          <table id="signals_table">
-            <thead>
-              <tr id="signals_head_row">
-                <th>Signals</th>
-              </tr>
-            </thead>
-            <tbody id="signals_results_body">
-              <tr>
-                <td class="muted">No signals loaded.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="pagination-controls">
-          <button id="signals_prev_btn" type="button" disabled>Prev</button>
-          <button id="signals_next_btn" type="button" disabled>Next</button>
-          <span id="signals_pagination" class="muted">Showing 0-0 of 0</span>
-        </div>
-      </section>
-    </main>
-
-    <script>
-      (function () {
-        const defaults = {
-          status: "Unavailable",
-          mode: "Unavailable",
-          runtime_id: "Unavailable",
-          started_at: "Unavailable",
-          updated_at: "Unavailable",
-        };
-
-        const fields = {
-          status: document.getElementById("status"),
-          mode: document.getElementById("mode"),
-          runtime_id: document.getElementById("runtime_id"),
-          started_at: document.getElementById("started_at"),
-          updated_at: document.getElementById("updated_at"),
-        };
-
-        const statusMessage = document.getElementById("status_message");
-
-        function setValues(values) {
-          Object.keys(fields).forEach(function (key) {
-            const target = fields[key];
-            const rawValue = values[key];
-            target.textContent =
-              rawValue === undefined || rawValue === null || rawValue === ""
-                ? defaults[key]
-                : String(rawValue);
-          });
-        }
-
-        function setMessage(message, isOffline) {
-          statusMessage.textContent = message;
-          statusMessage.classList.toggle("offline", Boolean(isOffline));
-        }
-
-        function parseJsonSafe(response) {
-          if (!response.ok) {
-            return null;
-          }
-
-          return response
-            .json()
-            .then(function (json) {
-              return json;
-            })
-            .catch(function () {
-              return null;
-            });
-        }
-
-        Promise.all([
-          fetch("/health")
-            .then(parseJsonSafe)
-            .catch(function () {
-              return null;
-            }),
-          fetch("/runtime/introspection")
-            .then(parseJsonSafe)
-            .catch(function () {
-              return null;
-            }),
-        ])
-          .then(function (results) {
-            const healthData = results[0] || {};
-            const runtimeData = results[1] || {};
-
-            setValues({
-              status: healthData.status,
-              mode: runtimeData.mode || healthData.mode,
-              runtime_id: runtimeData.runtime_id,
-              started_at:
-                runtimeData.timestamps && runtimeData.timestamps.started_at,
-              updated_at:
-                runtimeData.timestamps && runtimeData.timestamps.updated_at,
-            });
-
-            if (!results[0] && !results[1]) {
-              setMessage(
-                "Runtime endpoints are currently unavailable. Displaying fallback values.",
-                true
-              );
-            } else if (!results[0] || !results[1]) {
-              setMessage(
-                "Some runtime details could not be loaded. Showing available data.",
-                true
-              );
-            } else {
-              setMessage("Runtime details loaded.", false);
-            }
-          })
-          .catch(function () {
-            setValues(defaults);
-            setMessage(
-              "Runtime endpoints are currently unavailable. Displaying fallback values.",
-              true
-            );
-          });
-
-        const screenerForm = document.getElementById("screener_form");
-        const runButton = document.getElementById("run_screener_btn");
-        const loadingIndicator = document.getElementById("screener_loading");
-        const errorBox = document.getElementById("screener_error");
-        const resultsBody = document.getElementById("screener_results_body");
-        const sortHeaderButtons = Array.prototype.slice.call(
-          document.querySelectorAll("#screener_table th button[data-sort-key]")
-        );
-
-        let resultRows = [];
-        let sortState = {
-          key: "score",
-          direction: "desc",
-        };
-
-        function setLoading(isLoading) {
-          runButton.disabled = isLoading;
-          loadingIndicator.hidden = !isLoading;
-        }
-
-        function showError(message) {
-          errorBox.textContent = message;
-          errorBox.hidden = false;
-        }
-
-        function clearError() {
-          errorBox.textContent = "";
-          errorBox.hidden = true;
-        }
-
-        function normalizeNumber(value) {
-          const num = Number(value);
-          return Number.isFinite(num) ? num : null;
-        }
-
-        function getSortValue(row, key) {
-          if (key === "score" || key === "signal_strength") {
-            const numericValue = normalizeNumber(row[key]);
-            if (numericValue !== null) {
-              return numericValue;
-            }
-          }
-          if (row[key] === undefined || row[key] === null) {
-            return "";
-          }
-          return String(row[key]).toLowerCase();
-        }
-
-        function stableSortRows(rows, key, direction) {
-          const directionFactor = direction === "asc" ? 1 : -1;
-
-          return rows
-            .map(function (row, index) {
-              return { row: row, index: index };
-            })
-            .sort(function (left, right) {
-              const leftValue = getSortValue(left.row, key);
-              const rightValue = getSortValue(right.row, key);
-
-              if (leftValue < rightValue) {
-                return -1 * directionFactor;
-              }
-              if (leftValue > rightValue) {
-                return 1 * directionFactor;
-              }
-              return left.index - right.index;
-            })
-            .map(function (item) {
-              return item.row;
-            });
-        }
-
-        function flattenRows(payload) {
-          const symbols = payload && Array.isArray(payload.symbols) ? payload.symbols : [];
-          const rows = [];
-
-          symbols.forEach(function (symbolItem) {
-            const setups = Array.isArray(symbolItem.setups) ? symbolItem.setups : [];
-            setups.forEach(function (setupItem) {
-              rows.push({
-                symbol: symbolItem.symbol || "",
-                score: symbolItem.score,
-                signal_strength: symbolItem.signal_strength,
-                strategy: setupItem.strategy || "",
-                timeframe: setupItem.timeframe || "",
-                stage: setupItem.stage || "",
-              });
-            });
-          });
-
-          return rows;
-        }
-
-        function renderRows() {
-          resultsBody.innerHTML = "";
-
-          if (resultRows.length === 0) {
-            const emptyRow = document.createElement("tr");
-            const emptyCell = document.createElement("td");
-            emptyCell.colSpan = 6;
-            emptyCell.className = "muted";
-            emptyCell.textContent = "No screener results available.";
-            emptyRow.appendChild(emptyCell);
-            resultsBody.appendChild(emptyRow);
-            return;
-          }
-
-          resultRows.forEach(function (row) {
-            const tr = document.createElement("tr");
-            [
-              row.symbol,
-              row.score,
-              row.signal_strength,
-              row.strategy,
-              row.timeframe,
-              row.stage,
-            ].forEach(function (value) {
-              const td = document.createElement("td");
-              td.textContent =
-                value === undefined || value === null || value === "" ? "-" : String(value);
-              tr.appendChild(td);
-            });
-            resultsBody.appendChild(tr);
-          });
-        }
-
-        function applySorting() {
-          resultRows = stableSortRows(resultRows, sortState.key, sortState.direction);
-          renderRows();
-        }
-
-        function updateSortHeaderLabels() {
-          sortHeaderButtons.forEach(function (button) {
-            const key = button.getAttribute("data-sort-key");
-            const baseLabel = button.textContent.replace(/\s[↑↓]$/, "");
-            if (key === sortState.key) {
-              button.textContent = baseLabel + (sortState.direction === "asc" ? " ↑" : " ↓");
-            } else {
-              button.textContent = baseLabel;
-            }
-          });
-        }
-
-        sortHeaderButtons.forEach(function (button) {
-          button.addEventListener("click", function () {
-            const key = button.getAttribute("data-sort-key");
-            if (sortState.key === key) {
-              sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
-            } else {
-              sortState.key = key;
-              sortState.direction = key === "score" ? "desc" : "asc";
-            }
-            applySorting();
-            updateSortHeaderLabels();
-          });
-        });
-
-        function parseErrorPayload(textPayload) {
-          if (!textPayload) {
-            return "Request failed with empty error response.";
-          }
-          try {
-            const parsed = JSON.parse(textPayload);
-            return JSON.stringify(parsed, null, 2);
-          } catch (error) {
-            return textPayload;
-          }
-        }
-
-        screenerForm.addEventListener("submit", function (event) {
-          event.preventDefault();
-          clearError();
-
-          const ingestionRunId = document.getElementById("ingestion_run_id").value.trim();
-          const marketType = document.getElementById("market_type").value;
-          const lookbackDays = Number(document.getElementById("lookback_days").value);
-          const minScore = Number(document.getElementById("min_score").value);
-
-          if (!ingestionRunId) {
-            showError("ingestion_run_id is required.");
-            return;
-          }
-
-          const requestBody = {
-            ingestion_run_id: ingestionRunId,
-            market_type: marketType,
-            lookback_days: lookbackDays,
-            min_score: minScore,
-          };
-
-          setLoading(true);
-
-          fetch("/screener/basic", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(requestBody),
-          })
-            .then(function (response) {
-              if (!response.ok) {
-                return response.text().then(function (errorText) {
-                  throw new Error(
-                    "Screener request failed (" +
-                      response.status +
-                      "): " +
-                      parseErrorPayload(errorText)
-                  );
-                });
-              }
-              return response.json();
-            })
-            .then(function (payload) {
-              resultRows = flattenRows(payload);
-              applySorting();
-              updateSortHeaderLabels();
-            })
-            .catch(function (error) {
-              showError(error && error.message ? error.message : "Screener request failed.");
-            })
-            .finally(function () {
-              setLoading(false);
-            });
-        });
-
-        updateSortHeaderLabels();
-
-        const signalsForm = document.getElementById("signals_form");
-        const signalsLoadButton = document.getElementById("load_signals_btn");
-        const signalsLoadingIndicator = document.getElementById("signals_loading");
-        const signalsErrorBox = document.getElementById("signals_error");
-        const signalsHeadRow = document.getElementById("signals_head_row");
-        const signalsBody = document.getElementById("signals_results_body");
-        const signalsPrevButton = document.getElementById("signals_prev_btn");
-        const signalsNextButton = document.getElementById("signals_next_btn");
-        const signalsPagination = document.getElementById("signals_pagination");
-
-        let signalsState = {
-          ingestionRunId: "",
-          limit: 50,
-          offset: 0,
-          total: 0,
-          items: [],
-          columns: [],
-          sortKey: null,
-          sortDirection: "asc",
-        };
-
-        function setSignalsLoading(isLoading) {
-          signalsLoadButton.disabled = isLoading;
-          signalsPrevButton.disabled = isLoading || signalsState.offset === 0;
-          signalsNextButton.disabled =
-            isLoading || signalsState.offset + signalsState.limit >= signalsState.total;
-          signalsLoadingIndicator.hidden = !isLoading;
-        }
-
-        function showSignalsError(message) {
-          signalsErrorBox.textContent = message;
-          signalsErrorBox.hidden = false;
-        }
-
-        function clearSignalsError() {
-          signalsErrorBox.textContent = "";
-          signalsErrorBox.hidden = true;
-        }
-
-        function compareValues(leftValue, rightValue) {
-          if (leftValue < rightValue) {
-            return -1;
-          }
-          if (leftValue > rightValue) {
-            return 1;
-          }
-          return 0;
-        }
-
-        function normalizeSortValue(value) {
-          if (value === null || value === undefined) {
-            return "";
-          }
-          const numericValue = Number(value);
-          if (Number.isFinite(numericValue) && String(value).trim() !== "") {
-            return numericValue;
-          }
-          return String(value).toLowerCase();
-        }
-
-        function sortSignalsItems(items) {
-          if (!signalsState.sortKey) {
-            return items.slice();
-          }
-
-          const directionFactor = signalsState.sortDirection === "asc" ? 1 : -1;
-
-          return items
-            .map(function (item, index) {
-              return { item: item, index: index };
-            })
-            .sort(function (left, right) {
-              const leftValue = normalizeSortValue(left.item[signalsState.sortKey]);
-              const rightValue = normalizeSortValue(right.item[signalsState.sortKey]);
-              const comparison = compareValues(leftValue, rightValue);
-              if (comparison !== 0) {
-                return comparison * directionFactor;
-              }
-              return left.index - right.index;
-            })
-            .map(function (entry) {
-              return entry.item;
-            });
-        }
-
-        function updateSignalsPagination() {
-          const pageStart = signalsState.total === 0 ? 0 : signalsState.offset + 1;
-          const pageEnd = Math.min(signalsState.offset + signalsState.limit, signalsState.total);
-          signalsPagination.textContent =
-            "Showing " + pageStart + "-" + pageEnd + " of " + signalsState.total;
-          signalsPrevButton.disabled = signalsState.offset === 0;
-          signalsNextButton.disabled = signalsState.offset + signalsState.limit >= signalsState.total;
-        }
-
-        function buildSignalsColumns(items) {
-          if (!items.length) {
-            return [];
-          }
-          const seenKeys = {};
-          const columns = [];
-          items.forEach(function (item) {
-            Object.keys(item).forEach(function (key) {
-              if (!seenKeys[key]) {
-                seenKeys[key] = true;
-                columns.push(key);
-              }
-            });
-          });
-          return columns;
-        }
-
-        function toHeaderLabel(key) {
-          return key.replace(/_/g, " ").replace(/\b\w/g, function (char) {
-            return char.toUpperCase();
-          });
-        }
-
-        function renderSignalsHeaders() {
-          signalsHeadRow.innerHTML = "";
-          const columns = signalsState.columns.length ? signalsState.columns : ["signals"];
-          columns.forEach(function (column) {
-            const th = document.createElement("th");
-            if (signalsState.columns.length) {
-              const button = document.createElement("button");
-              button.type = "button";
-              const arrow =
-                signalsState.sortKey === column
-                  ? signalsState.sortDirection === "asc"
-                    ? " ↑"
-                    : " ↓"
-                  : "";
-              button.textContent = toHeaderLabel(column) + arrow;
-              button.addEventListener("click", function () {
-                if (signalsState.sortKey === column) {
-                  signalsState.sortDirection =
-                    signalsState.sortDirection === "asc" ? "desc" : "asc";
-                } else {
-                  signalsState.sortKey = column;
-                  signalsState.sortDirection = "asc";
-                }
-                renderSignalsHeaders();
-                renderSignalsRows();
-              });
-              th.appendChild(button);
-            } else {
-              th.textContent = "Signals";
-            }
-            signalsHeadRow.appendChild(th);
-          });
-        }
-
-        function renderSignalsRows() {
-          signalsBody.innerHTML = "";
-          if (!signalsState.items.length) {
-            const emptyRow = document.createElement("tr");
-            const emptyCell = document.createElement("td");
-            emptyCell.className = "muted";
-            emptyCell.colSpan = Math.max(signalsState.columns.length, 1);
-            emptyCell.textContent = "No signals available for this ingestion run.";
-            emptyRow.appendChild(emptyCell);
-            signalsBody.appendChild(emptyRow);
-            return;
-          }
-
-          const sortedItems = sortSignalsItems(signalsState.items);
-          sortedItems.forEach(function (item) {
-            const tr = document.createElement("tr");
-            signalsState.columns.forEach(function (column) {
-              const td = document.createElement("td");
-              const value = item[column];
-              if (value === null || value === undefined || value === "") {
-                td.textContent = "-";
-              } else if (typeof value === "object") {
-                td.textContent = JSON.stringify(value);
-              } else {
-                td.textContent = String(value);
-              }
-              tr.appendChild(td);
-            });
-            signalsBody.appendChild(tr);
-          });
-        }
-
-        function fetchSignals() {
-          clearSignalsError();
-          setSignalsLoading(true);
-
-          const query =
-            "?ingestion_run_id=" +
-            encodeURIComponent(signalsState.ingestionRunId) +
-            "&limit=" +
-            encodeURIComponent(String(signalsState.limit)) +
-            "&offset=" +
-            encodeURIComponent(String(signalsState.offset));
-
-          fetch("/signals" + query)
-            .then(function (response) {
-              if (!response.ok) {
-                return response.text().then(function (errorText) {
-                  throw new Error(
-                    "Signals request failed (" +
-                      response.status +
-                      "): " +
-                      parseErrorPayload(errorText)
-                  );
-                });
-              }
-              return response.json();
-            })
-            .then(function (payload) {
-              signalsState.items = Array.isArray(payload.items) ? payload.items : [];
-              signalsState.total = Number(payload.total) || 0;
-              signalsState.limit = Number(payload.limit) || signalsState.limit;
-              signalsState.offset = Number(payload.offset) || 0;
-              signalsState.columns = buildSignalsColumns(signalsState.items);
-              if (signalsState.columns.length && !signalsState.sortKey) {
-                signalsState.sortKey = signalsState.columns[0];
-                signalsState.sortDirection = "asc";
-              }
-              renderSignalsHeaders();
-              renderSignalsRows();
-              updateSignalsPagination();
-            })
-            .catch(function (error) {
-              showSignalsError(error && error.message ? error.message : "Signals request failed.");
-              signalsState.items = [];
-              signalsState.columns = [];
-              signalsState.total = 0;
-              renderSignalsHeaders();
-              renderSignalsRows();
-              updateSignalsPagination();
-            })
-            .finally(function () {
-              setSignalsLoading(false);
-            });
-        }
-
-        signalsForm.addEventListener("submit", function (event) {
-          event.preventDefault();
-
-          const ingestionRunId = document.getElementById("signals_ingestion_run_id").value.trim();
-          const limitValue = Number(document.getElementById("signals_limit").value);
-
-          if (!ingestionRunId) {
-            showSignalsError("ingestion_run_id is required.");
-            return;
-          }
-
-          signalsState.ingestionRunId = ingestionRunId;
-          signalsState.limit = Number.isFinite(limitValue) && limitValue > 0 ? limitValue : 50;
-          signalsState.offset = 0;
-          fetchSignals();
-        });
-
-        signalsPrevButton.addEventListener("click", function () {
-          if (signalsState.offset === 0 || !signalsState.ingestionRunId) {
-            return;
-          }
-          signalsState.offset = Math.max(0, signalsState.offset - signalsState.limit);
-          fetchSignals();
-        });
-
-        signalsNextButton.addEventListener("click", function () {
-          if (!signalsState.ingestionRunId) {
-            return;
-          }
-          if (signalsState.offset + signalsState.limit >= signalsState.total) {
-            return;
-          }
-          signalsState.offset = signalsState.offset + signalsState.limit;
-          fetchSignals();
-        });
-
-        renderSignalsHeaders();
-        renderSignalsRows();
-        updateSignalsPagination();
-      })();
-    </script>
+        </section>
+      </main>
+    </div>
   </body>
 </html>
