@@ -110,6 +110,12 @@
         gap: 0.85rem;
       }
 
+      .panel-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.85rem;
+      }
+
       .panel {
         border: 1px solid var(--line);
         border-radius: 10px;
@@ -138,6 +144,36 @@
         font-weight: 600;
       }
 
+      .status {
+        margin: 0.55rem 0 0;
+        font-size: 0.85rem;
+        color: var(--text-soft);
+      }
+
+      .table-wrap {
+        margin-top: 0.65rem;
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 0.45rem 0.5rem;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      th {
+        background: var(--surface-muted);
+        font-weight: 600;
+      }
+
       @media (max-width: 860px) {
         .workspace {
           grid-template-columns: 1fr;
@@ -146,6 +182,10 @@
         .nav {
           border-right: 0;
           border-bottom: 1px solid var(--line);
+        }
+
+        .panel-grid {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -168,6 +208,7 @@
               <li><a class="active" href="#overview">Overview</a></li>
               <li><a href="#runtime">Runtime Status</a></li>
               <li><a href="#analysis">Analysis Runs</a></li>
+              <li><a href="#strategies">Strategies</a></li>
               <li><a href="#signals">Signals</a></li>
               <li><a href="#screener">Screener</a></li>
               <li><a href="#audit">Audit Trail</a></li>
@@ -191,10 +232,46 @@
               <p>Reserved for future run history and trigger actions exposed by API endpoints.</p>
             </article>
 
-            <article id="signals" class="panel">
-              <h3>Signals Panel</h3>
-              <p>Reserved for future signal inspection views.</p>
-            </article>
+            <section class="panel-grid" aria-label="Strategy and signal visibility">
+              <article id="strategies" class="panel">
+                <h3>Strategy List Panel</h3>
+                <p>Read-only metadata fetched from <code>/strategies</code>.</p>
+                <p class="status" id="strategy-status">Loading strategy list...</p>
+                <div class="table-wrap">
+                  <table aria-label="Active strategy metadata table">
+                    <thead>
+                      <tr>
+                        <th>Strategy</th>
+                        <th>Display</th>
+                        <th>Default Keys</th>
+                      </tr>
+                    </thead>
+                    <tbody id="strategy-list"></tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article id="signals" class="panel">
+                <h3>Signals Panel</h3>
+                <p>Latest signals fetched from <code>/signals</code> (read-only).</p>
+                <p class="status" id="signal-status">Loading signals...</p>
+                <div class="table-wrap">
+                  <table aria-label="Signal visibility table">
+                    <thead>
+                      <tr>
+                        <th>Created</th>
+                        <th>Symbol</th>
+                        <th>Strategy</th>
+                        <th>Direction</th>
+                        <th>Score</th>
+                        <th>Stage</th>
+                      </tr>
+                    </thead>
+                    <tbody id="signal-list"></tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
 
             <article id="screener" class="panel">
               <h3>Screener Panel</h3>
@@ -209,5 +286,86 @@
         </section>
       </main>
     </div>
+    <script>
+      const strategyStatus = document.getElementById("strategy-status");
+      const strategyList = document.getElementById("strategy-list");
+      const signalStatus = document.getElementById("signal-status");
+      const signalList = document.getElementById("signal-list");
+
+      function createRow(cells) {
+        const row = document.createElement("tr");
+        cells.forEach((value) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        return row;
+      }
+
+      async function loadStrategies() {
+        strategyStatus.textContent = "Loading strategy list from /strategies...";
+        try {
+          const response = await fetch("/strategies");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          strategyList.innerHTML = "";
+
+          if (!payload.items || payload.items.length === 0) {
+            strategyStatus.textContent = "No strategies available.";
+            return;
+          }
+
+          payload.items.forEach((item) => {
+            strategyList.appendChild(
+              createRow([
+                item.strategy || "",
+                item.display_name || "",
+                (item.default_config_keys || []).join(", "),
+              ])
+            );
+          });
+          strategyStatus.textContent = `Loaded ${payload.total} strategies.`;
+        } catch (error) {
+          strategyStatus.textContent = `Failed to load strategies: ${error.message}`;
+        }
+      }
+
+      async function loadSignals() {
+        signalStatus.textContent = "Loading latest signals from /signals...";
+        try {
+          const response = await fetch("/signals?limit=20&sort=created_at_desc");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          signalList.innerHTML = "";
+
+          if (!payload.items || payload.items.length === 0) {
+            signalStatus.textContent = "No signals found.";
+            return;
+          }
+
+          payload.items.forEach((item) => {
+            signalList.appendChild(
+              createRow([
+                item.created_at || "",
+                item.symbol || "",
+                item.strategy || "",
+                item.direction || "",
+                item.score != null ? String(item.score) : "",
+                item.stage || "",
+              ])
+            );
+          });
+          signalStatus.textContent = `Showing ${payload.items.length} of ${payload.total} signals.`;
+        } catch (error) {
+          signalStatus.textContent = `Failed to load signals: ${error.message}`;
+        }
+      }
+
+      void Promise.all([loadStrategies(), loadSignals()]);
+    </script>
   </body>
 </html>
