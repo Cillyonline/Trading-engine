@@ -43,6 +43,7 @@ from cilly_trading.engine.runtime_controller import (
     start_engine_runtime,
 )
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
+from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
@@ -346,6 +347,22 @@ class RuntimeIntrospectionResponse(BaseModel):
     extensions: List[RuntimeIntrospectionExtensionResponse] = Field(default_factory=list)
 
 
+class SystemStateMetadataResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    read_only: Literal[True]
+    source: str
+
+
+class SystemStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    status: str
+    runtime: RuntimeIntrospectionResponse
+    metadata: SystemStateMetadataResponse
+
+
 # --- FastAPI-App initialisieren ---
 
 
@@ -532,6 +549,18 @@ def runtime_introspection() -> RuntimeIntrospectionResponse:
     payload = get_runtime_introspection_payload()
     payload.setdefault("extensions", [])
     return RuntimeIntrospectionResponse(**payload)
+
+
+@app.get(
+    "/system/state",
+    response_model=SystemStateResponse,
+    summary="System State",
+    description="Read-only system runtime state for operator inspection.",
+)
+def system_state() -> SystemStateResponse:
+    payload = get_system_state_payload()
+    payload["runtime"].setdefault("extensions", [])
+    return SystemStateResponse(**payload)
 
 
 def _require_engine_runtime_running() -> None:
