@@ -305,6 +305,22 @@ class ScreenerResultsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class StrategyMetadataItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy: str
+    display_name: str
+    default_config_keys: List[str]
+    has_default_config: bool
+
+
+class StrategyMetadataResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[StrategyMetadataItemResponse]
+    total: int
+
+
 class IngestionRunItemResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -517,6 +533,14 @@ def get_registered_strategy_keys() -> List[str]:
     return run_registry_smoke()
 
 
+def _strategy_display_name(strategy_key: str) -> str:
+    display_names: Dict[str, str] = {
+        "RSI2": "RSI2 Rebound",
+        "TURTLE": "Turtle Breakout",
+    }
+    return display_names.get(strategy_key, strategy_key)
+
+
 # --- Endpunkte ---
 
 
@@ -691,6 +715,50 @@ def _get_screener_results_query(
 def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List[IngestionRunItemResponse]:
     rows = analysis_run_repo.list_ingestion_runs(limit=limit)
     return [IngestionRunItemResponse(**row) for row in rows]
+
+
+@app.get(
+    "/strategies",
+    response_model=StrategyMetadataResponse,
+    responses={
+        200: {
+            "description": "Read-only strategy metadata list for operator visibility.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "items": [
+                            {
+                                "strategy": "RSI2",
+                                "display_name": "RSI2 Rebound",
+                                "default_config_keys": [
+                                    "min_score",
+                                    "oversold_threshold",
+                                    "rsi_period",
+                                ],
+                                "has_default_config": True,
+                            }
+                        ],
+                        "total": 1,
+                    }
+                }
+            },
+        }
+    },
+)
+def read_strategies() -> StrategyMetadataResponse:
+    items: List[StrategyMetadataItemResponse] = []
+    for strategy_key in get_registered_strategy_keys():
+        default_config = default_strategy_configs.get(strategy_key, {})
+        items.append(
+            StrategyMetadataItemResponse(
+                strategy=strategy_key,
+                display_name=_strategy_display_name(strategy_key),
+                default_config_keys=sorted(list(default_config.keys())),
+                has_default_config=bool(default_config),
+            )
+        )
+
+    return StrategyMetadataResponse(items=items, total=len(items))
 
 
 @app.get(
