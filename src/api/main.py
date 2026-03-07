@@ -53,6 +53,7 @@ from cilly_trading.engine.runtime_controller import (
     start_engine_runtime,
 )
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
+from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
@@ -122,7 +123,6 @@ class StrategyAnalyzeRequest(BaseModel):
         le=1000,
         description="Anzahl der Tage, die mindestens geladen werden sollen.",
     )
-    # Optional: einfache Strategie-Konfiguration (überschreibt Defaults)
     strategy_config: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Optionale Strategie-Konfiguration (z. B. Oversold-Schwelle).",
@@ -368,7 +368,6 @@ class RuntimeIntrospectionResponse(BaseModel):
     mode: str
     timestamps: RuntimeIntrospectionTimestampsResponse
     ownership: RuntimeIntrospectionOwnershipResponse
-    # Wichtig: default_factory verhindert "Field required" wenn payload kein extensions enthält.
     extensions: List[RuntimeIntrospectionExtensionResponse] = Field(default_factory=list)
 
 
@@ -424,7 +423,20 @@ class ComplianceGuardStatusResponse(BaseModel):
     guards: GuardStatusCollectionResponse
 
 
-# --- FastAPI-App initialisieren ---
+class SystemStateMetadataResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    read_only: Literal[True]
+    source: str
+
+
+class SystemStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    status: str
+    runtime: RuntimeIntrospectionResponse
+    metadata: SystemStateMetadataResponse
 
 
 app = FastAPI(
@@ -438,7 +450,6 @@ app.mount("/ui", StaticFiles(directory=UI_DIRECTORY, html=True), name="ui")
 
 logger.info("Cilly Trading Engine API starting up")
 
-
 ENGINE_RUNTIME_NOT_RUNNING_STATUS = 503
 ENGINE_RUNTIME_NOT_RUNNING_CODE = "engine_runtime_not_running"
 ENGINE_RUNTIME_GUARD_ACTIVE = False
@@ -446,12 +457,6 @@ PHASE_13_READ_ONLY_ENDPOINTS = frozenset({"/health", "/runtime/introspection"})
 
 
 def _assert_phase_13_read_only_endpoint(endpoint_path: str) -> None:
-    """
-    Explicit marker for the Phase-13 contract: these endpoints are read-only.
-
-    The assertion is intentionally side-effect free and exists to make the
-    invariant visible at the endpoint layer and test-detectable.
-    """
     assert endpoint_path in PHASE_13_READ_ONLY_ENDPOINTS
 
 
@@ -472,10 +477,8 @@ def _shutdown_runtime() -> None:
         logger.exception("Engine runtime shutdown failed")
 
 
-# Analysis DB Path (test-patchable)
 ANALYSIS_DB_PATH: Optional[str] = None
 
-# Repositories & Strategien als Singletons im Modul
 signal_repo = SqliteSignalRepository()
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 
@@ -510,14 +513,6 @@ def _require_snapshot_ready(
 
 
 def _resolve_analysis_db_path() -> str:
-    """
-    Resolves the SQLite DB path used for analysis & snapshot loading.
-
-    Resolution order:
-    1. ANALYSIS_DB_PATH if explicitly set (test-patchable override)
-    2. analysis_run_repo._db_path (preferred in tests where repo is patched)
-    3. DEFAULT_DB_PATH (last-resort fallback)
-    """
     if ANALYSIS_DB_PATH:
         resolved = str(ANALYSIS_DB_PATH)
         logger.debug("Analysis DB path resolved via ANALYSIS_DB_PATH override: %s", resolved)
@@ -557,7 +552,6 @@ def _normalize_for_hashing(value: Any) -> Any:
 
 initialize_default_registry()
 
-# Standard-Strategie-Konfigurationen
 default_strategy_configs: Dict[str, Dict[str, Any]] = {
     "RSI2": {
         "rsi_period": 2,
@@ -573,8 +567,6 @@ default_strategy_configs: Dict[str, Dict[str, Any]] = {
 
 
 def get_registered_strategy_keys() -> List[str]:
-    """Return deterministic strategy keys used by API smoke checks."""
-
     return run_registry_smoke()
 
 
@@ -584,9 +576,6 @@ def _strategy_display_name(strategy_key: str) -> str:
         "TURTLE": "Turtle Breakout",
     }
     return display_names.get(strategy_key, strategy_key)
-
-
-# --- Endpunkte ---
 
 
 @app.get("/health")
@@ -738,6 +727,18 @@ def runtime_introspection() -> RuntimeIntrospectionResponse:
     return RuntimeIntrospectionResponse(**payload)
 
 
+@app.get(
+    "/system/state",
+    response_model=SystemStateResponse,
+    summary="System State",
+    description="Read-only system runtime state for operator inspection.",
+)
+def system_state() -> SystemStateResponse:
+    payload = get_system_state_payload()
+    payload["runtime"].setdefault("extensions", [])
+    return SystemStateResponse(**payload)
+
+
 def _require_engine_runtime_running() -> None:
     if not ENGINE_RUNTIME_GUARD_ACTIVE:
         return
@@ -754,62 +755,17 @@ def _require_engine_runtime_running() -> None:
 
 
 def _get_signals_query(
-    symbol: Optional[str] = Query(
-        default=None,
-        description="Optionales Symbol-Filter (z. B. 'AAPL' oder 'BTC/USDT').",
-    ),
-    strategy: Optional[str] = Query(
-        default=None,
-        description="Optionaler Strategie-Filter (z. B. 'RSI2' oder 'TURTLE').",
-    ),
-    preset: Optional[str] = Query(
-        default=None,
-        description="Optionaler Preset-Filter (z. B. 'D1' oder 'H1').",
-    ),
-    ingestion_run_id: Optional[str] = Query(
-        default=None,
-        description="Optionaler Snapshot-Filter (ingestion_run_id).",
-    ),
-    from_: Optional[datetime] = Query(
-        default=None,
-        alias="from",
-        description="Startzeit (inklusive) für created_at im ISO-8601-Format.",
-    ),
-    to: Optional[datetime] = Query(
-        default=None,
-        alias="to",
-        description="Endzeit (inklusive) für created_at im ISO-8601-Format.",
-    ),
-    start: Optional[datetime] = Query(
-        default=None,
-        description="Startzeit (inklusive) für created_at im ISO-8601-Format.",
-    ),
-    end: Optional[datetime] = Query(
-        default=None,
-        description="Endzeit (inklusive) für created_at im ISO-8601-Format.",
-    ),
-    sort: Literal["created_at_asc", "created_at_desc"] = Query(
-        default="created_at_desc",
-        description=(
-            "Sortierung nach created_at. "
-            "'created_at_desc' liefert neueste zuerst, "
-            "'created_at_asc' liefert älteste zuerst."
-        ),
-    ),
-    limit: int = Query(
-        default=50,
-        ge=1,
-        le=SIGNALS_READ_MAX_LIMIT,
-        description=(
-            "Seitenlimit für Pagination. "
-            f"Maximal {SIGNALS_READ_MAX_LIMIT} Einträge."
-        ),
-    ),
-    offset: int = Query(
-        default=0,
-        ge=0,
-        description="Pagination-Offset: Anzahl der Einträge, die übersprungen werden.",
-    ),
+    symbol: Optional[str] = Query(default=None),
+    strategy: Optional[str] = Query(default=None),
+    preset: Optional[str] = Query(default=None),
+    ingestion_run_id: Optional[str] = Query(default=None),
+    from_: Optional[datetime] = Query(default=None, alias="from"),
+    to: Optional[datetime] = Query(default=None, alias="to"),
+    start: Optional[datetime] = Query(default=None),
+    end: Optional[datetime] = Query(default=None),
+    sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
+    limit: int = Query(default=50, ge=1, le=SIGNALS_READ_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
 ) -> SignalsReadQuery:
     if start is not None and from_ is not None and start != from_:
         raise HTTPException(status_code=422, detail="start conflicts with from")
@@ -821,6 +777,7 @@ def _get_signals_query(
 
     if resolved_from is not None and resolved_to is not None and resolved_from > resolved_to:
         raise HTTPException(status_code=422, detail="from must be less than or equal to to")
+
     return SignalsReadQuery(
         symbol=symbol,
         strategy=strategy,
@@ -837,23 +794,15 @@ def _get_signals_query(
 
 
 def _get_ingestion_runs_limit(
-    limit: int = Query(
-        default=20,
-        ge=1,
-        description="Anzahl der Einträge (1-100; Werte >100 werden auf 100 begrenzt).",
-    ),
+    limit: int = Query(default=20, ge=1),
 ) -> int:
     return min(limit, 100)
 
 
 def _get_screener_results_query(
-    strategy: str = Query(..., description="Strategie-Name für den Screener-Filter."),
-    timeframe: str = Query(..., description="Timeframe-Filter (z. B. 'D1')."),
-    min_score: Optional[float] = Query(
-        default=None,
-        ge=0.0,
-        description="Optionaler Mindest-Score für die Screener-Ergebnisse.",
-    ),
+    strategy: str = Query(...),
+    timeframe: str = Query(...),
+    min_score: Optional[float] = Query(default=None, ge=0.0),
 ) -> ScreenerResultsQuery:
     return ScreenerResultsQuery(
         strategy=strategy,
@@ -868,34 +817,7 @@ def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List
     return [IngestionRunItemResponse(**row) for row in rows]
 
 
-@app.get(
-    "/strategies",
-    response_model=StrategyMetadataResponse,
-    responses={
-        200: {
-            "description": "Read-only strategy metadata list for operator visibility.",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "items": [
-                            {
-                                "strategy": "RSI2",
-                                "display_name": "RSI2 Rebound",
-                                "default_config_keys": [
-                                    "min_score",
-                                    "oversold_threshold",
-                                    "rsi_period",
-                                ],
-                                "has_default_config": True,
-                            }
-                        ],
-                        "total": 1,
-                    }
-                }
-            },
-        }
-    },
-)
+@app.get("/strategies", response_model=StrategyMetadataResponse)
 def read_strategies() -> StrategyMetadataResponse:
     items: List[StrategyMetadataItemResponse] = []
     for strategy_key in get_registered_strategy_keys():
@@ -908,44 +830,10 @@ def read_strategies() -> StrategyMetadataResponse:
                 has_default_config=bool(default_config),
             )
         )
-
     return StrategyMetadataResponse(items=items, total=len(items))
 
 
-@app.get(
-    "/signals",
-    response_model=SignalReadResponseDTO,
-    responses={
-        200: {
-            "description": "Signals read (paginated).",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "items": [
-                            {
-                                "symbol": "AAPL",
-                                "strategy": "RSI2",
-                                "direction": "long",
-                                "score": 42.5,
-                                "created_at": "2024-01-15T09:30:00Z",
-                                "stage": "setup",
-                                "entry_zone": {"from_": 178.5, "to": 182.0},
-                                "confirmation_rule": "RSI below 10",
-                                "timeframe": "D1",
-                                "market_type": "stock",
-                                "data_source": "yahoo",
-                            }
-                        ],
-                        "limit": 50,
-                        "offset": 0,
-                        "total": 128,
-                    }
-                }
-            },
-        },
-        422: {"description": "Validation error (z. B. ungültiger Zeitraum oder limit > max)."},
-    },
-)
+@app.get("/signals", response_model=SignalReadResponseDTO)
 def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
     effective_from = params.from_ or params.start
     effective_to = params.to or params.end
@@ -987,32 +875,7 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
     )
 
 
-@app.get(
-    "/screener/v2/results",
-    response_model=ScreenerResultsResponse,
-    responses={
-        200: {
-            "description": "Screener results (filtered by strategy/timeframe).",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "items": [
-                            {
-                                "symbol": "NVDA",
-                                "score": 68.2,
-                                "strategy": "TURTLE",
-                                "timeframe": "D1",
-                                "market_type": "stock",
-                                "created_at": "2024-01-15T09:30:00Z",
-                            }
-                        ],
-                        "total": 1,
-                    }
-                }
-            },
-        }
-    },
-)
+@app.get("/screener/v2/results", response_model=ScreenerResultsResponse)
 def read_screener_results(
     params: ScreenerResultsQuery = Depends(_get_screener_results_query),
 ) -> ScreenerResultsResponse:
@@ -1031,9 +894,6 @@ def read_screener_results(
 
 @app.post("/strategy/analyze", response_model=StrategyAnalyzeResponse)
 def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
-    """
-    Führt eine Analyse für ein einzelnes Symbol mit einer ausgewählten Strategie durch.
-    """
     logger.info(
         "Strategy analyze start: symbol=%s strategy=%s market_type=%s lookback_days=%s",
         req.symbol,
@@ -1060,12 +920,6 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
     )
 
     if req.presets or req.preset_ids or req.preset_id:
-        if req.presets and req.strategy_config:
-            logger.info(
-                "Ignoring single strategy_config because presets are provided: strategy=%s",
-                strategy_name,
-            )
-
         results_by_preset: Dict[str, List[Dict[str, Any]]] = {}
         preset_results: List[PresetAnalysisResult] = []
 
@@ -1083,18 +937,8 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
             elif req.strategy_config:
                 effective_config.update(req.strategy_config)
 
-            logger.debug(
-                "Effective strategy config: strategy=%s preset=%s keys=%s",
-                strategy_name,
-                preset_id,
-                sorted(list(effective_config.keys())),
-            )
+            strategy_configs = {strategy_name: effective_config}
 
-            strategy_configs = {
-                strategy_name: effective_config,
-            }
-
-            # Engine-Aufruf
             signals = _run_snapshot_analysis(
                 symbols=[req.symbol],
                 strategies=[strategy],
@@ -1116,13 +960,6 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
                 PresetAnalysisResult(preset_id=preset_id, signals=filtered_signals)
             )
 
-        logger.info(
-            "Strategy analyze finished: symbol=%s strategy=%s presets=%d",
-            req.symbol,
-            strategy_name,
-            len(results_by_preset),
-        )
-
         return StrategyAnalyzeResponse(
             symbol=req.symbol,
             strategy=strategy_name,
@@ -1130,22 +967,12 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
             preset_results=preset_results,
         )
 
-    # Konfiguration: Defaults + optional Request-Override
     effective_config = default_strategy_configs.get(strategy_name, {}).copy()
     if req.strategy_config:
         effective_config.update(req.strategy_config)
 
-    logger.debug(
-        "Effective strategy config: strategy=%s keys=%s",
-        strategy_name,
-        sorted(list(effective_config.keys())),
-    )
+    strategy_configs = {strategy_name: effective_config}
 
-    strategy_configs = {
-        strategy_name: effective_config,
-    }
-
-    # Engine-Aufruf
     signals = _run_snapshot_analysis(
         symbols=[req.symbol],
         strategies=[strategy],
@@ -1160,13 +987,6 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
         s for s in signals if s.get("symbol") == req.symbol and s.get("strategy") == strategy_name
     ]
 
-    logger.info(
-        "Strategy analyze finished: symbol=%s strategy=%s signals_total=%d",
-        req.symbol,
-        strategy_name,
-        len(filtered_signals),
-    )
-
     return StrategyAnalyzeResponse(
         symbol=req.symbol,
         strategy=strategy_name,
@@ -1174,19 +994,8 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
     )
 
 
-@app.post(
-    "/analysis/run",
-    response_model=ManualAnalysisResponse,
-    responses={
-        200: {"description": "Manual analysis result (idempotent)."},
-        400: {"description": "Validation error (z. B. unbekannte Strategie)."},
-        422: {"description": "Snapshot fehlt oder wird nicht unterstützt."},
-    },
-)
+@app.post("/analysis/run", response_model=ManualAnalysisResponse)
 def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
-    """
-    Manuelles Triggern einer Analyse mit idempotenter Run-ID.
-    """
     strategy_name = req.strategy.upper()
     run_request_payload: Dict[str, Any] = {
         "ingestion_run_id": req.ingestion_run_id,
@@ -1224,9 +1033,7 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
     if req.strategy_config:
         effective_config.update(req.strategy_config)
 
-    strategy_configs = {
-        strategy_name: effective_config,
-    }
+    strategy_configs = {strategy_name: effective_config}
 
     signals = _run_snapshot_analysis(
         symbols=[req.symbol],
@@ -1263,33 +1070,16 @@ def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
 
 @app.post("/screener/basic", response_model=ScreenerResponse)
 def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
-    """
-    Einfacher Basis-Screener.
-
-    - Wenn keine Symbole angegeben werden, nutzt der Screener eine Default-Watchlist
-      (unterschiedlich für Aktien & Krypto).
-    - Nutzt alle registrierten Strategien (RSI2 + TURTLE).
-    - Gibt nur SETUP-Signale mit Score >= min_score zurück.
-    """
     _require_ingestion_run(req.ingestion_run_id)
-    # Default-Watchlists, MVP-Variante
     if req.symbols is None or len(req.symbols) == 0:
         if req.market_type == "stock":
             symbols = ["AAPL", "MSFT", "NVDA", "META", "TSLA"]
-        else:  # crypto
+        else:
             symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
     else:
         symbols = req.symbols
 
     _require_snapshot_ready(req.ingestion_run_id, symbols=symbols, timeframe="D1")
-
-    logger.info(
-        "Screener start: market_type=%s lookback_days=%s min_score=%s symbols=%d",
-        req.market_type,
-        req.lookback_days,
-        req.min_score,
-        len(symbols),
-    )
 
     engine_config = EngineConfig(
         timeframe="D1",
@@ -1298,10 +1088,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         data_source="yahoo" if req.market_type == "stock" else "binance",
     )
 
-    # Alle Strategien nutzen
     strategies = create_registered_strategies()
-
-    # Für den Screener nutzen wir einfach die Default-Configs
     strategy_configs = default_strategy_configs
 
     signals = _run_snapshot_analysis(
@@ -1314,9 +1101,6 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         db_path=_resolve_analysis_db_path(),
     )
 
-    logger.info("Screener engine run finished: total_signals=%d", len(signals))
-
-    # Nur SETUP-Signale mit Score >= min_score
     def _coerce_float(value: Any) -> Optional[float]:
         if value is None:
             return None
@@ -1334,14 +1118,12 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
             continue
         setup_signals.append(s)
 
-    # Nach Symbol gruppieren
     by_symbol: Dict[str, List[Dict[str, Any]]] = {}
     for s in setup_signals:
         sym = s.get("symbol", "")
         if not sym:
             continue
 
-        # Nur relevante Felder fürs Frontend extrahieren
         setup_info: Dict[str, Any] = {
             "strategy": s.get("strategy"),
             "score": s.get("score"),
@@ -1373,7 +1155,6 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         )
 
     def _sorting_key(item: ScreenerSymbolResult) -> tuple:
-        # Missing numeric values are normalized to -inf to guarantee deterministic ordering.
         score = item.score if item.score is not None else float("-inf")
         signal_strength = (
             item.signal_strength if item.signal_strength is not None else float("-inf")
@@ -1383,20 +1164,12 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
 
     symbol_results.sort(key=_sorting_key)
 
-    logger.info(
-        "Screener result prepared: setup_signals=%d symbols_returned=%d",
-        len(setup_signals),
-        len(symbol_results),
-    )
-
     return ScreenerResponse(
         market_type=req.market_type,
         symbols=symbol_results,
     )
 
 
-# Optionaler Startpunkt für lokalen Betrieb:
-# uvicorn api.main:app --reload
 if __name__ == "__main__":
     import uvicorn
 
