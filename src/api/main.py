@@ -35,7 +35,7 @@ from engine.compliance.drawdown_guard import (
     should_block_execution_for_drawdown,
 )
 from engine.compliance.kill_switch import is_kill_switch_active
-from engine.portfolio import PortfolioState
+from engine.portfolio import PortfolioState as CompliancePortfolioState
 from .config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.core import (
@@ -55,6 +55,10 @@ from cilly_trading.engine.runtime_controller import (
     start_engine_runtime,
 )
 from .order_events_sqlite import SqliteOrderEventRepository
+from cilly_trading.engine.portfolio import (
+    PortfolioPosition as PortfolioInspectionPosition,
+    load_portfolio_state_from_env,
+)
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
@@ -458,6 +462,23 @@ class ComplianceGuardStatusResponse(BaseModel):
     guards: GuardStatusCollectionResponse
 
 
+class PortfolioPositionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    size: float
+    average_price: float
+    unrealized_pnl: float
+    strategy_id: str
+
+
+class PortfolioPositionsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    positions: List[PortfolioPositionResponse]
+    total: int
+
+
 class SystemStateMetadataResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -702,7 +723,7 @@ def _read_float_env(*names: str) -> float | None:
     return None
 
 
-def _load_compliance_guard_status_sources() -> tuple[dict[str, object], PortfolioState]:
+def _load_compliance_guard_status_sources() -> tuple[dict[str, object], CompliancePortfolioState]:
     kill_switch_active = _read_bool_env(
         "CILLY_EXECUTION_KILL_SWITCH_ACTIVE",
         "execution.kill_switch.active",
@@ -737,7 +758,7 @@ def _load_compliance_guard_status_sources() -> tuple[dict[str, object], Portfoli
     if daily_loss_max_abs is not None:
         guard_config["execution.daily_loss.max_abs"] = daily_loss_max_abs
 
-    portfolio_state = PortfolioState(
+    portfolio_state = CompliancePortfolioState(
         peak_equity=peak_equity if peak_equity is not None else 0.0,
         current_equity=current_equity if current_equity is not None else 0.0,
         start_of_day_equity=start_of_day_equity,
@@ -809,6 +830,30 @@ def system_state() -> SystemStateResponse:
     payload = get_system_state_payload()
     payload["runtime"].setdefault("extensions", [])
     return SystemStateResponse(**payload)
+
+
+def _portfolio_position_response(
+    position: PortfolioInspectionPosition,
+) -> PortfolioPositionResponse:
+    return PortfolioPositionResponse(
+        symbol=position.symbol,
+        size=position.size,
+        average_price=position.average_price,
+        unrealized_pnl=position.unrealized_pnl,
+        strategy_id=position.strategy_id,
+    )
+
+
+@app.get(
+    "/portfolio/positions",
+    response_model=PortfolioPositionsResponse,
+    summary="Portfolio Positions",
+    description="Read-only current portfolio positions for operator inspection.",
+)
+def read_portfolio_positions() -> PortfolioPositionsResponse:
+    state = load_portfolio_state_from_env()
+    items = [_portfolio_position_response(position) for position in state.positions]
+    return PortfolioPositionsResponse(positions=items, total=len(items))
 
 
 def _require_engine_runtime_running() -> None:
