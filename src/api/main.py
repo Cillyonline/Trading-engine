@@ -24,6 +24,16 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from engine.compliance.daily_loss_guard import (
+    configured_daily_loss_limit,
+    should_block_execution_for_daily_loss,
+)
+from engine.compliance.drawdown_guard import (
+    configured_drawdown_threshold,
+    should_block_execution_for_drawdown,
+)
+from engine.compliance.kill_switch import is_kill_switch_active
+from engine.portfolio import PortfolioState
 from .config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.core import (
@@ -362,6 +372,58 @@ class RuntimeIntrospectionResponse(BaseModel):
     extensions: List[RuntimeIntrospectionExtensionResponse] = Field(default_factory=list)
 
 
+class GuardStatusDecisionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    blocking: bool
+    decision: Literal["allowing", "blocking"]
+
+
+class DrawdownGuardStatusResponse(GuardStatusDecisionResponse):
+    model_config = ConfigDict(extra="forbid")
+
+    threshold_pct: float | None
+    current_drawdown_pct: float
+
+
+class DailyLossGuardStatusResponse(GuardStatusDecisionResponse):
+    model_config = ConfigDict(extra="forbid")
+
+    max_daily_loss_abs: float | None
+    current_daily_loss_abs: float
+
+
+class KillSwitchStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    active: bool
+    blocking: bool
+    decision: Literal["allowing", "blocking"]
+
+
+class GuardStatusCollectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    drawdown_guard: DrawdownGuardStatusResponse
+    daily_loss_guard: DailyLossGuardStatusResponse
+    kill_switch: KillSwitchStatusResponse
+
+
+class ComplianceStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    blocking: bool
+    decision: Literal["allowing", "blocking"]
+
+
+class ComplianceGuardStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    compliance: ComplianceStatusResponse
+    guards: GuardStatusCollectionResponse
+
+
 # --- FastAPI-App initialisieren ---
 
 
@@ -548,6 +610,124 @@ def health() -> Dict[str, str]:
 
 def _health_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _guard_decision(*, blocking: bool) -> Literal["allowing", "blocking"]:
+    return "blocking" if blocking else "allowing"
+
+
+def _read_bool_env(*names: str) -> bool | None:
+    for name in names:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            continue
+        normalized = raw_value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return None
+
+
+def _read_float_env(*names: str) -> float | None:
+    for name in names:
+        raw_value = os.getenv(name)
+        if raw_value is None:
+            continue
+        try:
+            return float(raw_value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _load_compliance_guard_status_sources() -> tuple[dict[str, object], PortfolioState]:
+    kill_switch_active = _read_bool_env(
+        "CILLY_EXECUTION_KILL_SWITCH_ACTIVE",
+        "execution.kill_switch.active",
+    )
+    drawdown_max_pct = _read_float_env(
+        "CILLY_EXECUTION_DRAWDOWN_MAX_PCT",
+        "execution.drawdown.max_pct",
+    )
+    daily_loss_max_abs = _read_float_env(
+        "CILLY_EXECUTION_DAILY_LOSS_MAX_ABS",
+        "execution.daily_loss.max_abs",
+    )
+
+    peak_equity = _read_float_env(
+        "CILLY_PORTFOLIO_PEAK_EQUITY",
+        "portfolio.peak_equity",
+    )
+    current_equity = _read_float_env(
+        "CILLY_PORTFOLIO_CURRENT_EQUITY",
+        "portfolio.current_equity",
+    )
+    start_of_day_equity = _read_float_env(
+        "CILLY_PORTFOLIO_START_OF_DAY_EQUITY",
+        "portfolio.start_of_day_equity",
+    )
+
+    guard_config: dict[str, object] = {
+        "execution.kill_switch.active": kill_switch_active is True,
+    }
+    if drawdown_max_pct is not None:
+        guard_config["execution.drawdown.max_pct"] = drawdown_max_pct
+    if daily_loss_max_abs is not None:
+        guard_config["execution.daily_loss.max_abs"] = daily_loss_max_abs
+
+    portfolio_state = PortfolioState(
+        peak_equity=peak_equity if peak_equity is not None else 0.0,
+        current_equity=current_equity if current_equity is not None else 0.0,
+        start_of_day_equity=start_of_day_equity,
+    )
+    return guard_config, portfolio_state
+
+
+@app.get("/compliance/guards/status", response_model=ComplianceGuardStatusResponse)
+def read_compliance_guard_status() -> ComplianceGuardStatusResponse:
+    guard_config, portfolio_state = _load_compliance_guard_status_sources()
+
+    drawdown_threshold = configured_drawdown_threshold(config=guard_config)
+    drawdown_blocking = should_block_execution_for_drawdown(
+        portfolio_state=portfolio_state,
+        config=guard_config,
+    )
+    daily_loss_limit = configured_daily_loss_limit(config=guard_config)
+    daily_loss_blocking = should_block_execution_for_daily_loss(
+        portfolio_state=portfolio_state,
+        config=guard_config,
+    )
+    kill_switch_is_active = is_kill_switch_active(config=guard_config)
+    overall_blocking = drawdown_blocking or daily_loss_blocking or kill_switch_is_active
+
+    return ComplianceGuardStatusResponse(
+        compliance=ComplianceStatusResponse(
+            blocking=overall_blocking,
+            decision=_guard_decision(blocking=overall_blocking),
+        ),
+        guards=GuardStatusCollectionResponse(
+            drawdown_guard=DrawdownGuardStatusResponse(
+                enabled=drawdown_threshold is not None,
+                blocking=drawdown_blocking,
+                decision=_guard_decision(blocking=drawdown_blocking),
+                threshold_pct=drawdown_threshold,
+                current_drawdown_pct=portfolio_state.drawdown(),
+            ),
+            daily_loss_guard=DailyLossGuardStatusResponse(
+                enabled=daily_loss_limit is not None,
+                blocking=daily_loss_blocking,
+                decision=_guard_decision(blocking=daily_loss_blocking),
+                max_daily_loss_abs=daily_loss_limit,
+                current_daily_loss_abs=portfolio_state.daily_loss(),
+            ),
+            kill_switch=KillSwitchStatusResponse(
+                active=kill_switch_is_active,
+                blocking=kill_switch_is_active,
+                decision=_guard_decision(blocking=kill_switch_is_active),
+            ),
+        ),
+    )
 
 
 @app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
