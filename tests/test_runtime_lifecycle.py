@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from cilly_trading.engine.runtime_controller import _reset_runtime_controller_for_tests
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
@@ -235,3 +236,110 @@ def test_engine_requests_work_normally_when_runtime_running(monkeypatch) -> None
 
     assert response.status_code == 422
     assert response.json() == {"detail": "invalid_ingestion_run_id"}
+
+
+def test_engine_requests_are_blocked_when_runtime_paused(tmp_path: Path, monkeypatch) -> None:
+    ingestion_run_id = _setup_analysis_dependencies(tmp_path, monkeypatch)
+
+    def _start() -> str:
+        return "paused"
+
+    def _runtime() -> _RuntimeStateStub:
+        return _RuntimeStateStub("paused")
+
+    def _fail_run_watchlist_analysis(*args, **kwargs):
+        raise AssertionError("run_watchlist_analysis should not be called")
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", _start)
+    monkeypatch.setattr(api_main, "get_runtime_controller", _runtime)
+    monkeypatch.setattr(api_main, "run_watchlist_analysis", _fail_run_watchlist_analysis)
+
+    with TestClient(api_main.app) as client:
+        response = client.post(
+            "/strategy/analyze",
+            json={
+                "ingestion_run_id": ingestion_run_id,
+                "symbol": "AAPL",
+                "strategy": "RSI2",
+                "market_type": "stock",
+                "lookback_days": 200,
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": {
+            "code": "engine_runtime_not_running",
+            "state": "paused",
+        }
+    }
+
+
+def test_pause_during_in_progress_analysis_does_not_interrupt_execution(monkeypatch) -> None:
+    class _Strategy:
+        name = "RSI2"
+
+    class _InMemoryAnalysisRunRepo:
+        def __init__(self) -> None:
+            self._runs: dict[str, dict[str, object]] = {}
+
+        def get_run(self, analysis_run_id: str) -> dict[str, object] | None:
+            return self._runs.get(analysis_run_id)
+
+        def save_run(
+            self,
+            *,
+            analysis_run_id: str,
+            ingestion_run_id: str,
+            request_payload: dict[str, object],
+            result_payload: dict[str, object],
+        ) -> None:
+            self._runs[analysis_run_id] = {
+                "analysis_run_id": analysis_run_id,
+                "ingestion_run_id": ingestion_run_id,
+                "request": request_payload,
+                "result": result_payload,
+            }
+
+    calls = {"run": 0}
+
+    _reset_runtime_controller_for_tests()
+    monkeypatch.setattr(api_main, "_require_ingestion_run", lambda *_: None)
+    monkeypatch.setattr(api_main, "_require_snapshot_ready", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(api_main, "create_strategy", lambda *_: _Strategy())
+    monkeypatch.setattr(api_main, "analysis_run_repo", _InMemoryAnalysisRunRepo())
+    monkeypatch.setattr(api_main, "_resolve_analysis_db_path", lambda: "analysis.db")
+
+    def _run_snapshot_analysis(**kwargs):
+        calls["run"] += 1
+        pause_response = client.post("/execution/pause")
+        assert pause_response.status_code == 200
+        assert pause_response.json() == {"state": "paused"}
+        return [
+            {
+                "symbol": kwargs["symbols"][0],
+                "strategy": "RSI2",
+                "stage": "setup",
+            }
+        ]
+
+    monkeypatch.setattr(api_main, "_run_snapshot_analysis", _run_snapshot_analysis)
+
+    with TestClient(api_main.app) as client:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "ingestion_run_id": str(uuid.uuid4()),
+                "symbol": "AAPL",
+                "strategy": "RSI2",
+                "market_type": "stock",
+                "lookback_days": 200,
+            },
+        )
+        introspection = client.get("/runtime/introspection")
+
+    assert calls["run"] == 1
+    assert response.status_code == 200
+    assert response.json()["signals"][0]["symbol"] == "AAPL"
+    assert introspection.status_code == 200
+    assert introspection.json()["mode"] == "paused"

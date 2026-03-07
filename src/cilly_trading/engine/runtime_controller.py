@@ -23,7 +23,7 @@ class EngineRuntimeController:
     """Controls lifecycle transitions for a single engine runtime instance.
 
     The lifecycle follows the contract order:
-    ``init -> ready -> running -> stopping -> stopped``.
+    ``init -> ready -> running <-> paused -> stopping -> stopped``.
     """
 
     _state: str = field(default="init", init=False)
@@ -32,6 +32,7 @@ class EngineRuntimeController:
         "init",
         "ready",
         "running",
+        "paused",
         "stopping",
         "stopped",
     )
@@ -87,6 +88,10 @@ class EngineRuntimeController:
             LifecycleTransitionError: If called before runtime reaches ``running``.
         """
 
+        if self._state == "paused":
+            self._state = "stopped"
+            return self._state
+
         assert_can_shutdown(self._state)
 
         if self._state == "stopped":
@@ -98,6 +103,34 @@ class EngineRuntimeController:
 
         self._state = "stopping"
         self._state = "stopped"
+        return self._state
+
+    def pause_execution(self) -> str:
+        """Pause execution while keeping runtime initialized."""
+
+        if self._state == "paused":
+            return self._state
+
+        if self._state != "running":
+            raise LifecycleTransitionError(
+                f"Cannot pause_execution() while in state '{self._state}'. Expected 'running' or 'paused'."
+            )
+
+        self._state = "paused"
+        return self._state
+
+    def resume_execution(self) -> str:
+        """Resume execution after an operator pause."""
+
+        if self._state == "running":
+            return self._state
+
+        if self._state != "paused":
+            raise LifecycleTransitionError(
+                f"Cannot resume_execution() while in state '{self._state}'. Expected 'paused' or 'running'."
+            )
+
+        self._state = "running"
         return self._state
 
 _RUNTIME_LOCK: Final[Lock] = Lock()
@@ -147,6 +180,22 @@ def shutdown_engine_runtime() -> str:
             return runtime.state
 
         return runtime.shutdown()
+
+
+def pause_engine_runtime() -> str:
+    """Pause execution for the process-wide runtime."""
+
+    with _RUNTIME_LOCK:
+        runtime = _get_or_create_runtime_controller()
+        return runtime.pause_execution()
+
+
+def resume_engine_runtime() -> str:
+    """Resume execution for the process-wide runtime."""
+
+    with _RUNTIME_LOCK:
+        runtime = _get_or_create_runtime_controller()
+        return runtime.resume_execution()
 
 
 def _reset_runtime_controller_for_tests() -> None:
