@@ -23,12 +23,15 @@ def _load_provider_module():
 
 module = _load_provider_module()
 Candle = module.Candle
+detect_missing_candle_intervals = module.detect_missing_candle_intervals
 LocalSnapshotProvider = module.LocalSnapshotProvider
 MarketDataProvider = module.MarketDataProvider
 MarketDataRequest = module.MarketDataRequest
+MissingCandleInterval = module.MissingCandleInterval
 normalize_candle = module.normalize_candle
 normalize_candles = module.normalize_candles
 serialize_candles_deterministically = module.serialize_candles_deterministically
+timeframe_to_timedelta = module.timeframe_to_timedelta
 
 
 class InMemoryDeterministicProvider:
@@ -321,3 +324,132 @@ def test_serialize_candles_deterministically_is_stable() -> None:
         '{"timestamp":"2025-01-01T01:00:00+00:00","symbol":"BTC/USDT","timeframe":"1H",'
         '"open":"101.0","high":"102.0","low":"100.0","close":"101.5","volume":"290.0"}]'
     )
+
+
+def test_timeframe_to_timedelta_parses_canonical_units() -> None:
+    assert timeframe_to_timedelta("15M").total_seconds() == 900
+    assert timeframe_to_timedelta("1H").total_seconds() == 3600
+    assert timeframe_to_timedelta("2D").total_seconds() == 172800
+    assert timeframe_to_timedelta("1W").total_seconds() == 604800
+
+
+def test_detect_missing_candle_intervals_returns_empty_for_contiguous_data() -> None:
+    candles = (
+        Candle(
+            timestamp=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.0"),
+            high=Decimal("101.0"),
+            low=Decimal("99.0"),
+            close=Decimal("100.5"),
+            volume=Decimal("250.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.5"),
+            high=Decimal("102.0"),
+            low=Decimal("100.0"),
+            close=Decimal("101.0"),
+            volume=Decimal("260.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 2, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("101.0"),
+            high=Decimal("102.5"),
+            low=Decimal("100.5"),
+            close=Decimal("102.0"),
+            volume=Decimal("270.0"),
+        ),
+    )
+
+    assert detect_missing_candle_intervals(candles) == ()
+
+
+def test_detect_missing_candle_intervals_reports_gaps() -> None:
+    candles = (
+        Candle(
+            timestamp=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.0"),
+            high=Decimal("101.0"),
+            low=Decimal("99.0"),
+            close=Decimal("100.5"),
+            volume=Decimal("250.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.5"),
+            high=Decimal("102.0"),
+            low=Decimal("100.0"),
+            close=Decimal("101.0"),
+            volume=Decimal("260.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 4, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("103.0"),
+            high=Decimal("104.0"),
+            low=Decimal("102.0"),
+            close=Decimal("103.5"),
+            volume=Decimal("280.0"),
+        ),
+    )
+
+    gaps = detect_missing_candle_intervals(candles)
+
+    assert gaps == (
+        MissingCandleInterval(
+            start_timestamp=datetime(2025, 1, 1, 2, tzinfo=timezone.utc),
+            end_timestamp=datetime(2025, 1, 1, 3, tzinfo=timezone.utc),
+            missing_count=2,
+        ),
+    )
+
+
+def test_detect_missing_candle_intervals_is_deterministic() -> None:
+    candles = (
+        Candle(
+            timestamp=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.0"),
+            high=Decimal("101.0"),
+            low=Decimal("99.0"),
+            close=Decimal("100.5"),
+            volume=Decimal("250.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 3, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("102.0"),
+            high=Decimal("103.0"),
+            low=Decimal("101.0"),
+            close=Decimal("102.5"),
+            volume=Decimal("280.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 6, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("105.0"),
+            high=Decimal("106.0"),
+            low=Decimal("104.0"),
+            close=Decimal("105.5"),
+            volume=Decimal("300.0"),
+        ),
+    )
+
+    first = detect_missing_candle_intervals(candles)
+    second = detect_missing_candle_intervals(candles)
+
+    assert first == second

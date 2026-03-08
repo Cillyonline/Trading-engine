@@ -44,6 +44,26 @@ Incoming OHLCV data must pass deterministic integrity validation before analysis
 - Timestamp ordering: candles must be strictly ascending by timestamp.
 - Duplicate candle detection: duplicate timestamps are rejected.
 
+## Missing Candle Detection
+Canonical candle sequences can be scanned for missing intervals using:
+
+- `detect_missing_candle_intervals(candles, timeframe=None) -> tuple[MissingCandleInterval, ...]`
+
+Timeframe resolution uses:
+
+- `timeframe_to_timedelta(timeframe)`
+
+Supported timeframe units:
+
+- `M` (minutes), `H` (hours), `D` (days), `W` (weeks)
+
+Deterministic gap rules:
+
+- Input candles must represent one symbol and one timeframe.
+- Timestamps must be strictly increasing.
+- A gap exists when adjacent timestamps are separated by more than one timeframe step.
+- Missing intervals are reported only; input data is never modified.
+
 ## Validation Error Codes
 When validation fails, the following stable error codes are used:
 
