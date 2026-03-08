@@ -66,6 +66,15 @@ class MissingCandleInterval:
     missing_count: int
 
 
+@dataclass(frozen=True)
+class RegisteredMarketDataProvider:
+    """Registry entry for deterministic provider ordering and fallback."""
+
+    name: str
+    provider: MarketDataProvider
+    priority: int
+
+
 @runtime_checkable
 class MarketDataProvider(Protocol):
     """Provider protocol for deterministic market data iteration.
@@ -80,6 +89,105 @@ class MarketDataProvider(Protocol):
         """Yield canonical candles for a request in deterministic order."""
 
         ...
+
+
+@dataclass(frozen=True)
+class ProviderAttemptFailure:
+    """Captures a failed provider attempt during failover."""
+
+    provider_name: str
+    reason: str
+
+
+class ProviderFailoverExhaustedError(RuntimeError):
+    """Raised when all registered providers fail for a request."""
+
+    def __init__(self, failures: tuple[ProviderAttemptFailure, ...]) -> None:
+        self.failures = failures
+        details = ", ".join(
+            f"{failure.provider_name}: {failure.reason}" for failure in failures
+        )
+        super().__init__(f"All providers failed: {details}")
+
+
+class MarketDataProviderRegistry:
+    """Deterministic provider registry with priority-based fallback ordering."""
+
+    def __init__(self) -> None:
+        self._entries: dict[str, RegisteredMarketDataProvider] = {}
+
+    def register(
+        self, *, name: str, provider: MarketDataProvider, priority: int
+    ) -> None:
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("provider name must be a non-empty string")
+        if not isinstance(priority, int):
+            raise ValueError("provider priority must be an integer")
+        if name in self._entries:
+            raise ValueError(f"provider '{name}' is already registered")
+        self._entries[name] = RegisteredMarketDataProvider(
+            name=name, provider=provider, priority=priority
+        )
+
+    def get_registered(self) -> tuple[RegisteredMarketDataProvider, ...]:
+        """Return providers sorted by deterministic selection order."""
+
+        return tuple(
+            sorted(self._entries.values(), key=lambda entry: (entry.priority, entry.name))
+        )
+
+    def select_provider(self) -> RegisteredMarketDataProvider:
+        """Select primary provider deterministically from registry ordering."""
+
+        entries = self.get_registered()
+        if not entries:
+            raise ValueError("no market data providers are registered")
+        return entries[0]
+
+    def iter_candles_with_failover(
+        self, request: MarketDataRequest
+    ) -> Iterator[Candle]:
+        """Iterate candles using deterministic provider fallback order.
+
+        Failover applies both when creating the iterator and while consuming it.
+        """
+
+        entries = self.get_registered()
+        if not entries:
+            raise ValueError("no market data providers are registered")
+
+        def _iterate() -> Iterator[Candle]:
+            failures: list[ProviderAttemptFailure] = []
+            for entry in entries:
+                try:
+                    iterator = entry.provider.iter_candles(request)
+                except Exception as exc:
+                    failures.append(
+                        ProviderAttemptFailure(
+                            provider_name=entry.name,
+                            reason=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+                    continue
+
+                try:
+                    buffered = tuple(iterator)
+                except Exception as exc:
+                    failures.append(
+                        ProviderAttemptFailure(
+                            provider_name=entry.name,
+                            reason=f"{type(exc).__name__}: {exc}",
+                        )
+                    )
+                    continue
+
+                for candle in buffered:
+                    yield candle
+                return
+
+            raise ProviderFailoverExhaustedError(tuple(failures))
+
+        return _iterate()
 
 
 class LocalSnapshotProvider:

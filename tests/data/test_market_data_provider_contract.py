@@ -26,10 +26,13 @@ Candle = module.Candle
 detect_missing_candle_intervals = module.detect_missing_candle_intervals
 LocalSnapshotProvider = module.LocalSnapshotProvider
 MarketDataProvider = module.MarketDataProvider
+MarketDataProviderRegistry = module.MarketDataProviderRegistry
 MarketDataRequest = module.MarketDataRequest
 MissingCandleInterval = module.MissingCandleInterval
+ProviderFailoverExhaustedError = module.ProviderFailoverExhaustedError
 normalize_candle = module.normalize_candle
 normalize_candles = module.normalize_candles
+RegisteredMarketDataProvider = module.RegisteredMarketDataProvider
 serialize_candles_deterministically = module.serialize_candles_deterministically
 timeframe_to_timedelta = module.timeframe_to_timedelta
 
@@ -70,9 +73,275 @@ class InMemoryDeterministicProvider:
         return iter(candles)
 
 
+class AlwaysFailProvider:
+    def __init__(self, message: str = "provider failure") -> None:
+        self._message = message
+
+    def iter_candles(self, request: MarketDataRequest):
+        raise RuntimeError(self._message)
+
+
+class SingleCandleProvider:
+    def __init__(self, candle: Candle) -> None:
+        self._candle = candle
+
+    def iter_candles(self, request: MarketDataRequest):
+        if (
+            request.symbol == self._candle.symbol
+            and request.timeframe == self._candle.timeframe
+        ):
+            return iter((self._candle,))
+        return iter(())
+
+
+class IterationFailProvider:
+    def __init__(self, message: str = "iteration failure") -> None:
+        self._message = message
+
+    def iter_candles(self, request: MarketDataRequest):
+        def _generator():
+            raise RuntimeError(self._message)
+            yield  # pragma: no cover
+
+        return _generator()
+
+
+class PartialThenFailProvider:
+    def __init__(self, candles: tuple[Candle, ...], message: str = "partial failure") -> None:
+        self._candles = candles
+        self._message = message
+
+    def iter_candles(self, request: MarketDataRequest):
+        def _generator():
+            for candle in self._candles:
+                if (
+                    candle.symbol == request.symbol
+                    and candle.timeframe == request.timeframe
+                ):
+                    yield candle
+            raise RuntimeError(self._message)
+
+        return _generator()
+
+
 def test_market_data_provider_runtime_contract() -> None:
     provider = InMemoryDeterministicProvider()
     assert isinstance(provider, MarketDataProvider)
+
+
+def test_provider_registry_registers_provider() -> None:
+    registry = MarketDataProviderRegistry()
+    provider = InMemoryDeterministicProvider()
+    registry.register(name="snapshot", provider=provider, priority=10)
+
+    assert registry.get_registered() == (
+        RegisteredMarketDataProvider(name="snapshot", provider=provider, priority=10),
+    )
+
+
+def test_provider_selection_is_deterministic() -> None:
+    registry = MarketDataProviderRegistry()
+    registry.register(name="zeta", provider=InMemoryDeterministicProvider(), priority=10)
+    registry.register(name="alpha", provider=InMemoryDeterministicProvider(), priority=10)
+    registry.register(name="beta", provider=InMemoryDeterministicProvider(), priority=5)
+
+    selected = registry.select_provider()
+    ordered_names = tuple(entry.name for entry in registry.get_registered())
+
+    assert selected.name == "beta"
+    assert ordered_names == ("beta", "alpha", "zeta")
+
+
+def test_provider_registry_failover_uses_next_priority_provider() -> None:
+    registry = MarketDataProviderRegistry()
+    expected = Candle(
+        timestamp=datetime(2025, 1, 2, 0, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("200.0"),
+        high=Decimal("201.0"),
+        low=Decimal("199.0"),
+        close=Decimal("200.5"),
+        volume=Decimal("100.0"),
+    )
+    registry.register(name="primary", provider=AlwaysFailProvider(), priority=1)
+    registry.register(
+        name="fallback", provider=SingleCandleProvider(expected), priority=2
+    )
+
+    candles = tuple(
+        registry.iter_candles_with_failover(
+            MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+        )
+    )
+
+    assert candles == (expected,)
+
+
+def test_provider_registry_failover_raises_when_all_providers_fail() -> None:
+    registry = MarketDataProviderRegistry()
+    registry.register(name="primary", provider=AlwaysFailProvider("p1"), priority=1)
+    registry.register(name="secondary", provider=AlwaysFailProvider("p2"), priority=2)
+
+    try:
+        tuple(
+            registry.iter_candles_with_failover(
+                MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+            )
+        )
+    except ProviderFailoverExhaustedError as exc:
+        assert tuple(failure.provider_name for failure in exc.failures) == (
+            "primary",
+            "secondary",
+        )
+    else:
+        raise AssertionError("Expected ProviderFailoverExhaustedError")
+
+
+def test_provider_registry_failover_handles_iteration_time_failure() -> None:
+    registry = MarketDataProviderRegistry()
+    expected = Candle(
+        timestamp=datetime(2025, 1, 3, 0, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("300.0"),
+        high=Decimal("301.0"),
+        low=Decimal("299.0"),
+        close=Decimal("300.5"),
+        volume=Decimal("110.0"),
+    )
+    registry.register(name="primary", provider=IterationFailProvider("iter-p1"), priority=1)
+    registry.register(
+        name="fallback", provider=SingleCandleProvider(expected), priority=2
+    )
+
+    candles = tuple(
+        registry.iter_candles_with_failover(
+            MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+        )
+    )
+
+    assert candles == (expected,)
+
+
+def test_provider_registry_failover_aggregates_iteration_time_failures() -> None:
+    registry = MarketDataProviderRegistry()
+    registry.register(
+        name="primary", provider=IterationFailProvider("iter-p1"), priority=1
+    )
+    registry.register(
+        name="secondary", provider=IterationFailProvider("iter-p2"), priority=2
+    )
+
+    try:
+        tuple(
+            registry.iter_candles_with_failover(
+                MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+            )
+        )
+    except ProviderFailoverExhaustedError as exc:
+        assert tuple(failure.provider_name for failure in exc.failures) == (
+            "primary",
+            "secondary",
+        )
+        assert tuple(failure.reason for failure in exc.failures) == (
+            "RuntimeError: iter-p1",
+            "RuntimeError: iter-p2",
+        )
+    else:
+        raise AssertionError("Expected ProviderFailoverExhaustedError")
+
+
+def test_provider_registry_failover_discards_partial_output_before_fallback() -> None:
+    registry = MarketDataProviderRegistry()
+    partial_candle = Candle(
+        timestamp=datetime(2025, 1, 4, 0, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("400.0"),
+        high=Decimal("401.0"),
+        low=Decimal("399.0"),
+        close=Decimal("400.5"),
+        volume=Decimal("120.0"),
+    )
+    fallback_candle = Candle(
+        timestamp=datetime(2025, 1, 4, 1, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("401.0"),
+        high=Decimal("402.0"),
+        low=Decimal("400.0"),
+        close=Decimal("401.5"),
+        volume=Decimal("130.0"),
+    )
+    registry.register(
+        name="primary",
+        provider=PartialThenFailProvider((partial_candle,), "partial-p1"),
+        priority=1,
+    )
+    registry.register(
+        name="fallback", provider=SingleCandleProvider(fallback_candle), priority=2
+    )
+
+    candles = tuple(
+        registry.iter_candles_with_failover(
+            MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+        )
+    )
+
+    assert candles == (fallback_candle,)
+
+
+def test_provider_registry_failover_raises_when_all_partial_providers_fail() -> None:
+    registry = MarketDataProviderRegistry()
+    partial_a = Candle(
+        timestamp=datetime(2025, 1, 5, 0, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("500.0"),
+        high=Decimal("501.0"),
+        low=Decimal("499.0"),
+        close=Decimal("500.5"),
+        volume=Decimal("140.0"),
+    )
+    partial_b = Candle(
+        timestamp=datetime(2025, 1, 5, 1, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("501.0"),
+        high=Decimal("502.0"),
+        low=Decimal("500.0"),
+        close=Decimal("501.5"),
+        volume=Decimal("150.0"),
+    )
+    registry.register(
+        name="primary",
+        provider=PartialThenFailProvider((partial_a,), "partial-p1"),
+        priority=1,
+    )
+    registry.register(
+        name="secondary",
+        provider=PartialThenFailProvider((partial_b,), "partial-p2"),
+        priority=2,
+    )
+
+    try:
+        tuple(
+            registry.iter_candles_with_failover(
+                MarketDataRequest(symbol="BTC/USDT", timeframe="1H")
+            )
+        )
+    except ProviderFailoverExhaustedError as exc:
+        assert tuple(failure.provider_name for failure in exc.failures) == (
+            "primary",
+            "secondary",
+        )
+        assert tuple(failure.reason for failure in exc.failures) == (
+            "RuntimeError: partial-p1",
+            "RuntimeError: partial-p2",
+        )
+    else:
+        raise AssertionError("Expected ProviderFailoverExhaustedError")
 
 
 def test_candle_exposes_canonical_fields() -> None:
