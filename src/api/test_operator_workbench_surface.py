@@ -40,6 +40,10 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "id=\"signal-list\"" in response.text
     assert "/strategies" in response.text
     assert "/signals?limit=20&sort=created_at_desc" in response.text
+    assert "Trade Lifecycle Panel" in response.text
+    assert "id=\"lifecycle-order-list\"" in response.text
+    assert "id=\"lifecycle-event-timeline\"" in response.text
+    assert "/execution/orders?limit=200&offset=0" in response.text
     assert "Journal Artifacts Panel" in response.text
     assert "Decision Trace Panel" in response.text
     assert "id=\"journal-artifact-list\"" in response.text

@@ -138,6 +138,7 @@ def test_execution_orders_filtering_and_pagination(tmp_path: Path, monkeypatch) 
         by_symbol = client.get("/execution/orders", params={"symbol": "AAPL"})
         by_strategy = client.get("/execution/orders", params={"strategy": "RSI2"})
         by_run = client.get("/execution/orders", params={"run_id": "run-1"})
+        by_order = client.get("/execution/orders", params={"order_id": "a-1"})
         paged = client.get(
             "/execution/orders",
             params={"symbol": "AAPL", "strategy": "RSI2", "limit": 1, "offset": 1},
@@ -146,11 +147,13 @@ def test_execution_orders_filtering_and_pagination(tmp_path: Path, monkeypatch) 
     assert by_symbol.status_code == 200
     assert by_strategy.status_code == 200
     assert by_run.status_code == 200
+    assert by_order.status_code == 200
     assert paged.status_code == 200
 
     by_symbol_payload = by_symbol.json()
     by_strategy_payload = by_strategy.json()
     by_run_payload = by_run.json()
+    by_order_payload = by_order.json()
     paged_payload = paged.json()
 
     assert by_symbol_payload["total"] == 3
@@ -161,6 +164,9 @@ def test_execution_orders_filtering_and_pagination(tmp_path: Path, monkeypatch) 
 
     assert by_run_payload["total"] == 2
     assert all(item["run_id"] == "run-1" for item in by_run_payload["items"])
+
+    assert by_order_payload["total"] == 1
+    assert all(item["order_id"] == "a-1" for item in by_order_payload["items"])
 
     assert paged_payload["total"] == 2
     assert paged_payload["limit"] == 1

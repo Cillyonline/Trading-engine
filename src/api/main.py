@@ -303,6 +303,7 @@ class ExecutionOrdersReadQuery(BaseModel):
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
     run_id: Optional[str] = Field(default=None)
+    order_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
 
@@ -956,6 +957,7 @@ def _get_execution_orders_query(
     symbol: Optional[str] = Query(default=None),
     strategy: Optional[str] = Query(default=None),
     run_id: Optional[str] = Query(default=None),
+    order_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> ExecutionOrdersReadQuery:
@@ -963,6 +965,7 @@ def _get_execution_orders_query(
         symbol=symbol,
         strategy=strategy,
         run_id=run_id,
+        order_id=order_id,
         limit=limit,
         offset=offset,
     )
@@ -1189,6 +1192,7 @@ def read_execution_orders(
         symbol=params.symbol,
         strategy=params.strategy,
         run_id=params.run_id,
+        order_id=params.order_id,
         limit=params.limit,
         offset=params.offset,
     )

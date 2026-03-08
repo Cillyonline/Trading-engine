@@ -155,6 +155,51 @@
         overflow-x: auto;
       }
 
+      .lifecycle-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.85rem;
+        margin-top: 0.65rem;
+      }
+
+      .lifecycle-box {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.7rem;
+        background: var(--surface-muted);
+      }
+
+      .timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .timeline li {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        padding: 0.5rem;
+      }
+
+      .timeline-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.45rem;
+      }
+
+      .state-pill {
+        border: 1px solid #97d3ce;
+        border-radius: 999px;
+        color: #115e59;
+        background: var(--accent-soft);
+        font-size: 0.74rem;
+        font-weight: 600;
+        padding: 0.1rem 0.45rem;
+      }
+
       table {
         width: 100%;
         border-collapse: collapse;
@@ -187,6 +232,10 @@
         .panel-grid {
           grid-template-columns: 1fr;
         }
+
+        .lifecycle-layout {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -213,6 +262,7 @@
               <li><a href="#journal">Journal Artifacts</a></li>
               <li><a href="#decision-trace">Decision Trace</a></li>
               <li><a href="#screener">Screener</a></li>
+              <li><a href="#trade-lifecycle">Trade Lifecycle</a></li>
               <li><a href="#audit">Audit Trail</a></li>
             </ul>
           </nav>
@@ -325,6 +375,40 @@
               <p>Reserved for future screener workflow navigation.</p>
             </article>
 
+            <article id="trade-lifecycle" class="panel">
+              <h3>Trade Lifecycle Panel</h3>
+              <p>
+                Read-only order state timeline and execution events from <code>/execution/orders</code>.
+                This panel does not support order edits or cancellation.
+              </p>
+              <p class="status" id="lifecycle-status">Loading order lifecycle events...</p>
+              <p class="status" id="lifecycle-selected-order">No order selected.</p>
+              <section class="lifecycle-layout" aria-label="Trade lifecycle viewer">
+                <div class="lifecycle-box">
+                  <h4 style="margin: 0; font-size: 0.9rem">Orders</h4>
+                  <div class="table-wrap">
+                    <table aria-label="Order lifecycle list">
+                      <thead>
+                        <tr>
+                          <th>Run</th>
+                          <th>Order</th>
+                          <th>Symbol</th>
+                          <th>Strategy</th>
+                          <th>Events</th>
+                          <th>Last State</th>
+                        </tr>
+                      </thead>
+                      <tbody id="lifecycle-order-list"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="lifecycle-box">
+                  <h4 style="margin: 0; font-size: 0.9rem">Execution Event Timeline</h4>
+                  <ul class="timeline" id="lifecycle-event-timeline"></ul>
+                </div>
+              </section>
+            </article>
+
             <article id="audit" class="panel">
               <h3>Audit Trail Panel</h3>
               <p>Reserved for traceability and operational audit interfaces.</p>
@@ -344,6 +428,11 @@
       const artifactContentPreview = document.getElementById("artifact-content-preview");
       const decisionTraceStatus = document.getElementById("decision-trace-status");
       const decisionTraceList = document.getElementById("decision-trace-list");
+      const lifecycleStatus = document.getElementById("lifecycle-status");
+      const lifecycleOrderList = document.getElementById("lifecycle-order-list");
+      const lifecycleEventTimeline = document.getElementById("lifecycle-event-timeline");
+      const lifecycleSelectedOrder = document.getElementById("lifecycle-selected-order");
+      let selectedLifecycleKey = "";
 
       function createRow(cells) {
         const row = document.createElement("tr");
@@ -523,7 +612,135 @@
         }
       }
 
-      void Promise.all([loadStrategies(), loadSignals(), loadJournalArtifacts()]);
+      function createOrderKey(item) {
+        return `${item.run_id}::${item.order_id}`;
+      }
+
+      function compareOrderEvents(a, b) {
+        const timeA = String(a.event_timestamp || "");
+        const timeB = String(b.event_timestamp || "");
+        if (timeA < timeB) return -1;
+        if (timeA > timeB) return 1;
+        const seqA = Number(a.event_sequence || 0);
+        const seqB = Number(b.event_sequence || 0);
+        if (seqA < seqB) return -1;
+        if (seqA > seqB) return 1;
+        return 0;
+      }
+
+      function renderLifecycleTimeline(group) {
+        lifecycleEventTimeline.innerHTML = "";
+        if (!group) {
+          const item = document.createElement("li");
+          item.textContent = "No lifecycle events available.";
+          lifecycleEventTimeline.appendChild(item);
+          lifecycleSelectedOrder.textContent = "No order selected.";
+          return;
+        }
+
+        lifecycleSelectedOrder.textContent = `Selected order ${group.order_id} (run ${group.run_id}) with ${group.events.length} events.`;
+        group.events.forEach((event) => {
+          const li = document.createElement("li");
+          const top = document.createElement("div");
+          top.className = "timeline-top";
+          const timestamp = document.createElement("span");
+          timestamp.textContent = event.event_timestamp || "";
+          const state = document.createElement("span");
+          state.className = "state-pill";
+          state.textContent = event.state || "";
+          top.appendChild(timestamp);
+          top.appendChild(state);
+          li.appendChild(top);
+
+          const detail = document.createElement("div");
+          detail.style.marginTop = "0.35rem";
+          detail.style.fontSize = "0.8rem";
+          detail.style.color = "var(--text-soft)";
+          detail.textContent = `sequence=${event.event_sequence} symbol=${event.symbol} strategy=${event.strategy}`;
+          li.appendChild(detail);
+          lifecycleEventTimeline.appendChild(li);
+        });
+      }
+
+      function renderLifecycleOrderList(groups) {
+        lifecycleOrderList.innerHTML = "";
+        groups.forEach((group) => {
+          const lastEvent = group.events[group.events.length - 1] || {};
+          const row = createRow([
+            group.run_id,
+            group.order_id,
+            group.symbol,
+            group.strategy,
+            String(group.events.length),
+            lastEvent.state || "",
+          ]);
+          row.style.cursor = "pointer";
+          row.addEventListener("click", () => {
+            selectedLifecycleKey = group.key;
+            renderLifecycleTimeline(group);
+          });
+          lifecycleOrderList.appendChild(row);
+        });
+      }
+
+      async function loadTradeLifecycle() {
+        lifecycleStatus.textContent = "Loading order lifecycle events from /execution/orders...";
+        try {
+          const response = await fetch("/execution/orders?limit=200&offset=0");
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const payload = await response.json();
+          const items = Array.isArray(payload.items) ? payload.items : [];
+          if (items.length === 0) {
+            lifecycleStatus.textContent = "No order lifecycle events found.";
+            lifecycleOrderList.innerHTML = "";
+            renderLifecycleTimeline(null);
+            return;
+          }
+
+          const groupedMap = new Map();
+          items.forEach((item) => {
+            const key = createOrderKey(item);
+            if (!groupedMap.has(key)) {
+              groupedMap.set(key, {
+                key,
+                run_id: item.run_id || "",
+                order_id: item.order_id || "",
+                symbol: item.symbol || "",
+                strategy: item.strategy || "",
+                events: [],
+              });
+            }
+            groupedMap.get(key).events.push(item);
+          });
+
+          const groups = Array.from(groupedMap.values());
+          groups.forEach((group) => {
+            group.events.sort(compareOrderEvents);
+          });
+          groups.sort((a, b) => {
+            const aLast = a.events[a.events.length - 1];
+            const bLast = b.events[b.events.length - 1];
+            return compareOrderEvents(bLast, aLast);
+          });
+
+          renderLifecycleOrderList(groups);
+          const selected = groups.find((group) => group.key === selectedLifecycleKey) || groups[0];
+          selectedLifecycleKey = selected.key;
+          renderLifecycleTimeline(selected);
+          lifecycleStatus.textContent = `Loaded ${items.length} events across ${groups.length} orders.`;
+        } catch (error) {
+          lifecycleStatus.textContent = `Failed to load trade lifecycle events: ${error.message}`;
+          lifecycleOrderList.innerHTML = "";
+          renderLifecycleTimeline(null);
+        }
+      }
+
+      void Promise.all([loadStrategies(), loadSignals(), loadJournalArtifacts(), loadTradeLifecycle()]);
+      setInterval(() => {
+        void loadTradeLifecycle();
+      }, 15000);
     </script>
   </body>
 </html>
