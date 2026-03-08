@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
 
+from cilly_trading.engine.journal.execution_journal import (
+    build_execution_journal_artifact,
+    write_execution_journal_artifact,
+)
 from cilly_trading.engine.result_artifact import write_artifact
 
 
@@ -122,12 +126,83 @@ class BacktestRunner:
             invocation_log=invocation_log,
             config=config,
         )
-        return write_artifact(
+        artifact_path, artifact_sha256 = write_artifact(
             output_dir=config.output_dir,
             payload=payload,
             artifact_name=config.artifact_name,
             hash_name=config.hash_name,
         )
+        self._write_execution_journal(
+            processed_snapshots=processed_snapshots,
+            invocation_log=invocation_log,
+            config=config,
+        )
+        return artifact_path, artifact_sha256
+
+    def _write_execution_journal(
+        self,
+        *,
+        processed_snapshots: List[Dict[str, Any]],
+        invocation_log: List[str],
+        config: BacktestRunnerConfig,
+    ) -> None:
+        events: List[Dict[str, Any]] = []
+        snapshot_lookup = {
+            str(snapshot.get("id", "")): snapshot for snapshot in processed_snapshots
+        }
+
+        for index, invocation in enumerate(invocation_log, start=1):
+            if invocation == "on_run_start":
+                events.append(
+                    {
+                        "event_id": f"{config.run_id}:run_start",
+                        "phase": "run",
+                        "status": "started",
+                        "sequence": index,
+                        "snapshot_id": "",
+                        "timestamp": "",
+                        "metadata": {"hook": invocation},
+                    }
+                )
+                continue
+
+            if invocation == "on_run_end":
+                events.append(
+                    {
+                        "event_id": f"{config.run_id}:run_end",
+                        "phase": "run",
+                        "status": "completed",
+                        "sequence": index,
+                        "snapshot_id": "",
+                        "timestamp": "",
+                        "metadata": {"hook": invocation},
+                    }
+                )
+                continue
+
+            if invocation.startswith("on_snapshot:"):
+                snapshot_id = invocation.split(":", 1)[1]
+                snapshot_payload = snapshot_lookup.get(snapshot_id, {})
+                snapshot_timestamp = snapshot_payload.get("timestamp")
+                events.append(
+                    {
+                        "event_id": f"{config.run_id}:snapshot:{snapshot_id}",
+                        "phase": "snapshot",
+                        "status": "processed",
+                        "sequence": index,
+                        "snapshot_id": snapshot_id,
+                        "timestamp": "" if snapshot_timestamp is None else str(snapshot_timestamp),
+                        "metadata": {"hook": invocation},
+                    }
+                )
+
+        execution_journal = build_execution_journal_artifact(
+            run_id=config.run_id,
+            lifecycle_events=events,
+            deterministic=True,
+            created_at="",
+        )
+        write_execution_journal_artifact(config.output_dir, execution_journal)
 
     def _build_payload(
         self,
