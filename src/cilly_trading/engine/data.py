@@ -21,6 +21,10 @@ import yfinance as yf
 
 from cilly_trading.db import DEFAULT_DB_PATH, init_db
 from cilly_trading.db.init_db import get_connection
+from data_layer.ingestion_validation import (
+    SnapshotValidationError,
+    validate_market_data_integrity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +126,16 @@ def _normalize_local_ohlcv_rows(
     if out[["open", "high", "low", "close", "volume"]].isna().any().any():
         logger.error("Snapshot contains invalid numeric values: component=data symbol=%s", symbol)
         raise SnapshotIngestionError("snapshot_invalid_numeric")
+
+    try:
+        validate_market_data_integrity(out)
+    except SnapshotValidationError as exc:
+        logger.error(
+            "Snapshot failed integrity validation: component=data symbol=%s error=%s",
+            symbol,
+            str(exc),
+        )
+        raise SnapshotIngestionError(str(exc)) from exc
 
     out = out.sort_values("timestamp").reset_index(drop=True)
     out["symbol"] = symbol
@@ -521,6 +535,17 @@ def _validate_and_normalize_ohlcv(
             "No valid OHLC rows: component=data source=%s symbol=%s",
             source,
             symbol,
+        )
+        return _empty_ohlcv()
+
+    try:
+        validate_market_data_integrity(out)
+    except SnapshotValidationError as exc:
+        logger.warning(
+            "Invalid market data integrity: component=data source=%s symbol=%s error=%s",
+            source,
+            symbol,
+            str(exc),
         )
         return _empty_ohlcv()
 
