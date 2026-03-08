@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Protocol, runtime_checkable
@@ -54,6 +55,15 @@ class MarketDataRequest:
     symbol: str
     timeframe: str
     limit: int | None = None
+
+
+@dataclass(frozen=True)
+class MissingCandleInterval:
+    """Describes a contiguous range of missing candles."""
+
+    start_timestamp: datetime
+    end_timestamp: datetime
+    missing_count: int
 
 
 @runtime_checkable
@@ -201,6 +211,94 @@ def serialize_candles_deterministically(candles: Iterable[Candle]) -> str:
         for candle in ordered
     ]
     return json.dumps(canonical, separators=(",", ":"), ensure_ascii=True)
+
+
+def timeframe_to_timedelta(timeframe: str) -> timedelta:
+    """Parse canonical timeframe strings (M, H, D, W) into timedeltas."""
+
+    if not isinstance(timeframe, str):
+        raise ValueError("timeframe must be a non-empty string")
+    match = re.fullmatch(r"\s*(\d+)\s*([mhdwMHDW])\s*", timeframe)
+    if match is None:
+        raise ValueError("timeframe must use canonical format like 1M, 1H, 1D, 1W")
+
+    value = int(match.group(1))
+    unit = match.group(2).upper()
+    if value <= 0:
+        raise ValueError("timeframe value must be > 0")
+
+    if unit == "M":
+        return timedelta(minutes=value)
+    if unit == "H":
+        return timedelta(hours=value)
+    if unit == "D":
+        return timedelta(days=value)
+    if unit == "W":
+        return timedelta(weeks=value)
+
+    raise ValueError("unsupported timeframe unit")
+
+
+def detect_missing_candle_intervals(
+    candles: Iterable[Candle],
+    *,
+    timeframe: str | None = None,
+) -> tuple[MissingCandleInterval, ...]:
+    """Detect missing candle intervals for a canonical candle sequence.
+
+    Deterministic rules:
+    - Input candles must share the same symbol and timeframe.
+    - Timestamps must be strictly increasing.
+    - A missing interval is reported when distance between adjacent timestamps
+      is greater than the timeframe step.
+    """
+
+    ordered = tuple(candles)
+    if len(ordered) < 2:
+        return ()
+
+    sequence_timeframe = timeframe or ordered[0].timeframe
+    step = timeframe_to_timedelta(sequence_timeframe)
+    if step <= timedelta(0):
+        raise ValueError("timeframe must resolve to a positive interval")
+
+    first_symbol = ordered[0].symbol
+    first_timeframe = ordered[0].timeframe
+    if timeframe is None:
+        expected_timeframe = first_timeframe
+    else:
+        expected_timeframe = timeframe
+
+    gaps: list[MissingCandleInterval] = []
+    previous = ordered[0]
+
+    for current in ordered[1:]:
+        if current.symbol != first_symbol:
+            raise ValueError("candles must belong to the same symbol")
+        if current.timeframe != first_timeframe:
+            raise ValueError("candles must belong to the same timeframe")
+        if current.timeframe != expected_timeframe:
+            raise ValueError("candle timeframe does not match requested timeframe")
+        if current.timestamp <= previous.timestamp:
+            raise ValueError("candles must be strictly increasing by timestamp")
+
+        missing_timestamps: list[datetime] = []
+        probe = previous.timestamp + step
+        while probe < current.timestamp:
+            missing_timestamps.append(probe)
+            probe += step
+
+        if missing_timestamps:
+            gaps.append(
+                MissingCandleInterval(
+                    start_timestamp=missing_timestamps[0],
+                    end_timestamp=missing_timestamps[-1],
+                    missing_count=len(missing_timestamps),
+                )
+            )
+        previous = current
+
+    return tuple(gaps)
 
 
 def _extract_field(
