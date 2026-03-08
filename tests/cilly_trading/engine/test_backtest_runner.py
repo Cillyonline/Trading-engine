@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Mapping
 import pytest
 
 from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
+from cilly_trading.engine.journal.execution_journal import EXECUTION_JOURNAL_SCHEMA
+from tests.utils.json_schema_validator import validate_json_schema
 
 
 class SpyStrategy:
@@ -172,3 +174,33 @@ def test_snapshot_linkage_mixed_error(tmp_path: Path) -> None:
             strategy_factory=strategy_factory,
             config=BacktestRunnerConfig(output_dir=tmp_path / "mixed-mode"),
         )
+
+
+def test_backtest_runner_persists_execution_journal_artifacts(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    run_dir = tmp_path / "run-integration"
+    runner.run(
+        snapshots=_sample_snapshots(),
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=run_dir, run_id="run-integration"),
+    )
+
+    journal_path = run_dir / "execution-journal.json"
+    hash_path = run_dir / "execution-journal.sha256"
+
+    assert journal_path.exists()
+    assert hash_path.exists()
+
+    journal_payload = json.loads(journal_path.read_text(encoding="utf-8"))
+    validation_errors = validate_json_schema(journal_payload, EXECUTION_JOURNAL_SCHEMA)
+    assert validation_errors == []
+    assert journal_payload["run"]["run_id"] == "run-integration"
+
+    phases = [(event["phase"], event["status"]) for event in journal_payload["lifecycle"]]
+    assert phases[0] == ("run", "started")
+    assert phases[-1] == ("run", "completed")
+    assert any(phase == ("snapshot", "processed") for phase in phases)
