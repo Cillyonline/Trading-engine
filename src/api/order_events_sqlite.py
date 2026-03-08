@@ -133,6 +133,7 @@ class SqliteOrderEventRepository:
         symbol: Optional[str] = None,
         strategy: Optional[str] = None,
         run_id: Optional[str] = None,
+        order_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
@@ -148,6 +149,9 @@ class SqliteOrderEventRepository:
         if run_id is not None:
             where_clauses.append("run_id = ?")
             params.append(run_id)
+        if order_id is not None:
+            where_clauses.append("order_id = ?")
+            params.append(order_id)
 
         where_sql = ""
         if where_clauses:
