@@ -50,6 +50,62 @@ def _resolve_timestamp_column(df: pd.DataFrame, timestamp_column: str) -> str:
     return timestamp_column
 
 
+def validate_market_data_integrity(
+    df: pd.DataFrame,
+    *,
+    timestamp_column: str = "timestamp",
+    open_column: str = "open",
+    high_column: str = "high",
+    low_column: str = "low",
+    close_column: str = "close",
+) -> None:
+    """Validate deterministic market data integrity rules.
+
+    Error codes:
+    - snapshot_missing_columns
+    - snapshot_invalid_timestamp
+    - snapshot_duplicate_candle
+    - snapshot_timestamp_out_of_order
+    - snapshot_ohlc_integrity_invalid
+    """
+    if df is None or df.empty:
+        return
+
+    resolved_ts = _resolve_timestamp_column(df, timestamp_column)
+    required = [resolved_ts, open_column, high_column, low_column, close_column]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise SnapshotValidationError(
+            f"snapshot_missing_columns missing={','.join(missing)}"
+        )
+
+    timestamps = pd.to_datetime(df[resolved_ts], utc=True, errors="coerce")
+    if timestamps.isna().any():
+        raise SnapshotValidationError("snapshot_invalid_timestamp")
+    if timestamps.duplicated(keep=False).any():
+        raise SnapshotValidationError("snapshot_duplicate_candle")
+
+    ordered = timestamps.reset_index(drop=True)
+    if len(ordered) > 1 and not ordered.is_monotonic_increasing:
+        raise SnapshotValidationError("snapshot_timestamp_out_of_order")
+
+    ohlc = df[[open_column, high_column, low_column, close_column]].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    if ohlc.isna().any().any():
+        raise SnapshotValidationError("snapshot_ohlc_integrity_invalid")
+
+    invalid_ohlc = (
+        (ohlc[high_column] < ohlc[low_column])
+        | (ohlc[high_column] < ohlc[open_column])
+        | (ohlc[high_column] < ohlc[close_column])
+        | (ohlc[low_column] > ohlc[open_column])
+        | (ohlc[low_column] > ohlc[close_column])
+    )
+    if invalid_ohlc.any():
+        raise SnapshotValidationError("snapshot_ohlc_integrity_invalid")
+
+
 def validate_ohlcv_uniqueness(
     df: pd.DataFrame,
     *,
@@ -121,6 +177,7 @@ def validate_snapshot_ingestion(
         existing_source=existing_source,
         forbid_demo_seed=True,
     )
+    validate_market_data_integrity(df)
     validate_ohlcv_uniqueness(df)
     validate_single_source_rows(df, source=normalized_source)
     return SnapshotIngestionValidation(

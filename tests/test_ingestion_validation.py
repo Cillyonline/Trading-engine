@@ -3,6 +3,7 @@ import pytest
 
 from data_layer.ingestion_validation import (
     SnapshotValidationError,
+    validate_market_data_integrity,
     validate_ohlcv_uniqueness,
     validate_snapshot_ingestion,
     validate_snapshot_source,
@@ -84,3 +85,37 @@ def test_validate_snapshot_ingestion_allows_single_source() -> None:
     )
     assert result.source == "yahoo"
     assert result.ingestion_run_id == "run-1"
+
+
+def test_validate_market_data_integrity_rejects_invalid_ohlc() -> None:
+    df = _base_df()
+    df.loc[0, "high"] = 0
+    with pytest.raises(SnapshotValidationError, match="snapshot_ohlc_integrity_invalid"):
+        validate_market_data_integrity(df)
+
+
+def test_validate_market_data_integrity_rejects_timestamp_out_of_order() -> None:
+    df = _base_df().iloc[[1, 0]].reset_index(drop=True)
+    with pytest.raises(SnapshotValidationError, match="snapshot_timestamp_out_of_order"):
+        validate_market_data_integrity(df)
+
+
+def test_validate_market_data_integrity_rejects_duplicate_candles() -> None:
+    df = _base_df()
+    df = pd.concat([df, df.iloc[[0]]], ignore_index=True)
+    with pytest.raises(SnapshotValidationError, match="snapshot_duplicate_candle"):
+        validate_market_data_integrity(df)
+
+
+def test_validate_snapshot_ingestion_rejects_integrity_violations() -> None:
+    df = _base_df()
+    df["source"] = ["yahoo", "yahoo"]
+    df.loc[0, "low"] = 10
+    with pytest.raises(SnapshotValidationError, match="snapshot_ohlc_integrity_invalid"):
+        validate_snapshot_ingestion(
+            df,
+            source="yahoo",
+            ingestion_run_id="run-1",
+            symbols=["AAPL"],
+            timeframe="D1",
+        )
