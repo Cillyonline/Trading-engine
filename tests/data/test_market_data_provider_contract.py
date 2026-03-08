@@ -26,6 +26,9 @@ Candle = module.Candle
 LocalSnapshotProvider = module.LocalSnapshotProvider
 MarketDataProvider = module.MarketDataProvider
 MarketDataRequest = module.MarketDataRequest
+normalize_candle = module.normalize_candle
+normalize_candles = module.normalize_candles
+serialize_candles_deterministically = module.serialize_candles_deterministically
 
 
 class InMemoryDeterministicProvider:
@@ -205,3 +208,116 @@ def test_local_snapshot_provider_iteration_order_is_deterministic(tmp_path: Path
         datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
         datetime(2025, 1, 1, 2, tzinfo=timezone.utc),
     ]
+
+
+def test_normalize_candle_supports_common_provider_aliases() -> None:
+    normalized = normalize_candle(
+        {
+            "t": "2025-01-01T00:00:00Z",
+            "pair": "BTC/USDT",
+            "interval": "1H",
+            "o": "100.0",
+            "h": "101.0",
+            "l": "99.0",
+            "c": "100.5",
+            "v": "400.0",
+        }
+    )
+
+    assert normalized == Candle(
+        timestamp=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+        symbol="BTC/USDT",
+        timeframe="1H",
+        open=Decimal("100.0"),
+        high=Decimal("101.0"),
+        low=Decimal("99.0"),
+        close=Decimal("100.5"),
+        volume=Decimal("400.0"),
+    )
+
+
+def test_normalize_candle_raises_for_incomplete_schema() -> None:
+    payload = {
+        "timestamp": "2025-01-01T00:00:00+00:00",
+        "symbol": "BTC/USDT",
+        "timeframe": "1H",
+        "open": "100.0",
+        "high": "101.0",
+        "low": "99.0",
+        "close": "100.5",
+    }
+
+    try:
+        normalize_candle(payload)
+    except ValueError as exc:
+        assert "Invalid snapshot dataset" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for incomplete candle schema")
+
+
+def test_normalize_candles_orders_deterministically() -> None:
+    candles = normalize_candles(
+        [
+            {
+                "timestamp": "2025-01-01T01:00:00+00:00",
+                "symbol": "BTC/USDT",
+                "timeframe": "1H",
+                "open": "101.0",
+                "high": "102.0",
+                "low": "100.0",
+                "close": "101.5",
+                "volume": "290.0",
+            },
+            {
+                "timestamp": "2025-01-01T00:00:00+00:00",
+                "symbol": "BTC/USDT",
+                "timeframe": "1H",
+                "open": "100.0",
+                "high": "101.0",
+                "low": "99.5",
+                "close": "100.5",
+                "volume": "250.0",
+            },
+        ]
+    )
+
+    assert [candle.timestamp for candle in candles] == [
+        datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+        datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+    ]
+
+
+def test_serialize_candles_deterministically_is_stable() -> None:
+    candles = (
+        Candle(
+            timestamp=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("101.0"),
+            high=Decimal("102.0"),
+            low=Decimal("100.0"),
+            close=Decimal("101.5"),
+            volume=Decimal("290.0"),
+        ),
+        Candle(
+            timestamp=datetime(2025, 1, 1, 0, tzinfo=timezone.utc),
+            symbol="BTC/USDT",
+            timeframe="1H",
+            open=Decimal("100.0"),
+            high=Decimal("101.0"),
+            low=Decimal("99.5"),
+            close=Decimal("100.5"),
+            volume=Decimal("250.0"),
+        ),
+    )
+
+    first = serialize_candles_deterministically(candles)
+    second = serialize_candles_deterministically(reversed(candles))
+
+    assert first == second
+    assert first == (
+        '[{"timestamp":"2025-01-01T00:00:00+00:00","symbol":"BTC/USDT","timeframe":"1H",'
+        '"open":"100.0","high":"101.0","low":"99.5","close":"100.5","volume":"250.0"},'
+        '{"timestamp":"2025-01-01T01:00:00+00:00","symbol":"BTC/USDT","timeframe":"1H",'
+        '"open":"101.0","high":"102.0","low":"100.0","close":"101.5","volume":"290.0"}]'
+    )
