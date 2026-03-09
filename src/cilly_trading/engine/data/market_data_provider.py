@@ -10,6 +10,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Protocol, runtime_checkable
 
+from cilly_trading.engine.logging import emit_structured_engine_log
+
 
 CANONICAL_CANDLE_FIELDS: tuple[str, ...] = (
     "timestamp",
@@ -162,6 +164,16 @@ class MarketDataProviderRegistry:
                 try:
                     iterator = entry.provider.iter_candles(request)
                 except Exception as exc:
+                    emit_structured_engine_log(
+                        "provider_failover.attempt_failed",
+                        payload={
+                            "provider_name": entry.name,
+                            "symbol": request.symbol,
+                            "timeframe": request.timeframe,
+                            "limit": request.limit,
+                            "reason": f"{type(exc).__name__}: {exc}",
+                        },
+                    )
                     failures.append(
                         ProviderAttemptFailure(
                             provider_name=entry.name,
@@ -173,6 +185,16 @@ class MarketDataProviderRegistry:
                 try:
                     buffered = tuple(iterator)
                 except Exception as exc:
+                    emit_structured_engine_log(
+                        "provider_failover.attempt_failed",
+                        payload={
+                            "provider_name": entry.name,
+                            "symbol": request.symbol,
+                            "timeframe": request.timeframe,
+                            "limit": request.limit,
+                            "reason": f"{type(exc).__name__}: {exc}",
+                        },
+                    )
                     failures.append(
                         ProviderAttemptFailure(
                             provider_name=entry.name,
@@ -181,10 +203,34 @@ class MarketDataProviderRegistry:
                     )
                     continue
 
+                if failures:
+                    emit_structured_engine_log(
+                        "provider_failover.recovered",
+                        payload={
+                            "provider_name": entry.name,
+                            "symbol": request.symbol,
+                            "timeframe": request.timeframe,
+                            "limit": request.limit,
+                            "failed_provider_names": [
+                                failure.provider_name for failure in failures
+                            ],
+                        },
+                    )
                 for candle in buffered:
                     yield candle
                 return
 
+            emit_structured_engine_log(
+                "provider_failover.exhausted",
+                payload={
+                    "symbol": request.symbol,
+                    "timeframe": request.timeframe,
+                    "limit": request.limit,
+                    "failed_provider_names": [
+                        failure.provider_name for failure in failures
+                    ],
+                },
+            )
             raise ProviderFailoverExhaustedError(tuple(failures))
 
         return _iterate()
