@@ -15,6 +15,7 @@ from cilly_trading.engine.order_execution_model import (
     Position,
     _execute_order,
 )
+from cilly_trading.engine.risk import resolve_runtime_guard_type
 from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 from cilly_trading.engine.strategy_lifecycle.service import StrategyLifecycleStore
 
@@ -69,6 +70,10 @@ def run_pipeline(
         emit_structured_engine_log(
             "guard.triggered",
             payload={
+                "guard_type": resolve_runtime_guard_type(
+                    request=risk_request,
+                    guard_source=guard_source,
+                ),
                 "request_id": risk_request.request_id,
                 "strategy_id": risk_request.strategy_id,
                 "symbol": risk_request.symbol,
