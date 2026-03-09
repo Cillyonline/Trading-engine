@@ -9,12 +9,20 @@ from typing import Any, Mapping, Sequence
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
 
 from cilly_trading.engine.logging import emit_structured_engine_log
-from cilly_trading.engine.telemetry import (
-    GUARD_TRIGGER_EVENT,
-    GUARD_TRIGGER_PAYLOAD_KEY,
-    GUARD_TRIGGER_TYPES,
+from cilly_trading.engine.telemetry.schema import (
     TelemetryEvent,
     build_telemetry_event,
+)
+
+GUARD_TRIGGER_EVENT = "guard.triggered"
+GUARD_TRIGGER_PAYLOAD_KEY = "guard_type"
+GUARD_TRIGGER_TYPES: frozenset[str] = frozenset(
+    {
+        "kill_switch",
+        "drawdown",
+        "daily_loss",
+        "emergency",
+    }
 )
 
 _GUARD_EMISSION_ORDER: tuple[str, ...] = (
