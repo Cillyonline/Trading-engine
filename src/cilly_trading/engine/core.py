@@ -28,6 +28,7 @@ from cilly_trading.engine.data import (
     load_snapshot_metadata,
 )
 from cilly_trading.engine.lineage import LineageContext, LineageMissingError
+from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
 from cilly_trading.models import Signal
@@ -403,6 +404,20 @@ def run_watchlist_analysis(
         ingestion_run_id or "n/a",
         resolved_snapshot_id or "n/a",
     )
+    emit_structured_engine_log(
+        "analysis_run.started",
+        payload={
+            "analysis_run_id": analysis_run_id,
+            "ingestion_run_id": str(ingestion_run_id),
+            "snapshot_id": str(resolved_snapshot_id),
+            "snapshot_only": snapshot_only,
+            "symbols": ordered_symbols,
+            "strategies": ordered_strategy_names,
+            "timeframe": engine_config.timeframe,
+            "market_type": engine_config.market_type,
+            "data_source": engine_config.data_source,
+        },
+    )
 
     if not isinstance(strategy_configs, Mapping):
         logger.warning(
@@ -619,6 +634,17 @@ def run_watchlist_analysis(
                         )
                         raise ReasonGenerationError("Reason generation failed for signal") from exc
 
+                    emit_structured_engine_log(
+                        "signal.generated",
+                        payload={
+                            "analysis_run_id": lineage_ctx.analysis_run_id,
+                            "signal_id": s["signal_id"],
+                            "symbol": str(s.get("symbol", "")),
+                            "strategy": str(s.get("strategy", "")),
+                            "timeframe": str(s.get("timeframe", "")),
+                            "direction": str(s.get("direction", "")),
+                        },
+                    )
                     processed_signals.append(s)
 
                 all_signals.extend(processed_signals)
@@ -661,6 +687,7 @@ def run_watchlist_analysis(
             "Persisting signals: component=engine signals_total=%d",
             len(all_signals),
         )
+        completion_status = "signals_persisted"
         try:
             signal_repo.save_signals(all_signals)
         except Exception:
@@ -669,12 +696,29 @@ def run_watchlist_analysis(
                 len(all_signals),
                 exc_info=True,
             )
+            completion_status = "signal_persistence_failed"
         logger.info(
             "Engine run completed: component=engine signals_total=%d",
             len(all_signals),
         )
+        emit_structured_engine_log(
+            "analysis_run.completed",
+            payload={
+                "analysis_run_id": analysis_run_id,
+                "signals_total": len(all_signals),
+                "status": completion_status,
+            },
+        )
     else:
         logger.info("Engine run completed: component=engine signals_total=0")
+        emit_structured_engine_log(
+            "analysis_run.completed",
+            payload={
+                "analysis_run_id": analysis_run_id,
+                "signals_total": 0,
+                "status": "no_signals",
+            },
+        )
 
     return all_signals
 
