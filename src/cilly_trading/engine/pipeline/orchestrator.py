@@ -7,6 +7,7 @@ from typing import Literal, Mapping, Sequence
 
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
 
+from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.order_execution_model import (
     DeterministicExecutionConfig,
     Fill,
@@ -44,7 +45,38 @@ def run_pipeline(
 
     state = lifecycle_store.get_state(risk_request.strategy_id)
     risk_decision = risk_gate.evaluate(risk_request)
+    orders = _extract_orders(signal)
+    snapshot = _extract_snapshot(signal)
+    emit_structured_engine_log(
+        "order_submission.attempt",
+        payload={
+            "request_id": risk_request.request_id,
+            "strategy_id": risk_request.strategy_id,
+            "symbol": risk_request.symbol,
+            "order_count": len(orders),
+            "snapshot_key": _extract_snapshot_key(snapshot),
+            "lifecycle_state": state.value,
+            "risk_decision": risk_decision.decision,
+        },
+    )
+
     if state != StrategyLifecycleState.PRODUCTION or risk_decision.decision != "APPROVED":
+        guard_source = (
+            "lifecycle"
+            if state != StrategyLifecycleState.PRODUCTION
+            else "risk_gate"
+        )
+        emit_structured_engine_log(
+            "guard.triggered",
+            payload={
+                "request_id": risk_request.request_id,
+                "strategy_id": risk_request.strategy_id,
+                "symbol": risk_request.symbol,
+                "guard_source": guard_source,
+                "lifecycle_state": state.value,
+                "risk_decision": risk_decision.decision,
+            },
+        )
         return PipelineResult(
             status="rejected",
             fills=[],
@@ -53,11 +85,21 @@ def run_pipeline(
         )
 
     fills, updated_position = _execute_order(
-        orders=_extract_orders(signal),
-        snapshot=_extract_snapshot(signal),
+        orders=orders,
+        snapshot=snapshot,
         position=position,
         config=execution_config,
         risk_decision=risk_decision,
+    )
+    emit_structured_engine_log(
+        "order_submission.executed",
+        payload={
+            "request_id": risk_request.request_id,
+            "strategy_id": risk_request.strategy_id,
+            "symbol": risk_request.symbol,
+            "fill_count": len(fills),
+            "snapshot_key": _extract_snapshot_key(snapshot),
+        },
     )
 
     return PipelineResult(
@@ -80,6 +122,14 @@ def _extract_snapshot(signal: Mapping[str, object]) -> Mapping[str, object]:
     if not isinstance(snapshot, Mapping):
         raise ValueError("Signal must define 'snapshot' as a mapping")
     return snapshot
+
+
+def _extract_snapshot_key(snapshot: Mapping[str, object]) -> str:
+    for key in ("timestamp", "snapshot_key", "id"):
+        value = snapshot.get(key)
+        if value is not None:
+            return str(value)
+    return "unknown"
 
 
 __all__ = ["PipelineResult", "run_pipeline"]
