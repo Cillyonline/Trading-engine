@@ -683,6 +683,73 @@ def _strategy_display_name(strategy_key: str) -> str:
 @app.get("/health")
 def health() -> Dict[str, str]:
     _assert_phase_13_read_only_endpoint("/health")
+    return _runtime_health_payload()
+
+
+@app.get("/health/engine")
+def health_engine() -> Dict[str, Any]:
+    payload = _runtime_health_payload()
+    mode = payload["mode"]
+    ready = mode in {"ready", "running", "paused"}
+
+    return {
+        "subsystem": "engine",
+        "status": payload["status"],
+        "ready": ready,
+        "mode": mode,
+        "reason": payload["reason"],
+        "checked_at": payload["checked_at"],
+    }
+
+
+@app.get("/health/data")
+def health_data() -> Dict[str, Any]:
+    checked_at = _health_now()
+    db_path = Path(_resolve_analysis_db_path())
+    ready = db_path.exists()
+    status: Literal["healthy", "unavailable"] = "healthy" if ready else "unavailable"
+    reason = "data_source_available" if ready else "data_source_unavailable"
+
+    return {
+        "subsystem": "data",
+        "status": status,
+        "ready": ready,
+        "reason": reason,
+        "checked_at": checked_at.isoformat(),
+    }
+
+
+@app.get("/health/guards")
+def health_guards() -> Dict[str, Any]:
+    checked_at = _health_now()
+    guard_status = read_compliance_guard_status()
+    blocking = guard_status.compliance.blocking
+
+    return {
+        "subsystem": "guards",
+        "status": "degraded" if blocking else "healthy",
+        "ready": not blocking,
+        "decision": guard_status.compliance.decision,
+        "blocking": blocking,
+        "guards": {
+            "drawdown_guard": {
+                "enabled": guard_status.guards.drawdown_guard.enabled,
+                "blocking": guard_status.guards.drawdown_guard.blocking,
+            },
+            "daily_loss_guard": {
+                "enabled": guard_status.guards.daily_loss_guard.enabled,
+                "blocking": guard_status.guards.daily_loss_guard.blocking,
+            },
+            "kill_switch": {
+                "active": guard_status.guards.kill_switch.active,
+                "blocking": guard_status.guards.kill_switch.blocking,
+            },
+        },
+        "checked_at": checked_at.isoformat(),
+    }
+
+
+def _runtime_health_payload() -> Dict[str, str]:
     payload = get_runtime_introspection_payload()
     snapshot: RuntimeHealthSnapshot = {
         "mode": payload["mode"],
