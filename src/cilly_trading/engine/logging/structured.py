@@ -8,6 +8,8 @@ from decimal import Decimal
 from threading import Lock
 from typing import Any, Callable, Mapping
 
+from cilly_trading.engine.metrics import record_runtime_event_metric
+
 _SCHEMA_VERSION = "cilly.engine.log.v1"
 _LOG_LOCK = Lock()
 _EVENT_INDEX = 0
@@ -60,6 +62,7 @@ def emit_structured_engine_log(
     canonical_payload = _normalize_mapping(payload or {})
     with _LOG_LOCK:
         global _EVENT_INDEX
+        record_runtime_event_metric(event)
         record = {
             "component": "engine",
             "event": event,
