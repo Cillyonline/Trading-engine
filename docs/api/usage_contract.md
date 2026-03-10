@@ -6,6 +6,120 @@ This document defines the stable usage contract for the MVP v1 API. It documents
 
 - Local development: `http://localhost:8000`
 
+## Canonical Operator Analysis Contract
+
+This section is the single authoritative request/response contract for operator-triggered analysis.
+
+- Authoritative endpoint: `POST /analysis/run`
+- Governing workflow: the operator-facing manual analysis trigger currently represented by the owner dashboard workflow
+- Not authoritative: `POST /strategy/analyze`, `POST /screener/basic`, or any future UI-specific adapter payloads
+
+If multiple operator-facing UIs coexist, they are expected to implement this contract when they trigger the manual operator analysis flow.
+
+### Canonical request body
+
+Clients must send a JSON object with the following shape:
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference for the analysis. |
+| `symbol` | string | required | none | Instrument identifier such as `AAPL` or `BTC/USDT`. |
+| `strategy` | string | required | none | Canonical strategy key. Use `RSI2` or `TURTLE`. |
+| `market_type` | string | optional | `stock` | Must be `stock` or `crypto`. |
+| `lookback_days` | integer | optional | `200` | Must be in the inclusive range `30..1000`. |
+| `strategy_config` | object | optional | omitted | Strategy-specific parameter overrides. |
+
+Canonical request example:
+
+```json
+{
+  "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
+  "symbol": "AAPL",
+  "strategy": "RSI2",
+  "market_type": "stock",
+  "lookback_days": 200,
+  "strategy_config": {
+    "oversold_threshold": 10.0
+  }
+}
+```
+
+Request boundary notes:
+
+- `analysis_run_id` is not part of the canonical request contract. The server is authoritative for run identity and computes `analysis_run_id` from the canonical request payload.
+- A legacy client may still send `analysis_run_id`, and the current backend may ignore it, but frontend and backend follow-up work for this issue must treat that field as out of contract.
+- Required versus optional fields are defined only by the table above. If an optional field is omitted, the documented default applies.
+
+### Canonical success response body
+
+The endpoint returns a JSON object with the following top-level shape on success:
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `analysis_run_id` | string | required | Deterministic server-computed run identifier for this canonical request payload. |
+| `ingestion_run_id` | string (UUIDv4) | required | Snapshot reference used for the run. |
+| `symbol` | string | required | Instrument identifier used for the run. |
+| `strategy` | string | required | Canonical strategy key returned in uppercase form. |
+| `signals` | array of signal objects | required | Zero or more analysis signals. Empty array means the run succeeded but produced no signals. |
+
+Signal object shape:
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `symbol` | string | required | Signal symbol. |
+| `strategy` | string | required | Signal strategy key. |
+| `direction` | string | required | Signal direction such as `long` or `short`. |
+| `score` | number | required | Numeric signal score. |
+| `timestamp` | string (ISO-8601 datetime) | required | Signal timestamp. |
+| `stage` | string | required | Signal stage such as `setup`. |
+| `timeframe` | string | required | Timeframe emitted by the analysis engine. |
+| `market_type` | string | required | `stock` or `crypto`. |
+| `data_source` | string | required | Data source identifier used by the backend. |
+| `entry_zone` | object | optional | Present when the signal has an entry range. |
+| `confirmation_rule` | string | optional | Present when the signal includes an operator-readable confirmation rule. |
+
+`entry_zone` object shape when present:
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `from_` | number | required | Inclusive lower bound of the suggested entry zone. |
+| `to` | number | required | Inclusive upper bound of the suggested entry zone. |
+
+Canonical success response example:
+
+```json
+{
+  "analysis_run_id": "e1f2d3c4-1111-2222-3333-444455556666",
+  "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
+  "symbol": "AAPL",
+  "strategy": "RSI2",
+  "signals": [
+    {
+      "symbol": "AAPL",
+      "strategy": "RSI2",
+      "direction": "long",
+      "score": 42.5,
+      "timestamp": "2024-01-15T09:30:00Z",
+      "stage": "setup",
+      "entry_zone": {
+        "from_": 178.5,
+        "to": 182.0
+      },
+      "confirmation_rule": "RSI below 10",
+      "timeframe": "D1",
+      "market_type": "stock",
+      "data_source": "yahoo"
+    }
+  ]
+}
+```
+
+### Canonical failure semantics
+
+- Validation and snapshot failures use the API-wide error formats documented below.
+- For this operator contract, valid payload decisions come from the canonical request table above and the error table in the `POST /analysis/run` section below.
+- A successful response with `signals: []` is still a valid completed run.
+
 ## Common Conventions
 
 ### Snapshot-first analysis contract
@@ -504,7 +618,7 @@ curl -s -X POST http://localhost:8000/strategy/analyze \
 
 ### Purpose
 
-Manually trigger an analysis run. The API computes a deterministic run ID from the canonical request payload and returns it (idempotent). The `analysis_run_id` field in the request is optional and ignored; the server computes the deterministic ID.
+Manually trigger the canonical operator analysis flow. This is the authoritative route for operator-triggered analysis requests and responses. The API computes a deterministic run ID from the canonical request payload and returns it.
 
 ### Request
 
@@ -512,19 +626,20 @@ Manually trigger an analysis run. The API computes a deterministic run ID from t
 
 | Name | Type | Required | Default | Notes |
 | --- | --- | --- | --- | --- |
-| `analysis_run_id` | string | optional | none | Optional client-provided run ID (ignored). |
 | `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference ID. |
 | `symbol` | string | required | none | Symbol (e.g., `AAPL`, `BTC/USDT`). |
-| `strategy` | string | required | none | Strategy name (case-insensitive). |
+| `strategy` | string | required | none | Canonical strategy key. Use `RSI2` or `TURTLE`. |
 | `market_type` | string | optional | `stock` | Must match `stock` or `crypto`. |
 | `lookback_days` | integer | optional | `200` | Range `30..1000`. |
 | `strategy_config` | object | optional | none | Strategy config overrides. |
 
 **Validation rules:**
 
+- This endpoint is the authoritative contract for operator-triggered analysis. Client payloads should follow the canonical contract in the `Canonical Operator Analysis Contract` section above.
 - `strategy` must match a known strategy (`RSI2`, `TURTLE`), otherwise `400`.
 - `market_type` must be `stock` or `crypto`.
 - `lookback_days` must be within `30..1000`.
+- `analysis_run_id` is not part of the canonical request contract. If a legacy client still sends it, the current backend ignores it.
 
 ### Success response
 
@@ -561,10 +676,11 @@ Manually trigger an analysis run. The API computes a deterministic run ID from t
 curl -s -X POST http://localhost:8000/analysis/run \
   -H 'Content-Type: application/json' \
   -d '{
-    "analysis_run_id": "e1f2d3c4-1111-2222-3333-444455556666",
     "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
     "symbol": "AAPL",
-    "strategy": "RSI2"
+    "strategy": "RSI2",
+    "market_type": "stock",
+    "lookback_days": 200
   }'
 ```
 
