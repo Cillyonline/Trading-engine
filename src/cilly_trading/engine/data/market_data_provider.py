@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Protocol, runtime_checkable
 
 from cilly_trading.engine.logging import emit_structured_engine_log
+from cilly_trading.engine.telemetry.emitter import emit_telemetry_event
 
 
 CANONICAL_CANDLE_FIELDS: tuple[str, ...] = (
@@ -112,6 +113,19 @@ class ProviderFailoverExhaustedError(RuntimeError):
         super().__init__(f"All providers failed: {details}")
 
 
+@dataclass
+class _FailoverTelemetrySequence:
+    event_index: int = 0
+
+    def next_metadata(self) -> tuple[int, str]:
+        event_index = self.event_index
+        self.event_index += 1
+        timestamp = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(
+            seconds=event_index
+        )
+        return event_index, timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 class MarketDataProviderRegistry:
     """Deterministic provider registry with priority-based fallback ordering."""
 
@@ -160,24 +174,28 @@ class MarketDataProviderRegistry:
 
         def _iterate() -> Iterator[Candle]:
             failures: list[ProviderAttemptFailure] = []
+            telemetry_sequence = _FailoverTelemetrySequence()
             for entry in entries:
                 try:
                     iterator = entry.provider.iter_candles(request)
                 except Exception as exc:
-                    emit_structured_engine_log(
+                    reason = f"{type(exc).__name__}: {exc}"
+                    payload = {
+                        "provider_name": entry.name,
+                        "symbol": request.symbol,
+                        "timeframe": request.timeframe,
+                        "limit": request.limit,
+                        "reason": reason,
+                    }
+                    _emit_failover_observability(
                         "provider_failover.attempt_failed",
-                        payload={
-                            "provider_name": entry.name,
-                            "symbol": request.symbol,
-                            "timeframe": request.timeframe,
-                            "limit": request.limit,
-                            "reason": f"{type(exc).__name__}: {exc}",
-                        },
+                        payload=payload,
+                        telemetry_sequence=telemetry_sequence,
                     )
                     failures.append(
                         ProviderAttemptFailure(
                             provider_name=entry.name,
-                            reason=f"{type(exc).__name__}: {exc}",
+                            reason=reason,
                         )
                     )
                     continue
@@ -185,26 +203,29 @@ class MarketDataProviderRegistry:
                 try:
                     buffered = tuple(iterator)
                 except Exception as exc:
-                    emit_structured_engine_log(
+                    reason = f"{type(exc).__name__}: {exc}"
+                    payload = {
+                        "provider_name": entry.name,
+                        "symbol": request.symbol,
+                        "timeframe": request.timeframe,
+                        "limit": request.limit,
+                        "reason": reason,
+                    }
+                    _emit_failover_observability(
                         "provider_failover.attempt_failed",
-                        payload={
-                            "provider_name": entry.name,
-                            "symbol": request.symbol,
-                            "timeframe": request.timeframe,
-                            "limit": request.limit,
-                            "reason": f"{type(exc).__name__}: {exc}",
-                        },
+                        payload=payload,
+                        telemetry_sequence=telemetry_sequence,
                     )
                     failures.append(
                         ProviderAttemptFailure(
                             provider_name=entry.name,
-                            reason=f"{type(exc).__name__}: {exc}",
+                            reason=reason,
                         )
                     )
                     continue
 
                 if failures:
-                    emit_structured_engine_log(
+                    _emit_failover_observability(
                         "provider_failover.recovered",
                         payload={
                             "provider_name": entry.name,
@@ -215,12 +236,13 @@ class MarketDataProviderRegistry:
                                 failure.provider_name for failure in failures
                             ],
                         },
+                        telemetry_sequence=telemetry_sequence,
                     )
                 for candle in buffered:
                     yield candle
                 return
 
-            emit_structured_engine_log(
+            _emit_failover_observability(
                 "provider_failover.exhausted",
                 payload={
                     "symbol": request.symbol,
@@ -230,6 +252,7 @@ class MarketDataProviderRegistry:
                         failure.provider_name for failure in failures
                     ],
                 },
+                telemetry_sequence=telemetry_sequence,
             )
             raise ProviderFailoverExhaustedError(tuple(failures))
 
@@ -465,3 +488,23 @@ def _extract_field(
         if key in payload:
             return payload[key]
     raise KeyError(canonical_name)
+
+
+def _emit_failover_observability(
+    event: str,
+    *,
+    payload: Mapping[str, Any],
+    telemetry_sequence: _FailoverTelemetrySequence,
+) -> None:
+    emit_structured_engine_log(event, payload=payload)
+    try:
+        event_index, timestamp_utc = telemetry_sequence.next_metadata()
+        emit_telemetry_event(
+            event,
+            event_index=event_index,
+            timestamp_utc=timestamp_utc,
+            payload=payload,
+        )
+    except Exception:
+        # Telemetry must not change deterministic failover behavior.
+        return
