@@ -36,6 +36,23 @@ PYTHONPATH=src uvicorn api.main:app --reload
 
 Run it from the repository root after venv activation and dependency install.
 
+## Canonical configuration boundary
+
+The authoritative configuration contract for local runtime, environment, and
+strategy-related inputs is `docs/architecture/configuration_boundary.md`.
+
+For local runs, that contract currently spans:
+
+- process environment inputs such as `CILLY_LOG_LEVEL`
+- process-wide runtime constants such as `SIGNALS_READ_MAX_LIMIT`
+- request-scoped API inputs such as `market_type`, `lookback_days`, and
+  `strategy_config`
+- strategy-schema defaults and validation rules in
+  `src/cilly_trading/strategies/config_schema.py`
+
+This document describes how to start the app locally. It is not the authority
+for configuration precedence or validation ownership.
+
 ## Secondary / utility entrypoints (not canonical)
 
 - `PYTHONPATH=src python -m api.main` (starts same FastAPI app via module `__main__` block)
@@ -186,4 +203,6 @@ Safety note: reset deletes local signals, analysis runs, ingestion runs, and sna
 python -m pytest
 ```
 
-See `docs/testing.md` for the canonical test setup and command.
+See `docs/testing.md` for the canonical test setup and command, and see
+`docs/architecture/configuration_boundary.md` for the canonical configuration
+contract used by follow-up runtime-boundary work.
