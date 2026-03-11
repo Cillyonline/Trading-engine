@@ -134,3 +134,6 @@ python -m pytest
 
 ### Run Paper Trading (Simulation)
 No production operator CLI/runtime entrypoint is documented for paper-trading simulation in this runbook. The repository contains an engine-level deterministic simulator module (`src/cilly_trading/engine/paper_trading.py`) that is test-verified, but no owner-facing run command is defined here. It does not provide live trading or broker integration, and no real orders are used.
+
+Reference:
+- [paper_trading.md](paper_trading.md)

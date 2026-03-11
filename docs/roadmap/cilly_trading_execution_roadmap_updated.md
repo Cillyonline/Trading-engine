@@ -67,16 +67,16 @@ Market Data
 | 15 | Risk Control Primitives | Implemented |
 | 16 | Runtime Lifecycle Control | Implemented |
 | 17a | Operator Access Model | Implemented |
-| 17b | Owner Dashboard | Partially Implemented |
+| 17b | Owner Dashboard | Implemented |
 | 18 | Deterministic Test Hardening | Implemented |
 | 19 | Logging Framework | Implemented |
 | 20 | Error Handling System | Implemented |
 | 21 | Governance Rules | Implemented |
 | 22 | Artifact Integrity | Implemented |
 | 23 | Research Dashboard Governance | Not Implemented |
-| 24 | Paper Trading Governance | Partially Implemented |
+| 24 | Paper Trading Governance | Implemented |
 | 25 | Roadmap Traceability | Implemented in Repository |
-| 26 | Documentation Alignment | Partially Implemented |
+| 26 | Documentation Alignment | Implemented |
 | 27 | Risk Framework Governance | Implementation Artifacts Verified |
 | 28 | Repository Hardening | Implemented |
 | 29 | Trading Journal & Decision Trace | Implemented |
@@ -100,9 +100,9 @@ Market Data
 
 ## Status Notes
 
-- Phase 17b is backend-served at `/ui`; `/owner` remains a frontend development-only route.
+- Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
 - Phase 23 still has no verified Research Dashboard implementation artifact in code, tests, or runtime-facing docs.
-- Phase 24 and Phase 44 both benefit from the existing paper-trading simulator, but neither phase is treated as fully complete because the broader workflow and documentation alignment remain incomplete.
+- Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
 - Phase 35 is marked `Implemented` in this revision because metrics, telemetry, runtime health, guard-trigger monitoring, and integration tests are all present in-repo.
 - Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present.
@@ -365,7 +365,7 @@ Define who is allowed to do what in the system.
 ---
 
 ## Phase 17b - Owner Dashboard
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Goal**
 Provide the first operator-facing UI.
@@ -373,10 +373,10 @@ Provide the first operator-facing UI.
 **Current Status Basis**
 - Backend-served UI exists at `/ui`, with static mount and `Owner Dashboard` marker in `src/ui/index.html`.
 - Read-only workbench panels exist for strategies, signals, journal artifacts, decision trace, and trade lifecycle.
-- Audit and documentation still distinguish `/ui` from the frontend-only `/owner` route, so the phase is not treated as unambiguously complete.
+- Documentation now consistently states that `/ui` is the runtime-served surface while `/owner` is frontend development-only guidance and not a backend route.
 
 **Outcome**
-- The project has a visible operator UI, but route-boundary clarification remains part of the phase story.
+- The project has a verified operator UI with its route boundary documented consistently.
 
 ---
 
@@ -471,17 +471,17 @@ Track research dashboard maturity honestly.
 ---
 
 ## Phase 24 - Paper Trading Governance
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Goal**
 Prevent premature claims about paper-trading readiness.
 
 **Current Status Basis**
 - Paper-trading simulator code and tests exist in-repo.
-- The audit still reports documentation drift around paper-trading readiness, so the governance phase is not treated as fully cleanly complete.
+- Repository documentation now describes the simulator consistently as an engine-level deterministic capability with explicit non-live and non-broker boundaries.
 
 **Outcome**
-- The repo already contains meaningful paper-trading artifacts, but the documentation/governance story is still partially misaligned.
+- The repository has a documented and governed paper-trading simulator boundary without overstating Phase 44 readiness.
 
 ---
 
@@ -501,17 +501,17 @@ Map implementation work back to roadmap phases.
 ---
 
 ## Phase 26 - Documentation Alignment
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Goal**
 Ensure documentation reflects implementation reality.
 
 **Current Status Basis**
-- Many docs are aligned and several recent corrections already exist.
-- The roadmap audit still classifies overall alignment as only partially aligned, with specific documentation drift still present.
+- Active runtime, owner-dashboard, and paper-trading documentation now aligns with repository-verifiable code and tests.
+- The audit report was updated to remove stale contradiction claims for the audited active surfaces.
 
 **Outcome**
-- Documentation alignment work is active and meaningful, but not complete.
+- Core operator and simulator documentation is aligned to the current repository state.
 
 ---
 
@@ -849,16 +849,16 @@ Marktdaten
 | 15 | Risk Control Primitives | Implemented |
 | 16 | Runtime Lifecycle Control | Implemented |
 | 17a | Operator Access Model | Implemented |
-| 17b | Owner Dashboard | Partially Implemented |
+| 17b | Owner Dashboard | Implemented |
 | 18 | Deterministic Test Hardening | Implemented |
 | 19 | Logging Framework | Implemented |
 | 20 | Error Handling System | Implemented |
 | 21 | Governance Rules | Implemented |
 | 22 | Artifact Integrity | Implemented |
 | 23 | Research Dashboard Governance | Not Implemented |
-| 24 | Paper Trading Governance | Partially Implemented |
+| 24 | Paper Trading Governance | Implemented |
 | 25 | Roadmap Traceability | Implemented in Repository |
-| 26 | Documentation Alignment | Partially Implemented |
+| 26 | Documentation Alignment | Implemented |
 | 27 | Risk Framework Governance | Implementation Artifacts Verified |
 | 28 | Repository Hardening | Implemented |
 | 29 | Trading Journal & Decision Trace | Implemented |
@@ -882,9 +882,9 @@ Marktdaten
 
 ## Status-Hinweise
 
-- Phase 17b wird im Backend unter `/ui` ausgeliefert; `/owner` bleibt eine Frontend-Development-Route.
+- Phase 17b wird im Backend unter `/ui` ausgeliefert; `/owner` ist nur als Frontend-Development-Route dokumentiert und keine Runtime-Backend-Surface.
 - Fuer Phase 23 wurde weiterhin kein verifizierter Research-Dashboard-Implementierungsartefakt bestaetigt.
-- Phase 24 und Phase 44 profitieren beide vom vorhandenen Paper-Trading-Simulator, gelten aber wegen offener Workflow- und Doku-Luecken nicht als vollstaendig abgeschlossen.
+- Phase 24 gilt jetzt als implementiert, weil Simulator-Grenzen und Non-Live-Constraints konsistent dokumentiert sind; Phase 44 bleibt als breitere Produktphase nur teilweise implementiert.
 - Phase 25 und Phase 27 wurden gegen veraltete Roadmap-Aussagen korrigiert, weil Lifecycle- und Risk-Framework-Artefakte bereits im Repo vorhanden sind.
 - Phase 35 ist in dieser Fassung `Implemented`, weil Metrics, Telemetry, Runtime Health, Guard-Trigger-Monitoring und Integrationstests bereits vorhanden sind.
 - Phase 42b ist `Implemented in Repository`, weil deterministischer Backtest-Runner, CLI, Doku und Tests existieren.
@@ -1147,7 +1147,7 @@ Definieren, wer im System welche Aktionen ausfuehren darf.
 ---
 
 ## Phase 17b - Owner Dashboard
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Ziel**
 Die erste operatorseitige UI bereitstellen.
@@ -1155,10 +1155,10 @@ Die erste operatorseitige UI bereitstellen.
 **Aktuelle Statusbasis**
 - Eine backend-ausgelieferte UI existiert unter `/ui`, inklusive Static Mount und `Owner Dashboard`-Marker in `src/ui/index.html`.
 - Es gibt read-only-Workbench-Panels fuer Strategien, Signale, Journal-Artefakte, Decision Trace und Trade Lifecycle.
-- Audit und Doku unterscheiden weiter zwischen `/ui` und der frontend-only Route `/owner`, daher wird die Phase nicht als vollstaendig eindeutig abgeschlossen behandelt.
+- Die Dokumentation stellt jetzt konsistent klar, dass `/ui` die runtime-ausgelieferte Surface ist, waehrend `/owner` nur als frontend-only Dev-Route dient und keine Backend-Route ist.
 
 **Ergebnis**
-- Das Projekt besitzt eine sichtbare Operator-UI, aber die Routenabgrenzung bleibt Teil der Phasengeschichte.
+- Das Projekt besitzt eine verifizierte Operator-UI mit konsistent dokumentierter Routenabgrenzung.
 
 ---
 
@@ -1253,17 +1253,17 @@ Den Reifegrad des Research Dashboards ehrlich nachverfolgen.
 ---
 
 ## Phase 24 - Paper Trading Governance
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Ziel**
 Vorzeitige Aussagen zur Paper-Trading-Reife verhindern.
 
 **Aktuelle Statusbasis**
 - Paper-Trading-Simulator-Code und zugehoerige Tests existieren bereits im Repo.
-- Das Audit meldet weiterhin Dokumentationsdrift rund um Paper-Trading-Readiness, daher gilt die Governance-Phase nicht als sauber abgeschlossen.
+- Die Repository-Dokumentation beschreibt den Simulator jetzt konsistent als engine-level deterministische Faehigkeit mit klaren Non-Live- und Non-Broker-Grenzen.
 
 **Ergebnis**
-- Das Repo enthaelt bereits sinnvolle Paper-Trading-Artefakte, aber die Governance-/Doku-Lage ist noch nicht voll konsistent.
+- Das Repo besitzt eine dokumentierte und governte Paper-Trading-Simulator-Grenze, ohne Phase 44 zu ueberzeichnen.
 
 ---
 
@@ -1283,17 +1283,17 @@ Implementierungsarbeit auf Roadmap-Phasen zurueckfuehren.
 ---
 
 ## Phase 26 - Documentation Alignment
-**Status:** Partially Implemented
+**Status:** Implemented
 
 **Ziel**
 Sicherstellen, dass Dokumentation die Implementierungsrealitaet widerspiegelt.
 
 **Aktuelle Statusbasis**
-- Viele Docs sind bereits angepasst und mehrere Korrekturen existieren.
-- Das Roadmap-Audit stuft den Gesamtzustand aber weiterhin nur als teilweise aligned ein und nennt konkrete Doku-Drift.
+- Aktive Runtime-, Owner-Dashboard- und Paper-Trading-Dokumentation ist jetzt mit repo-verifizierbarem Code und Tests abgeglichen.
+- Der Audit-Report wurde aktualisiert und enthaelt keine veralteten Widersprueche mehr fuer die auditierten aktiven Surfaces.
 
 **Ergebnis**
-- Dokumentationsabgleich ist deutlich vorangekommen, aber nicht abgeschlossen.
+- Kernnahe Operator- und Simulator-Dokumentation ist an den aktuellen Repo-Stand angeglichen.
 
 ---
 

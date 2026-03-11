@@ -19,6 +19,7 @@ Use this order:
 
 ## CLI Usage
 - [CLI usage](cli/usage.md)
+- [Paper trading boundary](paper_trading.md)
 
 ## UI Surfaces
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
@@ -61,6 +62,11 @@ Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b
 - [Batch execution interface](interfaces/batch_execution.md)
 - [CLI contract](interfaces/cli_contract.md)
 - [Interface usage patterns](interfaces/usage_patterns.md)
+
+### Phase 24 Reference Materials
+Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above.
+- [Paper trading boundary](paper_trading.md)
+- [Runbook](RUNBOOK.md)
 
 ### Phase 18 Reference Materials
 Phase 18 reference links remain navigational and do not override the authoritative audited taxonomy above.
