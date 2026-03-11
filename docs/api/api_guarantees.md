@@ -13,10 +13,13 @@ This document separates what the API guarantees from what it explicitly does not
 - The API guarantees that the documented operator roles for the covered control-plane endpoints are limited to `owner`, `operator`, and `read_only`.
 - The API guarantees deterministic denial semantics for protected operator-facing endpoints: unauthenticated requests map to `401 Unauthorized`, and authenticated requests without the required role map to `403 Forbidden` as documented in `docs/external/error_semantics.md`.
 - The API guarantees that the documented operator-facing lifecycle control contract for `POST /execution/start` and `POST /execution/stop` is defined by `docs/architecture/engine_runtime_lifecycle_contract.md`.
+- The API guarantees that the documented start/stop lifecycle controls are `POST` endpoints with no request body or query parameters.
 - The API guarantees that start/stop lifecycle control responses use the same control-plane success body shape as existing pause/resume controls: `{"state":"<runtime_state>"}`.
 - The API guarantees that lifecycle transition conflicts, when defined by the lifecycle contract, use `409 Conflict` with the existing application error shape `{"detail":"<message>"}`.
+- The API guarantees that `POST /execution/start` delegates to the existing start lifecycle semantics: `init` and `ready` resolve to `running`, `running` is idempotent success, and `paused`/`stopping`/`stopped` return controller-authored transition conflicts.
 - The API guarantees that `POST /execution/start` is not a synonym for resume; a paused runtime remains governed by the existing resume semantics.
-- The API guarantees that the documented stop contract follows the existing engine shutdown semantics: `running` stops through `stopping`, `paused` stops directly to `stopped`, and pre-running `init`/`ready` stop requests are accepted as no-op successes that return the unchanged state.
+- The API guarantees that `POST /execution/stop` delegates to the existing shutdown lifecycle semantics: `running` stops through `stopping`, `paused` stops directly to `stopped`, `stopping` completes to `stopped`, `stopped` is idempotent success, and pre-running `init`/`ready` stop requests are accepted as no-op successes that return the unchanged state.
+- The API guarantees that no lifecycle-specific `409 Conflict` is defined for `POST /execution/stop` under the current runtime model.
 
 ## Not guaranteed
 
@@ -29,6 +32,7 @@ This document separates what the API guarantees from what it explicitly does not
 - The API does not guarantee any role model other than the documented `owner`, `operator`, and `read_only` contract for the currently covered control-plane endpoints.
 - The API does not guarantee that `POST /execution/start` or `POST /execution/stop` are already implemented in `src/api/main.py`; this issue defines response semantics and lifecycle behavior, not route delivery.
 - The API does not guarantee any start/stop lifecycle behavior other than the documented state machine and response semantics in `docs/architecture/engine_runtime_lifecycle_contract.md`.
+- The API does not guarantee alternative start/stop response mappings that differ from the current engine-owned lifecycle helpers.
 - The API does not guarantee profitability.
 - The API does not guarantee signal completeness.
 - The API does not guarantee complete snapshot coverage or more than one row per symbol and timeframe.
