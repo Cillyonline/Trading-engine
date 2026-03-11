@@ -1,88 +1,75 @@
-# Owner Dashboard
+# Operator Dashboard Runtime Surface
 
 ## Overview
-The Owner Dashboard is an operator interface for manually triggering and reviewing single-symbol analysis runs from the UI.
+The operator dashboard runtime surface is the backend-served workbench at `/ui`.
 
-## Current Features
-- Manual single-symbol analysis trigger from the Owner Dashboard UI.
-- Display of returned signals for the requested symbol.
-- Display of the analysis generation timestamp (`generated_at`).
-- Tabular display of signal data fields returned by the analysis response.
+This surface is served from `src/ui/index.html` by the backend static mount and is the authoritative operator-facing UI entrypoint at runtime.
 
-## UI Behavior
-- **Symbol input default:** `BTCUSDT`
-- **Loading state:** the trigger button is disabled and shows `Loading...` while the request is in progress.
-- **Error state:** an alert is shown when the request fails; fallback message is `Analysis request failed.`
-- **Empty state:** `No signals returned.` is shown when no signals are returned.
+If the React frontend remains in local development use, its `/owner` route is a development-only surface. It is not the backend-served runtime dashboard and must not be treated as interchangeable with `/ui`.
 
-## Scope & Limitations
-This Owner Dashboard documentation only covers the current manual, single-symbol operator flow.
-
-The following are explicitly **not included** in this scope:
-- Batch analysis flows
-- Scheduling workflows
-- Optimization workflows
-- Deployment workflows
-
-## Routes
+## Runtime Route
 - **Runtime route:** `/ui`
-  - Served by the backend runtime (FastAPI static mount).
-  - This is the authoritative operator-facing Owner Dashboard path.
-- **Dev-only route:** `/owner` (frontend development server context)
-  - Used only when running the frontend dev server locally.
-  - Not served by the backend in production/runtime.
-  - Must not be used as evidence of backend route implementation.
+- **Served by:** backend runtime static UI mount
+- **Authoritative source:** `src/ui/index.html`
 
-## Local Development Setup
-### Prerequisites
-- Node.js and npm installed for frontend development.
-- Python with a virtual environment available if backend services are run locally.
+## Runtime Workbench Contents
+The current runtime-served `/ui` workbench exposes the following sections:
 
-### Frontend
-From the repository root, run:
+- Overview
+- Runtime Status
+- Analysis Runs
+- Strategy List
+- Signals
+- Journal Artifacts
+- Decision Trace
+- Screener
+- Trade Lifecycle
+- Audit Trail
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+The page header labels this surface as **Operator Workbench** and explicitly states that it is served by FastAPI at `/ui`.
 
-Then open the frontend dev route at:
+## Runtime Data Surfaces
+The runtime workbench currently renders or reserves space for these backend-connected surfaces:
 
-- `/owner` (dev-only)
+| Workbench area | Runtime behavior |
+| --- | --- |
+| Strategy List | Read-only metadata fetched from `/strategies` |
+| Signals | Read-only latest signal list fetched from `/signals` |
+| Journal Artifacts | Read-only artifact browser fetched from `/journal/artifacts` |
+| Decision Trace | Read-only trace viewer fetched from `/journal/decision-trace` |
+| Trade Lifecycle | Read-only order lifecycle viewer fetched from `/execution/orders` |
+| Overview / Runtime Status / Analysis Runs / Screener / Audit Trail | Present in the runtime UI shell, with placeholder or reserved content in the current static page |
 
-### Backend requirement for analysis endpoint
-The Owner Dashboard triggers `POST /analysis/run`, so the backend must be running for successful analysis responses.
+## Development-Only Frontend Surface
+The frontend route structure in `frontend/src/App.tsx` defines `/owner` as a React route that renders `frontend/src/pages/OwnerDashboard.tsx`.
 
-Use the following uvicorn command pattern (replace `MODULE_PATH` with your app module path):
+That route is a development-only frontend surface:
 
-```bash
-uvicorn MODULE_PATH:app --reload --port 8000
-```
+- It exists in the frontend dev server route structure.
+- It is not the backend-served runtime entrypoint.
+- It must not be cited as the production or runtime dashboard URL.
+- It is only relevant when documenting local frontend development behavior.
 
-How to find the module path:
-- Search the backend codebase for `app = FastAPI()`.
-- Use the containing Python module path as `MODULE_PATH`.
+## Route Distinction
+| Route | Environment | Purpose |
+| --- | --- | --- |
+| `/ui` | Backend runtime | Authoritative operator dashboard surface served in runtime |
+| `/owner` | Frontend development server | Development-only React page for local frontend work |
 
-### Same-origin and backend port note
-If the frontend and backend are not configured for the same origin (or a development proxy is not configured), requests to `/analysis/run` may fail due to origin/port mismatch.
+`/ui` and `/owner` are not interchangeable routes.
 
-## Manual Test Checklist
-1. Start frontend (`npm run dev`) and open `/owner` (dev-only route).
-2. Confirm the symbol input defaults to `BTCUSDT`.
-3. With backend **down**, trigger analysis and verify:
-   - The button enters loading state (`Loading...`) and is disabled during the request.
-   - An alert appears with an error, including fallback text `Analysis request failed.` when no detailed message is available.
-4. Start backend so `POST /analysis/run` is reachable.
-5. Trigger analysis again and verify with backend **up**:
-   - Request completes without error alert.
-   - `generated_at` is displayed.
-   - Signal rows appear in the table when signals are returned.
-6. Verify empty-result handling by using a case that returns no signals, and confirm `No signals returned.` is shown.
+## Manual Review Checklist
+Use this checklist for documentation review against the actual surfaces:
 
-## Verification
-- Smoke test expectation remains `/ui` for the backend-served runtime Owner Dashboard route.
-- Do not treat `/owner` as equivalent to `/ui` in runtime/backend verification.
+1. Confirm `src/ui/index.html` identifies the runtime-served UI as `/ui`.
+2. Confirm the runtime page content matches the workbench sections listed in this document.
+3. Confirm `frontend/src/App.tsx` defines `/owner` only in the frontend route structure.
+4. Confirm no operator-facing documentation treats `/owner` as a backend runtime URL.
+5. Confirm no operator-facing documentation treats `/ui` and `/owner` as equivalent entrypoints.
 
-## Related Issues
-- #419 – feature implementation described by this document.
+## Verification Outcome
+A reviewer comparing this document to `src/ui/index.html` and the frontend route structure should find:
+
+- `/ui` is the runtime-served operator surface.
+- `/owner` is only a development-only frontend route if referenced.
+- There is no route ambiguity between runtime and development surfaces.
