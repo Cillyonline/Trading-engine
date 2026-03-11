@@ -10,11 +10,13 @@ Owner Dashboard is verifiably backend-served at `/ui` via FastAPI `app.mount("/u
 
 Paper-trading simulator code and tests are present, but documentation artifacts still describe paper trading as unavailable, creating state drift.
 
+Strategy Lifecycle Management and Risk Framework both have repository-verifiable implementation artifacts; earlier status wording that framed them as pending or absent was outdated.
+
 No live trading endpoint, broker integration runtime, or AI decision engine implementation was verified.
 
 Snapshot runtime execution capability is implemented in-repo, while scheduling remains external and no in-repo scheduler runtime was verified.
 
-Documentation and implementation are therefore only partially aligned.
+Documentation and implementation are therefore only partially aligned, with this report updated to remove direct contradictions for the audited phase-status artifacts.
 
 **Current overall alignment assessment:** **Partially Aligned**
 
@@ -28,10 +30,10 @@ Documentation and implementation are therefore only partially aligned.
 | Phase 16 | No authoritative in-repo phase taxonomy artifact located | `docs/roadmap/execution_roadmap.md` | Reviewers should treat the phase as unmapped unless a future governance artifact establishes it. |
 | Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | `docs/roadmap/execution_roadmap.md` | Distinct from Phase 17b; secondary index links are navigation only. |
 | Phase 17b | Owner Dashboard | `docs/roadmap/execution_roadmap.md` | This report's Owner Dashboard findings map only to Phase 17b. |
-| Phase 23 | Research Dashboard | `docs/phases/phase-23-status.md` | Status-bearing meaning remains in the dedicated phase artifact. |
-| Phase 25 | Strategy Lifecycle Management | `docs/phases/phase_25_strategy_lifecycle.md` | This taxonomy issue does not reclassify implementation status. |
+| Phase 23 | Research Dashboard | `docs/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/phases/phase-23-status.md` is the dedicated status artifact. |
+| Phase 25 | Strategy Lifecycle Management | `docs/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/phases/phase_25_strategy_lifecycle.md` is the dedicated status artifact aligned to verified lifecycle modules and tests. |
 | Phase 26 | No authoritative in-repo phase taxonomy artifact located | `docs/roadmap/execution_roadmap.md` | Reviewers should not infer a Phase 26 meaning from adjacent roadmap blocks. |
-| Phase 27 | Risk Framework | `docs/phases/phase-27-status.md` | Distinct from Phase 27b Pipeline Enforcement Layer artifacts. |
+| Phase 27 | Risk Framework | `docs/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/phases/phase-27-status.md` is the dedicated status artifact, and Phase 27 remains distinct from Phase 27b Pipeline Enforcement Layer artifacts. |
 
 ---
 
@@ -42,8 +44,9 @@ Documentation and implementation are therefore only partially aligned.
 | Phase 17b - Owner Dashboard | Partially Implemented | Backend UI mount in `src/api/main.py` (`app.mount("/ui", StaticFiles(..., html=True), name="ui")`); HTML marker in `src/ui/index.html` (`<title>Owner Dashboard</title>`); tests in `tests/health_endpoint.py`; manual trigger endpoint `POST /analysis/run` in `src/api/main.py`; test in `tests/test_api_manual_analysis_trigger.py`; documentation in `docs/ui/owner_dashboard.md`. | `/ui` is confirmed backend-served. `/owner` appears in documentation but no backend route definition was verified. |
 | Hourly Snapshot Runtime | Partially Implemented | `docs/runtime/snapshot_runtime.md` declares in-repo execution capability and external scheduling boundary; `docs/interfaces/batch_execution.md` states no scheduler implementation; no scheduler/cron endpoint verified in `src/api/main.py`. | Runtime execution capability exists in-repo; hourly scheduling is external and not provided by this repository. |
 | Phase 24 - Paper Trading Runtime | Partially Implemented | Simulator in `src/cilly_trading/engine/paper_trading.py`; tests in `tests/test_paper_trading_simulator.py`; documentation reference in `docs/RUNBOOK.md`. | Engine-level simulation exists; documentation still partially misaligned. |
-| Phase 23 - Research Dashboard | Not Implemented | Research Dashboard implementation artifact: Not confirmed (no verified code/docs/tests). | No repository-verified artifact found. |
-| Phase 27 - Risk Framework | Not Implemented | No standalone phase-scoped risk framework module verified; related artifacts include `src/cilly_trading/strategies/config_schema.py`, `tests/strategies/test_strategy_config_schema.py`, `docs/backtesting/metrics_contract.md`. | Risk-related fields exist but no framework-level artifact verified. |
+| Phase 23 - Research Dashboard | Not Implemented | No repository-verifiable code, tests, or runtime docs were confirmed beyond roadmap/status tracking references. | No direct implementation artifact was found for the audited phase. |
+| Phase 25 - Strategy Lifecycle Management | Implemented In Repository | Lifecycle state model in `src/cilly_trading/engine/strategy_lifecycle/model.py`; transition rules in `src/cilly_trading/engine/strategy_lifecycle/transitions.py`; promotion service in `src/cilly_trading/engine/strategy_lifecycle/service.py`; production-only enforcement in `src/cilly_trading/engine/pipeline/orchestrator.py`; tests in `tests/strategy_lifecycle/` and `tests/cilly_trading/engine/test_orchestrator_lifecycle_enforcement.py`. | Earlier "pending PR merge + CI" wording was stale relative to current repo contents. |
+| Phase 27 - Risk Framework | Implementation Artifacts Verified | Risk contracts in `src/risk/contracts.py`; concrete gate implementation in `src/cilly_trading/engine/risk/gate.py`; pipeline integration in `src/cilly_trading/engine/pipeline/orchestrator.py`; architecture/runtime docs in `docs/architecture/risk_framework.md` and `docs/risk/risk_framework.md`; tests in `tests/cilly_trading/engine/test_risk_gate.py` and related pipeline enforcement tests. | Audited status documents should not claim the framework is absent where these standalone artifacts exist. |
 
 ---
 
@@ -80,19 +83,22 @@ Documentation and implementation are therefore only partially aligned.
 3. **Documentation/runtime capability drift for paper trading.**  
    Simulator code and tests exist while documentation still frames paper trading as unavailable.
 
-4. **Orphaned directories.**  
+4. **Phase 25 status wording was stale.**  
+   The dedicated phase artifact described Phase 25 as pending PR merge and CI even though lifecycle modules and tests are already present in the repository.
+
+5. **Orphaned directories.**  
    No conclusive orphaned directory identified.
 
-5. **Dead endpoints.**  
+6. **Dead endpoints.**  
    No confirmed backend dead endpoint identified.
 
-6. **UI without backend support.**  
+7. **UI without backend support.**  
    No finding: `/ui` and `POST /analysis/run` are both verified.
 
-7. **Backend features without tests.**  
+8. **Backend features without tests.**  
    No conclusive untested high-surface endpoint in audited scope.
 
-8. **Test files without runtime linkage.**  
+9. **Test files without runtime linkage.**  
    No conclusive orphan test file identified.
 
 ---
@@ -112,12 +118,8 @@ Documentation and implementation are therefore only partially aligned.
    - **Phase classification:** Snapshot Runtime  
 
 4. **Proposed Issue:** `Phase 23 status artifact`  
-   - Add explicit not-implemented declaration or implementation artifact.  
+   - Keep explicit not-implemented declaration aligned to current repo evidence until implementation artifacts exist.  
    - **Phase classification:** Phase 23  
-
-5. **Proposed Issue:** `Phase 27 status artifact`  
-   - Add explicit declaration distinguishing framework-level risk system from existing risk-related fields.  
-   - **Phase classification:** Phase 27  
 
 ---
 
