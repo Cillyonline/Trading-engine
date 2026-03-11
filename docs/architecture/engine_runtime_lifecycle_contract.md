@@ -85,7 +85,10 @@ It is normative for request/response behavior and intentionally separate from ro
 
 ### Common Request and Response Shape
 - Method: `POST`
+- Path-specific endpoints: `POST /execution/start` and `POST /execution/stop`
 - Request body: none
+- Query parameters: none
+- Response media type: `application/json`
 - Success body shape:
 
 ```json
@@ -142,6 +145,28 @@ Purpose: Request that the runtime perform the existing shutdown behavior for the
 - No lifecycle-transition `409 Conflict` is defined for `POST /execution/stop` under the current runtime controller behavior.
 - Requests received in `init` or `ready` are accepted as no-op successes and return the unchanged state.
 - Requests received in `stopping` or `stopped` are accepted as idempotent shutdown completions.
+
+## Endpoint Binding to Existing Lifecycle Helpers
+The documented operator-facing contract is intentionally derived from the existing engine-owned lifecycle helpers.
+An implementation that exposes these endpoints should not make new lifecycle decisions; it should translate helper behavior to HTTP as follows:
+
+| Endpoint | Engine helper | HTTP translation rule |
+| --- | --- | --- |
+| `POST /execution/start` | `start_engine_runtime()` | Return `200 {"state":"running"}` on success. If the helper raises `LifecycleTransitionError`, return `409 {"detail":"<helper message>"}`. |
+| `POST /execution/stop` | `shutdown_engine_runtime()` | Return `200 {"state":"<returned_state>"}` for all lifecycle-controlled outcomes under the current model. |
+
+The following decision table is normative for lifecycle-controlled responses:
+
+| Current runtime state | `POST /execution/start` | `POST /execution/stop` |
+| --- | --- | --- |
+| `init` | `200 {"state":"running"}` | `200 {"state":"init"}` |
+| `ready` | `200 {"state":"running"}` | `200 {"state":"ready"}` |
+| `running` | `200 {"state":"running"}` | `200 {"state":"stopped"}` |
+| `paused` | `409 {"detail":"Cannot ensure running runtime from state 'paused'."}` | `200 {"state":"stopped"}` |
+| `stopping` | `409 {"detail":"Cannot ensure running runtime from state 'stopping'."}` | `200 {"state":"stopped"}` |
+| `stopped` | `409 {"detail":"Cannot ensure running runtime from state 'stopped'."}` | `200 {"state":"stopped"}` |
+
+No other lifecycle-specific status code or response body is part of this contract.
 
 ## Relation to Existing Pause/Resume Controls
 - `POST /execution/start` is not a synonym for `POST /execution/resume`.
