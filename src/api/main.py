@@ -21,7 +21,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -555,10 +555,34 @@ ENGINE_RUNTIME_NOT_RUNNING_STATUS = 503
 ENGINE_RUNTIME_NOT_RUNNING_CODE = "engine_runtime_not_running"
 ENGINE_RUNTIME_GUARD_ACTIVE = False
 PHASE_13_READ_ONLY_ENDPOINTS = frozenset({"/health", "/runtime/introspection"})
+ROLE_HEADER_NAME = "X-Cilly-Role"
+ROLE_PRECEDENCE: dict[str, int] = {
+    "read_only": 1,
+    "operator": 2,
+    "owner": 3,
+}
 
 
 def _assert_phase_13_read_only_endpoint(endpoint_path: str) -> None:
     assert endpoint_path in PHASE_13_READ_ONLY_ENDPOINTS
+
+
+def _require_role(minimum_role: str):
+    required_rank = ROLE_PRECEDENCE[minimum_role]
+
+    def _enforce_role(x_cilly_role: str | None = Header(default=None, alias=ROLE_HEADER_NAME)) -> str:
+        if x_cilly_role is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+
+        normalized_role = x_cilly_role.strip().lower()
+        caller_rank = ROLE_PRECEDENCE.get(normalized_role)
+        if caller_rank is None:
+            raise HTTPException(status_code=401, detail="unauthorized")
+        if caller_rank < required_rank:
+            raise HTTPException(status_code=403, detail="forbidden")
+        return normalized_role
+
+    return _enforce_role
 
 
 @app.on_event("startup")
@@ -843,7 +867,9 @@ def _load_compliance_guard_status_sources() -> tuple[dict[str, object], Complian
 
 
 @app.get("/compliance/guards/status", response_model=ComplianceGuardStatusResponse)
-def read_compliance_guard_status() -> ComplianceGuardStatusResponse:
+def read_compliance_guard_status(
+    _: str = Depends(_require_role("read_only")),
+) -> ComplianceGuardStatusResponse:
     guard_config, portfolio_state = _load_compliance_guard_status_sources()
 
     drawdown_threshold = configured_drawdown_threshold(config=guard_config)
@@ -902,7 +928,7 @@ def runtime_introspection() -> RuntimeIntrospectionResponse:
     summary="System State",
     description="Read-only system runtime state for operator inspection.",
 )
-def system_state() -> SystemStateResponse:
+def system_state(_: str = Depends(_require_role("read_only"))) -> SystemStateResponse:
     payload = get_system_state_payload()
     payload["runtime"].setdefault("extensions", [])
     return SystemStateResponse(**payload)
@@ -914,7 +940,7 @@ def system_state() -> SystemStateResponse:
     summary="Pause Execution",
     description="Pause engine execution while preserving runtime ownership and introspection state.",
 )
-def pause_execution() -> ExecutionControlResponse:
+def pause_execution(_: str = Depends(_require_role("owner"))) -> ExecutionControlResponse:
     try:
         state = pause_engine_runtime()
     except LifecycleTransitionError as exc:
@@ -928,7 +954,7 @@ def pause_execution() -> ExecutionControlResponse:
     summary="Resume Execution",
     description="Resume engine execution after an operator pause.",
 )
-def resume_execution() -> ExecutionControlResponse:
+def resume_execution(_: str = Depends(_require_role("owner"))) -> ExecutionControlResponse:
     try:
         state = resume_engine_runtime()
     except LifecycleTransitionError as exc:
@@ -1393,7 +1419,10 @@ def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
 
 
 @app.post("/analysis/run", response_model=ManualAnalysisResponse)
-def manual_analysis(req: ManualAnalysisRequest) -> ManualAnalysisResponse:
+def manual_analysis(
+    req: ManualAnalysisRequest,
+    _: str = Depends(_require_role("operator")),
+) -> ManualAnalysisResponse:
     strategy_name = req.strategy.upper()
     run_request_payload: Dict[str, Any] = {
         "ingestion_run_id": req.ingestion_run_id,

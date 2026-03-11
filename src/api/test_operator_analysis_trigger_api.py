@@ -7,6 +7,9 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 class _InMemoryAnalysisRunRepo:
     def __init__(self) -> None:
@@ -62,6 +65,7 @@ def test_operator_can_trigger_analysis_run_and_execution_is_logged(monkeypatch, 
     with TestClient(api_main.app) as client:
         response = client.post(
             "/analysis/run",
+            headers=OPERATOR_HEADERS,
             json={
                 "ingestion_run_id": "dbfb3ea6-cef8-49f3-acdb-df0de7115d6f",
                 "symbol": "AAPL",
@@ -90,6 +94,7 @@ def test_analysis_run_endpoint_validates_request(monkeypatch) -> None:
     with TestClient(api_main.app) as client:
         response = client.post(
             "/analysis/run",
+            headers=OPERATOR_HEADERS,
             json={
                 "ingestion_run_id": "dbfb3ea6-cef8-49f3-acdb-df0de7115d6f",
                 "strategy": "RSI2",
@@ -99,3 +104,53 @@ def test_analysis_run_endpoint_validates_request(monkeypatch) -> None:
         )
 
     assert response.status_code == 422
+
+
+def test_analysis_run_endpoint_requires_authenticated_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        response = client.post(
+            "/analysis/run",
+            json={
+                "ingestion_run_id": "dbfb3ea6-cef8-49f3-acdb-df0de7115d6f",
+                "symbol": "AAPL",
+                "strategy": "RSI2",
+                "market_type": "stock",
+                "lookback_days": 200,
+            },
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+def test_analysis_run_endpoint_forbids_read_only_role_without_execution(monkeypatch) -> None:
+    call_count = {"value": 0}
+
+    def _start() -> str:
+        return "running"
+
+    def _run_snapshot_analysis(**_kwargs):
+        call_count["value"] += 1
+        return []
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", _start)
+    monkeypatch.setattr(api_main, "_run_snapshot_analysis", _run_snapshot_analysis)
+
+    with TestClient(api_main.app) as client:
+        response = client.post(
+            "/analysis/run",
+            headers=READ_ONLY_HEADERS,
+            json={
+                "ingestion_run_id": "dbfb3ea6-cef8-49f3-acdb-df0de7115d6f",
+                "symbol": "AAPL",
+                "strategy": "RSI2",
+                "market_type": "stock",
+                "lookback_days": 200,
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "forbidden"}
+    assert call_count["value"] == 0

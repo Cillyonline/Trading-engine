@@ -13,6 +13,9 @@ from cilly_trading.engine.runtime_controller import _reset_runtime_controller_fo
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+OWNER_HEADERS = {api_main.ROLE_HEADER_NAME: "owner"}
+OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+
 
 class _RuntimeStateStub:
     def __init__(self, state: str) -> None:
@@ -202,7 +205,8 @@ def test_engine_requests_are_blocked_when_runtime_not_running(tmp_path: Path, mo
                 },
             ),
         ]:
-            response = client.post(path, json=payload)
+            headers = OPERATOR_HEADERS if path == "/analysis/run" else None
+            response = client.post(path, headers=headers, json=payload)
             assert response.status_code == 503
             assert response.json() == {
                 "detail": {
@@ -312,7 +316,7 @@ def test_pause_during_in_progress_analysis_does_not_interrupt_execution(monkeypa
 
     def _run_snapshot_analysis(**kwargs):
         calls["run"] += 1
-        pause_response = client.post("/execution/pause")
+        pause_response = client.post("/execution/pause", headers=OWNER_HEADERS)
         assert pause_response.status_code == 200
         assert pause_response.json() == {"state": "paused"}
         return [
@@ -328,6 +332,7 @@ def test_pause_during_in_progress_analysis_does_not_interrupt_execution(monkeypa
     with TestClient(api_main.app) as client:
         response = client.post(
             "/analysis/run",
+            headers=OPERATOR_HEADERS,
             json={
                 "ingestion_run_id": str(uuid.uuid4()),
                 "symbol": "AAPL",

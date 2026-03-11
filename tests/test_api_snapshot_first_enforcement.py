@@ -11,6 +11,8 @@ import api.main as api_main
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+
 
 def _make_signal_repo(tmp_path: Path) -> SqliteSignalRepository:
     return SqliteSignalRepository(db_path=tmp_path / "signals.db")
@@ -395,6 +397,7 @@ def test_manual_analysis_rejects_missing_snapshot(tmp_path: Path, monkeypatch) -
     client = TestClient(api_main.app)
     response = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",
@@ -443,6 +446,7 @@ def test_manual_analysis_rejects_invalid_snapshot_rows(tmp_path: Path, monkeypat
     client = TestClient(api_main.app)
     response = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",
@@ -495,6 +499,7 @@ def test_manual_analysis_accepts_ready_snapshot(tmp_path: Path, monkeypatch) -> 
     client = TestClient(api_main.app)
     response = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",

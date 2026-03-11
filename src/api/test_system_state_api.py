@@ -5,6 +5,9 @@ from fastapi.testclient import TestClient
 import api.main as api_main
 from tests.utils.json_schema_validator import validate_json_schema
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+OWNER_HEADERS = {api_main.ROLE_HEADER_NAME: "owner"}
+
 
 def _build_system_state_payload() -> dict[str, object]:
     return {
@@ -44,8 +47,8 @@ def test_system_state_endpoint_responds_successfully_with_deterministic_structur
     monkeypatch.setattr(api_main, "get_system_state_payload", lambda: expected)
 
     with TestClient(api_main.app) as client:
-        first = client.get("/system/state")
-        second = client.get("/system/state")
+        first = client.get("/system/state", headers=READ_ONLY_HEADERS)
+        second = client.get("/system/state", headers=READ_ONLY_HEADERS)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -58,7 +61,7 @@ def test_system_state_endpoint_payload_matches_response_schema(monkeypatch) -> N
     monkeypatch.setattr(api_main, "get_system_state_payload", _build_system_state_payload)
 
     with TestClient(api_main.app) as client:
-        payload = client.get("/system/state").json()
+        payload = client.get("/system/state", headers=READ_ONLY_HEADERS).json()
 
     schema = api_main.SystemStateResponse.model_json_schema()
     errors = validate_json_schema(payload, schema)
@@ -86,8 +89,31 @@ def test_system_state_reflects_paused_runtime_mode(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "get_system_state_payload", lambda: payload)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/system/state")
+        response = client.get("/system/state", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json()["status"] == "paused"
     assert response.json()["runtime"]["mode"] == "paused"
+
+
+def test_system_state_endpoint_requires_authenticated_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/system/state")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+def test_system_state_endpoint_allows_owner_role(monkeypatch) -> None:
+    expected = _build_system_state_payload()
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "get_system_state_payload", lambda: expected)
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/system/state", headers=OWNER_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json() == expected
