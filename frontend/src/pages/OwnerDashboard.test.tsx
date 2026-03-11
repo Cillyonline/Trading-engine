@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe('OwnerDashboard', () => {
-  it('sends manual analysis request and renders results', async () => {
+  it('sends the canonical manual analysis request and renders the canonical response', async () => {
     const deferredResponse = createDeferred<MockFetchResponse>();
     const fetchMock = vi.fn().mockReturnValue(deferredResponse.promise);
     vi.stubGlobal('fetch', fetchMock);
@@ -40,10 +40,18 @@ describe('OwnerDashboard', () => {
       </MemoryRouter>
     );
 
+    const ingestionRunIdInput = screen.getByLabelText('Ingestion Run ID');
     const symbolInput = screen.getByLabelText('Symbol');
+    const strategyInput = screen.getByLabelText('Strategy');
+    const marketTypeInput = screen.getByLabelText('Market Type');
+    const lookbackDaysInput = screen.getByLabelText('Lookback Days');
     const runButton = screen.getByRole('button', { name: 'Run Analysis' });
 
+    fireEvent.change(ingestionRunIdInput, { target: { value: 'dbfb3ea6-cef8-49f3-acdb-df0de7115d6f' } });
     fireEvent.change(symbolInput, { target: { value: 'ETHUSDT' } });
+    fireEvent.change(strategyInput, { target: { value: 'RSI2' } });
+    fireEvent.change(marketTypeInput, { target: { value: 'crypto' } });
+    fireEvent.change(lookbackDaysInput, { target: { value: '365' } });
     fireEvent.click(runButton);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -52,7 +60,13 @@ describe('OwnerDashboard', () => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ symbol: 'ETHUSDT' }),
+      body: JSON.stringify({
+        ingestion_run_id: 'dbfb3ea6-cef8-49f3-acdb-df0de7115d6f',
+        symbol: 'ETHUSDT',
+        strategy: 'RSI2',
+        market_type: 'crypto',
+        lookback_days: 365,
+      }),
     });
     expect(runButton).toBeDisabled();
     expect(screen.getByText('Loading...')).toBeInTheDocument();
@@ -60,26 +74,47 @@ describe('OwnerDashboard', () => {
     deferredResponse.resolve({
       ok: true,
       json: async () => ({
+        analysis_run_id: '3c8bc4c7e0f16ee05cf5c23d7be8b3f5',
+        ingestion_run_id: 'dbfb3ea6-cef8-49f3-acdb-df0de7115d6f',
         symbol: 'ETHUSDT',
-        generated_at: '2026-01-01T00:00:00Z',
-        signals: [{ strategy: 'ema_cross', signal: 'BUY', confidence: 0.87 }],
+        strategy: 'RSI2',
+        signals: [
+          {
+            symbol: 'ETHUSDT',
+            strategy: 'RSI2',
+            direction: 'long',
+            stage: 'setup',
+            score: 0.87,
+            timestamp: '2026-01-01T00:00:00Z',
+          },
+        ],
       }),
     } as unknown as MockFetchResponse);
 
     await waitFor(() => {
-      expect(screen.getByText('Generated At: 2026-01-01T00:00:00Z')).toBeInTheDocument();
+    expect(
+        screen.getByText('Analysis Run ID: 3c8bc4c7e0f16ee05cf5c23d7be8b3f5')
+      ).toBeInTheDocument();
     });
 
-    expect(screen.getByText('ema_cross')).toBeInTheDocument();
-    expect(screen.getByText('BUY')).toBeInTheDocument();
+    expect(screen.getByText('Ingestion Run ID: dbfb3ea6-cef8-49f3-acdb-df0de7115d6f')).toBeInTheDocument();
+    expect(screen.getByText('Symbol: ETHUSDT')).toBeInTheDocument();
+    expect(screen.getByText('Strategy: RSI2')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'ETHUSDT' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'RSI2' })).toBeInTheDocument();
+    expect(screen.getByText('long')).toBeInTheDocument();
+    expect(screen.getByText('setup')).toBeInTheDocument();
     expect(screen.getByText('0.87')).toBeInTheDocument();
+    expect(screen.getByText('2026-01-01T00:00:00Z')).toBeInTheDocument();
+    expect(screen.queryByText(/Generated At:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Confidence' })).not.toBeInTheDocument();
     expect(runButton).not.toBeDisabled();
   });
 
-  it('renders API error and re-enables button', async () => {
+  it('renders API detail errors and re-enables button', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
-      json: async () => ({ error: 'Bad request' }),
+      json: async () => ({ detail: 'Bad request' }),
     } as unknown as MockFetchResponse);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -88,6 +123,10 @@ describe('OwnerDashboard', () => {
         <OwnerDashboard />
       </MemoryRouter>
     );
+
+    fireEvent.change(screen.getByLabelText('Ingestion Run ID'), {
+      target: { value: 'dbfb3ea6-cef8-49f3-acdb-df0de7115d6f' },
+    });
 
     const runButton = screen.getByRole('button', { name: 'Run Analysis' });
     fireEvent.click(runButton);
