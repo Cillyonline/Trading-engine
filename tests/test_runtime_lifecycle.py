@@ -22,6 +22,14 @@ class _RuntimeStateStub:
         self.state = state
 
 
+def setup_function() -> None:
+    _reset_runtime_controller_for_tests()
+
+
+def teardown_function() -> None:
+    _reset_runtime_controller_for_tests()
+
+
 def _insert_ingestion_run(
     db_path: Path,
     ingestion_run_id: str,
@@ -348,3 +356,65 @@ def test_pause_during_in_progress_analysis_does_not_interrupt_execution(monkeypa
     assert response.json()["signals"][0]["symbol"] == "AAPL"
     assert introspection.status_code == 200
     assert introspection.json()["mode"] == "paused"
+
+
+def test_execution_start_endpoint_transitions_ready_runtime_to_running() -> None:
+    _reset_runtime_controller_for_tests()
+
+    with TestClient(api_main.app) as client:
+        _reset_runtime_controller_for_tests()
+        runtime = api_main.get_runtime_controller()
+        runtime.init()
+
+        response = client.post("/execution/start", headers=OWNER_HEADERS)
+        introspection = client.get("/runtime/introspection")
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "running"}
+    assert introspection.status_code == 200
+    assert introspection.json()["mode"] == "running"
+
+
+def test_execution_start_endpoint_returns_conflict_for_paused_runtime() -> None:
+    with TestClient(api_main.app) as client:
+        client.post("/execution/pause", headers=OWNER_HEADERS)
+        response = client.post("/execution/start", headers=OWNER_HEADERS)
+        introspection = client.get("/runtime/introspection")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Cannot ensure running runtime from state 'paused'."
+    }
+    assert introspection.status_code == 200
+    assert introspection.json()["mode"] == "paused"
+
+
+def test_execution_stop_endpoint_stops_running_runtime() -> None:
+    with TestClient(api_main.app) as client:
+        response = client.post("/execution/stop", headers=OWNER_HEADERS)
+        introspection = client.get("/runtime/introspection")
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "stopped"}
+    assert introspection.status_code == 200
+    assert introspection.json()["mode"] == "stopped"
+
+
+def test_execution_stop_endpoint_returns_ready_when_runtime_not_started(monkeypatch) -> None:
+    def _start() -> str:
+        return "ready"
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", _start)
+
+    with TestClient(api_main.app) as client:
+        _reset_runtime_controller_for_tests()
+        runtime = api_main.get_runtime_controller()
+        runtime.init()
+
+        response = client.post("/execution/stop", headers=OWNER_HEADERS)
+        introspection = client.get("/runtime/introspection")
+
+    assert response.status_code == 200
+    assert response.json() == {"state": "ready"}
+    assert introspection.status_code == 200
+    assert introspection.json()["mode"] == "ready"

@@ -935,6 +935,31 @@ def system_state(_: str = Depends(_require_role("read_only"))) -> SystemStateRes
 
 
 @app.post(
+    "/execution/start",
+    response_model=ExecutionControlResponse,
+    summary="Start Execution",
+    description="Ensure the engine runtime is in running state using the existing lifecycle start semantics.",
+)
+def start_execution(_: str = Depends(_require_role("owner"))) -> ExecutionControlResponse:
+    try:
+        state = start_engine_runtime()
+    except LifecycleTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ExecutionControlResponse(state=state)
+
+
+@app.post(
+    "/execution/stop",
+    response_model=ExecutionControlResponse,
+    summary="Stop Execution",
+    description="Stop the engine runtime using the existing lifecycle shutdown semantics.",
+)
+def stop_execution(_: str = Depends(_require_role("owner"))) -> ExecutionControlResponse:
+    state = shutdown_engine_runtime()
+    return ExecutionControlResponse(state=state)
+
+
+@app.post(
     "/execution/pause",
     response_model=ExecutionControlResponse,
     summary="Pause Execution",
