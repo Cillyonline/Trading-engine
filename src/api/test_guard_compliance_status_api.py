@@ -4,12 +4,14 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def test_compliance_guard_status_endpoint_is_reachable(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
 
     with TestClient(api_main.app) as client:
-        response = client.get("/compliance/guards/status")
+        response = client.get("/compliance/guards/status", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
 
@@ -18,7 +20,7 @@ def test_compliance_guard_status_response_structure_default_allowing(monkeypatch
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
 
     with TestClient(api_main.app) as client:
-        payload = client.get("/compliance/guards/status").json()
+        payload = client.get("/compliance/guards/status", headers=READ_ONLY_HEADERS).json()
 
     assert payload["compliance"] == {
         "blocking": False,
@@ -55,8 +57,8 @@ def test_compliance_guard_status_is_deterministic_and_reports_blocking(monkeypat
     monkeypatch.setenv("CILLY_EXECUTION_KILL_SWITCH_ACTIVE", "true")
 
     with TestClient(api_main.app) as client:
-        first = client.get("/compliance/guards/status").json()
-        second = client.get("/compliance/guards/status").json()
+        first = client.get("/compliance/guards/status", headers=READ_ONLY_HEADERS).json()
+        second = client.get("/compliance/guards/status", headers=READ_ONLY_HEADERS).json()
 
     assert first == second
     assert first["compliance"] == {
@@ -72,3 +74,13 @@ def test_compliance_guard_status_is_deterministic_and_reports_blocking(monkeypat
         "blocking": True,
         "decision": "blocking",
     }
+
+
+def test_compliance_guard_status_endpoint_requires_authenticated_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/compliance/guards/status")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
