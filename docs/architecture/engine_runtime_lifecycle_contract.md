@@ -1,130 +1,186 @@
 # Engine Runtime Lifecycle Contract
 
 ## Document Purpose
-This document defines the conceptual lifecycle contract for the engine runtime.
-It specifies lifecycle states, allowed state transitions, ownership boundaries, and invariants.
-It does not define implementation mechanics.
+This document defines the runtime lifecycle state machine and the operator-facing API contract for explicit runtime start and stop controls.
+It documents the existing lifecycle model and the response semantics that start/stop endpoints must follow when they are exposed.
+It does not require or describe a concrete endpoint implementation.
 
 ## Scope and Non-Scope
 ### In Scope
 - Explicit lifecycle state definitions.
-- Conceptual transition constraints between states.
-- Contract boundaries between engine and API regarding lifecycle.
-- Lifecycle ownership and authority rules.
-- Conceptual invariants and guarantees.
+- Allowed lifecycle transitions for a single runtime instance.
+- Operator-facing `start` and `stop` API contract semantics.
+- Invalid-transition behavior for operator-facing lifecycle controls.
+- Boundaries between engine-owned lifecycle authority and API-exposed control endpoints.
 
 ### Out of Scope
-- Startup or shutdown mechanics.
-- Internal control flow, sequencing logic, or algorithms.
-- Threading, asynchronous execution, or process-model decisions.
-- API endpoint design changes.
-- Testing strategy.
+- Implementing new endpoints.
+- Changing lifecycle states or transition rules.
+- Startup or shutdown internals beyond documented externally visible effects.
+- Authentication or authorization behavior.
+- UI behavior for lifecycle actions.
 
 ## Lifecycle State Model
-The engine runtime lifecycle is defined by exactly five states:
+The engine runtime lifecycle is defined by exactly six states:
 
 1. **init**
-   - The runtime lifecycle has been created as a lifecycle subject.
-   - The runtime is not yet declared usable for operational execution.
+   - The runtime controller exists.
+   - The runtime has not yet been prepared for operation.
 
 2. **ready**
-   - The runtime is declared operationally prepared.
-   - The runtime is not yet actively executing its operational workload.
+   - The runtime has been initialized and is prepared for operation.
+   - The runtime is not yet actively executing.
 
 3. **running**
-   - The runtime is declared to be in active operational execution.
+   - The runtime is actively executing its operational workload.
 
-4. **stopping**
-   - The runtime is declared to be in terminal transition away from running.
-   - This is a transitional state and not an operational target state.
+4. **paused**
+   - The runtime has been operator-paused after reaching `running`.
+   - Initialization and runtime ownership are preserved while execution is suspended.
 
-5. **stopped**
-   - The runtime is declared no longer operationally active.
-   - This is a terminal lifecycle state for the current runtime instance.
+5. **stopping**
+   - The runtime is in terminal transition away from active execution.
+   - This is a transitional state and not an operator target state.
+
+6. **stopped**
+   - The runtime is no longer operationally active.
+   - This is the terminal state for the current runtime instance.
 
 No additional lifecycle states are part of this contract.
 
-## Allowed Conceptual Transitions
-The lifecycle contract permits only the following direct state transitions:
+## Allowed Lifecycle Transitions
+The lifecycle contract permits only the following direct transitions:
 
 - `init -> ready`
 - `ready -> running`
+- `running -> paused`
+- `paused -> running`
 - `running -> stopping`
+- `paused -> stopped`
 - `stopping -> stopped`
 
 No other direct transitions are valid under this contract.
 
 ## Transition Rules
-- Lifecycle progression is forward-only for a runtime instance.
-- A state change is valid only if it matches one of the allowed transitions.
-- `running` is reachable only through `ready`.
-- `stopped` is reachable only through `stopping`.
-- Re-entry into earlier states is not permitted for the same runtime instance.
+- `start` may compose `init -> ready -> running` when the runtime has not yet been initialized.
+- `resume` is the only path from `paused` back to `running`.
+- `stop` may compose `running -> stopping -> stopped`.
+- `stopped` is terminal for the current runtime instance.
+- A stopped runtime instance is not restarted by re-entering an earlier state.
+- The API contract must not invent transitions that are not listed above.
+
+## Control Operation Mapping
+The existing engine-owned control operations map to the state machine as follows:
+
+| Control operation | Existing engine behavior | Resulting state semantics |
+| --- | --- | --- |
+| `start_engine_runtime()` | If state is `init`, it performs `init -> ready`, then `ready -> running`. If state is `ready`, it performs `ready -> running`. If state is already `running`, it returns `running`. Otherwise it raises `LifecycleTransitionError`. | Start is valid from `init`, `ready`, and `running`. |
+| `pause_engine_runtime()` | Pauses only from `running`; repeated pause on `paused` is idempotent; other states raise `LifecycleTransitionError`. | Pause is a control-plane suspension, not a terminal transition. |
+| `resume_engine_runtime()` | Resumes only from `paused`; repeated resume on `running` is idempotent; other states raise `LifecycleTransitionError`. | Resume is distinct from start. |
+| `shutdown_engine_runtime()` | Returns `init` or `ready` unchanged; transitions `running -> stopping -> stopped`; transitions `paused -> stopped`; transitions `stopping -> stopped`; returns `stopped` unchanged. | Stop is terminal when runtime has entered execution or shutdown phases and is a no-op before that point. |
+
+## Operator-Facing Runtime Control API Contract
+This section defines the operator-facing API contract that explicit start/stop endpoints must follow.
+It is normative for request/response behavior and intentionally separate from route implementation work.
+
+### Common Request and Response Shape
+- Method: `POST`
+- Request body: none
+- Success body shape:
+
+```json
+{
+  "state": "running"
+}
+```
+
+- The response body uses the same single-field control-plane shape already used by pause/resume: `{"state":"<runtime_state>"}`.
+- Lifecycle transition conflicts use `409 Conflict` with the existing application error shape:
+
+```json
+{
+  "detail": "controller-authored transition error message"
+}
+```
+
+### `POST /execution/start`
+Purpose: Request that the runtime be in `running` state using the existing start semantics.
+
+#### Success behavior
+
+| Current runtime state | Endpoint result | Notes |
+| --- | --- | --- |
+| `init` | `200 {"state":"running"}` | Internally composes `init -> ready -> running`. |
+| `ready` | `200 {"state":"running"}` | Internally performs `ready -> running`. |
+| `running` | `200 {"state":"running"}` | Idempotent success. |
+
+#### Invalid lifecycle transition behavior
+
+| Current runtime state | Endpoint result | Why |
+| --- | --- | --- |
+| `paused` | `409 {"detail":"Cannot ensure running runtime from state 'paused'."}` | Start is not resume. A paused runtime must use the existing resume control. |
+| `stopping` | `409 {"detail":"Cannot ensure running runtime from state 'stopping'."}` | Terminal shutdown has already begun. |
+| `stopped` | `409 {"detail":"Cannot ensure running runtime from state 'stopped'."}` | `stopped` is terminal for the runtime instance. |
+
+The `detail` value is the propagated `LifecycleTransitionError` text produced by the existing engine lifecycle helper.
+
+### `POST /execution/stop`
+Purpose: Request that the runtime perform the existing shutdown behavior for the current runtime instance.
+
+#### Success behavior
+
+| Current runtime state | Endpoint result | Notes |
+| --- | --- | --- |
+| `init` | `200 {"state":"init"}` | Accepted no-op. The runtime has not yet entered an active or shutdown-capable phase. |
+| `ready` | `200 {"state":"ready"}` | Accepted no-op. The runtime is prepared but not executing. |
+| `running` | `200 {"state":"stopped"}` | Internally composes `running -> stopping -> stopped`. |
+| `paused` | `200 {"state":"stopped"}` | Stop terminalizes a paused runtime directly. |
+| `stopping` | `200 {"state":"stopped"}` | Completes an in-progress shutdown. |
+| `stopped` | `200 {"state":"stopped"}` | Idempotent success. |
+
+#### Invalid lifecycle transition behavior
+- No lifecycle-transition `409 Conflict` is defined for `POST /execution/stop` under the current runtime controller behavior.
+- Requests received in `init` or `ready` are accepted as no-op successes and return the unchanged state.
+- Requests received in `stopping` or `stopped` are accepted as idempotent shutdown completions.
+
+## Relation to Existing Pause/Resume Controls
+- `POST /execution/start` is not a synonym for `POST /execution/resume`.
+- `paused -> running` remains owned by the existing resume behavior.
+- `POST /execution/stop` may be called while paused and results in `stopped`, not `running`.
+- A stopped runtime instance is not resumed or restarted by either pause/resume controls or the documented start contract.
 
 ## Engine vs API Lifecycle Contract
 
-### Engine Lifecycle Guarantees
-The engine lifecycle contract guarantees that:
-- Lifecycle state exists and is one of the five defined states.
-- Published lifecycle state reflects the current conceptual lifecycle phase.
-- State progression respects the allowed conceptual transitions.
-- Lifecycle authority is exercised only by lifecycle owner roles defined in this document.
-
-### API Reliance Contract
-The API may rely on the following:
-- Lifecycle state names and meanings as defined here.
-- The allowed transition topology defined in this contract.
-- Lifecycle invariants listed in this document.
-
-### API Lifecycle Prohibitions
-The API must not:
-- Create new lifecycle states.
-- Redefine state meanings.
-- Trigger or force lifecycle transitions.
-- Assume lifecycle paths that are not explicitly allowed by this contract.
-- Claim lifecycle ownership authority.
-
-## Runtime Ownership Rules
-
 ### Lifecycle Authority
 - Lifecycle authority is owned by the engine runtime domain.
-- Authority includes deciding and publishing lifecycle transitions.
-- Lifecycle authority is singular for a runtime instance.
+- The API may expose lifecycle control endpoints, but those endpoints delegate to engine-owned lifecycle operations.
+- The API must not redefine lifecycle states, redefine transition rules, or bypass engine transition checks.
 
-### Observer vs Controller Roles
-- Observer roles may read lifecycle state.
-- Controller roles may exercise lifecycle authority.
-- The API is an observer of lifecycle state, not a lifecycle controller.
-
-### Lifecycle-Agnostic API (Conceptual Definition)
-A lifecycle-agnostic API means:
-- API behavior is defined independently of lifecycle orchestration control.
-- API may consume lifecycle state as contract context.
-- API does not embed lifecycle control responsibility.
-- API contract remains valid without requiring API ownership of runtime lifecycle decisions.
+### Observer and Control Boundaries
+- Read-only endpoints such as runtime introspection and system state observe lifecycle state.
+- Control-plane endpoints may request transitions through engine-owned lifecycle helpers.
+- API exposure of start/stop/pause/resume does not transfer lifecycle ownership from the engine to the API.
 
 ## Invariants and Guarantees
 The following invariants are normative:
 
 1. **State Validity Invariant**
-   - The runtime lifecycle state is always one of: `init`, `ready`, `running`, `stopping`, `stopped`.
+   - The runtime lifecycle state is always one of: `init`, `ready`, `running`, `paused`, `stopping`, `stopped`.
 
-2. **Ordering Invariant**
-   - For a runtime instance, lifecycle order is monotonic: `init`, `ready`, `running`, `stopping`, `stopped`.
+2. **Transition Topology Invariant**
+   - The runtime may move only along the allowed transitions listed in this document.
 
-3. **Running Preconditions Invariant**
-   - `running` implies that `init` and `ready` have already occurred for the same runtime instance.
+3. **Resume Path Invariant**
+   - `paused` returns to `running` only through resume semantics, not through start semantics.
 
-4. **Stopped Preconditions Invariant**
-   - `stopped` implies that `stopping` has already occurred for the same runtime instance.
+4. **Terminal State Invariant**
+   - `stopped` is terminal for the current runtime instance.
 
-5. **No Backward Transition Invariant**
-   - No lifecycle transition may move to an earlier state in the lifecycle order.
+5. **Stop Composition Invariant**
+   - A stop request from `running` completes through `stopping` before publishing `stopped`.
 
 6. **Single-Authority Invariant**
-   - Exactly one lifecycle authority domain governs transitions for a runtime instance.
+   - Exactly one lifecycle authority domain governs transitions for a runtime instance: the engine runtime domain.
 
-7. **API Non-Control Invariant**
-   - The API never owns or executes lifecycle control authority.
-
-These invariants are conceptual guarantees and do not prescribe implementation techniques.
+7. **API Delegation Invariant**
+   - Operator-facing API controls delegate lifecycle requests to engine-owned lifecycle behavior and must preserve the documented response semantics.
