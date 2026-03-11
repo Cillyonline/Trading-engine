@@ -13,6 +13,8 @@ from cilly_trading.engine.core import compute_analysis_run_id
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+
 
 def _make_signal_repo(tmp_path: Path) -> SqliteSignalRepository:
     return SqliteSignalRepository(db_path=tmp_path / "signals.db")
@@ -153,7 +155,7 @@ def test_manual_analysis_idempotent(tmp_path: Path, monkeypatch) -> None:
     }
     expected_run_id = compute_analysis_run_id(run_request_payload)
 
-    response_first = client.post("/analysis/run", json=payload)
+    response_first = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
     assert response_first.status_code == 200
     first_body = response_first.json()
     assert first_body["analysis_run_id"] == expected_run_id
@@ -163,7 +165,7 @@ def test_manual_analysis_idempotent(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(api_main, "run_watchlist_analysis", _fail_run_watchlist_analysis)
 
-    response_second = client.post("/analysis/run", json=payload)
+    response_second = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
     assert response_second.status_code == 200
     second_body = response_second.json()
     assert second_body["analysis_run_id"] == expected_run_id
@@ -185,6 +187,7 @@ def test_manual_analysis_rejects_invalid_ingestion_run(tmp_path: Path, monkeypat
     client = TestClient(api_main.app)
     response = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": "not-a-uuid",
             "symbol": "AAPL",
@@ -248,6 +251,7 @@ def test_manual_analysis_uses_snapshot(tmp_path: Path, monkeypatch) -> None:
     client = TestClient(api_main.app)
     response = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             "analysis_run_id": "client-run",
             "ingestion_run_id": ingestion_run_id,
@@ -324,6 +328,7 @@ def test_manual_analysis_changes_id_for_different_payload(tmp_path: Path, monkey
     }
     response_first = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={**payload_base, "lookback_days": 200},
     )
     assert response_first.status_code == 200
@@ -331,6 +336,7 @@ def test_manual_analysis_changes_id_for_different_payload(tmp_path: Path, monkey
 
     response_second = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={**payload_base, "lookback_days": 201},
     )
     assert response_second.status_code == 200
@@ -391,7 +397,7 @@ def test_manual_analysis_strategy_config_float_idempotent(
 
     original_run_watchlist_analysis = api_main.run_watchlist_analysis
 
-    response_first = client.post("/analysis/run", json=payload)
+    response_first = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
     assert response_first.status_code == 200
     first_body = response_first.json()
     assert first_body["analysis_run_id"]
@@ -401,7 +407,7 @@ def test_manual_analysis_strategy_config_float_idempotent(
 
     monkeypatch.setattr(api_main, "run_watchlist_analysis", _fail_run_watchlist_analysis)
 
-    response_second = client.post("/analysis/run", json=payload)
+    response_second = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
     assert response_second.status_code == 200
     second_body = response_second.json()
     assert second_body["analysis_run_id"] == first_body["analysis_run_id"]
@@ -410,6 +416,7 @@ def test_manual_analysis_strategy_config_float_idempotent(
 
     response_third = client.post(
         "/analysis/run",
+        headers=OPERATOR_HEADERS,
         json={
             **payload,
             "strategy_config": {"oversold_threshold": 16.0},
