@@ -1,85 +1,89 @@
-# Strategy Config Schema – MVP
+# Strategy Configuration Boundary
 
-## Scope & Grundsätze
+## Purpose
 
-Dieses Dokument beschreibt das **offizielle Strategy-Config-Schema** für den **Cilly Trading Engine – MVP**.
+This document defines the strategy-specific portion of the canonical runtime
+configuration boundary documented in
+`docs/architecture/configuration_boundary.md`.
 
-**Gültig für:**
-- RSI2 Strategy
-- Turtle Strategy
+It does not create a separate configuration system. It assigns ownership for
+strategy defaults, validation, alias handling, and per-request overrides so
+follow-up implementation work can centralize those decisions without changing
+feature scope.
 
-### Wichtige Regeln (verbindlich)
+## Included Strategy Inputs
 
-- Strategy-Configs sind **optional**.
-- `None` oder `{}` → leere Config (`{}`).
-- Fehlende Keys → bleiben **ungesetzt** (keine Defaults pro Key aus der Config-Normalisierung).
-- Unbekannte Keys → werden **ignoriert** und als Warning geloggt.
-- Ungültige Typen oder Werte bei bekannten Keys → **Fehler**; die Strategie wird im Engine-Lauf **übersprungen**.
-- Konflikt zwischen Alias und Canonical-Key → **Fehler**; die Strategie wird im Engine-Lauf **übersprungen**.
-- Ungültiger Config-Typ (kein Mapping) → Warning, es wird eine **leere Config** verwendet.
+The canonical strategy-configuration boundary includes these raw inputs:
 
----
+- Schema artifacts in `src/cilly_trading/strategies/config_schema.py`
+  (`ConfigKeySpec`, per-strategy schema definitions, and normalization helpers).
+- Inline strategy default dictionaries that currently live in
+  `src/api/main.py` (`default_strategy_configs`).
+- Explicit request payloads that carry strategy parameters, including
+  `strategy_config` and resolved preset parameters.
 
-## Allgemeines Config-Verhalten
+Everything above is in scope for validation and precedence decisions even when
+the current implementation still reads those inputs from different places.
 
-- Strategy-Configs werden **vor der Strategy-Ausführung normalisiert und validiert**.
-- Aliases werden auf Canonical-Keys aufgelöst (siehe pro Strategie).
-- Bekannte Parameter werden typisiert und gegen Min/Max geprüft.
-- Die Normalisierung liefert **nur** die bekannten, validen Keys.
+## Validation Ownership
 
-### Typ-Normalisierung (für implementierte Parameter)
+Strategy-specific validation is owned by the strategy schema layer, not by API
+request models and not by engine consumers.
 
-- `int`: akzeptiert `int`, `float` mit ganzzahligem Wert (z. B. `2.0`) und numerische Strings (z. B. `"2"`).
-- `float`: akzeptiert `int`, `float` und numerische Strings (z. B. `"2.5"`).
+The boundary is responsible for:
 
----
+- resolving aliases to canonical strategy keys
+- coercing values only through documented schema conversions
+- applying strategy defaults for missing known keys
+- enforcing per-key constraints and cross-field invariants
+- rejecting unknown keys and conflicting alias/canonical pairs
 
-## Strategy: RSI2
+Consumers outside the boundary may read only already-resolved strategy config.
+They must not apply additional defaults, silently drop invalid keys, or invent
+fallback behavior.
 
-### Beschreibung
+## Defaulting Expectations
 
-RSI2 ist eine kurzfristige Mean-Reversion-Strategie basierend auf einem sehr kurzen RSI-Indikator.
+Strategy defaulting happens in exactly two places and in this order:
 
-### Konfigurations-Keys
+1. Schema defaults defined by the strategy schema layer.
+2. Explicit override payloads supplied by a preset or request.
 
-| Key | Typ | Alias | Beschreibung | Constraints |
-|---|---|---|---|---|
-| `rsi_period` | int | – | RSI-Periode | `>= 1` |
-| `oversold_threshold` | float | `oversold` | Oversold-Schwelle | `0.0 .. 100.0` |
-| `min_score` | float | – | Mindest-Score | `0.0 .. 100.0` |
+Current inline API defaults are treated as temporary raw inputs, not as the
+long-term owner of defaults. Follow-up implementation should move that ownership
+behind the canonical boundary while preserving the same effective precedence:
 
-### Minimal-Beispiel
+- schema defaults provide the baseline
+- boundary-owned default strategy bundles may override the baseline
+- request-level strategy overrides win last
 
-```json
-{ "oversold": 5, "min_score": 40 }
-```
+If a provided value fails validation, the boundary must report that failure. It
+must not silently replace an invalid explicit value with a default.
 
----
+## Request-Scoped Strategy Resolution
 
-## Strategy: Turtle
+When an API request supplies strategy-related input, the request layer may
+collect the raw payload, but it is not the authority for final strategy config.
 
-### Beschreibung
+The intended flow is:
 
-Turtle ist eine klassische Breakout-Trendfolge-Strategie.
+1. request models accept raw strategy payloads
+2. the canonical boundary resolves defaults and validates the payload
+3. engine execution receives an immutable, validated strategy configuration
 
-### Konfigurations-Keys
+This keeps strategy precedence decisions out of `src/api/main.py` and prevents
+the API layer from becoming a second configuration owner.
 
-| Key | Typ | Alias | Beschreibung | Constraints |
-|---|---|---|---|---|
-| `breakout_lookback` | int | `entry_lookback` | Breakout-Lookback | `>= 1` |
-| `proximity_threshold_pct` | float | `proximity_threshold` | Nähe zum Breakout-Level (Prozent) | `0.0 .. 1.0` |
-| `min_score` | float | – | Mindest-Score | `0.0 .. 100.0` |
+## Current Artifact Review
 
-### Minimal-Beispiel
+Manual design review for issue `#605` should account for these current artifacts:
 
-```json
-{ "entry_lookback": 55, "proximity_threshold": 0.2 }
-```
+- `src/cilly_trading/strategies/config_schema.py` contains the current
+  per-strategy schema and normalization helpers.
+- `src/api/main.py` contains inline `default_strategy_configs` that currently
+  act as request-time defaults.
+- API request models in `src/api/main.py` expose `strategy_config` and preset
+  payloads as raw strategy inputs.
 
----
-
-## Kompatibilität
-
-- Nur die oben gelisteten Keys sind implementiert.
-- Unbekannte Keys werden ignoriert; bekannte Keys werden strikt validiert.
-- Es gibt keine stillen Defaults oder Fallbacks in der Config-Normalisierung.
+The follow-up implementer should treat those artifacts as sources to be absorbed
+into the canonical boundary, not as competing authorities.
