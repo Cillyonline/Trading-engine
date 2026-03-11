@@ -1,23 +1,44 @@
-# Execution Roadmap – Canonical Source of Truth
+# Execution Roadmap - Authoritative Phase Taxonomy
 
 Status: Authoritative  
-Scope: Phases 17b, 23, 24, 27, 25–31  
+Scope: Audited phase taxonomy for Phases 5, 16, 17, 17b, 23, 25, 26, and 27  
 Owner: Governance  
 
 ## Purpose
-One canonical in-repo roadmap artifact that defines phase goals and acceptance boundaries.
+This file is the single authoritative in-repo source for audited phase-number meanings.
 
 ## How to Use
-- This file is the authoritative source for phase definitions.
-- Issues/PRs should reference the relevant phase.
-- Acceptance evidence requirements must be satisfied for phase completion.
+- Use this file to resolve the meaning of an audited phase number before relying on any secondary roadmap, index, or audit artifact.
+- Treat secondary documents as navigation or status evidence only unless they explicitly defer to this file.
+- If a phase is marked here as "no authoritative in-repo meaning located", do not infer a meaning from neighboring phases or legacy headings.
+
+---
+
+## Audited Phase Taxonomy
+
+| Phase | Authoritative meaning | Source trace |
+|-------|-----------------------|--------------|
+| Phase 5 | External Ready exit gate | `docs/governance/phase-5-exit-criteria.md` |
+| Phase 16 | No authoritative in-repo phase taxonomy artifact was located during the audit. | This roadmap entry is the governing clarification for audited artifacts. |
+| Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | Legacy index references align to this taxonomy; Phase 17b is the audited Owner Dashboard sub-phase. |
+| Phase 17b | Owner Dashboard | Verified by this roadmap entry and supporting runtime/documentation evidence. |
+| Phase 23 | Research Dashboard | `docs/phases/phase-23-status.md` |
+| Phase 25 | Strategy Lifecycle Management | `docs/phases/phase_25_strategy_lifecycle.md` |
+| Phase 26 | No authoritative in-repo phase taxonomy artifact was located during the audit. | This roadmap entry is the governing clarification for audited artifacts. |
+| Phase 27 | Risk Framework | `docs/phases/phase-27-status.md` |
+
+## Taxonomy Guardrails
+- Phase 17 and Phase 17b are not interchangeable: Phase 17 is the umbrella phase, and Phase 17b is the Owner Dashboard sub-phase.
+- Phase 27 and Phase 27b are not interchangeable: Phase 27 is Risk Framework taxonomy; Phase 27b remains a distinct Pipeline Enforcement Layer artifact.
+- Phase 25 and Phase 26 must not be grouped into a shared replacement meaning. Phase 25 is defined above, while Phase 26 remains unmapped in current authoritative in-repo taxonomy.
+- This document establishes taxonomy only. Implementation-status corrections remain scoped to the relevant status artifacts and follow-on issues.
 
 ---
 
 ## Phase 17b
 
 ### Goal
-Define and track the Owner Dashboard phase based on repository-verified artifacts and known documentation/runtime boundary conditions.
+Define and track the Owner Dashboard sub-phase based on repository-verified artifacts and known documentation/runtime boundary conditions.
 
 ### Explicit Deliverables
 - Backend-served Owner Dashboard surface at `/ui` via FastAPI static mount.
@@ -43,7 +64,7 @@ Define Phase 23 status using only repository-verified evidence.
 
 > Governance Note  
 > The implementation status of Phase 23 is explicitly documented in:  
-> docs/phases/phase-23-status.md
+> `docs/phases/phase-23-status.md`
 
 ### Explicit Deliverables
 - Explicit status declaration: Research Dashboard implementation artifact not confirmed in repository.
@@ -59,27 +80,6 @@ Define Phase 23 status using only repository-verified evidence.
 
 ---
 
-## Phase 24
-
-### Goal
-Define and track Paper Trading Runtime status from repository-verified implementation and documentation evidence.
-
-### Explicit Deliverables
-- Paper-trading simulator artifact in engine code.
-- Tests validating paper-trading simulator behavior.
-- Documentation references that describe phase runtime status.
-
-### Explicitly Out of Scope
-- Declaring full alignment while documentation still describes paper trading as unavailable.
-- Expanding scope beyond paper-trading runtime status/evidence alignment.
-
-### Acceptance Evidence Requirements
-- Simulator and related tests remain present and passing for phase-scoped behavior.
-- Documentation is updated to align with verified simulator state before closure.
-- Phase 24 PRs/issues cite concrete repository files for implementation and docs alignment.
-
----
-
 ## Phase 27
 
 ### Goal
@@ -87,7 +87,7 @@ Explicitly distinguish risk-related artifacts from a standalone Risk Framework i
 
 > Governance Note  
 > The implementation status of Phase 27 is explicitly documented in:  
-> docs/phases/phase-27-status.md
+> `docs/phases/phase-27-status.md`
 
 ### Verified Existing Artifacts
 - Risk-related configuration fields exist.
@@ -104,106 +104,3 @@ No standalone Phase 27 Risk Framework module was verified.
 - Standalone repository-verifiable framework module(s).
 - Explicit policy logic definition.
 - Documentation and tests mapped directly to Phase 27 framework scope.
-
----
-
-## Phases 25–31
-
-### Phase 25
-
-#### Goal
-Define Phase 25 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 25 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 26
-
-#### Goal
-Define Phase 26 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 26 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 27
-
-#### Goal
-Define Phase 27 status from available repository evidence within the 25–31 phase block.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository for the broader 25–31 set.
-- Refer to the dedicated Phase 27 section above for framework-specific status details.
-
-#### Explicitly Out of Scope
-- Reclassifying Phase 27 as implemented within the 25–31 block without framework-level repository evidence.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 28
-
-#### Goal
-Define Phase 28 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 28 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 29
-
-#### Goal
-Define Phase 29 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 29 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 30
-
-#### Goal
-Define Phase 30 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 30 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
-
-### Phase 31
-
-#### Goal
-Define Phase 31 status from available repository evidence.
-
-#### Explicit Deliverables
-- Explicit status declaration: phase-tagged artifacts not confirmed in repository.
-
-#### Explicitly Out of Scope
-- Claiming Phase 31 implementation without repository-verified phase-mapped artifacts.
-
-#### Acceptance Evidence Requirements
-- Any status change is supported by repository-verifiable phase-mapped code/docs/tests and linked issue/PR evidence.
