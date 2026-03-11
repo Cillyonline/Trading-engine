@@ -1,16 +1,30 @@
-# Phase 25 — Strategy Lifecycle Management
+# Phase 25 - Strategy Lifecycle Management
 
-**Status:** READY FOR COMPLETION (pending PR merge + CI)
+**Status:** IMPLEMENTED IN REPOSITORY
+
+## Taxonomy Alignment
+Phase 25 means `Strategy Lifecycle Management` in the authoritative taxonomy source:
+`docs/roadmap/execution_roadmap.md`
 
 ## Objective
-Phase 25 introduced the official lifecycle governance framework for strategies, including:
+Phase 25 covers the strategy lifecycle governance artifacts that are verifiably present in this repository:
 - Lifecycle state model
 - Deterministic transition matrix
 - Promotion service API
-- Orchestrator production-only enforcement
+- Production-only execution enforcement in the orchestrator
+
+## Verified Repository Evidence
+- Lifecycle state model: `src/cilly_trading/engine/strategy_lifecycle/model.py`
+- Transition rules: `src/cilly_trading/engine/strategy_lifecycle/transitions.py`
+- Promotion service API: `src/cilly_trading/engine/strategy_lifecycle/service.py`
+- Production-only orchestration enforcement: `src/cilly_trading/engine/pipeline/orchestrator.py`
+- State-model tests: `tests/strategy_lifecycle/test_state_model.py`
+- Transition-matrix tests: `tests/strategy_lifecycle/test_transitions.py`
+- Promotion-service tests: `tests/strategy_lifecycle/test_service.py`
+- Orchestrator enforcement tests: `tests/cilly_trading/engine/test_orchestrator_lifecycle_enforcement.py`
 
 ## Lifecycle States
-The Phase 25 lifecycle model defines four states:
+The verified lifecycle model defines four states:
 - **DRAFT**
 - **EVALUATION**
 - **PRODUCTION**
@@ -20,41 +34,20 @@ The Phase 25 lifecycle model defines four states:
 - **DEPRECATED** is the terminal state. No transitions are permitted out of DEPRECATED.
 
 ## Promotion Rules
-Allowed transitions are strictly limited to:
+Verified allowed transitions are:
 - DRAFT -> EVALUATION
 - DRAFT -> DEPRECATED
 - EVALUATION -> PRODUCTION
 - EVALUATION -> DEPRECATED
 - PRODUCTION -> DEPRECATED
 
-All other transitions are illegal and must be rejected by lifecycle governance.
+All other transitions are rejected by lifecycle governance.
 
 ## Execution Enforcement Rule
 Execution is governed by a strict production-only policy:
 - Only **PRODUCTION** strategies may execute.
-- This rule is enforced in the orchestrator.
+- The orchestrator checks lifecycle state before execution.
 - Non-production strategies are rejected before execution.
-- CI must fail if this guard is removed.
 
-## Linked Pull Requests
-- PR #474 (Closes #474) — Lifecycle Model Design
-- PR #475 (Closes #475) — Lifecycle State Machine Implementation
-- PR #476 (Closes #476) — Production-Only Execution Enforcement
-- PR #477 (Closes #477) — Governance Artifact
-
-## Validation Proof
-- `pytest`
-- Full test suite passing (308 passed, 4 warnings)
-- Enforcement tests present
-- Transition tests present
-
-## Governance Review
-- Review Authority: Codex A
-- Review Decision: APPROVED (pending final merge verification)
-
-## Completion Declaration
-Phase 25 is declared **COMPLETE** only after all of the following are satisfied:
-- All PRs merged
-- CI passing
-- Governance review recorded
-- Artifact committed to main branch
+## Explicit Declaration
+This phase-status artifact is evidence-based. It reflects repository artifacts already present and tested in-tree, rather than pending PR or merge state.
