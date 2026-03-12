@@ -7,6 +7,8 @@ This surface is served from `src/ui/index.html` by the backend static mount and 
 
 If the React frontend remains in local development use, its `/owner` route is a development-only surface. It is not the backend-served runtime dashboard and must not be treated as interchangeable with `/ui`.
 
+The canonical Phase 36 browser runtime contract is documented in `docs/ui/phase-36-web-activation-contract.md`. This document remains the runtime-surface inventory for the current operator workbench.
+
 ## Runtime Route
 - **Runtime route:** `/ui`
 - **Served by:** backend runtime static UI mount
@@ -27,6 +29,8 @@ The current runtime-served `/ui` workbench exposes the following sections:
 - Audit Trail
 
 The page header labels this surface as **Operator Workbench** and explicitly states that it is served by FastAPI at `/ui`.
+
+For Phase 36 scope and phase-boundary decisions, treat the canonical contract document as authoritative. The list below is a description of the current runtime shell contents, not a claim that every visible section already has a complete browser workflow.
 
 ## Runtime Data Surfaces
 The runtime workbench currently renders or reserves space for these backend-connected surfaces:
