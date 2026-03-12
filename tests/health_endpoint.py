@@ -144,4 +144,4 @@ def test_ui_endpoint_serves_html(monkeypatch) -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers.get("content-type", "")
-    assert "<title>Owner Dashboard</title>" in response.text
+    assert "<title>Runtime Analysis UI</title>" in response.text
