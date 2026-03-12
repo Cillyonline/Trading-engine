@@ -25,7 +25,9 @@ Use this order:
 - [Phase 36 /ui web activation contract](ui/phase-36-web-activation-contract.md)
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
   - Runtime-served operator UI is `/ui`.
-  - `/owner` is a frontend development-only route and not a runtime entrypoint.
+  - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
+  - `/owner` is not a canonical runtime entrypoint.
+- [Phase 36 web activation evidence](roadmap/phase-36-web-activation-evidence.md)
 
 ## Versioning & Governance
 - [Versioning model](versioning/model.md)

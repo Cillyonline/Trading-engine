@@ -1,109 +1,107 @@
 # Phase 36 /ui Web Activation Contract
 
 ## Purpose
-This document is the canonical Phase 36 runtime contract for the browser-served `/ui` surface.
+This document is the canonical Phase 36 contract for the runtime-served `/ui` surface.
 
-It defines:
+It fixes four things for audit and status review:
 
-- the fixed runtime entrypoint for Phase 36
-- the minimum browser workflow covered by this phase
-- the runtime capabilities that must be reachable through `/ui`
-- the boundary between Phase 36 and later roadmap phases
+- `/ui` is the only canonical runtime browser entrypoint for this phase
+- the supported browser workflow is limited to the repository-verifiable flow already implemented
+- `/owner` is separated from the runtime contract
+- later phases such as 37 and 40 are not implied by the presence of UI sections in the current shell
 
-This contract is normative for Phase 36 documentation and review. It must be read against the current repository-verified runtime behavior in `src/ui/index.html`, `src/api/main.py`, and the existing tests covering those surfaces.
+This contract is normative for Phase 36 documentation. It must stay aligned with `src/api/main.py`, `src/ui/index.html`, and the existing tests for those surfaces.
 
-## Canonical Runtime Entrypoint
-- Canonical browser runtime entrypoint: `/ui`
-- Served by: backend FastAPI static mount
-- Runtime source: `src/ui/index.html`
+## Canonical Runtime Surface
+- Canonical runtime URL: `/ui`
+- Serving mechanism: FastAPI static mount
+- Runtime page source: `src/ui/index.html`
 
-For Phase 36, `/ui` is the only canonical browser runtime surface.
+For Phase 36, `/ui` is the runtime-served browser surface. No other route is an equivalent runtime activation URL.
 
-`/owner` is not part of the Phase 36 runtime surface. If it exists in frontend development code, it remains a development-only route and must not be treated as a runtime URL, fallback runtime entrypoint, or equivalent browser activation path.
+## Supported Browser Workflow
+Phase 36 documents one bounded browser workflow that is implemented today:
 
-## Minimum Browser Workflow
-Phase 36 covers one bounded browser workflow:
+1. Open the backend-served runtime workbench at `/ui`.
+2. Load the read-only runtime context already fetched by the page:
+   - `GET /system/state`
+   - `GET /strategies`
+   - `GET /signals`
+   - `GET /journal/artifacts`
+   - `GET /execution/orders`
+3. Submit the browser-triggered manual analysis request from the `/ui` form through `POST /analysis/run`.
+4. Review the returned analysis result in-browser, including the deterministic `analysis_run_id` and any emitted signals.
+5. Inspect related evidence in the same `/ui` session through journal artifact preview, decision trace lookup, and trade lifecycle visibility.
 
-1. Open the backend-served workbench at `/ui`.
-2. Land on the runtime shell that identifies itself as the FastAPI-served operator workbench.
-3. Use the browser surface to inspect currently reachable runtime data that the page already loads from the backend.
-4. Navigate within the bounded runtime sections exposed by the current `/ui` page.
-5. Review the returned runtime data in-browser without requiring a separate frontend-only route.
+This is a bounded runtime workflow. It is not a claim that Phase 36 already provides a broader browser-native product surface beyond the implemented `/ui` workbench.
 
-This phase does not require a full browser-native product workflow. It only requires that the browser runtime surface is fixed, documented, and bounded around the currently verifiable `/ui` behavior.
+## Runtime-Reachable Phase 36 Surfaces
+The following surfaces are in scope because the current `/ui` page reaches them directly and repository tests verify the route family:
 
-## Required Runtime Views And Actions
-The following runtime views are covered by Phase 36 because they are repository-verifiable from the current `/ui` page and backend routes.
-
-| Phase 36 area | Reachability requirement through `/ui` | Repository-verifiable backend surface |
+| Phase 36 area | Current runtime behavior through `/ui` | Repository-verifiable surface |
 | --- | --- | --- |
-| Runtime shell | `/ui` loads the browser workbench shell | `/ui` static mount |
-| Strategies | Reachable as a read-only table in the browser | `GET /strategies` |
-| Signals | Reachable as a read-only table in the browser | `GET /signals` |
-| Journal artifact list | Reachable as a read-only artifact browser in the browser | `GET /journal/artifacts` |
-| Journal artifact preview | Reachable by selecting an artifact in the browser | `GET /journal/artifacts/{run_id}/{artifact_name}` |
-| Decision trace | Reachable from selected journal artifacts in the browser | `GET /journal/decision-trace` |
-| Trade lifecycle | Reachable as a read-only order timeline in the browser | `GET /execution/orders` |
+| Runtime shell | Browser page is served from the backend runtime | `/ui` |
+| Runtime state | Read-only runtime summary is loaded automatically | `GET /system/state` |
+| Analysis trigger | Browser form submits a manual runtime analysis request | `POST /analysis/run` |
+| Analysis results | Returned run id and signals are rendered in-browser | `POST /analysis/run` response |
+| Strategy reference | Read-only strategy metadata table | `GET /strategies` |
+| Latest signals | Read-only signal list | `GET /signals` |
+| Journal artifact list | Read-only artifact browser | `GET /journal/artifacts` |
+| Journal artifact preview | Artifact content preview after selection | `GET /journal/artifacts/{run_id}/{artifact_name}` |
+| Decision trace | Read-only trace view for a selected artifact | `GET /journal/decision-trace` |
+| Trade lifecycle | Read-only order lifecycle view | `GET /execution/orders` |
 
-The following workbench sections are part of the bounded Phase 36 shell because they are visibly present in the current `/ui` page, but this contract does not require additional product behavior beyond their current repository-verifiable shell state:
-
-- Overview
-- Runtime Status
-- Analysis Runs
-- Screener
-- Audit Trail
-
-Within Phase 36, these shell sections may exist as placeholders or reserved panels. This contract does not elevate them into broader workflow commitments unless the repository already verifies that behavior.
-
-## Phase 36 Action Boundary
-Phase 36 is a browser activation phase, not a browser feature expansion phase.
-
-The contract requires browser reachability and bounded runtime inspection through `/ui`. It does not require:
-
-- watchlist CRUD
-- watchlist persistence or ranking
-- alerts, notifications, or messaging
-- Strategy Lab workflows
-- paper-trading product workflows
-- live trading workflows
-- broker integration
-- broader trading-desk expansion
-
-## Explicit Later-Phase Separation
-Phase 36 ends at the bounded `/ui` runtime contract described above.
-
-The following capabilities are explicitly outside this phase and remain separated into later roadmap work:
-
-- Phase 37: watchlist engine behavior such as watchlist CRUD, repeatable watchlist product workflow, persistence, ranking, and dedicated watchlist management UI
-- Phase 40: expanded trading-desk dashboard behavior such as richer opportunity dashboards, heatmaps, leaderboard-style views, and broader professional desk workflow
-
-If a browser feature depends on those capabilities, it is not part of Phase 36 unless the roadmap and repository evidence are updated in a later issue.
+The current `/ui` shell also visibly includes Overview, Runtime Status, Analysis Runs, Screener, and Audit Trail labels. Their presence in the shell is Phase 36 evidence only for browser activation and section visibility. It is not evidence of later product-scope completion unless separate repository artifacts verify that behavior.
 
 ## /owner Boundary
-`/owner` is out of scope for runtime use in Phase 36.
+`/owner` is outside the Phase 36 runtime contract.
 
 That means:
 
-- `/owner` is not a runtime entrypoint
+- `/owner` is not a runtime-served backend entrypoint
 - `/owner` is not an accepted alternative to `/ui`
-- `/owner` must not be cited as part of the Phase 36 runtime workflow
-- frontend development routing does not redefine the runtime contract
+- `/owner` must not be cited as the Phase 36 browser activation URL
+- frontend route definitions do not redefine the runtime contract
 
-## Verification Basis
-This contract is intentionally limited to behavior that is reviewable in the repository today.
+## Later-Phase Boundary
+Phase 36 stops at the bounded `/ui` workflow above.
 
+The following remain out of scope for this phase:
+
+- Phase 37 watchlist product behavior such as watchlist CRUD, persistence, ranking, or dedicated watchlist management UI
+- Phase 40 trading-desk expansion such as heatmaps, leaderboard views, richer opportunity dashboards, or a broader professional desk workflow
+- alerts or notifications
+- Strategy Lab workflows
+- paper-trading product workflows
+- live-trading workflows
+- broker integration
+
+If a browser claim depends on those capabilities, it belongs to a later issue and later evidence set.
+
+## Acceptance Evidence
+The following repository evidence is sufficient to support later Phase 36 status review without inventing extra scope:
+
+| Evidence area | Repository basis |
+| --- | --- |
+| Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` |
+| Browser workflow | `src/ui/index.html` loads `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and submits `POST /analysis/run` |
+| Route reachability tests | `tests/health_endpoint.py`, `src/api/test_operator_workbench_surface.py`, and `tests/test_ui_runtime_browser_flow.py` verify the `/ui` surface and its browser workflow |
+| Manual analysis behavior | `tests/test_api_manual_analysis_trigger.py` verifies the deterministic `POST /analysis/run` flow |
+| Scope guard | The implemented `/ui` page and the listed tests do not verify watchlist CRUD, trading-desk expansion, alerts, paper-trading product workflow, or live-trading workflow |
+
+## Review Checklist
 Reviewers should verify:
 
-1. `src/api/main.py` mounts `/ui` as the backend-served static runtime surface.
-2. `src/ui/index.html` identifies the page as the FastAPI-served workbench at `/ui`.
-3. `src/ui/index.html` fetches only the runtime data surfaces claimed in this contract.
-4. Existing tests verify the `/ui` route and the covered backend endpoints claimed here.
-5. No statement in this contract expands Phase 36 into watchlist, trading-desk, alerting, Strategy Lab, paper-trading product, live trading, or broker-integration scope.
+1. `src/api/main.py` still mounts `/ui` as the runtime-served browser surface.
+2. `src/ui/index.html` still implements the bounded Phase 36 workflow described here.
+3. `/owner` is not presented anywhere as a runtime-equivalent route.
+4. The docs remain silent on unimplemented watchlist, trading-desk, alerts, paper-trading product, and live-trading claims.
+5. Roadmap wording and runtime-facing wording both describe Phase 36 as bounded browser activation rather than later-phase feature completion.
 
 ## Outcome
-For Phase 36, the canonical browser runtime contract is:
+For Phase 36, the canonical runtime contract is:
 
 - enter through `/ui`
-- use the current backend-served browser workbench
-- inspect the currently reachable runtime data surfaces already wired into that page
-- stop before watchlist-engine and trading-desk expansion work that belongs to later phases
+- use the implemented browser workflow already served by the backend
+- inspect runtime data and trigger bounded manual analysis in-browser
+- stop before watchlist-engine and trading-desk feature expansion claimed by later phases
