@@ -22,6 +22,7 @@ Use this order:
 - [Paper trading boundary](paper_trading.md)
 
 ## UI Surfaces
+- [Phase 36 /ui web activation contract](ui/phase-36-web-activation-contract.md)
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
   - Runtime-served operator UI is `/ui`.
   - `/owner` is a frontend development-only route and not a runtime entrypoint.
@@ -54,6 +55,7 @@ The links below are navigation aids only. They do not redefine the authoritative
 ### Phase 17 Reference Materials
 Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap.
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
+- [Phase 36 /ui web activation contract](ui/phase-36-web-activation-contract.md)
 - [API guarantees](api/api_guarantees.md)
 - [External API happy path](api/external_api_happy_path.md)
 - [Public API boundary](api/public_api_boundary.md)
