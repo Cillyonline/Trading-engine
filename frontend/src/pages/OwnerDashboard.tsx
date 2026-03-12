@@ -82,12 +82,44 @@ function OwnerDashboard() {
   }
 
   return (
-    <main className="dashboard-layout">
-      <h1>Owner Dashboard</h1>
+    <main className="runtime-entry-layout">
+      <section className="runtime-entry-hero">
+        <div>
+          <p className="eyebrow">Phase 36 Runtime UI</p>
+          <h1>Browser Analysis Entrypoint</h1>
+          <p className="hero-copy">
+            Use <code>/ui</code> to launch the supported runtime analysis flow, review the selected
+            input set, and inspect the returned signal package.
+          </p>
+        </div>
+        <nav className="runtime-entry-nav" aria-label="Runtime entry navigation">
+          <a href="#run-analysis">Start Analysis</a>
+          <a href="#entry-flow">Entry Flow</a>
+          <a href="#analysis-results">Results</a>
+        </nav>
+      </section>
 
-      <section aria-label="manual-analysis-controls">
-        <h2>Manual Analysis</h2>
-        <form onSubmit={handleRunAnalysis}>
+      <section id="entry-flow" className="runtime-card-grid" aria-label="runtime-entry-flow">
+        <article className="runtime-card">
+          <h2>Primary workflow</h2>
+          <p>Provide an ingestion run, market, symbol, strategy, and lookback window.</p>
+        </article>
+        <article className="runtime-card">
+          <h2>Runtime-only scope</h2>
+          <p>This surface is limited to browser analysis. It does not expose owner, broker, or lab workflows.</p>
+        </article>
+        <article className="runtime-card">
+          <h2>Expected outcome</h2>
+          <p>Each run returns the canonical analysis run id together with any signals emitted for the request.</p>
+        </article>
+      </section>
+
+      <section id="run-analysis" className="runtime-card" aria-label="manual-analysis-controls">
+        <div className="section-heading">
+          <h2>Run Analysis</h2>
+          <p>Submit the supported browser analysis request directly from the runtime entrypoint.</p>
+        </div>
+        <form className="runtime-analysis-form" onSubmit={handleRunAnalysis}>
           <label htmlFor="manual-analysis-ingestion-run-id">Ingestion Run ID</label>
           <input
             id="manual-analysis-ingestion-run-id"
@@ -135,49 +167,72 @@ function OwnerDashboard() {
           <button type="submit" disabled={isLoading}>
             Run Analysis
           </button>
-          {isLoading ? <p>Loading...</p> : null}
+          {isLoading ? <p className="form-status">Loading...</p> : null}
         </form>
       </section>
 
-      {error ? <p role="alert">{error}</p> : null}
+      {error ? <p role="alert" className="runtime-alert">{error}</p> : null}
 
-      {result ? (
-        <section aria-label="manual-analysis-results">
+      <section id="analysis-results" className="runtime-card" aria-label="manual-analysis-results">
+        <div className="section-heading">
           <h2>Analysis Results</h2>
-          <p>Analysis Run ID: {result.analysis_run_id}</p>
-          <p>Ingestion Run ID: {result.ingestion_run_id}</p>
-          <p>Symbol: {result.symbol}</p>
-          <p>Strategy: {result.strategy}</p>
-          {result.signals.length === 0 ? (
-            <p>No signals returned.</p>
-          ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th>Strategy</th>
-                  <th>Direction</th>
-                  <th>Stage</th>
-                  <th>Score</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.signals.map((signal, index) => (
-                  <tr key={`${signal.strategy}-${signal.timestamp ?? index}-${index}`}>
-                    <td>{signal.symbol ?? result.symbol}</td>
-                    <td>{signal.strategy}</td>
-                    <td>{signal.direction ?? '-'}</td>
-                    <td>{signal.stage ?? '-'}</td>
-                    <td>{typeof signal.score === 'number' ? signal.score.toFixed(2) : '-'}</td>
-                    <td>{signal.timestamp ?? '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      ) : null}
+          <p>Review the canonical response returned by the runtime analysis endpoint.</p>
+        </div>
+        {result ? (
+          <>
+            <dl className="result-summary">
+              <div>
+                <dt>Analysis Run ID</dt>
+                <dd>{result.analysis_run_id}</dd>
+              </div>
+              <div>
+                <dt>Ingestion Run ID</dt>
+                <dd>{result.ingestion_run_id}</dd>
+              </div>
+              <div>
+                <dt>Symbol</dt>
+                <dd>{result.symbol}</dd>
+              </div>
+              <div>
+                <dt>Strategy</dt>
+                <dd>{result.strategy}</dd>
+              </div>
+            </dl>
+            {result.signals.length === 0 ? (
+              <p>No signals returned.</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Strategy</th>
+                      <th>Direction</th>
+                      <th>Stage</th>
+                      <th>Score</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.signals.map((signal, index) => (
+                      <tr key={`${signal.strategy}-${signal.timestamp ?? index}-${index}`}>
+                        <td>{signal.symbol ?? result.symbol}</td>
+                        <td>{signal.strategy}</td>
+                        <td>{signal.direction ?? '-'}</td>
+                        <td>{signal.stage ?? '-'}</td>
+                        <td>{typeof signal.score === 'number' ? signal.score.toFixed(2) : '-'}</td>
+                        <td>{signal.timestamp ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="empty-state">No analysis has been run yet from this browser session.</p>
+        )}
+      </section>
     </main>
   );
 }

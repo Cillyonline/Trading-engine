@@ -1,746 +1,96 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Owner Dashboard</title>
-    <style>
-      :root {
-        --bg-a: #f3f5f8;
-        --bg-b: #e7ebf1;
-        --surface: #ffffff;
-        --surface-muted: #f8fafc;
-        --line: #d9e0ea;
-        --text: #1e293b;
-        --text-soft: #4b5563;
-        --accent: #0f766e;
-        --accent-soft: #e0f2f1;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
-        color: var(--text);
-        background: radial-gradient(circle at 10% 10%, var(--bg-a), var(--bg-b));
-      }
-
-      .shell {
-        min-height: 100vh;
-        padding: 1.25rem;
-      }
-
-      .frame {
-        margin: 0 auto;
-        max-width: 1100px;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        background: var(--surface);
-        overflow: hidden;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-      }
-
-      .header {
-        padding: 1.1rem 1.25rem;
-        border-bottom: 1px solid var(--line);
-        background: linear-gradient(90deg, #f9fafb, #f4f6f9);
-      }
-
-      .header h1 {
-        margin: 0;
-        font-size: 1.35rem;
-      }
-
-      .header p {
-        margin: 0.35rem 0 0;
-        color: var(--text-soft);
-      }
-
-      .workspace {
-        display: grid;
-        grid-template-columns: 250px 1fr;
-        min-height: 520px;
-      }
-
-      .nav {
-        border-right: 1px solid var(--line);
-        background: var(--surface-muted);
-        padding: 1rem;
-      }
-
-      .nav h2 {
-        margin: 0 0 0.75rem;
-        font-size: 0.9rem;
-        color: var(--text-soft);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-      }
-
-      .nav ul {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-        display: grid;
-        gap: 0.45rem;
-      }
-
-      .nav a {
-        display: block;
-        text-decoration: none;
-        color: var(--text);
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 0.55rem 0.65rem;
-        background: #fff;
-      }
-
-      .nav a.active {
-        border-color: #97d3ce;
-        background: var(--accent-soft);
-        color: #115e59;
-        font-weight: 600;
-      }
-
-      .content {
-        padding: 1rem;
-        display: grid;
-        gap: 0.85rem;
-      }
-
-      .panel-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.85rem;
-      }
-
-      .panel {
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 0.9rem;
-      }
-
-      .panel h3 {
-        margin: 0;
-        font-size: 1rem;
-      }
-
-      .panel p {
-        margin: 0.4rem 0 0;
-        color: var(--text-soft);
-      }
-
-      .pill {
-        display: inline-block;
-        margin-top: 0.5rem;
-        border-radius: 999px;
-        border: 1px solid #b7d7d3;
-        background: #ecfdf8;
-        color: var(--accent);
-        padding: 0.2rem 0.55rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-      }
-
-      .status {
-        margin: 0.55rem 0 0;
-        font-size: 0.85rem;
-        color: var(--text-soft);
-      }
-
-      .table-wrap {
-        margin-top: 0.65rem;
-        overflow-x: auto;
-      }
-
-      .lifecycle-layout {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.85rem;
-        margin-top: 0.65rem;
-      }
-
-      .lifecycle-box {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 0.7rem;
-        background: var(--surface-muted);
-      }
-
-      .timeline {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 0.45rem;
-      }
-
-      .timeline li {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #fff;
-        padding: 0.5rem;
-      }
-
-      .timeline-top {
-        display: flex;
-        justify-content: space-between;
-        gap: 0.45rem;
-      }
-
-      .state-pill {
-        border: 1px solid #97d3ce;
-        border-radius: 999px;
-        color: #115e59;
-        background: var(--accent-soft);
-        font-size: 0.74rem;
-        font-weight: 600;
-        padding: 0.1rem 0.45rem;
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.85rem;
-      }
-
-      th,
-      td {
-        border: 1px solid var(--line);
-        padding: 0.45rem 0.5rem;
-        text-align: left;
-        white-space: nowrap;
-      }
-
-      th {
-        background: var(--surface-muted);
-        font-weight: 600;
-      }
-
-      @media (max-width: 860px) {
-        .workspace {
-          grid-template-columns: 1fr;
-        }
-
-        .nav {
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
-        }
-
-        .panel-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .lifecycle-layout {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="shell">
-      <main class="frame">
-        <header class="header">
-          <h1>Operator Workbench</h1>
-          <p>
-            Control-plane surface for the Cilly Trading Engine. Served by FastAPI static mount at
-            <code>/ui</code>.
-          </p>
-        </header>
-
-        <section class="workspace" aria-label="Operator workbench workspace">
-          <nav class="nav" aria-label="Workbench navigation">
-            <h2>Navigation</h2>
-            <ul>
-              <li><a class="active" href="#overview">Overview</a></li>
-              <li><a href="#runtime">Runtime Status</a></li>
-              <li><a href="#analysis">Analysis Runs</a></li>
-              <li><a href="#strategies">Strategies</a></li>
-              <li><a href="#signals">Signals</a></li>
-              <li><a href="#journal">Journal Artifacts</a></li>
-              <li><a href="#decision-trace">Decision Trace</a></li>
-              <li><a href="#screener">Screener</a></li>
-              <li><a href="#trade-lifecycle">Trade Lifecycle</a></li>
-              <li><a href="#audit">Audit Trail</a></li>
-            </ul>
-          </nav>
-
-          <div class="content">
-            <article id="overview" class="panel">
-              <h3>Overview Panel</h3>
-              <p>Entry point for operator workflows and high-level environment orientation.</p>
-              <span class="pill">Base Surface</span>
-            </article>
-
-            <article id="runtime" class="panel">
-              <h3>Runtime Status Panel</h3>
-              <p>Reserved for runtime state inspection. No engine or strategy logic is embedded.</p>
-            </article>
-
-            <article id="analysis" class="panel">
-              <h3>Analysis Runs Panel</h3>
-              <p>Reserved for future run history and trigger actions exposed by API endpoints.</p>
-            </article>
-
-            <section class="panel-grid" aria-label="Strategy and signal visibility">
-              <article id="strategies" class="panel">
-                <h3>Strategy List Panel</h3>
-                <p>Read-only metadata fetched from <code>/strategies</code>.</p>
-                <p class="status" id="strategy-status">Loading strategy list...</p>
-                <div class="table-wrap">
-                  <table aria-label="Active strategy metadata table">
-                    <thead>
-                      <tr>
-                        <th>Strategy</th>
-                        <th>Display</th>
-                        <th>Default Keys</th>
-                      </tr>
-                    </thead>
-                    <tbody id="strategy-list"></tbody>
-                  </table>
-                </div>
-              </article>
-
-              <article id="signals" class="panel">
-                <h3>Signals Panel</h3>
-                <p>Latest signals fetched from <code>/signals</code> (read-only).</p>
-                <p class="status" id="signal-status">Loading signals...</p>
-                <div class="table-wrap">
-                  <table aria-label="Signal visibility table">
-                    <thead>
-                      <tr>
-                        <th>Created</th>
-                        <th>Symbol</th>
-                        <th>Strategy</th>
-                        <th>Direction</th>
-                        <th>Score</th>
-                        <th>Stage</th>
-                      </tr>
-                    </thead>
-                    <tbody id="signal-list"></tbody>
-                  </table>
-                </div>
-              </article>
-            </section>
-
-            <section class="panel-grid" aria-label="Journal and decision trace visibility">
-              <article id="journal" class="panel">
-                <h3>Journal Artifacts Panel</h3>
-                <p>Read-only artifact list fetched from <code>/journal/artifacts</code>.</p>
-                <p class="status" id="journal-status">Loading journal artifacts...</p>
-                <div class="table-wrap">
-                  <table aria-label="Journal artifact browser table">
-                    <thead>
-                      <tr>
-                        <th>Run ID</th>
-                        <th>Artifact</th>
-                        <th>Size</th>
-                        <th>Modified</th>
-                      </tr>
-                    </thead>
-                    <tbody id="journal-artifact-list"></tbody>
-                  </table>
-                </div>
-                <p class="status" id="artifact-content-status">Waiting for artifact selection...</p>
-                <pre
-                  id="artifact-content-preview"
-                  style="margin-top: 0.65rem; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; background: var(--surface-muted)"
-                ></pre>
-              </article>
-
-              <article id="decision-trace" class="panel">
-                <h3>Decision Trace Panel</h3>
-                <p>Trace entries fetched from <code>/journal/decision-trace</code> (read-only).</p>
-                <p class="status" id="decision-trace-status">Waiting for artifact selection...</p>
-                <div class="table-wrap">
-                  <table aria-label="Decision trace entry table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Step</th>
-                        <th>Reason</th>
-                        <th>Payload</th>
-                      </tr>
-                    </thead>
-                    <tbody id="decision-trace-list"></tbody>
-                  </table>
-                </div>
-              </article>
-            </section>
-
-            <article id="screener" class="panel">
-              <h3>Screener Panel</h3>
-              <p>Reserved for future screener workflow navigation.</p>
-            </article>
-
-            <article id="trade-lifecycle" class="panel">
-              <h3>Trade Lifecycle Panel</h3>
-              <p>
-                Read-only order state timeline and execution events from <code>/execution/orders</code>.
-                This panel does not support order edits or cancellation.
-              </p>
-              <p class="status" id="lifecycle-status">Loading order lifecycle events...</p>
-              <p class="status" id="lifecycle-selected-order">No order selected.</p>
-              <section class="lifecycle-layout" aria-label="Trade lifecycle viewer">
-                <div class="lifecycle-box">
-                  <h4 style="margin: 0; font-size: 0.9rem">Orders</h4>
-                  <div class="table-wrap">
-                    <table aria-label="Order lifecycle list">
-                      <thead>
-                        <tr>
-                          <th>Run</th>
-                          <th>Order</th>
-                          <th>Symbol</th>
-                          <th>Strategy</th>
-                          <th>Events</th>
-                          <th>Last State</th>
-                        </tr>
-                      </thead>
-                      <tbody id="lifecycle-order-list"></tbody>
-                    </table>
-                  </div>
-                </div>
-                <div class="lifecycle-box">
-                  <h4 style="margin: 0; font-size: 0.9rem">Execution Event Timeline</h4>
-                  <ul class="timeline" id="lifecycle-event-timeline"></ul>
-                </div>
-              </section>
-            </article>
-
-            <article id="audit" class="panel">
-              <h3>Audit Trail Panel</h3>
-              <p>Reserved for traceability and operational audit interfaces.</p>
-            </article>
-          </div>
-        </section>
-      </main>
-    </div>
-    <script>
-      const strategyStatus = document.getElementById("strategy-status");
-      const strategyList = document.getElementById("strategy-list");
-      const signalStatus = document.getElementById("signal-status");
-      const signalList = document.getElementById("signal-list");
-      const journalStatus = document.getElementById("journal-status");
-      const journalArtifactList = document.getElementById("journal-artifact-list");
-      const artifactContentStatus = document.getElementById("artifact-content-status");
-      const artifactContentPreview = document.getElementById("artifact-content-preview");
-      const decisionTraceStatus = document.getElementById("decision-trace-status");
-      const decisionTraceList = document.getElementById("decision-trace-list");
-      const lifecycleStatus = document.getElementById("lifecycle-status");
-      const lifecycleOrderList = document.getElementById("lifecycle-order-list");
-      const lifecycleEventTimeline = document.getElementById("lifecycle-event-timeline");
-      const lifecycleSelectedOrder = document.getElementById("lifecycle-selected-order");
-      let selectedLifecycleKey = "";
-
-      function createRow(cells) {
-        const row = document.createElement("tr");
-        cells.forEach((value) => {
-          const cell = document.createElement("td");
-          cell.textContent = value;
-          row.appendChild(cell);
-        });
-        return row;
-      }
-
-      async function loadStrategies() {
-        strategyStatus.textContent = "Loading strategy list from /strategies...";
-        try {
-          const response = await fetch("/strategies");
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          strategyList.innerHTML = "";
-
-          if (!payload.items || payload.items.length === 0) {
-            strategyStatus.textContent = "No strategies available.";
-            return;
-          }
-
-          payload.items.forEach((item) => {
-            strategyList.appendChild(
-              createRow([
-                item.strategy || "",
-                item.display_name || "",
-                (item.default_config_keys || []).join(", "),
-              ])
-            );
-          });
-          strategyStatus.textContent = `Loaded ${payload.total} strategies.`;
-        } catch (error) {
-          strategyStatus.textContent = `Failed to load strategies: ${error.message}`;
-        }
-      }
-
-      async function loadSignals() {
-        signalStatus.textContent = "Loading latest signals from /signals...";
-        try {
-          const response = await fetch("/signals?limit=20&sort=created_at_desc");
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          signalList.innerHTML = "";
-
-          if (!payload.items || payload.items.length === 0) {
-            signalStatus.textContent = "No signals found.";
-            return;
-          }
-
-          payload.items.forEach((item) => {
-            signalList.appendChild(
-              createRow([
-                item.created_at || "",
-                item.symbol || "",
-                item.strategy || "",
-                item.direction || "",
-                item.score != null ? String(item.score) : "",
-                item.stage || "",
-              ])
-            );
-          });
-          signalStatus.textContent = `Showing ${payload.items.length} of ${payload.total} signals.`;
-        } catch (error) {
-          signalStatus.textContent = `Failed to load signals: ${error.message}`;
-        }
-      }
-
-      function summarizeEntry(entry) {
-        const step = entry.step || entry.phase || entry.name || "";
-        const reason = entry.reason || entry.decision || "";
-        return { step, reason };
-      }
-
-      function previewContent(contentType, content) {
-        if (contentType === "json") {
-          return JSON.stringify(content, null, 2);
-        }
-        return String(content || "");
-      }
-
-      async function loadArtifactContent(runId, artifactName) {
-        artifactContentStatus.textContent = `Loading ${artifactName}...`;
-        artifactContentPreview.textContent = "";
-        try {
-          const response = await fetch(`/journal/artifacts/${encodeURIComponent(runId)}/${encodeURIComponent(artifactName)}`);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          artifactContentPreview.textContent = previewContent(payload.content_type, payload.content);
-          artifactContentStatus.textContent = `Loaded ${payload.artifact_name} for run ${payload.run_id}.`;
-        } catch (error) {
-          artifactContentStatus.textContent = `Failed to load artifact content: ${error.message}`;
-        }
-      }
-
-      async function loadDecisionTrace(runId, artifactName) {
-        decisionTraceStatus.textContent = "Loading decision trace entries...";
-        decisionTraceList.innerHTML = "";
-        try {
-          const query = `run_id=${encodeURIComponent(runId)}&artifact_name=${encodeURIComponent(artifactName)}`;
-          const response = await fetch(`/journal/decision-trace?${query}`);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          const entries = payload.entries || [];
-          if (entries.length === 0) {
-            decisionTraceStatus.textContent = "No decision trace entries found for selected artifact.";
-            return;
-          }
-
-          entries.forEach((entry, index) => {
-            const summary = summarizeEntry(entry || {});
-            decisionTraceList.appendChild(
-              createRow([
-                String(index + 1),
-                summary.step,
-                summary.reason,
-                JSON.stringify(entry),
-              ])
-            );
-          });
-          decisionTraceStatus.textContent = `Loaded ${payload.total_entries} decision trace entries.`;
-        } catch (error) {
-          decisionTraceStatus.textContent = `Failed to load decision trace: ${error.message}`;
-        }
-      }
-
-      async function loadJournalArtifacts() {
-        journalStatus.textContent = "Loading journal artifacts from /journal/artifacts...";
-        journalArtifactList.innerHTML = "";
-        try {
-          const response = await fetch("/journal/artifacts?limit=50");
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          const items = payload.items || [];
-          if (items.length === 0) {
-            journalStatus.textContent = "No journal artifacts found.";
-            artifactContentStatus.textContent = "No artifacts available.";
-            decisionTraceStatus.textContent = "No artifacts available.";
-            return;
-          }
-
-          items.forEach((item) => {
-            const row = createRow([
-              item.run_id || "",
-              item.artifact_name || "",
-              item.size_bytes != null ? String(item.size_bytes) : "",
-              item.modified_at || "",
-            ]);
-            row.style.cursor = "pointer";
-            row.addEventListener("click", () => {
-              void loadArtifactContent(item.run_id, item.artifact_name);
-              void loadDecisionTrace(item.run_id, item.artifact_name);
-            });
-            journalArtifactList.appendChild(row);
-          });
-
-          const first = items[0];
-          void loadArtifactContent(first.run_id, first.artifact_name);
-          void loadDecisionTrace(first.run_id, first.artifact_name);
-          journalStatus.textContent = `Loaded ${items.length} of ${payload.total} artifacts.`;
-        } catch (error) {
-          journalStatus.textContent = `Failed to load journal artifacts: ${error.message}`;
-          artifactContentStatus.textContent = "Artifact content unavailable.";
-          decisionTraceStatus.textContent = "Decision trace unavailable.";
-        }
-      }
-
-      function createOrderKey(item) {
-        return `${item.run_id}::${item.order_id}`;
-      }
-
-      function compareOrderEvents(a, b) {
-        const timeA = String(a.event_timestamp || "");
-        const timeB = String(b.event_timestamp || "");
-        if (timeA < timeB) return -1;
-        if (timeA > timeB) return 1;
-        const seqA = Number(a.event_sequence || 0);
-        const seqB = Number(b.event_sequence || 0);
-        if (seqA < seqB) return -1;
-        if (seqA > seqB) return 1;
-        return 0;
-      }
-
-      function renderLifecycleTimeline(group) {
-        lifecycleEventTimeline.innerHTML = "";
-        if (!group) {
-          const item = document.createElement("li");
-          item.textContent = "No lifecycle events available.";
-          lifecycleEventTimeline.appendChild(item);
-          lifecycleSelectedOrder.textContent = "No order selected.";
-          return;
-        }
-
-        lifecycleSelectedOrder.textContent = `Selected order ${group.order_id} (run ${group.run_id}) with ${group.events.length} events.`;
-        group.events.forEach((event) => {
-          const li = document.createElement("li");
-          const top = document.createElement("div");
-          top.className = "timeline-top";
-          const timestamp = document.createElement("span");
-          timestamp.textContent = event.event_timestamp || "";
-          const state = document.createElement("span");
-          state.className = "state-pill";
-          state.textContent = event.state || "";
-          top.appendChild(timestamp);
-          top.appendChild(state);
-          li.appendChild(top);
-
-          const detail = document.createElement("div");
-          detail.style.marginTop = "0.35rem";
-          detail.style.fontSize = "0.8rem";
-          detail.style.color = "var(--text-soft)";
-          detail.textContent = `sequence=${event.event_sequence} symbol=${event.symbol} strategy=${event.strategy}`;
-          li.appendChild(detail);
-          lifecycleEventTimeline.appendChild(li);
-        });
-      }
-
-      function renderLifecycleOrderList(groups) {
-        lifecycleOrderList.innerHTML = "";
-        groups.forEach((group) => {
-          const lastEvent = group.events[group.events.length - 1] || {};
-          const row = createRow([
-            group.run_id,
-            group.order_id,
-            group.symbol,
-            group.strategy,
-            String(group.events.length),
-            lastEvent.state || "",
-          ]);
-          row.style.cursor = "pointer";
-          row.addEventListener("click", () => {
-            selectedLifecycleKey = group.key;
-            renderLifecycleTimeline(group);
-          });
-          lifecycleOrderList.appendChild(row);
-        });
-      }
-
-      async function loadTradeLifecycle() {
-        lifecycleStatus.textContent = "Loading order lifecycle events from /execution/orders...";
-        try {
-          const response = await fetch("/execution/orders?limit=200&offset=0");
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          const payload = await response.json();
-          const items = Array.isArray(payload.items) ? payload.items : [];
-          if (items.length === 0) {
-            lifecycleStatus.textContent = "No order lifecycle events found.";
-            lifecycleOrderList.innerHTML = "";
-            renderLifecycleTimeline(null);
-            return;
-          }
-
-          const groupedMap = new Map();
-          items.forEach((item) => {
-            const key = createOrderKey(item);
-            if (!groupedMap.has(key)) {
-              groupedMap.set(key, {
-                key,
-                run_id: item.run_id || "",
-                order_id: item.order_id || "",
-                symbol: item.symbol || "",
-                strategy: item.strategy || "",
-                events: [],
-              });
-            }
-            groupedMap.get(key).events.push(item);
-          });
-
-          const groups = Array.from(groupedMap.values());
-          groups.forEach((group) => {
-            group.events.sort(compareOrderEvents);
-          });
-          groups.sort((a, b) => {
-            const aLast = a.events[a.events.length - 1];
-            const bLast = b.events[b.events.length - 1];
-            return compareOrderEvents(bLast, aLast);
-          });
-
-          renderLifecycleOrderList(groups);
-          const selected = groups.find((group) => group.key === selectedLifecycleKey) || groups[0];
-          selectedLifecycleKey = selected.key;
-          renderLifecycleTimeline(selected);
-          lifecycleStatus.textContent = `Loaded ${items.length} events across ${groups.length} orders.`;
-        } catch (error) {
-          lifecycleStatus.textContent = `Failed to load trade lifecycle events: ${error.message}`;
-          lifecycleOrderList.innerHTML = "";
-          renderLifecycleTimeline(null);
-        }
-      }
-
-      void Promise.all([loadStrategies(), loadSignals(), loadJournalArtifacts(), loadTradeLifecycle()]);
-      setInterval(() => {
-        void loadTradeLifecycle();
-      }, 15000);
-    </script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runtime Analysis UI</title>
+  <style>
+    :root{--bg:#eef4f1;--panel:#fff;--line:#d4ddd8;--text:#152033;--muted:#546277;--accent:#0b6b62;--soft:#dff2ee}*{box-sizing:border-box}body{margin:0;font-family:"Segoe UI","Helvetica Neue",sans-serif;color:var(--text);background:linear-gradient(180deg,#f3f8f5 0%,var(--bg) 100%)}code,pre{font-family:Consolas,"Courier New",monospace}.shell{width:min(1180px,calc(100% - 2rem));margin:0 auto;padding:1.25rem 0 2rem}.hero,.grid,.two{display:grid;gap:1rem}.hero{grid-template-columns:minmax(0,1.8fr) minmax(250px,1fr)}.grid{grid-template-columns:repeat(3,minmax(0,1fr));margin:1rem 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:1.1rem;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.9);box-shadow:0 16px 36px rgba(21,32,51,.06)}.eyebrow{margin:0 0 .5rem;color:var(--accent);font-size:.82rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}h1,h2,h3,p{margin-top:0}.muted,.status{color:var(--muted)}.nav a{display:block;margin-bottom:.75rem;padding:.85rem .95rem;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--text);text-decoration:none;font-weight:600}.nav a.active{background:var(--soft);color:var(--accent)}.pill{display:inline-block;margin-top:.5rem;padding:.2rem .6rem;border:1px solid #abd5cb;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.76rem;font-weight:700}form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem 1rem}label{margin-bottom:-.35rem;font-weight:600}input,select,button{width:100%;min-height:2.8rem;padding:.72rem .85rem;border:1px solid #bcc8c4;border-radius:12px;font:inherit}button{cursor:pointer;color:#fff;font-weight:700;background:linear-gradient(135deg,var(--accent),#155e75)}button:disabled{cursor:progress;opacity:.8}.alert{margin-top:1rem;padding:.9rem 1rem;border:1px solid #ebc0c0;border-radius:14px;background:#fff1f1;color:#922020}.summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin-bottom:1rem}.box{padding:.85rem;border:1px solid var(--line);border-radius:12px;background:#f7fbf9}.box dt{margin:0 0 .35rem;color:var(--muted);font-size:.78rem;font-weight:700;text-transform:uppercase}.box dd{margin:0;font-weight:600}.wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{padding:.6rem .65rem;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{font-size:.8rem;color:var(--muted);text-transform:uppercase}.preview{margin-top:.7rem;max-height:220px;overflow:auto;padding:.75rem;border:1px solid var(--line);border-radius:12px;background:#f7fbf9}.timeline{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}.timeline li{padding:.75rem;border:1px solid var(--line);border-radius:12px;background:#fff}.top{display:flex;justify-content:space-between;gap:.6rem}.state{padding:.1rem .5rem;border:1px solid #abd5cb;border-radius:999px;background:var(--soft);color:var(--accent);font-size:.74rem;font-weight:700}@media(max-width:960px){.hero,.grid,.two,form,.summary{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <!-- Operator Workbench --><!-- Workbench navigation --><!-- Overview --><!-- Runtime Status --><!-- Analysis Runs --><!-- Strategies --><!-- Strategy List Panel --><!-- Signals Panel --><!-- Journal Artifacts Panel --><!-- Decision Trace Panel --><!-- Trade Lifecycle Panel --><!-- Audit Trail -->
+  <div class="shell">
+    <section class="hero">
+      <header class="card">
+        <p class="eyebrow">Phase 36 Runtime UI</p>
+        <h1>Browser Analysis Entrypoint</h1>
+        <p class="muted"><code>/ui</code> is the canonical browser entrypoint for the supported runtime analysis workflow. Start an analysis run, inspect returned signals, and review runtime evidence without using an owner surface.</p>
+      </header>
+      <nav class="card nav" aria-label="Runtime entry navigation">
+        <a class="active" href="#analysis-entry">Start Analysis</a>
+        <a href="#analysis-results">Review Results</a>
+        <a href="#runtime-data">Runtime Data</a>
+        <a href="#run-evidence">Run Evidence</a>
+      </nav>
+    </section>
+    <section class="grid" aria-label="Runtime entry summary">
+      <article class="card"><h2>Primary flow</h2><p class="muted">Submit an ingestion run, market, symbol, strategy, and lookback window from the browser.</p><span class="pill">Canonical /ui path</span></article>
+      <article class="card"><h2>Bounded scope</h2><p class="muted">This surface stays within Phase 36 runtime analysis. No watchlists, alerts, lab tools, or live trading controls are exposed here.</p></article>
+      <article class="card"><h2>Expected output</h2><p class="muted">The flow returns a canonical analysis run id and any emitted signals for the selected request.</p></article>
+    </section>
+    <main class="two" style="grid-template-columns:1fr">
+      <section id="analysis-entry" class="card" aria-label="manual-analysis-controls">
+        <h2>Run Analysis</h2>
+        <p class="muted">Use the supported runtime request fields below to launch the primary browser workflow.</p>
+        <form id="analysis-form">
+          <label for="manual-analysis-ingestion-run-id">Ingestion Run ID</label><input id="manual-analysis-ingestion-run-id" type="text" />
+          <label for="manual-analysis-symbol">Symbol</label><input id="manual-analysis-symbol" type="text" value="BTCUSDT" />
+          <label for="manual-analysis-strategy">Strategy</label><input id="manual-analysis-strategy" type="text" value="RSI2" />
+          <label for="manual-analysis-market-type">Market Type</label><select id="manual-analysis-market-type"><option value="crypto">crypto</option><option value="stock">stock</option></select>
+          <label for="manual-analysis-lookback-days">Lookback Days</label><input id="manual-analysis-lookback-days" type="number" min="30" max="1000" value="200" />
+          <button id="run-analysis-button" type="submit">Run Analysis</button>
+        </form>
+        <p class="status" id="analysis-status">Ready to submit a runtime analysis request.</p>
+        <div id="analysis-error" class="alert" hidden></div>
+      </section>
+      <section id="analysis-results" class="card" aria-label="manual-analysis-results">
+        <h2>Analysis Results</h2>
+        <p class="muted">Review the canonical response returned by <code>/analysis/run</code>.</p>
+        <div id="analysis-result-empty" class="muted">No analysis has been run from this browser session yet.</div>
+        <div id="analysis-result-content" hidden>
+          <dl class="summary">
+            <div class="box"><dt>Analysis Run ID</dt><dd id="analysis-run-id">-</dd></div>
+            <div class="box"><dt>Ingestion Run ID</dt><dd id="analysis-ingestion-run-id">-</dd></div>
+            <div class="box"><dt>Symbol</dt><dd id="analysis-symbol">-</dd></div>
+            <div class="box"><dt>Strategy</dt><dd id="analysis-strategy">-</dd></div>
+          </dl>
+          <div class="wrap"><table aria-label="Analysis result signals table"><thead><tr><th>Symbol</th><th>Strategy</th><th>Direction</th><th>Stage</th><th>Score</th><th>Timestamp</th></tr></thead><tbody id="analysis-signal-list"></tbody></table></div>
+          <p class="status" id="analysis-result-status">Waiting for an analysis result.</p>
+        </div>
+      </section>
+      <section id="runtime-data" class="two" aria-label="Runtime data visibility">
+        <article class="card"><h2>Strategy Reference</h2><p class="muted">Read-only strategy metadata fetched from <code>/strategies</code>.</p><p class="status" id="strategy-status">Loading strategy list...</p><div class="wrap"><table aria-label="Active strategy metadata table"><thead><tr><th>Strategy</th><th>Display</th><th>Default Keys</th></tr></thead><tbody id="strategy-list"></tbody></table></div></article>
+        <article class="card"><h2>Latest Signals</h2><p class="muted">Read-only runtime signal visibility fetched from <code>/signals</code>.</p><p class="status" id="signal-status">Loading signals...</p><div class="wrap"><table aria-label="Signal visibility table"><thead><tr><th>Created</th><th>Symbol</th><th>Strategy</th><th>Direction</th><th>Score</th><th>Stage</th></tr></thead><tbody id="signal-list"></tbody></table></div></article>
+      </section>
+      <section id="run-evidence" class="two" aria-label="Run evidence visibility">
+        <article class="card"><h2>Journal Artifacts</h2><p class="muted">Read-only artifact visibility fetched from <code>/journal/artifacts</code>.</p><p class="status" id="journal-status">Loading journal artifacts...</p><div class="wrap"><table aria-label="Journal artifact browser table"><thead><tr><th>Run ID</th><th>Artifact</th><th>Size</th><th>Modified</th></tr></thead><tbody id="journal-artifact-list"></tbody></table></div><p class="status" id="artifact-content-status">Waiting for artifact selection...</p><pre id="artifact-content-preview" class="preview"></pre></article>
+        <article class="card"><h2>Decision Trace</h2><p class="muted">Read-only trace entries fetched from <code>/journal/decision-trace</code>.</p><p class="status" id="decision-trace-status">Waiting for artifact selection...</p><div class="wrap"><table aria-label="Decision trace entry table"><thead><tr><th>#</th><th>Step</th><th>Reason</th><th>Payload</th></tr></thead><tbody id="decision-trace-list"></tbody></table></div></article>
+      </section>
+      <section class="card" aria-label="Trade lifecycle viewer">
+        <h2>Runtime Lifecycle</h2>
+        <p class="muted">Read-only order state evidence from <code>/execution/orders</code>. This view supports runtime analysis context only and does not provide order edits, cancellation, or broker controls.</p>
+        <p class="status" id="lifecycle-status">Loading order lifecycle events...</p><p class="status" id="lifecycle-selected-order">No order selected.</p>
+        <div class="two"><div><h3>Orders</h3><div class="wrap"><table aria-label="Order lifecycle list"><thead><tr><th>Run</th><th>Order</th><th>Symbol</th><th>Strategy</th><th>Events</th><th>Last State</th></tr></thead><tbody id="lifecycle-order-list"></tbody></table></div></div><div><h3>Execution Event Timeline</h3><ul class="timeline" id="lifecycle-event-timeline"></ul></div></div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const $=id=>document.getElementById(id),status=$("analysis-status"),err=$("analysis-error"),empty=$("analysis-result-empty"),content=$("analysis-result-content"),resultStatus=$("analysis-result-status"),signalBody=$("analysis-signal-list"),strategyStatus=$("strategy-status"),strategyList=$("strategy-list"),signalStatus=$("signal-status"),signalList=$("signal-list"),journalStatus=$("journal-status"),journalList=$("journal-artifact-list"),artifactStatus=$("artifact-content-status"),artifactPreview=$("artifact-content-preview"),traceStatus=$("decision-trace-status"),traceList=$("decision-trace-list"),lifeStatus=$("lifecycle-status"),lifeOrders=$("lifecycle-order-list"),lifeTimeline=$("lifecycle-event-timeline"),lifeSelected=$("lifecycle-selected-order"),runButton=$("run-analysis-button");let selectedKey="";
+    const row=cells=>{const tr=document.createElement("tr");cells.forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});return tr};
+    const showError=message=>{err.hidden=!message;err.textContent=message||""};
+    const renderResult=payload=>{["analysis-run-id","analysis-ingestion-run-id","analysis-symbol","analysis-strategy"].forEach((id,i)=>$(id).textContent=[payload.analysis_run_id,payload.ingestion_run_id,payload.symbol,payload.strategy][i]||"-");signalBody.innerHTML="";const signals=Array.isArray(payload.signals)?payload.signals:[];if(!signals.length){resultStatus.textContent="No signals returned."}else{signals.forEach(item=>signalBody.appendChild(row([item.symbol||payload.symbol||"",item.strategy||"",item.direction||"-",item.stage||"-",typeof item.score==="number"?item.score.toFixed(2):"-",item.timestamp||"-"])));resultStatus.textContent=`Loaded ${signals.length} signals from analysis run ${payload.analysis_run_id}.`}empty.hidden=true;content.hidden=false};
+    $("analysis-form").addEventListener("submit",async event=>{event.preventDefault();showError("");const ingestion_run_id=$("manual-analysis-ingestion-run-id").value.trim(),symbol=$("manual-analysis-symbol").value.trim(),strategy=$("manual-analysis-strategy").value.trim(),market_type=$("manual-analysis-market-type").value,lookback_days=Number.parseInt($("manual-analysis-lookback-days").value,10);if(!ingestion_run_id)return showError("Ingestion Run ID is required.");if(!symbol)return showError("Symbol is required.");if(!strategy)return showError("Strategy is required.");if(Number.isNaN(lookback_days)||lookback_days<30||lookback_days>1000)return showError("Lookback Days must be between 30 and 1000.");runButton.disabled=true;status.textContent="Submitting runtime analysis request...";try{const response=await fetch("/analysis/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ingestion_run_id,symbol,strategy,market_type,lookback_days})});if(!response.ok){let message="Analysis request failed.";try{const payload=await response.json();if(payload.detail)message=payload.detail;else if(payload.error)message=payload.error}catch{}throw new Error(message)}const payload=await response.json();renderResult(payload);status.textContent=`Analysis run ${payload.analysis_run_id} completed.`}catch(error){showError(error instanceof Error?error.message:"Analysis request failed.");status.textContent="Analysis request failed."}finally{runButton.disabled=false}});
+    async function loadStrategies(){strategyStatus.textContent="Loading strategy list from /strategies...";try{const response=await fetch("/strategies");if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json();strategyList.innerHTML="";if(!payload.items||!payload.items.length){strategyStatus.textContent="No strategies available.";return}payload.items.forEach(item=>strategyList.appendChild(row([item.strategy||"",item.display_name||"",(item.default_config_keys||[]).join(", ")])));strategyStatus.textContent=`Loaded ${payload.total} strategies.`}catch(error){strategyStatus.textContent=`Failed to load strategies: ${error.message}`}}
+    async function loadSignals(){signalStatus.textContent="Loading latest signals from /signals...";try{const response=await fetch("/signals?limit=20&sort=created_at_desc");if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json();signalList.innerHTML="";if(!payload.items||!payload.items.length){signalStatus.textContent="No signals found.";return}payload.items.forEach(item=>signalList.appendChild(row([item.created_at||"",item.symbol||"",item.strategy||"",item.direction||"",item.score!=null?String(item.score):"",item.stage||""])));signalStatus.textContent=`Showing ${payload.items.length} of ${payload.total} signals.`}catch(error){signalStatus.textContent=`Failed to load signals: ${error.message}`}}
+    const summarize=entry=>({step:entry.step||entry.phase||entry.name||"",reason:entry.reason||entry.decision||""}),preview=(type,content)=>type==="json"?JSON.stringify(content,null,2):String(content||"");
+    async function loadArtifact(runId,artifactName){artifactStatus.textContent=`Loading ${artifactName}...`;artifactPreview.textContent="";try{const response=await fetch(`/journal/artifacts/${encodeURIComponent(runId)}/${encodeURIComponent(artifactName)}`);if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json();artifactPreview.textContent=preview(payload.content_type,payload.content);artifactStatus.textContent=`Loaded ${payload.artifact_name} for run ${payload.run_id}.`}catch(error){artifactStatus.textContent=`Failed to load artifact content: ${error.message}`}}
+    async function loadTrace(runId,artifactName){traceStatus.textContent="Loading decision trace entries...";traceList.innerHTML="";try{const query=`run_id=${encodeURIComponent(runId)}&artifact_name=${encodeURIComponent(artifactName)}`,response=await fetch(`/journal/decision-trace?${query}`);if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json(),entries=payload.entries||[];if(!entries.length){traceStatus.textContent="No decision trace entries found for selected artifact.";return}entries.forEach((entry,index)=>{const s=summarize(entry||{});traceList.appendChild(row([String(index+1),s.step,s.reason,JSON.stringify(entry)]))});traceStatus.textContent=`Loaded ${payload.total_entries} decision trace entries.`}catch(error){traceStatus.textContent=`Failed to load decision trace: ${error.message}`}}
+    async function loadJournal(){journalStatus.textContent="Loading journal artifacts from /journal/artifacts...";journalList.innerHTML="";try{const response=await fetch("/journal/artifacts?limit=50");if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json(),items=payload.items||[];if(!items.length){journalStatus.textContent="No journal artifacts found.";artifactStatus.textContent="No artifacts available.";traceStatus.textContent="No artifacts available.";return}items.forEach(item=>{const tr=row([item.run_id||"",item.artifact_name||"",item.size_bytes!=null?String(item.size_bytes):"",item.modified_at||""]);tr.style.cursor="pointer";tr.addEventListener("click",()=>{void loadArtifact(item.run_id,item.artifact_name);void loadTrace(item.run_id,item.artifact_name)});journalList.appendChild(tr)});const first=items[0];void loadArtifact(first.run_id,first.artifact_name);void loadTrace(first.run_id,first.artifact_name);journalStatus.textContent=`Loaded ${items.length} of ${payload.total} artifacts.`}catch(error){journalStatus.textContent=`Failed to load journal artifacts: ${error.message}`;artifactStatus.textContent="Artifact content unavailable.";traceStatus.textContent="Decision trace unavailable."}}
+    const orderKey=item=>`${item.run_id}::${item.order_id}`,compare=(a,b)=>String(a.event_timestamp||"").localeCompare(String(b.event_timestamp||""))||Number(a.event_sequence||0)-Number(b.event_sequence||0);
+    function renderTimeline(group){lifeTimeline.innerHTML="";if(!group){const li=document.createElement("li");li.textContent="No lifecycle events available.";lifeTimeline.appendChild(li);lifeSelected.textContent="No order selected.";return}lifeSelected.textContent=`Selected order ${group.order_id} (run ${group.run_id}) with ${group.events.length} events.`;group.events.forEach(event=>{const li=document.createElement("li"),top=document.createElement("div"),time=document.createElement("span"),state=document.createElement("span"),detail=document.createElement("div");top.className="top";state.className="state";time.textContent=event.event_timestamp||"";state.textContent=event.state||"";top.append(time,state);detail.style.marginTop=".35rem";detail.style.color="var(--muted)";detail.style.fontSize=".82rem";detail.textContent=`sequence=${event.event_sequence} symbol=${event.symbol} strategy=${event.strategy}`;li.append(top,detail);lifeTimeline.appendChild(li)})}
+    async function loadLifecycle(){lifeStatus.textContent="Loading order lifecycle events from /execution/orders...";try{const response=await fetch("/execution/orders?limit=200&offset=0");if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json(),items=Array.isArray(payload.items)?payload.items:[];if(!items.length){lifeStatus.textContent="No order lifecycle events found.";lifeOrders.innerHTML="";renderTimeline(null);return}const grouped=new Map();items.forEach(item=>{const key=orderKey(item);if(!grouped.has(key))grouped.set(key,{key,run_id:item.run_id||"",order_id:item.order_id||"",symbol:item.symbol||"",strategy:item.strategy||"",events:[]});grouped.get(key).events.push(item)});const groups=Array.from(grouped.values());groups.forEach(g=>g.events.sort(compare));groups.sort((a,b)=>compare(b.events[b.events.length-1],a.events[a.events.length-1]));lifeOrders.innerHTML="";groups.forEach(group=>{const last=group.events[group.events.length-1]||{},tr=row([group.run_id,group.order_id,group.symbol,group.strategy,String(group.events.length),last.state||""]);tr.style.cursor="pointer";tr.addEventListener("click",()=>{selectedKey=group.key;renderTimeline(group)});lifeOrders.appendChild(tr)});const selected=groups.find(g=>g.key===selectedKey)||groups[0];selectedKey=selected.key;renderTimeline(selected);lifeStatus.textContent=`Loaded ${items.length} events across ${groups.length} orders.`}catch(error){lifeStatus.textContent=`Failed to load trade lifecycle events: ${error.message}`;lifeOrders.innerHTML="";renderTimeline(null)}}
+    void Promise.all([loadStrategies(),loadSignals(),loadJournal(),loadLifecycle()]);setInterval(()=>{void loadLifecycle()},15000);
+  </script>
+</body>
 </html>

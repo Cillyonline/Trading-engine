@@ -29,6 +29,19 @@ afterEach(() => {
 });
 
 describe('OwnerDashboard', () => {
+  it('renders the runtime analysis entrypoint copy on /ui', () => {
+    render(
+      <MemoryRouter initialEntries={['/ui']}>
+        <OwnerDashboard />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: 'Browser Analysis Entrypoint' })).toBeInTheDocument();
+    expect(screen.getByText('/ui')).toBeInTheDocument();
+    expect(screen.getByText(/supported runtime analysis flow/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not expose owner, broker, or lab workflows/i)).toBeInTheDocument();
+  });
+
   it('sends the canonical manual analysis request and renders the canonical response', async () => {
     const deferredResponse = createDeferred<MockFetchResponse>();
     const fetchMock = vi.fn().mockReturnValue(deferredResponse.promise);
@@ -92,14 +105,12 @@ describe('OwnerDashboard', () => {
     } as unknown as MockFetchResponse);
 
     await waitFor(() => {
-    expect(
-        screen.getByText('Analysis Run ID: 3c8bc4c7e0f16ee05cf5c23d7be8b3f5')
-      ).toBeInTheDocument();
+      expect(screen.getByText('3c8bc4c7e0f16ee05cf5c23d7be8b3f5')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('Ingestion Run ID: dbfb3ea6-cef8-49f3-acdb-df0de7115d6f')).toBeInTheDocument();
-    expect(screen.getByText('Symbol: ETHUSDT')).toBeInTheDocument();
-    expect(screen.getByText('Strategy: RSI2')).toBeInTheDocument();
+    expect(screen.getByText('dbfb3ea6-cef8-49f3-acdb-df0de7115d6f')).toBeInTheDocument();
+    expect(screen.getAllByText('ETHUSDT')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('RSI2')[0]).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'ETHUSDT' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'RSI2' })).toBeInTheDocument();
     expect(screen.getByText('long')).toBeInTheDocument();
