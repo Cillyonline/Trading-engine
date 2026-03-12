@@ -1,8 +1,8 @@
 """
-Init-Skript für die SQLite-Datenbank der Cilly Trading Engine.
+Init-Skript fuer die SQLite-Datenbank der Cilly Trading Engine.
 
 - Legt die Datei `cilly_trading.db` im Projektverzeichnis an (falls nicht vorhanden).
-- Erzeugt die Tabellen `signals`, `trades` und `analysis_runs`
+- Erzeugt die Tabellen `signals`, `trades`, `analysis_runs` und `watchlists`
   entsprechend der MVP-Spezifikation.
 """
 
@@ -12,7 +12,7 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-# Standard-Pfad für die Datenbankdatei (kann später per ENV konfiguriert werden)
+# Standard-Pfad fuer die Datenbankdatei (kann spaeter per ENV konfiguriert werden)
 DEFAULT_DB_PATH = Path("cilly_trading.db")
 
 
@@ -25,12 +25,12 @@ def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     if db_path is None:
         db_path = DEFAULT_DB_PATH
 
-    # ensure parent dir exists (falls später in Unterordnern gespeichert wird)
+    # ensure parent dir exists (falls spaeter in Unterordnern gespeichert wird)
     if db_path.parent and not db_path.parent.exists():
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(db_path)
-    # bessere Row-Funktionalität: Zugriff per Spaltenname möglich
+    # bessere Row-Funktionalitaet: Zugriff per Spaltenname moeglich
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -39,7 +39,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
     """
     Initialisiert die SQLite-Datenbank:
     - erzeugt Datei (falls nicht vorhanden)
-    - legt Tabellen `signals` und `trades` an (wenn sie noch nicht existieren)
+    - legt Tabellen an (wenn sie noch nicht existieren)
     """
     conn = get_connection(db_path)
     cur = conn.cursor()
@@ -196,12 +196,53 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
 
+    # Tabelle: watchlists
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS watchlists (
+            watchlist_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_watchlists_name
+          ON watchlists(name, watchlist_id);
+        """
+    )
+
+    # Tabelle: watchlist_symbols
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS watchlist_symbols (
+            watchlist_id TEXT NOT NULL,
+            position INTEGER NOT NULL,
+            symbol TEXT NOT NULL,
+            PRIMARY KEY (watchlist_id, position),
+            FOREIGN KEY (watchlist_id) REFERENCES watchlists(watchlist_id) ON DELETE CASCADE
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_watchlist_symbols_unique_membership
+          ON watchlist_symbols(watchlist_id, symbol);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_watchlist_symbols_lookup
+          ON watchlist_symbols(watchlist_id, position, symbol);
+        """
+    )
+
     conn.commit()
     conn.close()
 
 
 if __name__ == "__main__":
-    # Für lokalen Aufruf:
+    # Fuer lokalen Aufruf:
     # python -m src.cilly_trading.db.init_db
     init_db()
     print(f"SQLite-Datenbank initialisiert unter: {DEFAULT_DB_PATH.resolve()}")
