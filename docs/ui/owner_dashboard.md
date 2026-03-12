@@ -1,21 +1,17 @@
 # Operator Dashboard Runtime Surface
 
 ## Overview
-The operator dashboard runtime surface is the backend-served workbench at `/ui`.
+The operator-facing runtime surface is the backend-served workbench at `/ui`.
 
-This surface is served from `src/ui/index.html` by the backend static mount and is the authoritative operator-facing UI entrypoint at runtime.
-
-If the React frontend remains in local development use, its `/owner` route is a development-only surface. It is not the backend-served runtime dashboard and must not be treated as interchangeable with `/ui`.
-
-The canonical Phase 36 browser runtime contract is documented in `docs/ui/phase-36-web-activation-contract.md`. This document remains the runtime-surface inventory for the current operator workbench.
+This page is served from `src/ui/index.html` through the FastAPI static mount in `src/api/main.py`. For runtime documentation, `/ui` is the authoritative browser surface and `docs/ui/phase-36-web-activation-contract.md` is the authoritative Phase 36 contract.
 
 ## Runtime Route
-- **Runtime route:** `/ui`
-- **Served by:** backend runtime static UI mount
-- **Authoritative source:** `src/ui/index.html`
+- Runtime route: `/ui`
+- Served by: backend runtime static mount
+- Runtime source: `src/ui/index.html`
 
-## Runtime Workbench Contents
-The current runtime-served `/ui` workbench exposes the following sections:
+## Current Runtime Workbench
+The current `/ui` page exposes these visible sections in the runtime shell:
 
 - Overview
 - Runtime Status
@@ -28,52 +24,50 @@ The current runtime-served `/ui` workbench exposes the following sections:
 - Trade Lifecycle
 - Audit Trail
 
-The page header labels this surface as **Operator Workbench** and explicitly states that it is served by FastAPI at `/ui`.
+Those section labels are part of the current shell inventory. They are not, by themselves, evidence that later roadmap phases are complete.
 
-For Phase 36 scope and phase-boundary decisions, treat the canonical contract document as authoritative. The list below is a description of the current runtime shell contents, not a claim that every visible section already has a complete browser workflow.
+## Backend-Connected Workflow
+The runtime page currently performs this browser-served work:
 
-## Runtime Data Surfaces
-The runtime workbench currently renders or reserves space for these backend-connected surfaces:
-
-| Workbench area | Runtime behavior |
+| Workbench area | Current runtime behavior |
 | --- | --- |
-| Strategy List | Read-only metadata fetched from `/strategies` |
-| Signals | Read-only latest signal list fetched from `/signals` |
-| Journal Artifacts | Read-only artifact browser fetched from `/journal/artifacts` |
-| Decision Trace | Read-only trace viewer fetched from `/journal/decision-trace` |
-| Trade Lifecycle | Read-only order lifecycle viewer fetched from `/execution/orders` |
-| Overview / Runtime Status / Analysis Runs / Screener / Audit Trail | Present in the runtime UI shell, with placeholder or reserved content in the current static page |
+| Runtime State | Read-only summary fetched from `GET /system/state` |
+| Run Analysis | Browser form submits `POST /analysis/run` |
+| Analysis Results | Returned `analysis_run_id` and signals are rendered in the page |
+| Strategy List | Read-only metadata fetched from `GET /strategies` |
+| Signals | Read-only latest signal list fetched from `GET /signals` |
+| Journal Artifacts | Read-only artifact browser fetched from `GET /journal/artifacts` |
+| Artifact Preview | Selected artifact content fetched from `GET /journal/artifacts/{run_id}/{artifact_name}` |
+| Decision Trace | Read-only trace viewer fetched from `GET /journal/decision-trace` |
+| Trade Lifecycle | Read-only order lifecycle viewer fetched from `GET /execution/orders` |
 
-## Development-Only Frontend Surface
-The frontend route structure in `frontend/src/App.tsx` defines `/owner` as a React route that renders `frontend/src/pages/OwnerDashboard.tsx`.
+## /owner Separation
+`/owner` is not part of the runtime-served operator surface.
 
-That route is a development-only frontend surface:
+The frontend route structure in `frontend/src/App.tsx` may still reference `/owner`, but that does not change the runtime contract:
 
-- It exists in the frontend dev server route structure.
-- It is not the backend-served runtime entrypoint.
-- It must not be cited as the production or runtime dashboard URL.
-- It is only relevant when documenting local frontend development behavior.
+- `/ui` is the backend-served runtime URL
+- `/owner` must not be documented as an equivalent runtime entrypoint
+- `/owner` must not be used to describe the Phase 36 browser workflow
 
-## Route Distinction
-| Route | Environment | Purpose |
+## Runtime Versus Development Routes
+| Route | Environment | Meaning for documentation |
 | --- | --- | --- |
-| `/ui` | Backend runtime | Authoritative operator dashboard surface served in runtime |
-| `/owner` | Frontend development server | Development-only React page for local frontend work |
+| `/ui` | Backend runtime | Canonical runtime-served operator workbench |
+| `/owner` | Frontend route structure only | Non-canonical route reference that must not replace `/ui` in runtime docs |
 
-`/ui` and `/owner` are not interchangeable routes.
+## Evidence Pointers
+Use these repository artifacts when validating this document:
 
-## Manual Review Checklist
-Use this checklist for documentation review against the actual surfaces:
-
-1. Confirm `src/ui/index.html` identifies the runtime-served UI as `/ui`.
-2. Confirm the runtime page content matches the workbench sections listed in this document.
-3. Confirm `frontend/src/App.tsx` defines `/owner` only in the frontend route structure.
-4. Confirm no operator-facing documentation treats `/owner` as a backend runtime URL.
-5. Confirm no operator-facing documentation treats `/ui` and `/owner` as equivalent entrypoints.
+1. `src/api/main.py` mounts `/ui` and defines `GET /system/state`, `POST /analysis/run`, `GET /strategies`, `GET /signals`, `GET /journal/artifacts`, `GET /journal/decision-trace`, and `GET /execution/orders`.
+2. `src/ui/index.html` contains the runtime shell and the implemented browser workflow.
+3. `tests/health_endpoint.py` verifies the runtime page title and route reachability.
+4. `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers and linked runtime endpoints.
+5. `tests/test_ui_runtime_browser_flow.py` verifies the browser workflow uses the existing runtime API surface.
 
 ## Verification Outcome
-A reviewer comparing this document to `src/ui/index.html` and the frontend route structure should find:
+A reviewer should find:
 
-- `/ui` is the runtime-served operator surface.
-- `/owner` is only a development-only frontend route if referenced.
-- There is no route ambiguity between runtime and development surfaces.
+- `/ui` is the runtime-served operator surface
+- `/owner` is not a runtime-equivalent route
+- the current workbench supports a bounded Phase 36 browser workflow without claiming later watchlist, trading-desk, alerts, paper-trading product, or live-trading scope
