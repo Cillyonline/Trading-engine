@@ -4,8 +4,9 @@ import OwnerDashboard from './pages/OwnerDashboard';
 function App() {
   return (
     <Routes>
-      <Route path="/owner" element={<OwnerDashboard />} />
-      <Route path="*" element={<Navigate to="/owner" replace />} />
+      <Route path="/ui" element={<OwnerDashboard />} />
+      <Route path="/owner" element={<Navigate to="/ui" replace />} />
+      <Route path="*" element={<Navigate to="/ui" replace />} />
     </Routes>
   );
 }
