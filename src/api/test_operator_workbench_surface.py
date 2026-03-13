@@ -33,6 +33,19 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "Overview" in response.text
     assert "Runtime Status" in response.text
     assert "Analysis Runs" in response.text
+    assert "Phase 37 Runtime UI" in response.text
+    assert "Manage Watchlists" in response.text
+    assert "Watchlist Management Panel" in response.text
+    assert "Watchlist Execution Panel" in response.text
+    assert "Watchlist Ranked Results Panel" in response.text
+    assert "id=\"watchlist-form\"" in response.text
+    assert "id=\"watchlist-select\"" in response.text
+    assert "id=\"watchlist-ranked-result-list\"" in response.text
+    assert "id=\"watchlist-failure-list\"" in response.text
+    assert "/watchlists" in response.text
+    assert "/watchlists/{watchlist_id}" in response.text
+    assert "/watchlists/{watchlist_id}/execute" in response.text
+    assert "No Phase 39 or Phase 40 features" in response.text
     assert "Strategies" in response.text
     assert "Strategy List Panel" in response.text
     assert "Signals Panel" in response.text
