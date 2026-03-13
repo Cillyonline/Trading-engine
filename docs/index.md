@@ -23,10 +23,12 @@ Use this order:
 
 ## UI Surfaces
 - [Phase 36 /ui web activation contract](ui/phase-36-web-activation-contract.md)
+- [Phase 39 /ui charting contract](ui/phase-39-charting-contract.md)
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
   - Runtime-served operator UI is `/ui`.
   - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
   - The current Phase 37 browser workflow on the same `/ui` surface uses `/watchlists`, `/watchlists/{watchlist_id}`, and `POST /watchlists/{watchlist_id}/execute`.
+  - The Phase 39 charting contract is bounded to read-only visual analysis on the same `/ui` surface and does not imply implemented chart components or Phase 40 desk scope.
   - `/owner` is not a canonical runtime entrypoint.
 - [Phase 36 web activation evidence](roadmap/phase-36-web-activation-evidence.md)
 - [Phase 37 watchlist engine status](phases/phase-37-status.md)
