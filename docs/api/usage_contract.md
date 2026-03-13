@@ -158,6 +158,7 @@ No validation is performed on the number of rows, date coverage, or completeness
 
 - **POST `/strategy/analyze`** (`api.main.analyze_strategy`) calls `_run_snapshot_analysis`, which invokes `cilly_trading.engine.core.run_watchlist_analysis(snapshot_only=True)` and loads data via `cilly_trading.engine.data.load_ohlcv_snapshot`. Determinism is limited to the contents of the referenced `ingestion_run_id` snapshot.
 - **POST `/analysis/run`** (`api.main.manual_analysis`) follows the same snapshot-only path through `_run_snapshot_analysis` and `run_watchlist_analysis(snapshot_only=True)`.
+- **POST `/watchlists/{watchlist_id}/execute`** (`api.main.execute_watchlist`) follows the same snapshot-only path through `_run_snapshot_analysis` and `run_watchlist_analysis(snapshot_only=True)`, but isolates symbol-level snapshot failures into the response payload instead of failing the entire request.
 - **POST `/screener/basic`** (`api.main.basic_screener`) follows the same snapshot-only path through `_run_snapshot_analysis` and `run_watchlist_analysis(snapshot_only=True)`.
 
 **Non-deterministic (engine usage outside API snapshot-only guards):**
@@ -167,7 +168,7 @@ No validation is performed on the number of rows, date coverage, or completeness
 
 ### Error semantics (analysis endpoints)
 
-These errors are emitted by `/strategy/analyze`, `/analysis/run`, and `/screener/basic`:
+These errors are emitted by `/strategy/analyze`, `/analysis/run`, `/watchlists/{watchlist_id}/execute`, and `/screener/basic` unless the endpoint-specific section below narrows the behavior:
 
 #### 4xx vs 5xx responses (what they mean)
 
@@ -693,6 +694,125 @@ curl -s -X POST http://localhost:8000/analysis/run \
   "symbol": "AAPL",
   "strategy": "RSI2",
   "signals": []
+}
+```
+
+---
+
+## POST /watchlists/{watchlist_id}/execute
+
+### Purpose
+
+Run the persisted watchlist workflow against a saved watchlist and return deterministic ranked results for later UI consumption.
+
+### Request
+
+**Path parameters:**
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `watchlist_id` | string | required | Saved watchlist identifier. Must already exist. |
+
+**Request body:**
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `ingestion_run_id` | string (UUIDv4) | required | none | Snapshot reference ID. |
+| `market_type` | string | optional | `stock` | Must match `stock` or `crypto`. |
+| `lookback_days` | integer | optional | `200` | Range `30..1000`. |
+| `min_score` | number | optional | `30.0` | Range `0..100`. Only setup signals at or above this score are ranked. |
+
+**Validation rules:**
+
+- `watchlist_id` must identify an existing saved watchlist, otherwise `404`.
+- `ingestion_run_id` must be a valid UUIDv4 and must exist.
+- Unlike `/screener/basic`, this endpoint does not require every watchlist symbol to be snapshot-ready up front. Snapshot failures for individual symbols are isolated into the response `failures` array.
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "analysis_run_id": "d6d596a6f792d1f04b6cb13df7dd1f4707f258d8d0678d163fc8cb5ea1c9f2ad",
+    "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
+    "watchlist_id": "tech-growth",
+    "watchlist_name": "Tech Growth",
+    "market_type": "stock",
+    "ranked_results": [
+      {
+        "rank": 1,
+        "symbol": "NVDA",
+        "score": 68.2,
+        "signal_strength": 0.91,
+        "setups": [
+          {
+            "strategy": "TURTLE",
+            "score": 68.2,
+            "signal_strength": 0.91,
+            "stage": "setup",
+            "confirmation_rule": "Breakout confirmed",
+            "entry_zone": {"from_": 178.5, "to": 182.0},
+            "timeframe": "D1",
+            "market_type": "stock"
+          }
+        ]
+      }
+    ],
+    "failures": [
+      {
+        "symbol": "MSFT",
+        "code": "snapshot_data_invalid",
+        "detail": "snapshot data unavailable or invalid for symbol"
+      }
+    ]
+  }
+  ```
+
+**Ranking rules:**
+
+- Only `setup` signals with `score >= min_score` participate in ranking.
+- Ranked items are sorted deterministically by `score DESC`, then `signal_strength DESC`, then `symbol ASC`.
+- `rank` is the 1-based position after deterministic sorting.
+
+**Empty/no-result behavior:** Returns `ranked_results: []` when no qualifying setup signals are produced. Symbol-level failures may still be present in `failures`.
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 404 | `{"detail":"watchlist_not_found"}` | `watchlist_not_found` | `watchlist_id` does not exist. |
+| 422 | `{"detail":"invalid_ingestion_run_id"}` | `invalid_ingestion_run_id` | `ingestion_run_id` is not a valid UUIDv4 string. |
+| 422 | `{"detail":"ingestion_run_not_found"}` | `ingestion_run_not_found` | `ingestion_run_id` does not exist in the repository. |
+| 422 | Pydantic validation list | varies | Invalid request body (for example `min_score` outside `0..100`). |
+
+### Example
+
+**Request:**
+
+```bash
+curl -s -X POST http://localhost:8000/watchlists/tech-growth/execute \
+  -H 'Content-Type: application/json' \
+  -H 'X-Cilly-Role: operator' \
+  -d '{
+    "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
+    "market_type": "stock",
+    "lookback_days": 200,
+    "min_score": 30.0
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "analysis_run_id": "d6d596a6f792d1f04b6cb13df7dd1f4707f258d8d0678d163fc8cb5ea1c9f2ad",
+  "ingestion_run_id": "b1b2c3d4-1111-2222-3333-444455556666",
+  "watchlist_id": "tech-growth",
+  "watchlist_name": "Tech Growth",
+  "market_type": "stock",
+  "ranked_results": [],
+  "failures": []
 }
 ```
 

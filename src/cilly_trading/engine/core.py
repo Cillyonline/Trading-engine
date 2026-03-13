@@ -327,6 +327,8 @@ def run_watchlist_analysis(
     audit_dir: Optional[Path] = None,
     snapshot_only: bool = False,
     lineage_repo: Optional[SqliteLineageRepository] = None,
+    symbol_failures: Optional[List[Dict[str, str]]] = None,
+    isolate_symbol_failures: bool = False,
 ) -> List[Signal]:
     """
     Führt die Analyse über eine Symbol-Watchlist und eine Liste von Strategien aus.
@@ -463,8 +465,16 @@ def run_watchlist_analysis(
                         db_path=db_path,
                     )
                 except SnapshotDataError:
-                    if snapshot_only:
+                    if snapshot_only and not isolate_symbol_failures:
                         raise
+                    if symbol_failures is not None:
+                        symbol_failures.append(
+                            {
+                                "symbol": symbol,
+                                "code": "snapshot_data_invalid",
+                                "detail": "snapshot data unavailable or invalid for symbol",
+                            }
+                        )
                     logger.warning(
                         "Skipping symbol due to snapshot data error: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
                         symbol,
@@ -658,6 +668,21 @@ def run_watchlist_analysis(
             )
 
         except SnapshotDataError:
+            if isolate_symbol_failures:
+                if symbol_failures is not None:
+                    symbol_failures.append(
+                        {
+                            "symbol": symbol,
+                            "code": "snapshot_data_invalid",
+                            "detail": "snapshot data unavailable or invalid for symbol",
+                        }
+                    )
+                logger.warning(
+                    "Snapshot data error isolated at symbol level: component=engine symbol=%s timeframe=%s",
+                    symbol,
+                    engine_config.timeframe,
+                )
+                continue
             logger.error(
                 "Snapshot data error while processing symbol: component=engine symbol=%s timeframe=%s",
                 symbol,
@@ -668,8 +693,31 @@ def run_watchlist_analysis(
         except LineageMissingError:
             raise
         except ReasonGenerationError:
+            if isolate_symbol_failures:
+                if symbol_failures is not None:
+                    symbol_failures.append(
+                        {
+                            "symbol": symbol,
+                            "code": "reason_generation_failed",
+                            "detail": "signal reason generation failed for symbol",
+                        }
+                    )
+                logger.warning(
+                    "Reason generation failure isolated at symbol level: component=engine symbol=%s timeframe=%s",
+                    symbol,
+                    engine_config.timeframe,
+                )
+                continue
             raise
         except Exception:
+            if symbol_failures is not None:
+                symbol_failures.append(
+                    {
+                        "symbol": symbol,
+                        "code": "symbol_analysis_failed",
+                        "detail": "unexpected symbol analysis failure",
+                    }
+                )
             logger.error(
                 "Unexpected error while processing symbol: component=engine symbol=%s timeframe=%s",
                 symbol,

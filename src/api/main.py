@@ -277,6 +277,59 @@ class ScreenerResponse(BaseModel):
     symbols: List[ScreenerSymbolResult]
 
 
+class WatchlistExecutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ingestion_run_id: str = Field(..., min_length=1, description="Snapshot reference ID.")
+    market_type: str = Field(
+        "stock",
+        description="Markttyp: 'stock' oder 'crypto'",
+        pattern="^(stock|crypto)$",
+    )
+    lookback_days: int = Field(
+        200,
+        ge=30,
+        le=1000,
+        description="Anzahl der Tage, die mindestens geladen werden sollen.",
+    )
+    min_score: float = Field(
+        30.0,
+        ge=0.0,
+        le=100.0,
+        description="Mindestscore fuer Setups, die im Ranking erscheinen sollen.",
+    )
+
+
+class WatchlistExecutionRankedItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rank: int
+    symbol: str
+    score: Optional[float] = None
+    signal_strength: Optional[float] = None
+    setups: List[Dict[str, Any]]
+
+
+class WatchlistExecutionFailure(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    code: str
+    detail: str
+
+
+class WatchlistExecutionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_run_id: str
+    ingestion_run_id: str
+    watchlist_id: str
+    watchlist_name: str
+    market_type: str
+    ranked_results: List[WatchlistExecutionRankedItem]
+    failures: List[WatchlistExecutionFailure]
+
+
 class SignalsReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -711,6 +764,93 @@ def _normalize_for_hashing(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_normalize_for_hashing(item) for item in value]
     return value
+
+
+def _coerce_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _max_numeric(values: List[Optional[float]]) -> Optional[float]:
+    numeric_values = [value for value in values if value is not None]
+    return max(numeric_values) if numeric_values else None
+
+
+def _build_ranked_symbol_results(
+    signals: List[Dict[str, Any]],
+    *,
+    min_score: float,
+) -> List[ScreenerSymbolResult]:
+    setup_signals = []
+    for signal in signals:
+        if signal.get("stage") != "setup":
+            continue
+        score_value = _coerce_float(signal.get("score"))
+        if (score_value or 0.0) < min_score:
+            continue
+        setup_signals.append(signal)
+
+    by_symbol: Dict[str, List[Dict[str, Any]]] = {}
+    for signal in setup_signals:
+        symbol = signal.get("symbol", "")
+        if not symbol:
+            continue
+
+        setup_info: Dict[str, Any] = {
+            "strategy": signal.get("strategy"),
+            "score": signal.get("score"),
+            "signal_strength": signal.get("signal_strength"),
+            "stage": signal.get("stage"),
+            "confirmation_rule": signal.get("confirmation_rule"),
+            "entry_zone": signal.get("entry_zone"),
+            "timeframe": signal.get("timeframe"),
+            "market_type": signal.get("market_type"),
+        }
+        by_symbol.setdefault(symbol, []).append(setup_info)
+
+    symbol_results: List[ScreenerSymbolResult] = []
+    for symbol, setups in by_symbol.items():
+        symbol_results.append(
+            ScreenerSymbolResult(
+                symbol=symbol,
+                score=_max_numeric([_coerce_float(setup.get("score")) for setup in setups]),
+                signal_strength=_max_numeric(
+                    [_coerce_float(setup.get("signal_strength")) for setup in setups]
+                ),
+                setups=setups,
+            )
+        )
+
+    symbol_results.sort(
+        key=lambda item: (
+            -(item.score if item.score is not None else float("-inf")),
+            -(item.signal_strength if item.signal_strength is not None else float("-inf")),
+            item.symbol or "",
+        )
+    )
+    return symbol_results
+
+
+def _build_watchlist_ranked_results(
+    signals: List[Dict[str, Any]],
+    *,
+    min_score: float,
+) -> List[WatchlistExecutionRankedItem]:
+    ranked_symbols = _build_ranked_symbol_results(signals, min_score=min_score)
+    return [
+        WatchlistExecutionRankedItem(
+            rank=index,
+            symbol=item.symbol,
+            score=item.score,
+            signal_strength=item.signal_strength,
+            setups=item.setups,
+        )
+        for index, item in enumerate(ranked_symbols, start=1)
+    ]
 
 
 initialize_default_registry()
@@ -1297,6 +1437,91 @@ def delete_watchlist(
     return WatchlistDeleteResponse(watchlist_id=watchlist_id, deleted=True)
 
 
+@app.post(
+    "/watchlists/{watchlist_id}/execute",
+    response_model=WatchlistExecutionResponse,
+)
+def execute_watchlist(
+    watchlist_id: str,
+    req: WatchlistExecutionRequest,
+    _: str = Depends(_require_role("operator")),
+) -> WatchlistExecutionResponse:
+    watchlist = watchlist_repo.get_watchlist(watchlist_id)
+    if watchlist is None:
+        raise HTTPException(status_code=404, detail="watchlist_not_found")
+
+    _require_ingestion_run(req.ingestion_run_id)
+
+    strategies = create_registered_strategies()
+    strategy_names = sorted(
+        getattr(strategy, "name", strategy.__class__.__name__) for strategy in strategies
+    )
+    run_request_payload: Dict[str, Any] = {
+        "workflow": "watchlist_execution",
+        "ingestion_run_id": req.ingestion_run_id,
+        "watchlist_id": watchlist.watchlist_id,
+        "symbols": list(watchlist.symbols),
+        "strategies": strategy_names,
+        "market_type": req.market_type,
+        "lookback_days": req.lookback_days,
+        "min_score": _normalize_for_hashing(req.min_score),
+    }
+    computed_run_id = compute_analysis_run_id(run_request_payload)
+
+    existing_run = analysis_run_repo.get_run(computed_run_id)
+    if existing_run is not None:
+        logger.info(
+            "Watchlist execution reused: component=control_plane analysis_run_id=%s ingestion_run_id=%s watchlist_id=%s",
+            computed_run_id,
+            existing_run["ingestion_run_id"],
+            watchlist.watchlist_id,
+        )
+        _require_ingestion_run(existing_run["ingestion_run_id"])
+        return WatchlistExecutionResponse(**existing_run["result"])
+
+    engine_config = EngineConfig(
+        timeframe="D1",
+        lookback_days=req.lookback_days,
+        market_type=req.market_type,
+        data_source="yahoo" if req.market_type == "stock" else "binance",
+    )
+    symbol_failures: List[Dict[str, str]] = []
+    signals = _run_snapshot_analysis(
+        symbols=list(watchlist.symbols),
+        strategies=strategies,
+        engine_config=engine_config,
+        strategy_configs=default_strategy_configs,
+        signal_repo=signal_repo,
+        ingestion_run_id=req.ingestion_run_id,
+        db_path=_resolve_analysis_db_path(),
+        run_id=computed_run_id,
+        symbol_failures=symbol_failures,
+        isolate_symbol_failures=True,
+    )
+
+    ranked_results = _build_watchlist_ranked_results(signals, min_score=req.min_score)
+    response_payload = {
+        "analysis_run_id": computed_run_id,
+        "ingestion_run_id": req.ingestion_run_id,
+        "watchlist_id": watchlist.watchlist_id,
+        "watchlist_name": watchlist.name,
+        "market_type": req.market_type,
+        "ranked_results": [item.model_dump() for item in ranked_results],
+        "failures": [
+            WatchlistExecutionFailure(**failure).model_dump() for failure in symbol_failures
+        ],
+    }
+
+    analysis_run_repo.save_run(
+        analysis_run_id=computed_run_id,
+        ingestion_run_id=req.ingestion_run_id,
+        request_payload=run_request_payload,
+        result_payload=response_payload,
+    )
+
+    return WatchlistExecutionResponse(**response_payload)
+
+
 @app.get("/journal/artifacts", response_model=JournalArtifactListResponse)
 def read_journal_artifacts(
     limit: int = Query(default=50, ge=1, le=500),
@@ -1675,69 +1900,7 @@ def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
         ingestion_run_id=req.ingestion_run_id,
         db_path=_resolve_analysis_db_path(),
     )
-
-    def _coerce_float(value: Any) -> Optional[float]:
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    setup_signals = []
-    for s in signals:
-        if s.get("stage") != "setup":
-            continue
-        score_value = _coerce_float(s.get("score"))
-        if (score_value or 0.0) < req.min_score:
-            continue
-        setup_signals.append(s)
-
-    by_symbol: Dict[str, List[Dict[str, Any]]] = {}
-    for s in setup_signals:
-        sym = s.get("symbol", "")
-        if not sym:
-            continue
-
-        setup_info: Dict[str, Any] = {
-            "strategy": s.get("strategy"),
-            "score": s.get("score"),
-            "signal_strength": s.get("signal_strength"),
-            "stage": s.get("stage"),
-            "confirmation_rule": s.get("confirmation_rule"),
-            "entry_zone": s.get("entry_zone"),
-            "timeframe": s.get("timeframe"),
-            "market_type": s.get("market_type"),
-        }
-
-        by_symbol.setdefault(sym, []).append(setup_info)
-
-    def _max_numeric(values: List[Optional[float]]) -> Optional[float]:
-        numeric_values = [value for value in values if value is not None]
-        return max(numeric_values) if numeric_values else None
-
-    symbol_results = []
-    for symbol, setups in by_symbol.items():
-        score = _max_numeric([_coerce_float(s.get("score")) for s in setups])
-        signal_strength = _max_numeric([_coerce_float(s.get("signal_strength")) for s in setups])
-        symbol_results.append(
-            ScreenerSymbolResult(
-                symbol=symbol,
-                score=score,
-                signal_strength=signal_strength,
-                setups=setups,
-            )
-        )
-
-    def _sorting_key(item: ScreenerSymbolResult) -> tuple:
-        score = item.score if item.score is not None else float("-inf")
-        signal_strength = (
-            item.signal_strength if item.signal_strength is not None else float("-inf")
-        )
-        symbol = item.symbol or ""
-        return (-score, -signal_strength, symbol)
-
-    symbol_results.sort(key=_sorting_key)
+    symbol_results = _build_ranked_symbol_results(signals, min_score=req.min_score)
 
     return ScreenerResponse(
         market_type=req.market_type,
