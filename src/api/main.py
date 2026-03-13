@@ -66,6 +66,7 @@ from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
+from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 from cilly_trading.strategies.registry import (
     StrategyNotRegisteredError,
     create_registered_strategies,
@@ -539,6 +540,41 @@ class DecisionTraceResponse(BaseModel):
     total_entries: int
 
 
+class WatchlistPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1)
+    symbols: List[str] = Field(..., min_length=1)
+
+
+class WatchlistCreateRequest(WatchlistPayload):
+    model_config = ConfigDict(extra="forbid")
+
+    watchlist_id: str = Field(..., min_length=1)
+
+
+class WatchlistResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    watchlist_id: str
+    name: str
+    symbols: List[str]
+
+
+class WatchlistListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[WatchlistResponse]
+    total: int
+
+
+class WatchlistDeleteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    watchlist_id: str
+    deleted: Literal[True]
+
+
 app = FastAPI(
     title="Cilly Trading Engine API",
     version="0.1.0",
@@ -607,6 +643,7 @@ ANALYSIS_DB_PATH: Optional[str] = None
 signal_repo = SqliteSignalRepository()
 order_event_repo = SqliteOrderEventRepository(db_path=DEFAULT_DB_PATH)
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
+watchlist_repo = SqliteWatchlistRepository(db_path=DEFAULT_DB_PATH)
 
 
 def _is_uuid4(value: str) -> bool:
@@ -1181,10 +1218,83 @@ def _extract_trace_entries(content: Any) -> tuple[Optional[str], List[Dict[str, 
     return trace_id, normalized_entries
 
 
+def _to_watchlist_response(watchlist: Any) -> WatchlistResponse:
+    return WatchlistResponse(
+        watchlist_id=watchlist.watchlist_id,
+        name=watchlist.name,
+        symbols=list(watchlist.symbols),
+    )
+
+
 @app.get("/ingestion/runs", response_model=List[IngestionRunItemResponse])
 def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List[IngestionRunItemResponse]:
     rows = analysis_run_repo.list_ingestion_runs(limit=limit)
     return [IngestionRunItemResponse(**row) for row in rows]
+
+
+@app.post("/watchlists", response_model=WatchlistResponse)
+def create_watchlist(
+    req: WatchlistCreateRequest,
+    _: str = Depends(_require_role("operator")),
+) -> WatchlistResponse:
+    try:
+        watchlist = watchlist_repo.create_watchlist(
+            watchlist_id=req.watchlist_id,
+            name=req.name,
+            symbols=req.symbols,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_watchlist_response(watchlist)
+
+
+@app.get("/watchlists", response_model=WatchlistListResponse)
+def read_watchlists(
+    _: str = Depends(_require_role("read_only")),
+) -> WatchlistListResponse:
+    items = [_to_watchlist_response(watchlist) for watchlist in watchlist_repo.list_watchlists()]
+    return WatchlistListResponse(items=items, total=len(items))
+
+
+@app.get("/watchlists/{watchlist_id}", response_model=WatchlistResponse)
+def read_watchlist(
+    watchlist_id: str,
+    _: str = Depends(_require_role("read_only")),
+) -> WatchlistResponse:
+    watchlist = watchlist_repo.get_watchlist(watchlist_id)
+    if watchlist is None:
+        raise HTTPException(status_code=404, detail="watchlist_not_found")
+    return _to_watchlist_response(watchlist)
+
+
+@app.put("/watchlists/{watchlist_id}", response_model=WatchlistResponse)
+def update_watchlist(
+    watchlist_id: str,
+    req: WatchlistPayload,
+    _: str = Depends(_require_role("operator")),
+) -> WatchlistResponse:
+    try:
+        watchlist = watchlist_repo.update_watchlist(
+            watchlist_id=watchlist_id,
+            name=req.name,
+            symbols=req.symbols,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="watchlist_not_found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _to_watchlist_response(watchlist)
+
+
+@app.delete("/watchlists/{watchlist_id}", response_model=WatchlistDeleteResponse)
+def delete_watchlist(
+    watchlist_id: str,
+    _: str = Depends(_require_role("operator")),
+) -> WatchlistDeleteResponse:
+    deleted = watchlist_repo.delete_watchlist(watchlist_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="watchlist_not_found")
+    return WatchlistDeleteResponse(watchlist_id=watchlist_id, deleted=True)
 
 
 @app.get("/journal/artifacts", response_model=JournalArtifactListResponse)
