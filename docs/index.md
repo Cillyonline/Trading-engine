@@ -28,7 +28,8 @@ Use this order:
   - Runtime-served operator UI is `/ui`.
   - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
   - The current Phase 37 browser workflow on the same `/ui` surface uses `/watchlists`, `/watchlists/{watchlist_id}`, and `POST /watchlists/{watchlist_id}/execute`.
-  - The Phase 39 charting contract is bounded to read-only visual analysis on the same `/ui` surface and does not imply implemented chart components or Phase 40 desk scope.
+  - The current Phase 39 browser workflow on the same `/ui` surface adds a bounded read-only chart panel fed by `POST /analysis/run`, `POST /watchlists/{watchlist_id}/execute`, and `GET /signals?limit=20&sort=created_at_desc`.
+  - The Phase 39 charting contract and roadmap status remain bounded to read-only visual analysis on `/ui` and do not imply Phase 40 desk scope.
   - `/owner` is not a canonical runtime entrypoint.
 - [Phase 36 web activation evidence](roadmap/phase-36-web-activation-evidence.md)
 - [Phase 37 watchlist engine status](phases/phase-37-status.md)

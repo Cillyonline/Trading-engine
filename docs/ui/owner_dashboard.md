@@ -3,7 +3,7 @@
 ## Overview
 The operator-facing runtime surface is the backend-served workbench at `/ui`.
 
-This page is served from `src/ui/index.html` through the FastAPI static mount in `src/api/main.py`. For runtime documentation, `/ui` is the authoritative browser surface, `docs/ui/phase-36-web-activation-contract.md` is the authoritative Phase 36 contract, `docs/phases/phase-37-status.md` defines the bounded watchlist workflow now present on the same runtime page, and `docs/ui/phase-39-charting-contract.md` defines the bounded charting contract for later read-only visual analysis on that same runtime page.
+This page is served from `src/ui/index.html` through the FastAPI static mount in `src/api/main.py`. For runtime documentation, `/ui` is the authoritative browser surface, `docs/ui/phase-36-web-activation-contract.md` is the authoritative Phase 36 contract, `docs/phases/phase-37-status.md` defines the bounded watchlist workflow now present on the same runtime page, `docs/ui/phase-39-charting-contract.md` defines the bounded charting contract now implemented as a read-only visual-analysis surface on that same runtime page, and `docs/roadmap/cilly_trading_execution_roadmap_updated.md` now reflects that bounded implementation in roadmap terms.
 
 ## Runtime Route
 - Runtime route: `/ui`
@@ -18,6 +18,8 @@ The current `/ui` page exposes these visible sections in the runtime shell:
 - Analysis Runs
 - Strategy List
 - Signals
+- Chart Panel
+- Visual Analysis Surface
 - Journal Artifacts
 - Decision Trace
 - Screener
@@ -39,6 +41,8 @@ The runtime page currently performs this browser-served work:
 | Analysis Results | Returned `analysis_run_id` and signals are rendered in the page |
 | Strategy List | Read-only metadata fetched from `GET /strategies` |
 | Signals | Read-only latest signal list fetched from `GET /signals` |
+| Chart Panel | Read-only chart surface rendered from existing runtime payloads returned by `GET /signals`, `POST /analysis/run`, and `POST /watchlists/{watchlist_id}/execute` |
+| Chart Source Markers | Stable runtime markers identify analysis, watchlist-execution, and signal feeds for deterministic `/ui` surface tests |
 | Watchlist Management | Create, list, read, update, and delete saved watchlists through `/watchlists` routes |
 | Watchlist Execution | Execute a saved watchlist through `POST /watchlists/{watchlist_id}/execute` |
 | Watchlist Ranking Output | Render `ranked_results` and `failures` returned by the watchlist execution route |
@@ -48,14 +52,13 @@ The runtime page currently performs this browser-served work:
 | Trade Lifecycle | Read-only order lifecycle viewer fetched from `GET /execution/orders` |
 
 ## Phase Boundary
-The current `/ui` surface now spans two documented runtime boundaries:
+The current `/ui` surface now spans three documented runtime boundaries:
 
 - Phase 36: backend-served browser activation and the original operator workbench shell
 - Phase 37: bounded watchlist management, persisted watchlist execution, and ranked-result rendering on that same shell
+- Phase 39: bounded read-only charting and visual analysis built from existing runtime payloads on that same shell
 
-Phase 39 is currently documented only as a bounded contract for later read-only visual analysis on `/ui`; it is not claimed as implemented charting on the current shell.
-
-This does not imply Phase 39 implementation, Phase 40 trading-desk expansion, alerts, or broader later-phase product workflows.
+This does not imply Phase 40 trading-desk expansion, alerts, or broader later-phase product workflows.
 
 ## /owner Separation
 `/owner` is not part of the runtime-served operator surface.
@@ -76,15 +79,15 @@ The frontend route structure in `frontend/src/App.tsx` may still reference `/own
 Use these repository artifacts when validating this document:
 
 1. `src/api/main.py` mounts `/ui` and defines `GET /system/state`, `POST /analysis/run`, watchlist CRUD routes, `POST /watchlists/{watchlist_id}/execute`, `GET /strategies`, `GET /signals`, `GET /journal/artifacts`, `GET /journal/decision-trace`, and `GET /execution/orders`.
-2. `src/ui/index.html` contains the runtime shell and the implemented browser workflow, including watchlist panels and result markers.
+2. `src/ui/index.html` contains the runtime shell and the implemented browser workflow, including watchlist panels, chart-panel markers, and chart-source markers.
 3. `tests/api/test_health_endpoints_api.py` verifies the runtime health endpoint surface.
-4. `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers, watchlist panels, and linked runtime endpoints.
-5. `tests/test_ui_runtime_browser_flow.py` verifies the browser workflow uses the existing runtime API surface for watchlist CRUD and execution as well as the existing operator routes.
-6. `docs/ui/phase-39-charting-contract.md` defines the bounded read-only charting scope that may later build on those same `/ui` surfaces without expanding into later product phases.
+4. `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers, watchlist panels, chart-panel markers, and linked runtime endpoints.
+5. `tests/test_ui_runtime_browser_flow.py` verifies the browser workflow uses the existing runtime API surface for watchlist CRUD, execution, and deterministic chart-panel markers as well as the existing operator routes.
+6. `docs/ui/phase-39-charting-contract.md` defines the bounded read-only charting scope implemented on the same `/ui` surface without expanding into later product phases.
 
 ## Verification Outcome
 A reviewer should find:
 
 - `/ui` is the runtime-served operator surface
 - `/owner` is not a runtime-equivalent route
-- the current workbench supports the bounded Phase 36 and Phase 37 browser workflows, while the separate Phase 39 contract remains a non-implemented scope definition rather than a charting completion claim
+- the current workbench supports the bounded Phase 36 and Phase 37 browser workflows and the bounded Phase 39 chart panel, without claiming Phase 40 desk scope or later workflow completion
