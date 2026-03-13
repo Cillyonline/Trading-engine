@@ -89,7 +89,7 @@ Market Data
 | 36 | Web Activation | Partially Implemented |
 | 37 | Watchlist Engine | Implemented in Repository |
 | 38 | Market Data Integration | Partially Implemented |
-| 39 | Charting & Visual Analysis | Planned |
+| 39 | Charting & Visual Analysis | Implemented in Repository |
 | 40 | Trading Desk Dashboard | Partially Implemented |
 | 41 | Alerts & Notification System | Planned |
 | 42 | Strategy Lab | Planned |
@@ -106,6 +106,7 @@ Market Data
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
 - Phase 35 is marked `Implemented` in this revision because metrics, telemetry, runtime health, guard-trigger monitoring, and integration tests are all present in-repo.
 - Phase 37 is marked `Implemented in Repository` in this revision because watchlist persistence, CRUD API, execution/ranking, `/ui` behavior, and tests are now all present in-repo.
+- Phase 39 is marked `Implemented in Repository` in this revision because the backend-served `/ui` workbench now includes a bounded read-only chart panel, explicit source markers, and runtime/browser tests that verify the chart surface without expanding into Phase 40 desk scope.
 - Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present.
 
 ---
@@ -700,16 +701,19 @@ Support real market-data integrations directly.
 ---
 
 ## Phase 39 - Charting & Visual Analysis
-**Status:** Planned
+**Status:** Implemented in Repository
 
 **Goal**
 Make setups visually interpretable.
 
 **Current Status Basis**
-- No repository charting implementation or visual-analysis module matching this phase scope was verified.
+- The backend-served `/ui` surface now contains a dedicated, bounded chart panel and visual-analysis surface.
+- The charting surface is explicitly tied to already governed runtime data from `POST /analysis/run`, `POST /watchlists/{watchlist_id}/execute`, and `GET /signals`.
+- Runtime-surface and browser-flow tests verify deterministic chart markers without claiming Phase 40 trading-desk widgets, alerts, Strategy Lab, paper-trading workflow, or live-trading workflow behavior.
+- Runtime-facing documentation constrains Phase 39 to read-only `/ui` charting and evidence-linked visual analysis.
 
 **Outcome**
-- Charting remains future work.
+- The repository contains a bounded Phase 39 charting surface on `/ui`, while broader trading-desk and later workflow scope remains out of phase.
 
 ---
 
@@ -875,7 +879,7 @@ Marktdaten
 | 36 | Web Activation | Partially Implemented |
 | 37 | Watchlist Engine | Implemented in Repository |
 | 38 | Market Data Integration | Partially Implemented |
-| 39 | Charting & Visual Analysis | Planned |
+| 39 | Charting & Visual Analysis | Implemented in Repository |
 | 40 | Trading Desk Dashboard | Partially Implemented |
 | 41 | Alerts & Notification System | Planned |
 | 42 | Strategy Lab | Planned |
@@ -1485,16 +1489,19 @@ Reale Marktdaten-Integrationen direkt unterstuetzen.
 ---
 
 ## Phase 39 - Charting & Visual Analysis
-**Status:** Planned
+**Status:** Implemented in Repository
 
 **Ziel**
 Setups visuell interpretierbar machen.
 
 **Aktuelle Statusbasis**
-- Es wurde keine Charting-Implementierung oder Visual-Analysis-Schicht im Sinne dieser Phase bestaetigt.
+- Die backend-ausgelieferte `/ui`-Surface enthaelt jetzt ein dediziertes, begrenztes Chart-Panel und eine Visual-Analysis-Surface.
+- Die Charting-Surface ist explizit an bereits governte Runtime-Daten aus `POST /analysis/run`, `POST /watchlists/{watchlist_id}/execute` und `GET /signals` gebunden.
+- Runtime-Surface- und Browser-Flow-Tests verifizieren deterministische Chart-Marker, ohne Phase-40-Trading-Desk-Widgets, Alerts, Strategy-Lab-, Paper-Trading- oder Live-Trading-Workflows zu behaupten.
+- Runtime-nahe Dokumentation begrenzt Phase 39 auf read-only `/ui`-Charting und evidenzgebundene visuelle Analyse.
 
 **Ergebnis**
-- Charting bleibt Zukunftsarbeit.
+- Das Repository enthaelt eine begrenzte Phase-39-Charting-Surface auf `/ui`, waehrend breiterer Trading-Desk- und spaeterer Workflow-Scope weiter ausserhalb der Phase bleibt.
 
 ---
 
