@@ -1,7 +1,7 @@
 # Execution Roadmap - Authoritative Phase Taxonomy
 
 Status: Authoritative  
-Scope: Audited phase taxonomy for Phases 5, 16, 17, 17b, 23, 25, 26, and 27  
+Scope: Audited phase taxonomy for Phases 5, 16, 17, 17b, 23, 25, 26, 27, and 37  
 Owner: Governance  
 
 ## Purpose
@@ -26,6 +26,7 @@ This file is the single authoritative in-repo source for audited phase-number me
 | Phase 25 | Strategy Lifecycle Management | `docs/phases/phase_25_strategy_lifecycle.md` |
 | Phase 26 | No authoritative in-repo phase taxonomy artifact was located during the audit. | This roadmap entry is the governing clarification for audited artifacts. |
 | Phase 27 | Risk Framework | `docs/phases/phase-27-status.md` |
+| Phase 37 | Watchlist Engine | `docs/phases/phase-37-status.md` |
 
 ## Taxonomy Guardrails
 - Phase 17 and Phase 17b are not interchangeable: Phase 17 is the umbrella phase, and Phase 17b is the Owner Dashboard sub-phase.
@@ -42,7 +43,7 @@ Define and track the Owner Dashboard sub-phase based on repository-verified arti
 
 ### Explicit Deliverables
 - Backend-served Owner Dashboard surface at `/ui` via FastAPI static mount.
-- Owner Dashboard HTML marker (`<title>Owner Dashboard</title>`) in the served UI.
+- Repository-served `/ui` runtime artifact from `src/ui/index.html`.
 - Manual trigger endpoint `POST /analysis/run` associated with owner-operator flow.
 - Evidence-backed documentation and tests for the above artifacts.
 
@@ -51,7 +52,7 @@ Define and track the Owner Dashboard sub-phase based on repository-verified arti
 - Claiming Phase 17b as fully implemented while route documentation mismatch remains unresolved.
 
 ### Acceptance Evidence Requirements
-- Repository evidence in code and tests confirms `/ui` serving behavior and Owner Dashboard marker.
+- Repository evidence in code and tests confirms `/ui` serving behavior and the current runtime artifact.
 - Repository evidence confirms `POST /analysis/run` exists and is tested.
 - Documentation references are present and aligned with verified backend route behavior.
 
@@ -104,3 +105,28 @@ No standalone Phase 27 Risk Framework module was verified.
 - Standalone repository-verifiable framework module(s).
 - Explicit policy logic definition.
 - Documentation and tests mapped directly to Phase 27 framework scope.
+
+---
+
+## Phase 37
+
+### Goal
+Define Phase 37 using the bounded watchlist workflow that is verifiable in the repository.
+
+> Governance Note  
+> The implementation status of Phase 37 is explicitly documented in:  
+> `docs/phases/phase-37-status.md`
+
+### Verified Existing Artifacts
+- SQLite-backed watchlist persistence and CRUD behavior.
+- Watchlist CRUD API endpoints and deterministic response models.
+- Snapshot-only watchlist execution with deterministic ranking output and isolated symbol failures.
+- Backend-served `/ui` watchlist management and execution markers tied to the implemented API routes.
+
+### Explicitly Out of Scope
+- Claiming Phase 37 as market-data expansion, charting, alerts, or trading-desk completion.
+- Treating Phase 37 evidence as proof of later dashboard/product phases.
+
+### Acceptance Evidence Requirements
+- Repository-verifiable code and tests exist for watchlist persistence, CRUD, execution, ranking, and `/ui` watchlist behavior.
+- Roadmap and runtime-facing docs describe the watchlist workflow as bounded Phase 37 scope rather than as later-phase product completion.

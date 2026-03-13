@@ -26,8 +26,10 @@ Use this order:
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
   - Runtime-served operator UI is `/ui`.
   - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
+  - The current Phase 37 browser workflow on the same `/ui` surface uses `/watchlists`, `/watchlists/{watchlist_id}`, and `POST /watchlists/{watchlist_id}/execute`.
   - `/owner` is not a canonical runtime entrypoint.
 - [Phase 36 web activation evidence](roadmap/phase-36-web-activation-evidence.md)
+- [Phase 37 watchlist engine status](phases/phase-37-status.md)
 
 ## Versioning & Governance
 - [Versioning model](versioning/model.md)
@@ -50,6 +52,7 @@ The authoritative in-repo source for audited phase-number meanings is [Execution
 | Phase 25 | Strategy Lifecycle Management | `docs/phases/phase_25_strategy_lifecycle.md` |
 | Phase 26 | No authoritative in-repo meaning located | `docs/roadmap/execution_roadmap.md` |
 | Phase 27 | Risk Framework | `docs/phases/phase-27-status.md` |
+| Phase 37 | Watchlist Engine | `docs/phases/phase-37-status.md` |
 
 ## Reference Navigation
 The links below are navigation aids only. They do not redefine the authoritative phase taxonomy.
@@ -71,6 +74,12 @@ Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b
 Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above.
 - [Paper trading boundary](paper_trading.md)
 - [Runbook](RUNBOOK.md)
+
+### Phase 37 Reference Materials
+Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above.
+- [Phase 37 watchlist engine status](phases/phase-37-status.md)
+- [Operator dashboard runtime surface](ui/owner_dashboard.md)
+- [API usage contract](api/usage_contract.md)
 
 ### Phase 18 Reference Materials
 Phase 18 reference links remain navigational and do not override the authoritative audited taxonomy above.
