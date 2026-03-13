@@ -5,12 +5,14 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 
 import api.main as api_main
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
+from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 
 OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
@@ -27,6 +29,10 @@ def _make_signal_repo(tmp_path: Path) -> SqliteSignalRepository:
 
 def _make_analysis_repo(tmp_path: Path) -> SqliteAnalysisRunRepository:
     return SqliteAnalysisRunRepository(db_path=tmp_path / "analysis.db")
+
+
+def _make_watchlist_repo(tmp_path: Path) -> SqliteWatchlistRepository:
+    return SqliteWatchlistRepository(db_path=tmp_path / "watchlists.db")
 
 
 def _insert_ingestion_run(
@@ -104,20 +110,38 @@ def _insert_snapshot_rows(
     conn.close()
 
 
+class _ScoreFromCloseStrategy:
+    name = "WATCHLIST_FAKE"
+
+    def generate_signals(self, df: Any, config: dict[str, Any]) -> list[dict[str, Any]]:
+        last_row = df.iloc[-1]
+        return [
+            {
+                "score": float(last_row["volume"]),
+                "signal_strength": float(last_row["close"]),
+                "stage": "setup",
+            }
+        ]
+
+
 def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "get_runtime_controller", lambda: _RuntimeControllerStub("running"))
     signal_repo = _make_signal_repo(tmp_path)
     analysis_repo = _make_analysis_repo(tmp_path)
+    watchlist_repo = _make_watchlist_repo(tmp_path)
 
     monkeypatch.setattr(api_main, "signal_repo", signal_repo)
     monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+    monkeypatch.setattr(api_main, "watchlist_repo", watchlist_repo)
+    monkeypatch.setattr(api_main, "_require_engine_runtime_running", lambda: None)
+    monkeypatch.setattr(api_main, "create_registered_strategies", lambda: [_ScoreFromCloseStrategy()])
 
     ingestion_run_id = str(uuid.uuid4())
     _insert_ingestion_run(
         tmp_path / "analysis.db",
         ingestion_run_id,
-        symbols=["AAPL"],
+        symbols=["AAPL", "MSFT", "NVDA"],
     )
     _insert_snapshot_rows(
         tmp_path / "analysis.db",
@@ -128,6 +152,26 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
             (1735689600000, 101.0, 102.0, 100.0, 101.0, 1000.0),
             (1735776000000, 100.0, 101.0, 90.0, 91.0, 1000.0),
             (1735862400000, 90.0, 91.0, 80.0, 81.0, 1000.0),
+        ],
+    )
+    _insert_snapshot_rows(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        "MSFT",
+        "D1",
+        [
+            (1735689600000, 201.0, 202.0, 200.0, 201.0, 70.0),
+            (1735776000000, 205.0, 206.0, 204.0, 205.0, 72.0),
+        ],
+    )
+    _insert_snapshot_rows(
+        tmp_path / "analysis.db",
+        ingestion_run_id,
+        "NVDA",
+        "D1",
+        [
+            (1735689600000, 301.0, 302.0, 300.0, 301.0, 95.0),
+            (1735776000000, 306.0, 307.0, 305.0, 306.0, 96.0),
         ],
     )
 
@@ -173,6 +217,11 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
         assert 'operatorHeaders={[roleHeaderName]:"operator"}' in ui_response.text
         assert "/analysis/run" in ui_response.text
         assert "/signals?limit=20&sort=created_at_desc" in ui_response.text
+        assert "/watchlists" in ui_response.text
+        assert "/watchlists/{watchlist_id}" in ui_response.text
+        assert "/watchlists/{watchlist_id}/execute" in ui_response.text
+        assert 'id="watchlist-form"' in ui_response.text
+        assert 'id="watchlist-ranked-result-list"' in ui_response.text
 
         state_response = client.get("/system/state", headers=READ_ONLY_HEADERS)
         assert state_response.status_code == 200
@@ -206,3 +255,65 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
         signals_payload = signals_response.json()
         assert signals_payload["total"] >= 1
         assert any(item["symbol"] == "AAPL" for item in signals_payload["items"])
+
+        create_watchlist_response = client.post(
+            "/watchlists",
+            headers=OPERATOR_HEADERS,
+            json={
+                "watchlist_id": "phase37-tech",
+                "name": "Phase 37 Tech",
+                "symbols": ["MSFT", "NVDA"],
+            },
+        )
+        assert create_watchlist_response.status_code == 200
+        assert create_watchlist_response.json()["watchlist_id"] == "phase37-tech"
+
+        list_watchlists_response = client.get("/watchlists", headers=READ_ONLY_HEADERS)
+        assert list_watchlists_response.status_code == 200
+        assert list_watchlists_response.json()["total"] == 1
+
+        update_watchlist_response = client.put(
+            "/watchlists/phase37-tech",
+            headers=OPERATOR_HEADERS,
+            json={
+                "name": "Phase 37 Ranked Tech",
+                "symbols": ["NVDA", "MSFT"],
+            },
+        )
+        assert update_watchlist_response.status_code == 200
+        assert update_watchlist_response.json()["name"] == "Phase 37 Ranked Tech"
+
+        read_watchlist_response = client.get(
+            "/watchlists/phase37-tech",
+            headers=READ_ONLY_HEADERS,
+        )
+        assert read_watchlist_response.status_code == 200
+        assert read_watchlist_response.json()["symbols"] == ["NVDA", "MSFT"]
+
+        execute_watchlist_response = client.post(
+            "/watchlists/phase37-tech/execute",
+            headers=OPERATOR_HEADERS,
+            json={
+                "ingestion_run_id": ingestion_run_id,
+                "market_type": "stock",
+                "lookback_days": 200,
+                "min_score": 60.0,
+            },
+        )
+        assert execute_watchlist_response.status_code == 200
+        execute_payload = execute_watchlist_response.json()
+        assert execute_payload["watchlist_id"] == "phase37-tech"
+        assert execute_payload["watchlist_name"] == "Phase 37 Ranked Tech"
+        assert [item["symbol"] for item in execute_payload["ranked_results"]] == ["NVDA", "MSFT"]
+        assert [item["rank"] for item in execute_payload["ranked_results"]] == [1, 2]
+        assert execute_payload["failures"] == []
+
+        delete_watchlist_response = client.delete(
+            "/watchlists/phase37-tech",
+            headers=OPERATOR_HEADERS,
+        )
+        assert delete_watchlist_response.status_code == 200
+        assert delete_watchlist_response.json() == {
+            "watchlist_id": "phase37-tech",
+            "deleted": True,
+        }
