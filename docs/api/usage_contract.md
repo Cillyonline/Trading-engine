@@ -120,6 +120,15 @@ Canonical success response example:
 - For this operator contract, valid payload decisions come from the canonical request table above and the error table in the `POST /analysis/run` section below.
 - A successful response with `signals: []` is still a valid completed run.
 
+## Phase 37 Watchlist Workflow
+
+The repository now includes a bounded Phase 37 watchlist workflow on top of the existing snapshot-only analysis surface.
+
+- Persistence and CRUD are exposed through `/watchlists` routes.
+- Execution and ranking are exposed through `POST /watchlists/{watchlist_id}/execute`.
+- The workflow is bounded to saved watchlists, snapshot-only execution, deterministic ranking, and isolated symbol failures.
+- This API contract does not imply later-phase charting, alerts, trading-desk, or broader market-data-product claims.
+
 ## Common Conventions
 
 ### Snapshot-first analysis contract
@@ -699,6 +708,217 @@ curl -s -X POST http://localhost:8000/analysis/run \
 
 ---
 
+## POST /watchlists
+
+### Purpose
+
+Create a persisted watchlist with a stable identifier, display name, and ordered symbol membership.
+
+### Request
+
+**Request body:**
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `watchlist_id` | string | required | none | Stable saved-watchlist identifier. |
+| `name` | string | required | none | Human-readable watchlist name. |
+| `symbols` | array of strings | required | none | Ordered symbol list. Must not be empty. |
+
+**Validation rules:**
+
+- Mutation requires an operator-capable role.
+- `symbols` must not be empty and must not contain empty values.
+- Duplicate names or identifiers are rejected.
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "watchlist_id": "tech-growth",
+    "name": "Tech Growth",
+    "symbols": ["MSFT", "AAPL", "NVDA"]
+  }
+  ```
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller role cannot mutate watchlists. |
+| 422 | `{"detail":"watchlist symbols must not contain empty values"}` | `watchlist symbols must not contain empty values` | Symbol list contains empty members. |
+| 422 | `{"detail":"watchlist name and symbols must remain unique"}` | `watchlist name and symbols must remain unique` | Duplicate identifier or name. |
+| 422 | Pydantic validation list | varies | Invalid request body such as missing fields. |
+
+---
+
+## GET /watchlists
+
+### Purpose
+
+Read the saved watchlist inventory in deterministic order.
+
+### Request
+
+No request body.
+
+**Validation rules:**
+
+- Read access requires a valid authenticated role header and a role permitted to inspect watchlists.
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "items": [
+      {
+        "watchlist_id": "alpha-list",
+        "name": "Alpha",
+        "symbols": ["AAPL"]
+      }
+    ],
+    "total": 1
+  }
+  ```
+
+**Empty/no-result behavior:** Returns `items: []` and `total: 0` when no watchlists are stored.
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller has a valid role but lacks read access. |
+
+---
+
+## GET /watchlists/{watchlist_id}
+
+### Purpose
+
+Read one persisted watchlist by identifier.
+
+### Request
+
+**Path parameters:**
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `watchlist_id` | string | required | Saved watchlist identifier. |
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "watchlist_id": "tech-growth",
+    "name": "Tech Growth",
+    "symbols": ["MSFT", "AAPL", "NVDA"]
+  }
+  ```
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller has a valid role but lacks read access. |
+| 404 | `{"detail":"watchlist_not_found"}` | `watchlist_not_found` | `watchlist_id` does not exist. |
+
+---
+
+## PUT /watchlists/{watchlist_id}
+
+### Purpose
+
+Replace the saved watchlist name and symbol membership for an existing watchlist.
+
+### Request
+
+**Path parameters:**
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `watchlist_id` | string | required | Saved watchlist identifier. |
+
+**Request body:**
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `name` | string | required | none | Replacement display name. |
+| `symbols` | array of strings | required | none | Replacement ordered symbol list. Must not be empty. |
+
+**Validation rules:**
+
+- Mutation requires an operator-capable role.
+- Missing watchlists return `404`.
+- Invalid updates do not partially persist.
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "watchlist_id": "tech-growth",
+    "name": "Phase 37 Ranked Tech",
+    "symbols": ["NVDA", "MSFT"]
+  }
+  ```
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller role cannot mutate watchlists. |
+| 404 | `{"detail":"watchlist_not_found"}` | `watchlist_not_found` | `watchlist_id` does not exist. |
+| 422 | `{"detail":"watchlist symbols must not contain empty values"}` | `watchlist symbols must not contain empty values` | Symbol list contains empty members. |
+| 422 | `{"detail":"watchlist name and symbols must remain unique"}` | `watchlist name and symbols must remain unique` | New state conflicts with another watchlist. |
+| 422 | Pydantic validation list | varies | Invalid request body. |
+
+---
+
+## DELETE /watchlists/{watchlist_id}
+
+### Purpose
+
+Delete a persisted watchlist.
+
+### Request
+
+**Path parameters:**
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `watchlist_id` | string | required | Saved watchlist identifier. |
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "watchlist_id": "tech-growth",
+    "deleted": true
+  }
+  ```
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller role cannot mutate watchlists. |
+| 404 | `{"detail":"watchlist_not_found"}` | `watchlist_not_found` | `watchlist_id` does not exist. |
+
+---
+
 ## POST /watchlists/{watchlist_id}/execute
 
 ### Purpose
@@ -726,6 +946,7 @@ Run the persisted watchlist workflow against a saved watchlist and return determ
 
 - `watchlist_id` must identify an existing saved watchlist, otherwise `404`.
 - `ingestion_run_id` must be a valid UUIDv4 and must exist.
+- Mutation-level watchlist CRUD happens through the `/watchlists` routes above; this endpoint only executes an already-saved watchlist.
 - Unlike `/screener/basic`, this endpoint does not require every watchlist symbol to be snapshot-ready up front. Snapshot failures for individual symbols are isolated into the response `failures` array.
 
 ### Success response
@@ -774,6 +995,7 @@ Run the persisted watchlist workflow against a saved watchlist and return determ
 - Only `setup` signals with `score >= min_score` participate in ranking.
 - Ranked items are sorted deterministically by `score DESC`, then `signal_strength DESC`, then `symbol ASC`.
 - `rank` is the 1-based position after deterministic sorting.
+- The response is designed for the bounded Phase 37 `/ui` workflow and does not, by itself, imply later trading-desk or charting capability.
 
 **Empty/no-result behavior:** Returns `ranked_results: []` when no qualifying setup signals are produced. Symbol-level failures may still be present in `failures`.
 
@@ -781,6 +1003,8 @@ Run the persisted watchlist workflow against a saved watchlist and return determ
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller has a valid role but lacks execution privileges. |
 | 404 | `{"detail":"watchlist_not_found"}` | `watchlist_not_found` | `watchlist_id` does not exist. |
 | 422 | `{"detail":"invalid_ingestion_run_id"}` | `invalid_ingestion_run_id` | `ingestion_run_id` is not a valid UUIDv4 string. |
 | 422 | `{"detail":"ingestion_run_not_found"}` | `ingestion_run_not_found` | `ingestion_run_id` does not exist in the repository. |

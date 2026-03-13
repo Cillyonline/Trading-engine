@@ -87,7 +87,7 @@ Market Data
 | 34 | Runtime Stabilization | Implemented |
 | 35 | Observability Layer | Implemented |
 | 36 | Web Activation | Partially Implemented |
-| 37 | Watchlist Engine | Partially Implemented |
+| 37 | Watchlist Engine | Implemented in Repository |
 | 38 | Market Data Integration | Partially Implemented |
 | 39 | Charting & Visual Analysis | Planned |
 | 40 | Trading Desk Dashboard | Partially Implemented |
@@ -105,6 +105,7 @@ Market Data
 - Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
 - Phase 35 is marked `Implemented` in this revision because metrics, telemetry, runtime health, guard-trigger monitoring, and integration tests are all present in-repo.
+- Phase 37 is marked `Implemented in Repository` in this revision because watchlist persistence, CRUD API, execution/ranking, `/ui` behavior, and tests are now all present in-repo.
 - Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present.
 
 ---
@@ -666,17 +667,20 @@ Turn the operator-oriented UI into a usable browser analysis application.
 ---
 
 ## Phase 37 - Watchlist Engine
-**Status:** Partially Implemented
+**Status:** Implemented in Repository
 
 **Goal**
 Enable repeatable multi-asset screening.
 
 **Current Status Basis**
-- Watchlist analysis orchestration exists in the engine.
-- No full watchlist CRUD, persistence, ranking workflow, or dedicated watchlist management UI was verified.
+- Watchlist persistence is implemented through the SQLite watchlist repository and is covered by repository tests.
+- The FastAPI surface exposes watchlist create, list, read, update, delete, and execute endpoints with role-guarded behavior.
+- Watchlist execution returns deterministic ranked results and isolated symbol failures for snapshot-only runs.
+- The backend-served `/ui` workbench includes watchlist management and execution panels and is covered by runtime-surface and browser-flow tests.
+- The bounded Phase 37 contract is documented in `docs/phases/phase-37-status.md`.
 
 **Outcome**
-- Multi-asset analysis exists at engine level, but the full watchlist product workflow remains incomplete.
+- The repository contains a verified watchlist workflow for persistence, CRUD, execution, ranking, and bounded `/ui` behavior without implying later trading-desk, charting, alerting, or broader product claims.
 
 ---
 
@@ -869,7 +873,7 @@ Marktdaten
 | 34 | Runtime Stabilization | Implemented |
 | 35 | Observability Layer | Implemented |
 | 36 | Web Activation | Partially Implemented |
-| 37 | Watchlist Engine | Partially Implemented |
+| 37 | Watchlist Engine | Implemented in Repository |
 | 38 | Market Data Integration | Partially Implemented |
 | 39 | Charting & Visual Analysis | Planned |
 | 40 | Trading Desk Dashboard | Partially Implemented |
@@ -1448,17 +1452,20 @@ Die operatororientierte UI in eine nutzbare browserbasierte Analyseanwendung ver
 ---
 
 ## Phase 37 - Watchlist Engine
-**Status:** Partially Implemented
+**Status:** Implemented in Repository
 
 **Ziel**
 Wiederholbares Multi-Asset-Screening ermoeglichen.
 
 **Aktuelle Statusbasis**
-- Watchlist-Analyse-Orchestrierung existiert bereits in der Engine.
-- Eine vollstaendige Watchlist-CRUD-, Persistenz- und UI-Workflow-Schicht wurde nicht verifiziert.
+- Watchlist-Persistenz ist ueber das SQLite-Watchlist-Repository implementiert und durch Repository-Tests abgesichert.
+- Die FastAPI-Surface stellt Create-, List-, Read-, Update-, Delete- und Execute-Endpunkte fuer Watchlists mit rollenbasierter Begrenzung bereit.
+- Watchlist-Execution liefert deterministische Ranked Results und isolierte Symbol-Fehler fuer snapshot-only Runs.
+- Die backend-ausgelieferte `/ui`-Workbench enthaelt Watchlist-Management- und Execution-Panels und ist durch Runtime-Surface- und Browser-Flow-Tests abgedeckt.
+- Der begrenzte Phase-37-Vertrag ist in `docs/phases/phase-37-status.md` dokumentiert.
 
 **Ergebnis**
-- Multi-Asset-Analyse existiert auf Engine-Level, aber der volle Watchlist-Produkt-Workflow ist unvollstaendig.
+- Das Repository enthaelt einen verifizierten Watchlist-Workflow fuer Persistenz, CRUD, Execution, Ranking und begrenztes `/ui`-Verhalten, ohne spaetere Trading-Desk-, Charting-, Alerting- oder breitere Produkt-Claims zu implizieren.
 
 ---
 
