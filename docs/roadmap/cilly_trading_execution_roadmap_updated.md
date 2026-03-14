@@ -122,6 +122,7 @@ Market Data
 - Status changes follow one update path: update evidence as needed, then update this master roadmap to change the canonical phase maturity/status label.
 - Secondary docs that describe a phase do not create an independent status authority; they are reconciled to this file.
 - Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
+- Phase 23 is bounded to one dedicated research-only dashboard surface; current `/ui` operator panels, analytics artifacts, charting surfaces, and trading-desk wording do not count as implied implementation evidence for that phase.
 - Phase 23 still has no verified Research Dashboard implementation artifact in code, tests, or runtime-facing docs.
 - Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
@@ -482,14 +483,15 @@ Guarantee reproducible research artifacts.
 **Status:** Not Implemented
 
 **Goal**
-Track research dashboard maturity honestly.
+Define one bounded authoritative meaning for the Research Dashboard phase and keep its status evidence-based.
 
 **Current Status Basis**
-- The dedicated phase status file explicitly states that no Research Dashboard implementation artifact was verified.
-- No repo-verifiable code, tests, or runtime-facing docs confirm the dashboard itself.
+- The dedicated phase status file constrains Phase 23 to one dedicated research-only dashboard surface rather than generic dashboard, operator, analytics, charting, or trading-desk language.
+- The repository does not currently contain repo-verifiable code, tests, or runtime-facing docs for that bounded Phase 23 dashboard artifact.
+- Existing evidence for Phase 17b `/ui`, Phase 30 analytics artifacts, Phase 39 read-only charting, and Phase 40 desk-style dashboard scope is explicitly treated as adjacent and non-substitutable.
 
 **Outcome**
-- The roadmap remains honest about this unimplemented phase.
+- The roadmap defines exactly what Phase 23 means, what it does not mean, and why it remains unimplemented.
 
 ---
 
@@ -1276,14 +1278,15 @@ Reproduzierbare Research-Artefakte garantieren.
 **Status:** Not Implemented
 
 **Ziel**
-Den Reifegrad des Research Dashboards ehrlich nachverfolgen.
+Eine klar begrenzte authoritative Bedeutung fuer die Phase Research Dashboard festlegen und den Status evidenzbasiert halten.
 
 **Aktuelle Statusbasis**
-- Die dedizierte Phasen-Statusdatei erklaert explizit, dass kein Research-Dashboard-Implementierungsartefakt verifiziert wurde.
-- Weder Code noch Tests noch runtime-nahe Doku bestaetigen das Dashboard selbst.
+- Die dedizierte Phasen-Statusdatei begrenzt Phase 23 auf eine einzelne dedizierte research-only Dashboard-Surface statt auf allgemeine Dashboard-, Operator-, Analytics-, Charting- oder Trading-Desk-Sprache.
+- Das Repository enthaelt derzeit keinen repo-verifizierbaren Code, keine Tests und keine runtime-nahe Doku fuer dieses begrenzte Phase-23-Dashboard-Artefakt.
+- Vorhandene Evidenz fuer Phase 17b `/ui`, Phase 30 Analytics-Artefakte, Phase 39 read-only Charting und Phase-40-artigen Desk-Scope wird explizit als benachbart und nicht austauschbar behandelt.
 
 **Ergebnis**
-- Die Roadmap bleibt fuer diese nicht implementierte Phase ehrlich.
+- Die Roadmap definiert jetzt exakt, was Phase 23 bedeutet, was sie nicht bedeutet und warum sie weiter nicht implementiert ist.
 
 ---
 
