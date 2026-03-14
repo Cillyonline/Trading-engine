@@ -12,13 +12,17 @@ source .venv/bin/activate
 2) Install test dependencies:
 
 ```bash
-pip install -r requirements-dev.txt
+python -m pip install -e ".[test]"
 ```
+
+This is the canonical test setup path because it uses the repository-controlled
+`pyproject.toml` and its `test` optional dependency group. Use Python 3.12+ to
+match the package metadata.
 
 ## Run the test suite
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
 ## Notes

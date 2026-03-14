@@ -4,7 +4,7 @@
 This guide provides the single authoritative path for owners to start and access the application locally. Follow the steps in order to verify the API is running and then stop/reset it cleanly.
 
 ## B. Prerequisites
-- Python 3.10+
+- Python 3.12+
 - `pip`
 
 ## C. Single Authoritative Start Method (canonical)
@@ -13,9 +13,12 @@ From the repository root, run exactly:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -e ".[test]"
 PYTHONPATH=src uvicorn api.main:app --reload
 ```
+
+The install step is canonical because it comes from the repository-controlled
+`pyproject.toml`. It replaces older requirements-file-based instructions.
 
 ## D. Secondary / utility entrypoints (not canonical)
 - `PYTHONPATH=src python -m api.main`

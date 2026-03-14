@@ -1,7 +1,7 @@
 # Quickstart – Cilly Trading Engine
 
 ## 1. Prerequisites
-- Python 3.10+
+- Python 3.12+
 - Git installed
 
 ## 2. Clone the Repository
@@ -17,7 +17,7 @@ cd Trading-engine
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
-python -m pip install -r requirements.txt
+python -m pip install -e ".[test]"
 ```
 
 ### Bash (macOS/Linux)
@@ -25,10 +25,11 @@ python -m pip install -r requirements.txt
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
-python -m pip install -r requirements.txt
+python -m pip install -e ".[test]"
 ```
 
-This repository includes `requirements.txt`, so install dependencies with that file.
+The canonical dependency install path is the repository `pyproject.toml` via
+`python -m pip install -e ".[test]"`.
 
 ## 4. Run Deterministic Smoke Test
 
