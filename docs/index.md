@@ -48,7 +48,10 @@ Use this order:
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](roadmap/execution_roadmap.md).
-The broader [Complete Master Roadmap](roadmap/cilly_trading_execution_roadmap_updated.md) is a navigation and status document and must defer to that execution roadmap wherever audited phase meaning is concerned.
+The authoritative in-repo source for phase maturity/status is the broader [Complete Master Roadmap](roadmap/cilly_trading_execution_roadmap_updated.md).
+The execution roadmap governs audited phase meaning and taxonomy only, while the master roadmap governs canonical phase maturity/status.
+Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
+Status changes therefore follow one update path: update supporting evidence as needed, then update the master roadmap to change the canonical phase maturity/status.
 
 | Phase | Meaning in the authoritative taxonomy | Primary trace |
 |-------|---------------------------------------|---------------|
@@ -63,10 +66,10 @@ The broader [Complete Master Roadmap](roadmap/cilly_trading_execution_roadmap_up
 | Phase 37 | Watchlist Engine | `docs/phases/phase-37-status.md` |
 
 ## Reference Navigation
-The links below, including the broader master roadmap, are navigation aids only. They do not redefine the authoritative phase taxonomy.
+The links below are navigation aids only. They do not redefine the authoritative phase taxonomy or the canonical phase maturity/status in the master roadmap.
 
 ### Phase 17 Reference Materials
-Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap.
+Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap. Any status wording in the links below is derived and must defer to the master roadmap.
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
 - [Phase 36 /ui web activation contract](ui/phase-36-web-activation-contract.md)
 - [API guarantees](api/api_guarantees.md)
@@ -79,18 +82,18 @@ Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b
 - [Interface usage patterns](interfaces/usage_patterns.md)
 
 ### Phase 24 Reference Materials
-Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above.
+Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
 - [Paper trading boundary](paper_trading.md)
 - [Runbook](RUNBOOK.md)
 
 ### Phase 37 Reference Materials
-Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above.
+Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
 - [Phase 37 watchlist engine status](phases/phase-37-status.md)
 - [Operator dashboard runtime surface](ui/owner_dashboard.md)
 - [API usage contract](api/usage_contract.md)
 
 ### Phase 18 Reference Materials
-Phase 18 reference links remain navigational and do not override the authoritative audited taxonomy above.
+Phase 18 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
 - [Change policy](external/change_policy.md)
 - [Client types](external/client_types.md)
 - [Contract surface](external/contract_surface.md)
@@ -98,7 +101,7 @@ Phase 18 reference links remain navigational and do not override the authoritati
 - [Integration assumptions](external/integration_assumptions.md)
 
 ### Phase 19 Reference Materials
-Phase 19 reference links remain navigational and do not override the authoritative audited taxonomy above.
+Phase 19 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
 - [Compatibility gate](versioning/compatibility_gate.md)
 - [Change enforcement](versioning/change_enforcement.md)
 - [Version declaration](versioning/declaration.md)
