@@ -5,7 +5,7 @@
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -e ".[test]"
 PYTHONPATH=src uvicorn api.main:app --reload
 ```
 
@@ -23,8 +23,20 @@ Expected output:
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - `pip`
+
+## Canonical local setup path
+
+The canonical local dependency install path is the repository `pyproject.toml`:
+
+```bash
+python -m pip install -e ".[test]"
+```
+
+Run it from the repository root after activating your virtual environment. This
+installs the project and the repo-defined test extra from files that are
+versioned in this repository.
 
 ## Canonical startup path
 
@@ -73,7 +85,7 @@ source .venv/bin/activate
 2) **Install dependencies**
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -e ".[test]"
 ```
 
 3) **Start the API (terminal A)**
@@ -200,7 +212,7 @@ Safety note: reset deletes local signals, analysis runs, ingestion runs, and sna
 ## Run tests (optional)
 
 ```bash
-python -m pytest
+python -m pytest -q
 ```
 
 See `docs/testing.md` for the canonical test setup and command, and see
