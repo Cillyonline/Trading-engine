@@ -10,11 +10,23 @@ This guide provides the single authoritative path for owners to start and access
 ## C. Single Authoritative Start Method (canonical)
 From the repository root, run exactly:
 
+### Bash (macOS/Linux)
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ".[test]"
 PYTHONPATH=src uvicorn api.main:app --reload
+```
+
+### PowerShell (Windows)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[test]"
+$env:PYTHONPATH = "src"
+uvicorn api.main:app --reload
 ```
 
 The install step is canonical because it comes from the repository-controlled
@@ -43,8 +55,21 @@ The application is running when the endpoint returns exactly:
 2. Wait until shutdown completes and the terminal prompt returns.
 3. Optional confirmation:
 
+### Bash (macOS/Linux)
+
 ```bash
 curl --fail http://127.0.0.1:8000/health
+```
+
+### PowerShell (Windows)
+
+```powershell
+try {
+  Invoke-WebRequest http://127.0.0.1:8000/health -ErrorAction Stop | Out-Null
+  throw "API still running"
+} catch {
+  if ($_.Exception.Message -eq "API still running") { throw }
+}
 ```
 
 After stopping `uvicorn`, the command exits non-zero because the endpoint is unreachable.
@@ -52,8 +77,16 @@ After stopping `uvicorn`, the command exits non-zero because the endpoint is unr
 ## H. Reset Local Runtime State
 Run from repository root (local development only):
 
+### Bash (macOS/Linux)
+
 ```bash
 rm -f cilly_trading.db
+```
+
+### PowerShell (Windows)
+
+```powershell
+Remove-Item .\cilly_trading.db -ErrorAction SilentlyContinue
 ```
 
 On next API start, SQLite tables are recreated automatically.
@@ -61,12 +94,25 @@ On next API start, SQLite tables are recreated automatically.
 ## I. Troubleshooting
 - If `uvicorn: command not found` appears, activate the virtual environment again:
 
+  Bash (macOS/Linux):
   ```bash
   source .venv/bin/activate
   ```
 
+  PowerShell (Windows):
+  ```powershell
+  .\.venv\Scripts\Activate.ps1
+  ```
+
 - If `/health` does not respond, confirm the start command is running exactly as documented:
 
+  Bash (macOS/Linux):
   ```bash
   PYTHONPATH=src uvicorn api.main:app --reload
+  ```
+
+  PowerShell (Windows):
+  ```powershell
+  $env:PYTHONPATH = "src"
+  uvicorn api.main:app --reload
   ```
