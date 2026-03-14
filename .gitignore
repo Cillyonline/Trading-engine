@@ -1,6 +1,11 @@
 ﻿__pycache__/
 *.pyc
 .pytest_cache/
+
+# Transient PR body artifacts at repository root
+/pr_body.md
+/pr_body_*.md
+/.pr-body-*.md
 *.db
 .venv*/
 
