@@ -7,10 +7,13 @@ It defines the bounded Phase 39 scope for the implemented chart panel and visual
 
 This contract is normative for Phase 39 documentation. It must stay aligned with the current `/ui` runtime shell, the already implemented runtime API surface, and the existing runtime-facing docs that govern `/ui`.
 
+The authoritative chart-data shape, reuse evaluation, and validation boundary live in `docs/api/runtime_chart_data_contract.md`.
+
 ## Current Repository State
 - `/ui` is the canonical runtime-served browser surface.
 - The current runtime shell is still the Phase 36 and Phase 37 workbench described in `docs/ui/phase-36-web-activation-contract.md`, `docs/ui/owner_dashboard.md`, and `docs/phases/phase-37-status.md`.
 - `src/ui/index.html` now contains a dedicated chart panel and visual-analysis surface with stable runtime markers for Phase 39 verification.
+- Phase 39 chart data is defined as a projection over existing runtime API routes, not as a new chart backend.
 - The current `/ui` shell explicitly limits the charting surface to Phase 39 visual analysis and blocks Phase 40 desk widgets, alerts, paper-trading workflow, and live-trading workflow claims.
 
 This file therefore defines the allowed Phase 39 contract boundary for the implemented `/ui` chart panel and for later bounded work on the same surface.
@@ -55,6 +58,8 @@ The implemented chart panel on `/ui` is bounded as follows:
   - `POST /watchlists/{watchlist_id}/execute` for ranked watchlist scores and signal strength
   - `GET /signals?limit=20&sort=created_at_desc` for fallback score visibility when no session-local analysis result has been rendered yet
 - panel behavior remains read-only and browser-local; it does not create, mutate, or stream market data
+- chart consumers must use the existing runtime API routes through the contract in `docs/api/runtime_chart_data_contract.md`
+- `GET /signals` remains fallback-only historical evidence for the chart panel because its response does not expose `ingestion_run_id`
 
 ## Explicitly Out of Scope
 Phase 39 does not include:
@@ -69,6 +74,8 @@ Phase 39 does not include:
 - broker controls, order entry, order cancellation, or execution-side mutation from charts
 - market-data productization changes, new provider commitments, streaming feeds, or real-time market-data claims
 
+The chart panel therefore consumes existing runtime API routes and stops before any new market-data product or dedicated chart backend claim.
+
 If a charting claim depends on those capabilities, it belongs to a later issue and later evidence set.
 
 ## Evidence Pointers
@@ -77,6 +84,7 @@ Use these repository artifacts when reviewing Phase 39 wording:
 | Evidence area | Repository basis |
 | --- | --- |
 | Runtime `/ui` route boundary | `src/api/main.py` mounts `/ui` as the backend-served browser surface |
+| Runtime chart-data contract | `docs/api/runtime_chart_data_contract.md` defines the bounded chart payload shape and the existing runtime API routes that feed it |
 | Current `/ui` shell markers | `src/ui/index.html` contains the current workbench sections, chart panel markers, and explicit Phase 39 boundary text |
 | Runtime `/ui` shell verification | `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers, route references, chart-panel markers, and the "No Phase 40 desk widgets, alerts, or live trading controls" boundary text |
 | Browser workflow verification | `tests/test_ui_runtime_browser_flow.py` verifies the existing `/ui` browser workflow and deterministic chart-panel markers against the current runtime API surface |
@@ -89,10 +97,10 @@ Use these repository artifacts when reviewing Phase 39 wording:
 Reviewers should verify:
 
 1. The contract keeps `/ui` as the only canonical runtime-served browser surface for Phase 39 work.
-2. Every allowed Phase 39 capability is read-only, browser-rendered, and anchored to an already documented runtime/API surface.
-3. The contract claims only the implemented bounded chart panel and stable markers already verified in `src/ui/index.html` and the existing `/ui` tests.
+2. Every allowed Phase 39 capability is read-only, browser-rendered, and anchored to existing runtime API routes and the chart-data contract in `docs/api/runtime_chart_data_contract.md`.
+3. The contract claims only the implemented bounded chart panel, the existing runtime API routes, and stable markers already verified in `src/ui/index.html` and the existing `/ui` tests.
 4. The exclusions explicitly block Phase 40 trading-desk claims, alerts, Strategy Lab, paper-trading product workflow, and live-trading workflow claims.
-5. The wording stays consistent with the existing Phase 36 and Phase 37 `/ui` documentation.
+5. The wording stays consistent with the existing Phase 36 and Phase 37 `/ui` documentation and keeps `GET /signals` fallback-only rather than authoritative snapshot state.
 
 ## Outcome
 For Phase 39, the canonical bounded contract is:

@@ -16,6 +16,7 @@ Use this order:
 
 ## API Usage
 - [API usage](api/usage.md)
+- [Phase 39 runtime chart data contract](api/runtime_chart_data_contract.md)
 
 ## CLI Usage
 - [CLI usage](cli/usage.md)
@@ -29,6 +30,7 @@ Use this order:
   - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
   - The current Phase 37 browser workflow on the same `/ui` surface uses `/watchlists`, `/watchlists/{watchlist_id}`, and `POST /watchlists/{watchlist_id}/execute`.
   - The current Phase 39 browser workflow on the same `/ui` surface adds a bounded read-only chart panel fed by `POST /analysis/run`, `POST /watchlists/{watchlist_id}/execute`, and `GET /signals?limit=20&sort=created_at_desc`.
+  - The chart payload boundary for those existing routes is defined in `docs/api/runtime_chart_data_contract.md`.
   - The Phase 39 charting contract and roadmap status remain bounded to read-only visual analysis on `/ui` and do not imply Phase 40 desk scope.
   - `/owner` is not a canonical runtime entrypoint.
 - [Phase 36 web activation evidence](roadmap/phase-36-web-activation-evidence.md)
