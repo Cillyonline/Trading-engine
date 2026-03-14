@@ -4,12 +4,29 @@
 
 1) Create and activate a virtualenv:
 
+### PowerShell (Windows)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### Bash (macOS/Linux)
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
 2) Install test dependencies:
+
+### PowerShell (Windows)
+
+```powershell
+python -m pip install -e ".[test]"
+```
+
+### Bash (macOS/Linux)
 
 ```bash
 python -m pip install -e ".[test]"
@@ -20,6 +37,14 @@ This is the canonical test setup path because it uses the repository-controlled
 match the package metadata.
 
 ## Run the test suite
+
+### PowerShell (Windows)
+
+```powershell
+python -m pytest -q
+```
+
+### Bash (macOS/Linux)
 
 ```bash
 python -m pytest -q

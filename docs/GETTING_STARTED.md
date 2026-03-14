@@ -2,6 +2,7 @@
 
 ## A. Purpose
 This guide provides the single authoritative path for owners to start and access the application locally. Follow the steps in order to verify the API is running and then stop/reset it cleanly.
+The PowerShell path below is a first-class canonical local workflow for Windows.
 
 ## B. Prerequisites
 - Python 3.12+
@@ -50,6 +51,20 @@ The application is running when the endpoint returns exactly:
 {"status":"ok"}
 ```
 
+Use the matching shell command in a second terminal:
+
+### Bash (macOS/Linux)
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+### PowerShell (Windows)
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
 ## G. Clean Stop Procedure
 1. In the terminal where `uvicorn` is running, press `Ctrl+C` once.
 2. Wait until shutdown completes and the terminal prompt returns.
@@ -91,7 +106,23 @@ Remove-Item .\cilly_trading.db -ErrorAction SilentlyContinue
 
 On next API start, SQLite tables are recreated automatically.
 
-## I. Troubleshooting
+## I. Optional shell cleanup
+
+If you want to clear the session variable used by the canonical startup path:
+
+### Bash (macOS/Linux)
+
+```bash
+unset PYTHONPATH
+```
+
+### PowerShell (Windows)
+
+```powershell
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+```
+
+## J. Troubleshooting
 - If `uvicorn: command not found` appears, activate the virtual environment again:
 
   Bash (macOS/Linux):
