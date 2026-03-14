@@ -12,8 +12,8 @@ Choose the path that matches your role:
 
 Use these documents if you need to run, verify, or operate the platform locally.
 
-- Quick local setup: `docs/quickstart.md`
-- Canonical local runtime path: `docs/local_run.md`
+- Quick local setup (PowerShell and Bash): `docs/quickstart.md`
+- Canonical local runtime path (PowerShell and Bash): `docs/local_run.md`
 - Owner startup and reset cheatsheet: `docs/OWNER_RUNBOOK.md`
 - Working runbook and quality gate expectations: `docs/RUNBOOK.md`
 - Runtime and health references: `docs/health.md`, `docs/runtime_status_and_health.md`
@@ -48,7 +48,7 @@ The full boundary definition is documented in `docs/api/public_api_boundary.md`.
 
 ## Verification Paths
 
-- Operators validating a local environment should start with `docs/quickstart.md`, then use `docs/local_run.md` and `docs/OWNER_RUNBOOK.md`.
+- Operators validating a local environment should start with `docs/quickstart.md`, then use `docs/local_run.md` and `docs/OWNER_RUNBOOK.md`. Windows users should follow the PowerShell command blocks in those docs directly.
 - Contributors or reviewers validating behavior and change scope should start with `docs/index.md`, then use `docs/testing.md`, `docs/api/public_api_boundary.md`, and `docs/roadmap/execution_roadmap.md`.
 
 ## Local CI Check

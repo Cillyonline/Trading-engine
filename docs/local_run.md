@@ -1,5 +1,9 @@
 # Local Development: Run & Analyze
 
+This document defines the canonical local run path for both PowerShell on
+Windows and Bash on macOS/Linux. The PowerShell commands below are first-class
+instructions, not translations of the Bash path.
+
 ## TL;DR Quick Start (fresh local setup)
 
 ### Bash (macOS/Linux)
@@ -323,6 +327,23 @@ docker compose down -v
 ```
 
 Safety note: reset deletes local signals, analysis runs, ingestion runs, and snapshot rows.
+
+### Optional shell cleanup after stopping
+
+If you want to clear the local shell session variable used by the canonical
+startup path:
+
+### Bash (macOS/Linux)
+
+```bash
+unset PYTHONPATH
+```
+
+### PowerShell (Windows)
+
+```powershell
+Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
+```
 
 ## Common setup errors & fixes
 
