@@ -7,6 +7,11 @@ Owner: Governance
 ## Purpose
 This file is the single authoritative in-repo source for audited phase-number meanings.
 
+## Authority Relationship
+- This file governs the meaning of the audited phase numbers listed below.
+- The master roadmap at `docs/roadmap/cilly_trading_execution_roadmap_updated.md` may summarize broader sequencing and implementation-status context, but it must defer to this file for audited phase meaning.
+- If wording in a secondary roadmap, index, or audit artifact conflicts with the audited phase meanings defined here, this file controls the taxonomy interpretation.
+
 ## How to Use
 - Use this file to resolve the meaning of an audited phase number before relying on any secondary roadmap, index, or audit artifact.
 - Treat secondary documents as navigation or status evidence only unless they explicitly defer to this file.

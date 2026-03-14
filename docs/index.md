@@ -48,6 +48,7 @@ Use this order:
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](roadmap/execution_roadmap.md).
+The broader [Complete Master Roadmap](roadmap/cilly_trading_execution_roadmap_updated.md) is a navigation and status document and must defer to that execution roadmap wherever audited phase meaning is concerned.
 
 | Phase | Meaning in the authoritative taxonomy | Primary trace |
 |-------|---------------------------------------|---------------|
@@ -62,7 +63,7 @@ The authoritative in-repo source for audited phase-number meanings is [Execution
 | Phase 37 | Watchlist Engine | `docs/phases/phase-37-status.md` |
 
 ## Reference Navigation
-The links below are navigation aids only. They do not redefine the authoritative phase taxonomy.
+The links below, including the broader master roadmap, are navigation aids only. They do not redefine the authoritative phase taxonomy.
 
 ### Phase 17 Reference Materials
 Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap.

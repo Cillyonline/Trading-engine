@@ -19,6 +19,11 @@ Primary status sources:
 - `tests/**`
 - runtime and operator documentation under `docs/**`
 
+Authority model used in this file:
+- `docs/roadmap/execution_roadmap.md` is the authoritative in-repo source for audited phase meaning and taxonomy.
+- This master roadmap is the broader navigation and status document for the 45-phase reference, but it does not redefine audited phase meanings that are governed by the authoritative execution roadmap.
+- Where this file references an audited phase that is covered by the authoritative execution roadmap, phase meaning must defer to that file and any conflicting wording here should be read as non-authoritative.
+
 Status policy used in this file:
 - `Implemented`: repo-verifiable implementation exists without a documented material completion gap for this phase scope.
 - `Partially Implemented`: meaningful implementation exists, but documented scope gaps or runtime/documentation drift remain.
@@ -31,6 +36,12 @@ Status policy used in this file:
 ---
 
 # ENGLISH VERSION
+
+## Authority Relationship
+
+- `docs/roadmap/execution_roadmap.md` governs audited phase meaning.
+- This document governs the broader master-roadmap view, sequencing, and status labels for the 45-phase reference set.
+- For audited phases, this document must defer to the authoritative execution roadmap for taxonomy and phase-name interpretation.
 
 ## System Workflow
 
@@ -821,6 +832,12 @@ Enable controlled real-capital trading only after all earlier layers are proven.
 ---
 
 # DEUTSCHE VERSION
+
+## Authority Relationship
+
+- `docs/roadmap/execution_roadmap.md` steuert die autoritative Bedeutung der auditierten Phasen.
+- Dieses Dokument steuert die breitere Master-Roadmap-Sicht, die Einordnung im 45-Phasen-Referenzmodell und die hier verwendeten Statuslabels.
+- Fuer auditierte Phasen muss dieses Dokument bei Taxonomie und Phasenbedeutung auf die autoritative Execution-Roadmap verweisen.
 
 ## System-Workflow
 
