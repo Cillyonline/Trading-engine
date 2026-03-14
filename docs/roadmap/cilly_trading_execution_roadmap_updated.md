@@ -21,8 +21,15 @@ Primary status sources:
 
 Authority model used in this file:
 - `docs/roadmap/execution_roadmap.md` is the authoritative in-repo source for audited phase meaning and taxonomy.
-- This master roadmap is the broader navigation and status document for the 45-phase reference, but it does not redefine audited phase meanings that are governed by the authoritative execution roadmap.
-- Where this file references an audited phase that is covered by the authoritative execution roadmap, phase meaning must defer to that file and any conflicting wording here should be read as non-authoritative.
+- This master roadmap is the single authoritative in-repo source for phase maturity/status across the 45-phase reference set.
+- Per-phase status artifacts, audit reports, indexes, and other roadmap/navigation documents are evidence-bearing or explanatory surfaces only; they do not set canonical phase maturity/status unless their change is also reflected in this file.
+- This file does not redefine audited phase meanings that are governed by the authoritative execution roadmap.
+- Where this file references an audited phase that is covered by the authoritative execution roadmap, phase meaning must defer to that file and any conflicting wording here should be read as non-authoritative for taxonomy.
+
+Status update path:
+- Update supporting evidence first, as needed, in the relevant per-phase or audit artifact.
+- Update this file to record the canonical phase maturity/status change.
+- Treat any secondary document that has not yet been reconciled to this file as stale derived documentation rather than as a competing status source.
 
 Status policy used in this file:
 - `Implemented`: repo-verifiable implementation exists without a documented material completion gap for this phase scope.
@@ -40,7 +47,8 @@ Status policy used in this file:
 ## Authority Relationship
 
 - `docs/roadmap/execution_roadmap.md` governs audited phase meaning.
-- This document governs the broader master-roadmap view, sequencing, and status labels for the 45-phase reference set.
+- This document governs the broader master-roadmap view, sequencing, and the canonical phase maturity/status labels for the 45-phase reference set.
+- Per-phase status files, audit artifacts, and index/navigation pages may explain or evidence a phase, but they remain derived surfaces for status and must defer to this document for the canonical maturity/status label.
 - For audited phases, this document must defer to the authoritative execution roadmap for taxonomy and phase-name interpretation.
 
 ## System Workflow
@@ -111,6 +119,8 @@ Market Data
 
 ## Status Notes
 
+- Status changes follow one update path: update evidence as needed, then update this master roadmap to change the canonical phase maturity/status label.
+- Secondary docs that describe a phase do not create an independent status authority; they are reconciled to this file.
 - Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
 - Phase 23 still has no verified Research Dashboard implementation artifact in code, tests, or runtime-facing docs.
 - Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
