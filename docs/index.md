@@ -59,7 +59,7 @@ Status changes therefore follow one update path: update supporting evidence as n
 | Phase 16 | No authoritative in-repo meaning located | `docs/roadmap/execution_roadmap.md` |
 | Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | `docs/roadmap/execution_roadmap.md` |
 | Phase 17b | Owner Dashboard sub-phase | `docs/roadmap/execution_roadmap.md` |
-| Phase 23 | Research Dashboard bounded to one dedicated research-only dashboard surface; not implied by current `/ui`, analytics, charting, or trading-desk docs | `docs/phases/phase-23-status.md` |
+| Phase 23 | `Research Dashboard`: one dedicated research-only dashboard surface; it remains `NOT IMPLEMENTED` until one coherent minimum evidence set exists for that surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact | `docs/phases/phase-23-status.md` |
 | Phase 25 | Strategy Lifecycle Management | `docs/phases/phase_25_strategy_lifecycle.md` |
 | Phase 26 | No authoritative in-repo meaning located | `docs/roadmap/execution_roadmap.md` |
 | Phase 27 | Risk Framework | `docs/phases/phase-27-status.md` |
@@ -82,7 +82,7 @@ Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b
 - [Interface usage patterns](interfaces/usage_patterns.md)
 
 ### Phase 23 Boundary Note
-Phase 23 is bounded to one dedicated research-only dashboard surface as defined in [Phase 23 status](phases/phase-23-status.md). Current operator `/ui` surfaces, analytics artifacts, Phase 39 charting docs, and Phase 40 trading-desk wording are adjacent references only and must not be read as implied implementation evidence for Phase 23.
+Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface as defined in [Phase 23 status](phases/phase-23-status.md). It remains `NOT IMPLEMENTED` until one coherent minimum evidence set exists for that surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact. Current operator `/ui` surfaces, analytics artifacts, Phase 39 charting docs, and Phase 40 trading-desk wording are adjacent references only and are insufficient on their own to claim Phase 23 implementation.
 
 ### Phase 24 Reference Materials
 Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
