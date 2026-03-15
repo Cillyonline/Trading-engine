@@ -7,6 +7,7 @@ Define the deterministic alert event contract for signal, strategy, and runtime 
 ## Scope
 - `AlertEvent` is the canonical pre-routing alert envelope.
 - `AlertRouter` dispatches `AlertEvent` instances to registered channels.
+- `AlertDispatcher` delivers `AlertEvent` instances to registered notification channels.
 - Alert severity levels are bounded to `info`, `warning`, and `critical`.
 - Alert source types are bounded to `signal`, `strategy`, and `runtime`.
 - Deterministic creation utilities derive `event_id` values from canonical event content.
@@ -39,13 +40,26 @@ Define the deterministic alert event contract for signal, strategy, and runtime 
 - Registered channels implement a minimal `dispatch(event)` method and remain outside the router package.
 - Routing returns the ordered tuple of channel names that received the event for deterministic verification.
 
+## Dispatcher Contract
+- `NotificationChannel` defines the minimal delivery protocol with `channel_name` and `deliver(event)`.
+- `AlertDispatcher.register_channel(...)` registers delivery channels with unique names.
+- `AlertDispatcher.dispatch(...)` attempts delivery to each registered channel in deterministic name order.
+- Dispatcher delivery is synchronous within the current process.
+- Delivery failures raised by a channel are converted into structured per-channel results instead of raising to the caller.
+- Dispatcher continues attempting later channels after an earlier channel raises an exception.
+
 ## Repository Evidence
 - Model and utilities: `src/cilly_trading/alerts/alert_models.py`
 - Public package exports: `src/cilly_trading/alerts/__init__.py`
 - Router implementation: `src/cilly_trading/alerts/alert_router.py`
-- Unit coverage: `tests/alerts/test_alert_models.py`, `tests/alerts/test_alert_router.py`
+- Dispatcher implementation: `src/cilly_trading/alerts/alert_dispatcher.py`
+- Channel contract: `src/cilly_trading/alerts/channels/__init__.py`
+- Unit coverage: `tests/alerts/test_alert_models.py`, `tests/alerts/test_alert_router.py`, `tests/alerts/test_dispatcher.py`
 
 ## Acceptance Criteria Mapping
 1. AlertEvent model exists and is documented by the module contract and this phase document.
 2. AlertRouter receives `AlertEvent` objects and dispatches them to registered channels through the channel protocol.
 3. Unit tests cover deterministic alert creation, schema validation, signal-to-alert conversion, channel registration, router dispatch, and deterministic routing order.
+4. AlertDispatcher delivers alerts to registered notification channels and reports successful deliveries deterministically.
+5. Delivery failures are handled gracefully through structured results without interrupting remaining deliveries.
+6. Dispatcher tests cover successful delivery, mocked channel failures, and continuation to remaining channels after a failure.
