@@ -36,6 +36,7 @@ from engine.compliance.drawdown_guard import (
 )
 from engine.compliance.kill_switch import is_kill_switch_active
 from engine.portfolio import PortfolioState as CompliancePortfolioState
+from .alerts_api import build_alerts_router
 from .config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.core import (
@@ -634,6 +635,8 @@ app = FastAPI(
     description="MVP-API für die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
 )
 
+app.state.alert_configuration_store = {}
+
 UI_DIRECTORY = Path(__file__).resolve().parent.parent / "ui"
 JOURNAL_ARTIFACTS_ROOT = Path(__file__).resolve().parents[2] / "runs" / "phase6"
 app.mount("/ui", StaticFiles(directory=UI_DIRECTORY, html=True), name="ui")
@@ -672,6 +675,9 @@ def _require_role(minimum_role: str):
         return normalized_role
 
     return _enforce_role
+
+
+app.include_router(build_alerts_router(_require_role))
 
 
 @app.on_event("startup")
