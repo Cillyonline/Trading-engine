@@ -636,6 +636,7 @@ app = FastAPI(
 )
 
 app.state.alert_configuration_store = {}
+app.state.alert_history_store = []
 
 UI_DIRECTORY = Path(__file__).resolve().parent.parent / "ui"
 JOURNAL_ARTIFACTS_ROOT = Path(__file__).resolve().parents[2] / "runs" / "phase6"

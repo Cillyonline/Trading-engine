@@ -225,3 +225,52 @@ def test_alert_listing_is_sorted_and_read_only_accessible(monkeypatch) -> None:
             "threshold": 5.0,
         },
     ]
+
+
+def test_alert_history_endpoint_and_sorting(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    api_main.app.state.alert_history_store = [
+        {
+            "schema_version": "1.0",
+            "event_id": "alert_old",
+            "event_type": "signal.generated",
+            "source_type": "signal",
+            "source_id": "sig_123",
+            "severity": "info",
+            "occurred_at": "2025-01-01T00:00:00+00:00",
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "correlation_id": None,
+            "payload": {},
+        },
+        {
+            "schema_version": "1.0",
+            "event_id": "alert_new",
+            "event_type": "signal.generated",
+            "source_type": "signal",
+            "source_id": "sig_124",
+            "severity": "warning",
+            "occurred_at": "2025-01-02T00:00:00+00:00",
+            "symbol": "NVDA",
+            "strategy": "RSI2",
+            "correlation_id": None,
+            "payload": {},
+        },
+    ]
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/alerts/history", headers=READ_ONLY_HEADERS)
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["total"] == 2
+        assert [item["event_id"] for item in payload["items"]] == ["alert_new", "alert_old"]
+
+
+def test_alert_history_empty_and_read_only(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    api_main.app.state.alert_history_store = []
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/alerts/history", headers=READ_ONLY_HEADERS)
+        assert response.status_code == 200
+        assert response.json() == {"items": [], "total": 0}
