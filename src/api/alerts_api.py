@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from cilly_trading.alerts.alert_models import AlertEvent
 
 
 class AlertConfigurationPayload(BaseModel):
@@ -69,6 +71,13 @@ class AlertListResponse(BaseModel):
     total: int
 
 
+class AlertHistoryListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[AlertEvent]
+    total: int
+
+
 class AlertConfigurationDeleteResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -81,6 +90,14 @@ def _get_store(request: Request) -> Dict[str, Dict[str, Any]]:
     if store is None:
         store = {}
         request.app.state.alert_configuration_store = store
+    return store
+
+
+def _get_alert_history_store(request: Request) -> List[Dict[str, Any]]:
+    store = getattr(request.app.state, "alert_history_store", None)
+    if store is None:
+        store = []
+        request.app.state.alert_history_store = store
     return store
 
 
@@ -187,5 +204,24 @@ def build_alerts_router(require_role: Callable[[str], Any]) -> APIRouter:
             for item in _sorted_items(store)
         ]
         return AlertListResponse(items=items, total=len(items))
+
+    @router.get("/alerts/history", response_model=AlertHistoryListResponse)
+    def read_alert_history(
+        request: Request,
+        limit: int = Query(default=20, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+        _: str = Depends(require_role("read_only")),
+    ) -> AlertHistoryListResponse:
+        store = _get_alert_history_store(request)
+        sorted_events = sorted(
+            store,
+            key=lambda event: (
+                event.get("occurred_at", ""),
+                event.get("event_id", ""),
+            ),
+            reverse=True,
+        )
+        items = [AlertEvent(**event) for event in sorted_events[offset : offset + limit]]
+        return AlertHistoryListResponse(items=items, total=len(store))
 
     return router

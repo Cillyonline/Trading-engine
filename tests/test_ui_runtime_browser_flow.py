@@ -216,6 +216,9 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
         assert 'readOnlyHeaders={[roleHeaderName]:"read_only"}' in ui_response.text
         assert 'operatorHeaders={[roleHeaderName]:"operator"}' in ui_response.text
         assert "/analysis/run" in ui_response.text
+        assert "/alerts/history" in ui_response.text
+        assert 'id="alert-status"' in ui_response.text
+        assert 'id="alert-list"' in ui_response.text
         assert "/signals?limit=20&sort=created_at_desc" in ui_response.text
         assert "/watchlists" in ui_response.text
         assert "/watchlists/{watchlist_id}" in ui_response.text

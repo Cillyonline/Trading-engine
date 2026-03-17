@@ -130,6 +130,37 @@ Response shape:
 }
 ```
 
+### `GET /alerts/history`
+
+Returns a read-only history of recent alert events in deterministic ordering by `occurred_at` descending.
+
+Query parameters (optional):
+
+- `limit` (integer, default 20, max 200)
+- `offset` (integer, default 0)
+
+Response shape:
+
+```json
+{
+  "items": [
+    {
+      "schema_version": "1.0",
+      "event_id": "alert_...",
+      "event_type": "signal.generated",
+      "source_type": "signal",
+      "source_id": "signal_...",
+      "severity": "warning",
+      "occurred_at": "2025-01-01T12:00:00+00:00",
+      "symbol": "AAPL",
+      "strategy": "RSI2",
+      "correlation_id": null,
+      "payload": {}
+    }
+  ],
+  "total": 1
+}
+```
 ## Test Verification
 
 Test command:
