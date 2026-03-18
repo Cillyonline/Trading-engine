@@ -4,37 +4,30 @@ The Cilly Trading Engine repository contains a deterministic trading-analysis an
 
 The current repository state supports local runtime, deterministic smoke-run and test workflows, and bounded operator-facing UI and API surfaces. It should not be read as a production-readiness declaration.
 
-## Start Here
+## Documentation Entry Point
 
-Choose the path that matches your role:
+`README.md` is an entry point only. It provides navigation into the canonical
+documentation structure and does not act as the source of truth for setup,
+local run, testing, or architecture topics.
 
-### Operators
+Start from these documents:
 
-Use these documents if you need to run, verify, or operate the platform locally.
-
-- Quick local setup (PowerShell and Bash): `docs/quickstart.md`
-- Canonical local runtime path (PowerShell and Bash): `docs/local_run.md`
-- Owner startup and reset cheatsheet: `docs/OWNER_RUNBOOK.md`
-- Working runbook and quality gate expectations: `docs/RUNBOOK.md`
-- Runtime and health references: `docs/health.md`, `docs/runtime_status_and_health.md`
-- Paper-trading boundary: `docs/paper_trading.md`
-
-### Contributors and Reviewers
-
-Use these documents if you need to understand repository scope, test expectations, interfaces, or roadmap/governance boundaries.
-
-- Documentation index: `docs/index.md`
-- Testing entrypoint: `docs/testing.md`
-- Getting started path for owners/local access: `docs/GETTING_STARTED.md`
-- Public Python API boundary: `docs/api/public_api_boundary.md`
-- Authoritative roadmap and phase taxonomy: `docs/roadmap/execution_roadmap.md`
-- Strategy configuration references: `docs/strategy-configs.md`
-- Snapshot/golden-master guidance: `docs/snapshot-testing.md`
+- Canonical documentation structure and navigation flow:
+  `docs/architecture/documentation_structure.md`
+- Repository documentation index: `docs/index.md`
+- Setup authority: `docs/GETTING_STARTED.md`
+- Local run authority: `docs/local_run.md`
+- Testing authority: `docs/testing.md`
+- Architecture authority root: `docs/architecture/`
 
 ## Canonical Boundaries
 
 - The repository-level documentation index is `docs/index.md`.
+- The canonical documentation structure is defined in
+  `docs/architecture/documentation_structure.md`.
+- The canonical setup path is documented in `docs/GETTING_STARTED.md`.
 - The canonical local runtime path is documented in `docs/local_run.md`.
+- The canonical testing path is documented in `docs/testing.md`.
 - The authoritative audited phase taxonomy is `docs/roadmap/execution_roadmap.md`.
 - The supported package-level public API for `src/api` is `from api import app`.
 - The canonical top-level repository structure is documented in `docs/architecture/repository_root_structure.md`.
@@ -70,8 +63,13 @@ The full boundary definition is documented in `docs/api/public_api_boundary.md`.
 
 ## Verification Paths
 
-- Operators validating a local environment should start with `docs/quickstart.md`, then use `docs/local_run.md` and `docs/OWNER_RUNBOOK.md`. Windows users should follow the PowerShell command blocks in those docs directly.
-- Contributors or reviewers validating behavior and change scope should start with `docs/index.md`, then use `docs/testing.md`, `docs/api/public_api_boundary.md`, and `docs/roadmap/execution_roadmap.md`.
+- Operators validating a local environment should start here, then follow
+  `docs/architecture/documentation_structure.md` to the canonical setup and
+  local run documents.
+- Contributors or reviewers validating behavior and change scope should start
+  here, then use `docs/index.md` and
+  `docs/architecture/documentation_structure.md` to reach the canonical
+  testing and architecture documents.
 
 ## Local CI Check
 
