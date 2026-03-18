@@ -15,19 +15,20 @@ Start from these documents:
 - Canonical documentation structure and navigation flow:
   `docs/architecture/documentation_structure.md`
 - Repository documentation index: `docs/index.md`
-- Setup authority: `docs/GETTING_STARTED.md`
-- Local run authority: `docs/local_run.md`
-- Testing authority: `docs/testing.md`
+- Setup authority: `docs/getting-started/getting-started.md`
+- Local run authority: `docs/getting-started/local-run.md`
+- Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
 
 ## Verification Paths
 
 - Operators validating a local environment should start here, then follow
-  `docs/GETTING_STARTED.md` and `docs/local_run.md`.
+  `docs/getting-started/getting-started.md` and `docs/getting-started/local-run.md`.
 - Contributors or reviewers validating behavior and change scope should start
-  here, then use `docs/testing.md` and `docs/architecture/`.
+  here, then use `docs/testing/index.md` and `docs/architecture/`.
 
 ## Public API
 
 The supported package-level public API for `src/api` is documented in
-`docs/api/public_api_boundary.md`.
+`docs/operations/api/public_api_boundary.md`.
+Legacy compatibility path: `docs/api/public_api_boundary.md`.
