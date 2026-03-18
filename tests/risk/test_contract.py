@@ -9,7 +9,7 @@ from typing import get_type_hints
 
 import pytest
 
-from engine.risk_framework.contract import (
+from cilly_trading.risk_framework.contract import (
     RiskEvaluationRequest,
     RiskEvaluationResponse,
     RiskEvaluator,
@@ -94,7 +94,7 @@ def test_request_deterministic_equality() -> None:
 
 
 def test_contract_uses_no_forbidden_execution_or_orchestrator_imports() -> None:
-    source = Path("engine/risk_framework/contract.py").read_text(encoding="utf-8")
+    source = Path("src/cilly_trading/risk_framework/contract.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
 
     imported_modules: set[str] = set()
@@ -104,7 +104,7 @@ def test_contract_uses_no_forbidden_execution_or_orchestrator_imports() -> None:
         if isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
 
-    forbidden_prefixes = ("engine.execution", "engine.orchestrator")
+    forbidden_prefixes = ("cilly_trading.execution", "cilly_trading.orchestrator")
 
     assert not any(
         module.startswith(prefix)

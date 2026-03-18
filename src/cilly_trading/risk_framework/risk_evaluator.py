@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from engine.risk_framework.allocation_rules import RiskLimits
-from engine.risk_framework.contract import RiskEvaluationRequest, RiskEvaluationResponse
-from engine.risk_framework.exposure_model import compute_exposure_metrics
-from engine.risk_framework.kill_switch import is_kill_switch_enabled
+from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.risk_framework.contract import RiskEvaluationRequest, RiskEvaluationResponse
+from cilly_trading.risk_framework.exposure_model import compute_exposure_metrics
+from cilly_trading.risk_framework.kill_switch import is_kill_switch_enabled
 
 
 def _safe_pct(numerator: float, denominator: float) -> float:

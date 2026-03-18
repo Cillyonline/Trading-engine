@@ -2,20 +2,16 @@
 
 ## Repo Overview
 
-This repository contains the Cilly Trading Engine MVP, including a FastAPI service, deterministic analysis workflows, fixtures, schemas, and tests.
+This repository contains the Cilly Trading Engine MVP, including a FastAPI service, deterministic analysis workflows, fixtures, package-scoped schemas, and tests.
 
 ## High-level Folder Structure
 
 Top-level directories and their purpose:
 
-- `api/`: FastAPI application entry point and configuration (see `api/main.py`).
-- `data/`: Versioned snapshot fixture data used for Phase-6 snapshot contract testing (see `data/phase6_snapshots/test-snapshot-0001/*`).
 - `docs/`: Project documentation, runbooks, and specifications (see `docs/local_run.md`, `docs/deterministic-analysis.md`, `docs/smoke-run.md`).
-- `fixtures/`: Deterministic fixtures for analysis, smoke run, and market data normalization (see `fixtures/deterministic-analysis/*`, `fixtures/smoke-run/*`, `fixtures/market_data/*`).
-- `schemas/`: JSON schema definitions for signal output contracts (see `schemas/signal-output.schema.json`).
+- `fixtures/`: Deterministic fixtures for analysis, smoke run, market data normalization, and Phase-6 snapshots (see `fixtures/deterministic-analysis/*`, `fixtures/smoke-run/*`, `fixtures/market_data/*`, `fixtures/phase6_snapshots/*`).
 - `scripts/`: Utility scripts (see `scripts/create_demo_snapshot.py`).
-- `src/`: Core Python package (`cilly_trading`) containing engine, repositories, strategies, and utilities.
-- `strategy/`: Strategy preset JSON configuration files (see `strategy/presets/*.json`).
+- `src/`: Core Python package (`cilly_trading`) containing API, engine, repositories, schemas, strategies, and utilities.
 - `tests/`: Pytest test suite plus test fixtures and golden data (see `tests/*`).
 
 ## Execution & Entry Points
@@ -55,8 +51,8 @@ Top-level directories and their purpose:
 
 ### Versioned datasets / fixtures (repo-tracked)
 
-- `data/phase6_snapshots/test-snapshot-0001/metadata.json` (JSON metadata). Includes `payload_checksum` hash.
-- `data/phase6_snapshots/test-snapshot-0001/payload.json` (JSON payload rows).
+- `fixtures/phase6_snapshots/test-snapshot-0001/metadata.json` (JSON metadata). Includes `payload_checksum` hash.
+- `fixtures/phase6_snapshots/test-snapshot-0001/payload.json` (JSON payload rows).
 - `fixtures/deterministic-analysis/analysis_config.json` (JSON analysis configuration).
 - `fixtures/deterministic-analysis/aapl_d1.csv` (CSV OHLCV data).
 - `fixtures/smoke-run/input.json` (JSON input).
@@ -70,7 +66,7 @@ Top-level directories and their purpose:
 
 ### Hashes present
 
-- `data/phase6_snapshots/test-snapshot-0001/metadata.json` includes `payload_checksum`.
+- `fixtures/phase6_snapshots/test-snapshot-0001/metadata.json` includes `payload_checksum`.
 
 ## Test Inventory
 
@@ -102,7 +98,7 @@ Top-level directories and their purpose:
 | Deterministic smoke run | Y | `run_smoke_run` via `python -c` | Fixture JSON/CSV/YAML | stdout lines + JSON artifact | Y | Enforces deterministic constraints and required output lines. |
 | SQLite DB init | Y | `python -m src.cilly_trading.db.init_db` | None (optional DB path) | SQLite DB file | Y | Creates DB schema locally. |
 | Demo snapshot seed | Y | `python scripts/create_demo_snapshot.py` | None (writes demo data) | SQLite DB rows + printed IDs | Y | Creates deterministic OHLCV rows for a fixed watchlist. |
-| Strategy presets | Y | JSON files under `strategy/presets/` | JSON preset files | Strategy preset configs | Y | Used as static configuration. |
+| Strategy presets | Y | JSON files under `src/cilly_trading/strategies/presets/` | JSON preset files | Strategy preset configs | Y | Used as static configuration. |
 
 ## Current Capabilities (Plain Language)
 

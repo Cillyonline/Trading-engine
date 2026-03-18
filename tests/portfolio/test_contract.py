@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from engine.portfolio_framework.contract import PortfolioPosition, PortfolioState
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
 
 
 def test_portfolio_state_is_immutable() -> None:

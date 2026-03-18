@@ -5,15 +5,15 @@ from __future__ import annotations
 import ast
 import pathlib
 
-from engine.journal_framework import generate_decision_trace
-from engine.journal_framework.decision_trace import _canonicalize, _deep_freeze
-from engine.portfolio_framework.capital_allocation_policy import (
+from cilly_trading.journal_framework import generate_decision_trace
+from cilly_trading.journal_framework.decision_trace import _canonicalize, _deep_freeze
+from cilly_trading.portfolio_framework.capital_allocation_policy import (
     CapitalAllocationRules,
     StrategyAllocationRule,
     assess_capital_allocation,
 )
-from engine.portfolio_framework.contract import PortfolioPosition, PortfolioState
-from engine.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
+from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
 
 
 
@@ -162,13 +162,13 @@ def test_deep_freeze_and_canonicalize_cover_container_variants() -> None:
 
 def test_import_boundary_no_forbidden_imports() -> None:
     forbidden_prefixes = (
-        "engine.execution",
-        "engine.orchestrator",
-        "engine.broker",
-        "engine.risk_framework",
+        "cilly_trading.execution",
+        "cilly_trading.orchestrator",
+        "cilly_trading.broker",
+        "cilly_trading.risk_framework",
     )
 
-    for path in pathlib.Path("engine/journal_framework").glob("*.py"):
+    for path in pathlib.Path("src/cilly_trading/journal_framework").glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

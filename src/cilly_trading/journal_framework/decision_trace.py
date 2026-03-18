@@ -8,8 +8,8 @@ import json
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from engine.portfolio_framework.capital_allocation_policy import CapitalAllocationAssessment
-from engine.portfolio_framework.exposure_aggregator import PortfolioExposureSummary
+from cilly_trading.portfolio_framework.capital_allocation_policy import CapitalAllocationAssessment
+from cilly_trading.portfolio_framework.exposure_aggregator import PortfolioExposureSummary
 
 
 

@@ -5,8 +5,8 @@ import json
 
 from cilly_trading.engine.paper_trading import PaperTradingSimulator
 
-from engine.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
-from engine.trade_ledger import build_trade_ledger_from_paper_trades
+from cilly_trading.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
+from cilly_trading.trade_ledger import build_trade_ledger_from_paper_trades
 
 
 def _deterministic_ledger() -> dict[str, object]:

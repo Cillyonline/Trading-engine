@@ -15,7 +15,7 @@ from typing import Any, Optional
 SnapshotId = str
 SchemaVersion = str | int
 
-DEFAULT_SNAPSHOT_DIR = Path("data/phase6_snapshots")
+DEFAULT_SNAPSHOT_DIR = Path("fixtures/phase6_snapshots")
 DEFAULT_RUN_DIR = Path("runs/phase6")
 DEFAULT_RUNTIME_STATUS_PATH = DEFAULT_RUN_DIR / "runtime_status.json"
 SNAPSHOT_METADATA_FILENAME = "metadata.json"

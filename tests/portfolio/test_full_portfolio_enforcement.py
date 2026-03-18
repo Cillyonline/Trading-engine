@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from engine.portfolio_framework.capital_allocation_policy import (
+from cilly_trading.portfolio_framework.capital_allocation_policy import (
     CapitalAllocationRules,
     StrategyAllocationRule,
     assess_capital_allocation,
 )
-from engine.portfolio_framework.contract import PortfolioPosition, PortfolioState
-from engine.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
+from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
 
 
 def test_enforcement_approval_case() -> None:

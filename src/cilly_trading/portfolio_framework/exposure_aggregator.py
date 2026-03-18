@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from engine.portfolio_framework.contract import PortfolioState
+from cilly_trading.portfolio_framework.contract import PortfolioState
 
 
 @dataclass(frozen=True)

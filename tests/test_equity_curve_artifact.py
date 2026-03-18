@@ -4,7 +4,7 @@ import hashlib
 
 from pathlib import Path
 
-from engine.equity_curve import (
+from cilly_trading.equity_curve import (
     build_equity_curve_from_trade_ledger,
     canonical_equity_curve_json_bytes,
     load_equity_curve_artifact,

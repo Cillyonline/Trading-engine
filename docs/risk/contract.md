@@ -5,12 +5,12 @@ This document defines the deterministic and immutable contract surface for risk
 assessment in Issue #482.
 
 ## Module
-- `engine/risk_framework/contract.py`
+- `src/cilly_trading/risk_framework/contract.py`
 
 ## Design Constraints
 - Use frozen dataclasses.
 - No business logic.
-- No imports from `engine.execution` or `engine.orchestrator`.
+- No imports from `cilly_trading.execution` or `cilly_trading.orchestrator`.
 - Deterministic contract behavior through explicit, value-based fields.
 
 ## Types

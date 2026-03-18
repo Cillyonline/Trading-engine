@@ -7,13 +7,13 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from engine.performance_report import (
+from cilly_trading.performance_report import (
     build_performance_report_from_trade_ledger,
     write_performance_report_artifact,
 )
-from engine.equity_curve import build_equity_curve_from_trade_ledger, write_equity_curve_artifact
-from engine.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
-from engine.trade_attribution import build_trade_attribution
+from cilly_trading.equity_curve import build_equity_curve_from_trade_ledger, write_equity_curve_artifact
+from cilly_trading.risk_adjusted_metrics import compute_risk_adjusted_metrics_from_trade_ledger
+from cilly_trading.trade_attribution import build_trade_attribution
 
 _PRICE_QUANTIZER = Decimal("0.0001")
 

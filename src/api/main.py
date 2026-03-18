@@ -26,16 +26,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cilly_trading.engine.analysis import trigger_operator_analysis_run
-from engine.compliance.daily_loss_guard import (
+from cilly_trading.compliance.daily_loss_guard import (
     configured_daily_loss_limit,
     should_block_execution_for_daily_loss,
 )
-from engine.compliance.drawdown_guard import (
+from cilly_trading.compliance.drawdown_guard import (
     configured_drawdown_threshold,
     should_block_execution_for_drawdown,
 )
-from engine.compliance.kill_switch import is_kill_switch_active
-from engine.portfolio import PortfolioState as CompliancePortfolioState
+from cilly_trading.compliance.kill_switch import is_kill_switch_active
+from cilly_trading.portfolio import PortfolioState as CompliancePortfolioState
 from .alerts_api import build_alerts_router
 from .config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH

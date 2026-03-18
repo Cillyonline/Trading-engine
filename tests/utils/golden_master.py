@@ -123,7 +123,14 @@ def build_run_payload(ingestion_run_id: str) -> Dict[str, Any]:
 
 
 def _load_schema_version() -> str:
-    schema_path = Path(__file__).resolve().parents[2] / "schemas" / "signal-output.schema.json"
+    schema_path = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "cilly_trading"
+        / "contracts"
+        / "schemas"
+        / "signal-output.schema.json"
+    )
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     version_enum = schema["properties"]["schema_version"]["enum"]
     if not isinstance(version_enum, list) or not version_enum:

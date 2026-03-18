@@ -4,7 +4,7 @@ from pathlib import Path
 
 from cilly_trading.engine.paper_trading import PaperTradingSimulator
 
-from engine.trade_ledger import (
+from cilly_trading.trade_ledger import (
     build_trade_ledger_from_paper_trades,
     canonical_trade_ledger_json_bytes,
     load_trade_ledger_artifact,

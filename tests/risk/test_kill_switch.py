@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from engine.risk_framework.allocation_rules import RiskLimits
-from engine.risk_framework.contract import RiskEvaluationRequest
-from engine.risk_framework.kill_switch import is_kill_switch_enabled
-from engine.risk_framework.risk_evaluator import evaluate_risk
+from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.risk_framework.contract import RiskEvaluationRequest
+from cilly_trading.risk_framework.kill_switch import is_kill_switch_enabled
+from cilly_trading.risk_framework.risk_evaluator import evaluate_risk
 
 
 def _request() -> RiskEvaluationRequest:

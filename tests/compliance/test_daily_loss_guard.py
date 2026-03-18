@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from engine.compliance.daily_loss_guard import (
+from cilly_trading.compliance.daily_loss_guard import (
     configured_daily_loss_limit,
     should_block_execution_for_daily_loss,
 )
-from engine.portfolio.state import PortfolioState, calculate_daily_pnl
+from cilly_trading.portfolio.state import PortfolioState, calculate_daily_pnl
 
 
 def test_calculate_daily_pnl_deterministic_scenario() -> None:

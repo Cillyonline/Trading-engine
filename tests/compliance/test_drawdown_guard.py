@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from engine.compliance.drawdown_guard import (
+from cilly_trading.compliance.drawdown_guard import (
     configured_drawdown_threshold,
     should_block_execution_for_drawdown,
 )
-from engine.portfolio.state import PortfolioState, calculate_drawdown
+from cilly_trading.portfolio.state import PortfolioState, calculate_drawdown
 
 
 def test_calculate_drawdown_deterministic_scenario() -> None:

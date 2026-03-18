@@ -13,13 +13,9 @@ Current materials include detailed scope, architecture, workflow, and determinis
 Top-level directories include:
 
 - `docs/`: Documentation for scope, architecture, governance, runbooks, and specifications (including the smoke-run spec and MVP documents).
-- `documentation/`: Additional documentation content separate from `docs/` (directory present at the root level).
-- `api/`: API-related source code directory (implementation details are not described here).
 - `src/`: Core source code directory (implementation details are not described here).
 - `tests/`: Test suite directory.
-- `schemas/`: Schema definitions used by the project.
-- `strategy/`: Strategy-related materials/configuration directory.
-- `data/`: Data-related files and assets.
+- `fixtures/`: Deterministic fixture and sample snapshot data.
 - `scripts/`: Utility or helper scripts.
 
 Documentation, governance, and specifications primarily live in `docs/`, including the runbook, governance rules, MVP scope, and deterministic smoke-run specification.
