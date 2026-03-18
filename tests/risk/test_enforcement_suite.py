@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from engine.risk_framework.allocation_rules import RiskLimits
-from engine.risk_framework.contract import RiskEvaluationRequest
-from engine.risk_framework.risk_evaluator import evaluate_risk
+from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.risk_framework.contract import RiskEvaluationRequest
+from cilly_trading.risk_framework.risk_evaluator import evaluate_risk
 
 
 def _request(

@@ -5,7 +5,7 @@ The journal framework defines the deterministic decision trace artifact layer. I
 
 ## 2. Scope
 Included in scope:
-- `engine/journal_framework` module.
+- `src/cilly_trading/journal_framework` module.
 - `DecisionTrace` immutable contract.
 - Deterministic trace generation from:
   - `PortfolioExposureSummary`.
@@ -31,8 +31,8 @@ The journal framework is a standalone boundary:
 
 ## 5. Import Direction Rules
 Import rules are mandatory:
-- MAY import: Python stdlib, `engine.portfolio_framework.*`.
-- MUST NOT import: `engine.execution*`, `engine.orchestrator*`, `engine.broker*`, `engine.risk_framework*`, `src.*`.
+- MAY import: Python stdlib, `cilly_trading.portfolio_framework.*`.
+- MUST NOT import: `cilly_trading.execution*`, `cilly_trading.orchestrator*`, `cilly_trading.broker*`, `cilly_trading.risk_framework*`, `src.*`.
 - Any import-boundary violation must fail CI.
 
 ## 6. Relationship to Portfolio Framework
@@ -55,4 +55,4 @@ Enforced guardrails:
 - Immutable dataclasses only.
 - Pure functions only.
 - Import boundaries enforced via AST tests.
-- Coverage expectation: `>=95%` for `engine/journal_framework`.
+- Coverage expectation: `>=95%` for `src/cilly_trading/journal_framework`.

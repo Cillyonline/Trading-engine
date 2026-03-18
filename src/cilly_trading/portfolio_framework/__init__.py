@@ -1,14 +1,14 @@
 """Portfolio framework package for deterministic portfolio-state aggregation."""
 
-from engine.portfolio_framework.capital_allocation_policy import (
+from cilly_trading.portfolio_framework.capital_allocation_policy import (
     CapitalAllocationAssessment,
     CapitalAllocationRules,
     StrategyAllocationAssessment,
     StrategyAllocationRule,
     assess_capital_allocation,
 )
-from engine.portfolio_framework.contract import PortfolioPosition, PortfolioState
-from engine.portfolio_framework.exposure_aggregator import (
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
+from cilly_trading.portfolio_framework.exposure_aggregator import (
     PortfolioExposureSummary,
     PositionExposure,
     StrategyExposure,

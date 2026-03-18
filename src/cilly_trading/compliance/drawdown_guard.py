@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.portfolio import PortfolioState
+from cilly_trading.portfolio import PortfolioState
 
 
 _DRAWDOWN_THRESHOLD_KEY = "execution.drawdown.max_pct"

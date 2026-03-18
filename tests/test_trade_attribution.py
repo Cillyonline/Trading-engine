@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from engine.trade_attribution import build_trade_attribution
+from cilly_trading.trade_attribution import build_trade_attribution
 
 
 def _signals() -> list[dict[str, object]]:

@@ -7,17 +7,17 @@ from pathlib import Path
 
 
 MODULES = [
-    "engine.risk_framework",
-    "engine.risk_framework.contract",
-    "engine.risk_framework.risk_evaluator",
-    "engine.risk_framework.exposure_model",
-    "engine.risk_framework.allocation_rules",
-    "engine.risk_framework.kill_switch",
+    "cilly_trading.risk_framework",
+    "cilly_trading.risk_framework.contract",
+    "cilly_trading.risk_framework.risk_evaluator",
+    "cilly_trading.risk_framework.exposure_model",
+    "cilly_trading.risk_framework.allocation_rules",
+    "cilly_trading.risk_framework.kill_switch",
 ]
 
 FORBIDDEN_PREFIXES = (
-    "engine.execution",
-    "engine.orchestrator",
+    "cilly_trading.execution",
+    "cilly_trading.orchestrator",
 )
 
 
@@ -39,7 +39,7 @@ def _imported_module_names(node: ast.AST) -> list[str]:
 def test_risk_framework_import_boundary() -> None:
     """Risk framework package must not import execution or orchestrator packages."""
     root = Path(__file__).resolve().parents[2]
-    package_dir = root / "engine" / "risk_framework"
+    package_dir = root / "src" / "cilly_trading" / "risk_framework"
 
     for path in package_dir.glob("*.py"):
         source = path.read_text(encoding="utf-8")

@@ -6,8 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from engine.compliance.emergency_guard import is_emergency_block_active
-from engine.compliance.kill_switch import is_kill_switch_active
+from cilly_trading.compliance.emergency_guard import is_emergency_block_active
+from cilly_trading.compliance.kill_switch import is_kill_switch_active
 
 
 class ExecutionBlockedError(RuntimeError):

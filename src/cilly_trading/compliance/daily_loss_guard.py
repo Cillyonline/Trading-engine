@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from engine.portfolio import PortfolioState
+from cilly_trading.portfolio import PortfolioState
 
 
 _DAILY_LOSS_LIMIT_KEY = "execution.daily_loss.max_abs"

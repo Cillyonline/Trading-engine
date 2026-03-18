@@ -6,7 +6,7 @@ The Risk Framework is a governance-controlled architectural subsystem that defin
 ## 2) Architectural Boundary
 The module root for the Risk Framework is:
 
-`engine/risk_framework/`
+`src/cilly_trading/risk_framework/`
 
 This boundary is isolated from the execution layer. The Risk Framework must remain an independent policy and validation subsystem and must not depend on execution implementation details, execution state, or execution-side control flow.
 

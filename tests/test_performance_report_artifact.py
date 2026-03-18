@@ -4,7 +4,7 @@ import hashlib
 
 from pathlib import Path
 
-from engine.performance_report import (
+from cilly_trading.performance_report import (
     build_performance_report_from_trade_ledger,
     canonical_performance_report_json_bytes,
     load_performance_report_artifact,

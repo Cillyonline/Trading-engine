@@ -7,16 +7,16 @@ from pathlib import Path
 
 
 MODULES = [
-    "engine.portfolio_framework",
-    "engine.portfolio_framework.capital_allocation_policy",
-    "engine.portfolio_framework.contract",
-    "engine.portfolio_framework.exposure_aggregator",
+    "cilly_trading.portfolio_framework",
+    "cilly_trading.portfolio_framework.capital_allocation_policy",
+    "cilly_trading.portfolio_framework.contract",
+    "cilly_trading.portfolio_framework.exposure_aggregator",
 ]
 
 FORBIDDEN_PREFIXES = (
-    "engine.execution",
-    "engine.orchestrator",
-    "engine.broker",
+    "cilly_trading.execution",
+    "cilly_trading.orchestrator",
+    "cilly_trading.broker",
 )
 
 
@@ -67,7 +67,7 @@ def _dynamic_import_target(node: ast.AST) -> str | None:
 def test_portfolio_framework_import_boundary() -> None:
     """Portfolio framework package must not import forbidden runtime packages."""
     root = Path(__file__).resolve().parents[2]
-    package_dir = root / "engine" / "portfolio_framework"
+    package_dir = root / "src" / "cilly_trading" / "portfolio_framework"
 
     for path in package_dir.glob("*.py"):
         source = path.read_text(encoding="utf-8")

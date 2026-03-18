@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from engine.portfolio_framework.contract import PortfolioPosition, PortfolioState
-from engine.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
+from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
 
 
 def test_multi_strategy_aggregation_with_shared_symbol() -> None:

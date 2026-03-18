@@ -13,9 +13,9 @@
 | scripts/create_demo_snapshot.py | file | Generates demo snapshot data. | keep |  |
 | .devcontainer/ | dir | Devcontainer configuration assets. | keep |  |
 | .devcontainer/devcontainer.json | file | Devcontainer setup configuration. | keep |  |
-| schemas/ | dir | JSON schemas for outputs. | keep |  |
-| schemas/signal-output.schema.json | file | Signal output schema definition. | keep |  |
-| schemas/signal-output.schema.v0.json | file | Legacy signal output schema. | keep |  |
+| src/cilly_trading/contracts/schemas/ | dir | JSON schemas for outputs. | keep | Moved under package contracts. |
+| src/cilly_trading/contracts/schemas/signal-output.schema.json | file | Signal output schema definition. | keep |  |
+| src/cilly_trading/contracts/schemas/signal-output.schema.v0.json | file | Legacy signal output schema. | keep |  |
 | docs/ | dir | Documentation hub. | keep |  |
 | docs/api_cookbook.md | file | API usage cookbook. | keep |  |
 | docs/numeric_output_precision.md | file | Numeric output precision guidance. | keep |  |
@@ -72,15 +72,13 @@
 | fixtures/market_data/aapl_us_d1_2015-02/raw.csv | file | Raw market data CSV. | keep |  |
 | fixtures/market_data/aapl_us_d1_2015-02/normalized.csv | file | Normalized market data CSV. | keep |  |
 | Dockerfile | file | Container build configuration. | keep |  |
-| data/ | dir | Local data storage. | keep |  |
-| data/phase6_snapshots/ | dir | Phase 6 snapshot data. | keep |  |
-| data/phase6_snapshots/test-snapshot-0001/ | dir | Sample snapshot data. | candidate-for-archive | Example snapshot. |
-| data/phase6_snapshots/test-snapshot-0001/payload.json | file | Snapshot payload data. | candidate-for-archive | Example snapshot. |
-| data/phase6_snapshots/test-snapshot-0001/metadata.json | file | Snapshot metadata. | candidate-for-archive | Example snapshot. |
-| strategy/ | dir | Strategy configuration assets. | keep |  |
-| strategy/presets/ | dir | Strategy preset definitions. | keep |  |
-| strategy/presets/rsi2.presets.json | file | RSI2 strategy presets. | keep |  |
-| strategy/presets/turtle.presets.json | file | Turtle strategy presets. | keep |  |
+| fixtures/phase6_snapshots/ | dir | Phase 6 snapshot data. | keep | Moved under canonical fixtures root. |
+| fixtures/phase6_snapshots/test-snapshot-0001/ | dir | Sample snapshot data. | candidate-for-archive | Example snapshot. |
+| fixtures/phase6_snapshots/test-snapshot-0001/payload.json | file | Snapshot payload data. | candidate-for-archive | Example snapshot. |
+| fixtures/phase6_snapshots/test-snapshot-0001/metadata.json | file | Snapshot metadata. | candidate-for-archive | Example snapshot. |
+| src/cilly_trading/strategies/presets/ | dir | Strategy preset definitions. | keep | Moved under strategy package. |
+| src/cilly_trading/strategies/presets/rsi2.presets.json | file | RSI2 strategy presets. | keep |  |
+| src/cilly_trading/strategies/presets/turtle.presets.json | file | Turtle strategy presets. | keep |  |
 | docker-compose.yml | file | Multi-container orchestration config. | keep |  |
 | .gitignore | file | Git ignore rules. | keep |  |
 
@@ -88,18 +86,18 @@
 - Documentation is extensive, covering governance, architecture, and operations.
 - Historical reports exist under docs/reports and may be archival material.
 - Fixtures and sample data are present for smoke and deterministic analysis.
-- Phase 6 snapshot sample data is stored under data/phase6_snapshots.
-- Non-code configuration files include Docker, devcontainer, and schemas.
-- Strategy presets are stored as JSON configurations.
+- Phase 6 snapshot sample data is stored under fixtures/phase6_snapshots.
+- Non-code configuration files include Docker, devcontainer, and package-scoped schemas.
+- Strategy presets are stored as JSON configurations under src/cilly_trading/strategies/presets.
 
 ## Cleanup Candidates (Not Executed)
 ### candidate-for-archive
 - docs/reports/
 - docs/reports/I-029a_implicit_time_inventory.md
 - docs/reports/repo_audit_DISC-4_C2.md
-- data/phase6_snapshots/test-snapshot-0001/
-- data/phase6_snapshots/test-snapshot-0001/payload.json
-- data/phase6_snapshots/test-snapshot-0001/metadata.json
+- fixtures/phase6_snapshots/test-snapshot-0001/
+- fixtures/phase6_snapshots/test-snapshot-0001/payload.json
+- fixtures/phase6_snapshots/test-snapshot-0001/metadata.json
 
 ### candidate-for-removal
 - None identified.

@@ -5,14 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from engine.compliance.daily_loss_guard import should_block_execution_for_daily_loss
-from engine.compliance.drawdown_guard import should_block_execution_for_drawdown
-from engine.orchestrator.runtime import (
+from cilly_trading.compliance.daily_loss_guard import should_block_execution_for_daily_loss
+from cilly_trading.compliance.drawdown_guard import should_block_execution_for_drawdown
+from cilly_trading.orchestrator.runtime import (
     ExecutionBlockedError,
     ExecutionRequest,
     execute_request,
 )
-from engine.portfolio.state import PortfolioState
+from cilly_trading.portfolio.state import PortfolioState
 
 
 def _request() -> ExecutionRequest:
