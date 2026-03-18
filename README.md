@@ -37,6 +37,28 @@ Use these documents if you need to understand repository scope, test expectation
 - The canonical local runtime path is documented in `docs/local_run.md`.
 - The authoritative audited phase taxonomy is `docs/roadmap/execution_roadmap.md`.
 - The supported package-level public API for `src/api` is `from api import app`.
+- The canonical top-level repository structure is documented in `docs/architecture/repository_root_structure.md`.
+
+## Canonical Repository Structure
+
+The canonical root structure for this repository is defined in
+`docs/architecture/repository_root_structure.md`.
+
+For all future repository changes, the allowed top-level directories are:
+
+- `docs/`
+- `src/`
+- `tests/`
+- `scripts/` when repository-owned automation or developer tooling is required
+- `frontend/` when a repository-owned frontend surface is required
+- `fixtures/` when shared deterministic fixture data is required
+
+Top-level directories outside that set are not canonical destinations for new
+work unless a separate repository decision documents and approves them.
+
+This issue does not move, delete, or rename any existing top-level directories.
+Current extra root folders remain part of the repository's present state until a
+separate cleanup or migration issue addresses them.
 
 ## Public API
 
@@ -54,5 +76,5 @@ The full boundary definition is documented in `docs/api/public_api_boundary.md`.
 ## Local CI Check
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
