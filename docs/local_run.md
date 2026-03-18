@@ -4,71 +4,10 @@ This document defines the canonical local run path for both PowerShell on
 Windows and Bash on macOS/Linux. The PowerShell commands below are first-class
 instructions, not translations of the Bash path.
 
-## TL;DR Quick Start (fresh local setup)
-
-### Bash (macOS/Linux)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e ".[test]"
-PYTHONPATH=src uvicorn api.main:app --reload
-```
-
-### PowerShell (Windows)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
-$env:PYTHONPATH = "src"
-uvicorn api.main:app --reload
-```
-
-In a second terminal:
-
-### Bash (macOS/Linux)
-
-```bash
-curl http://127.0.0.1:8000/health
-```
-
-### PowerShell (Windows)
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-```
-
-Expected output:
-
-```json
-{"status":"ok"}
-```
-
 ## Prerequisites
 
-- Python 3.12+
-- `pip`
-
-## Canonical local setup path
-
-The canonical local dependency install path is the repository `pyproject.toml`:
-
-### Bash (macOS/Linux)
-
-```bash
-python -m pip install -e ".[test]"
-```
-
-### PowerShell (Windows)
-
-```powershell
-python -m pip install -e ".[test]"
-```
-
-Run it from the repository root after activating your virtual environment. This
-installs the project and the repo-defined test extra from files that are
-versioned in this repository.
+- Complete the canonical setup flow in `docs/GETTING_STARTED.md`.
+- Run commands from the repository root.
 
 ## Canonical startup path
 
@@ -114,39 +53,9 @@ for configuration precedence or validation ownership.
 
 There is no installed top-level project CLI command (for example `cilly-trading ...`).
 
-## Step-by-step (fresh clone -> analysis request -> persisted signals)
+## Step-by-step (ready environment -> analysis request -> persisted signals)
 
-1) **Create and activate a virtual environment**
-
-### Bash (macOS/Linux)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-### PowerShell (Windows)
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-2) **Install dependencies**
-
-### Bash (macOS/Linux)
-
-```bash
-python -m pip install -e ".[test]"
-```
-
-### PowerShell (Windows)
-
-```powershell
-python -m pip install -e ".[test]"
-```
-
-3) **Start the API (terminal A)**
+1) **Start the API (terminal A)**
 
 ### Bash (macOS/Linux)
 
@@ -161,7 +70,7 @@ $env:PYTHONPATH = "src"
 uvicorn api.main:app --reload
 ```
 
-4) **Verify API health (terminal B)**
+2) **Verify API health (terminal B)**
 
 ### Bash (macOS/Linux)
 
@@ -181,7 +90,7 @@ Expected output:
 {"status":"ok"}
 ```
 
-5) **Create a demo snapshot and capture `ingestion_run_id` (terminal B)**
+3) **Create a demo snapshot and capture `ingestion_run_id` (terminal B)**
 
 ### Bash (macOS/Linux)
 
@@ -202,7 +111,7 @@ Expected behavior:
 - command prints a UUID value
 - this value is required by snapshot-only analysis endpoints
 
-6) **Trigger strategy analysis using the created snapshot (terminal B)**
+4) **Trigger strategy analysis using the created snapshot (terminal B)**
 
 ### Bash (macOS/Linux)
 
@@ -249,7 +158,7 @@ Expected output shape:
 
 (`signals` may be empty or contain one/more signal objects depending on snapshot data.)
 
-7) **Verify persisted signals (terminal B)**
+5) **Verify persisted signals (terminal B)**
 
 ### Bash (macOS/Linux)
 
@@ -363,20 +272,6 @@ Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
 - Symptom: `{"detail":"invalid_ingestion_run_id"}`
 - Fix: provide a valid UUIDv4 string.
 
-## Run tests (optional)
-
-### Bash (macOS/Linux)
-
-```bash
-python -m pytest -q
-```
-
-### PowerShell (Windows)
-
-```powershell
-python -m pytest -q
-```
-
-See `docs/testing.md` for the canonical test setup and command, and see
-`docs/architecture/configuration_boundary.md` for the canonical configuration
-contract used by follow-up runtime-boundary work.
+For repository tests, use `docs/testing.md`. For the canonical configuration
+contract used by follow-up runtime-boundary work, see
+`docs/architecture/configuration_boundary.md`.
