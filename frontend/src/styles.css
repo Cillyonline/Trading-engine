@@ -101,6 +101,11 @@ body {
   margin: 0.4rem 0 0;
 }
 
+.section-status {
+  margin: 0 0 1rem;
+  color: #42506a;
+}
+
 .runtime-analysis-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

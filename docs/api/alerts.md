@@ -1,13 +1,13 @@
 # Alerts API
 
-The alert API exposes deterministic, in-memory alert configuration endpoints for operators and read-only retrieval endpoints for inspection.
+The alert API exposes deterministic, in-memory alert configuration endpoints for operators and read-only retrieval endpoints for inspection, including recent alert event history for the operator dashboard.
 
 ## Authorization
 
 All endpoints use the `X-Cilly-Role` header already enforced by the main API surface.
 
 - `operator`: create, update, and delete alert configurations
-- `read_only`: list and read alert configurations, list alerts
+- `read_only`: list and read alert configurations, list alerts, read alert history
 
 ## Endpoints
 
@@ -130,55 +130,58 @@ Response shape:
 }
 ```
 
+### `GET /alerts/history`
+
+Returns recent alert events for dashboard inspection in deterministic `triggered_at` descending order. If multiple events share the same `triggered_at`, ties are broken by `event_id` descending and then `alert_id` descending.
+
+Response shape:
+
+```json
+{
+  "items": [
+    {
+      "event_id": "evt-runtime-critical",
+      "alert_id": "runtime-critical",
+      "name": "Runtime Halted",
+      "severity": "critical",
+      "source": "runtime",
+      "triggered_at": "2026-03-16T09:00:00Z",
+      "summary": "Runtime entered a blocked state.",
+      "symbol": null,
+      "strategy": null
+    },
+    {
+      "event_id": "evt-drawdown-warning",
+      "alert_id": "drawdown-warning",
+      "name": "Drawdown Warning",
+      "severity": "warning",
+      "source": "risk",
+      "triggered_at": "2026-03-16T08:00:00Z",
+      "summary": "Drawdown crossed the warning threshold.",
+      "symbol": "AAPL",
+      "strategy": "RSI2"
+    }
+  ],
+  "total": 2
+}
+```
+
+Notes:
+
+- The endpoint is strictly read-only.
+- The UI must consume this endpoint directly and must not invent alert events client-side.
+- Empty history returns `{ "items": [], "total": 0 }`.
+
 ## Test Verification
 
 Test command:
 
 ```powershell
-python -m pytest tests/api/test_alerts_api.py
+python -m pytest tests/api/test_alerts_api.py tests/ui/test_alert_panel.py tests/test_ui_runtime_browser_flow.py
 ```
 
 Test output:
 
 ```text
-============================= test session starts =============================
-platform win32 -- Python 3.13.2, pytest-8.4.1, pluggy-1.6.0
-rootdir: C:\dev\Trading-engine
-configfile: pytest.ini
-plugins: anyio-4.9.0
-collected 3 items
-
-tests\api\test_alerts_api.py ...                                         [100%]
-
-============================== warnings summary ===============================
-src\api\main.py:683
-  C:\dev\Trading-engine\src\api\main.py:683: DeprecationWarning:
-          on_event is deprecated, use lifespan event handlers instead.
-
-          Read more about it in the
-          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-
-    @app.on_event("startup")
-
-..\..\Users\Serdar Cil\AppData\Roaming\Python\Python313\site-packages\fastapi\applications.py:4495
-..\..\Users\Serdar Cil\AppData\Roaming\Python\Python313\site-packages\fastapi\applications.py:4495
-  C:\Users\Serdar Cil\AppData\Roaming\Python\Python313\site-packages\fastapi\applications.py:4495: DeprecationWarning:
-          on_event is deprecated, use lifespan event handlers instead.
-
-          Read more about it in the
-          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-
-    return self.router.on_event(event_type)
-
-src\api\main.py:690
-  C:\dev\Trading-engine\src\api\main.py:690: DeprecationWarning:
-          on_event is deprecated, use lifespan event handlers instead.
-
-          Read more about it in the
-          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-
-    @app.on_event("shutdown")
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 3 passed, 4 warnings in 3.48s ========================
+Captured after implementation.
 ```

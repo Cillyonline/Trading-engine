@@ -134,6 +134,30 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
     monkeypatch.setattr(api_main, "signal_repo", signal_repo)
     monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
     monkeypatch.setattr(api_main, "watchlist_repo", watchlist_repo)
+    api_main.app.state.alert_history_store = [
+        {
+            "event_id": "evt-runtime-critical",
+            "alert_id": "runtime-critical",
+            "name": "Runtime Halted",
+            "severity": "critical",
+            "source": "runtime",
+            "triggered_at": "2026-03-16T09:00:00Z",
+            "summary": "Runtime entered a blocked state.",
+            "symbol": None,
+            "strategy": None,
+        },
+        {
+            "event_id": "evt-drawdown-warning",
+            "alert_id": "drawdown-warning",
+            "name": "Drawdown Warning",
+            "severity": "warning",
+            "source": "risk",
+            "triggered_at": "2026-03-16T08:00:00Z",
+            "summary": "Drawdown crossed the warning threshold.",
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+        },
+    ]
     monkeypatch.setattr(api_main, "_require_engine_runtime_running", lambda: None)
     monkeypatch.setattr(api_main, "create_registered_strategies", lambda: [_ScoreFromCloseStrategy()])
 
@@ -216,12 +240,44 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
         assert 'readOnlyHeaders={[roleHeaderName]:"read_only"}' in ui_response.text
         assert 'operatorHeaders={[roleHeaderName]:"operator"}' in ui_response.text
         assert "/analysis/run" in ui_response.text
+        assert "/alerts/history" in ui_response.text
+        assert 'id="alert-history-list"' in ui_response.text
         assert "/signals?limit=20&sort=created_at_desc" in ui_response.text
         assert "/watchlists" in ui_response.text
         assert "/watchlists/{watchlist_id}" in ui_response.text
         assert "/watchlists/{watchlist_id}/execute" in ui_response.text
         assert 'id="watchlist-form"' in ui_response.text
         assert 'id="watchlist-ranked-result-list"' in ui_response.text
+
+        alert_history_response = client.get("/alerts/history", headers=READ_ONLY_HEADERS)
+        assert alert_history_response.status_code == 200
+        assert alert_history_response.json() == {
+            "items": [
+                {
+                    "event_id": "evt-runtime-critical",
+                    "alert_id": "runtime-critical",
+                    "name": "Runtime Halted",
+                    "severity": "critical",
+                    "source": "runtime",
+                    "triggered_at": "2026-03-16T09:00:00Z",
+                    "summary": "Runtime entered a blocked state.",
+                    "symbol": None,
+                    "strategy": None,
+                },
+                {
+                    "event_id": "evt-drawdown-warning",
+                    "alert_id": "drawdown-warning",
+                    "name": "Drawdown Warning",
+                    "severity": "warning",
+                    "source": "risk",
+                    "triggered_at": "2026-03-16T08:00:00Z",
+                    "summary": "Drawdown crossed the warning threshold.",
+                    "symbol": "AAPL",
+                    "strategy": "RSI2",
+                },
+            ],
+            "total": 2,
+        }
 
         state_response = client.get("/system/state", headers=READ_ONLY_HEADERS)
         assert state_response.status_code == 200

@@ -69,6 +69,27 @@ class AlertListResponse(BaseModel):
     total: int
 
 
+class AlertHistoryItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    event_id: str = Field(..., min_length=1, max_length=128)
+    alert_id: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=128)
+    severity: Literal["info", "warning", "critical"]
+    source: str = Field(..., min_length=1, max_length=64)
+    triggered_at: str = Field(..., min_length=1, max_length=64)
+    summary: str = Field(..., min_length=1, max_length=512)
+    symbol: str | None = Field(default=None, max_length=64)
+    strategy: str | None = Field(default=None, max_length=64)
+
+
+class AlertHistoryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[AlertHistoryItemResponse]
+    total: int
+
+
 class AlertConfigurationDeleteResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -84,8 +105,28 @@ def _get_store(request: Request) -> Dict[str, Dict[str, Any]]:
     return store
 
 
+def _get_alert_history_store(request: Request) -> List[Dict[str, Any]]:
+    store = getattr(request.app.state, "alert_history_store", None)
+    if store is None:
+        store = []
+        request.app.state.alert_history_store = store
+    return store
+
+
 def _sorted_items(store: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [store[alert_id] for alert_id in sorted(store)]
+
+
+def _sorted_history_items(store: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(
+        store,
+        key=lambda item: (
+            str(item.get("triggered_at", "")),
+            str(item.get("event_id", "")),
+            str(item.get("alert_id", "")),
+        ),
+        reverse=True,
+    )
 
 
 def build_alerts_router(require_role: Callable[[str], Any]) -> APIRouter:
@@ -187,5 +228,14 @@ def build_alerts_router(require_role: Callable[[str], Any]) -> APIRouter:
             for item in _sorted_items(store)
         ]
         return AlertListResponse(items=items, total=len(items))
+
+    @router.get("/alerts/history", response_model=AlertHistoryResponse)
+    def list_alert_history(
+        request: Request,
+        _: str = Depends(require_role("read_only")),
+    ) -> AlertHistoryResponse:
+        store = _get_alert_history_store(request)
+        items = [AlertHistoryItemResponse(**item) for item in _sorted_history_items(store)]
+        return AlertHistoryResponse(items=items, total=len(items))
 
     return router

@@ -55,6 +55,9 @@ Define the deterministic alert event contract for signal, strategy, and runtime 
 - Dispatcher implementation: `src/cilly_trading/alerts/alert_dispatcher.py`
 - Channel contract: `src/cilly_trading/alerts/channels/__init__.py`
 - Unit coverage: `tests/alerts/test_alert_models.py`, `tests/alerts/test_alert_router.py`, `tests/alerts/test_dispatcher.py`
+- Read-only alert history API: `src/api/alerts_api.py`, `src/api/main.py`
+- Browser dashboard surfaces: `src/ui/index.html`, `frontend/src/pages/OwnerDashboard.tsx`
+- Alert history UI coverage: `frontend/src/pages/OwnerDashboard.test.tsx`, `tests/ui/test_alert_panel.py`, `tests/test_ui_runtime_browser_flow.py`
 
 ## Acceptance Criteria Mapping
 1. AlertEvent model exists and is documented by the module contract and this phase document.
@@ -63,3 +66,10 @@ Define the deterministic alert event contract for signal, strategy, and runtime 
 4. AlertDispatcher delivers alerts to registered notification channels and reports successful deliveries deterministically.
 5. Delivery failures are handled gracefully through structured results without interrupting remaining deliveries.
 6. Dispatcher tests cover successful delivery, mocked channel failures, and continuation to remaining channels after a failure.
+
+## Phase 41 Dashboard Addendum
+
+- `/alerts/history` provides deterministic, read-only alert event history for the operator dashboard.
+- Alert history responses are ordered by `triggered_at` descending, then `event_id` descending, then `alert_id` descending.
+- `/ui` renders recent alerts directly from the API and preserves deterministic empty and error states.
+- The dashboard remains read-only for alert visibility and does not generate alerts or mutate engine state.

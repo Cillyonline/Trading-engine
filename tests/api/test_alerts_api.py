@@ -24,6 +24,31 @@ def _create_payload(alert_id: str = "drawdown-warning") -> dict[str, object]:
     }
 
 
+def _create_history_event(
+    *,
+    event_id: str,
+    alert_id: str,
+    triggered_at: str,
+    severity: str = "warning",
+    source: str = "risk",
+    name: str = "Drawdown Warning",
+    summary: str = "Warn when drawdown breaches threshold.",
+    symbol: str | None = None,
+    strategy: str | None = None,
+) -> dict[str, object]:
+    return {
+        "event_id": event_id,
+        "alert_id": alert_id,
+        "name": name,
+        "severity": severity,
+        "source": source,
+        "triggered_at": triggered_at,
+        "summary": summary,
+        "symbol": symbol,
+        "strategy": strategy,
+    }
+
+
 def test_alert_configuration_crud_and_listing(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     api_main.app.state.alert_configuration_store = {}
@@ -225,3 +250,116 @@ def test_alert_listing_is_sorted_and_read_only_accessible(monkeypatch) -> None:
             "threshold": 5.0,
         },
     ]
+
+
+def test_alert_history_is_read_only_and_sorted_by_triggered_at_desc(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    api_main.app.state.alert_history_store = [
+        _create_history_event(
+            event_id="evt-older",
+            alert_id="drawdown-warning",
+            triggered_at="2026-03-16T08:00:00Z",
+            summary="Drawdown crossed the warning threshold.",
+            symbol="BTCUSDT",
+            strategy="RSI2",
+        ),
+        _create_history_event(
+            event_id="evt-latest",
+            alert_id="runtime-critical",
+            triggered_at="2026-03-16T09:00:00Z",
+            severity="critical",
+            source="runtime",
+            name="Runtime Halted",
+            summary="Runtime entered a blocked state.",
+        ),
+        _create_history_event(
+            event_id="evt-same-time-a",
+            alert_id="latency-warning",
+            triggered_at="2026-03-16T08:30:00Z",
+            severity="info",
+            source="runtime",
+            name="Latency Warning",
+            summary="Latency exceeded the informational threshold.",
+        ),
+        _create_history_event(
+            event_id="evt-same-time-b",
+            alert_id="latency-warning",
+            triggered_at="2026-03-16T08:30:00Z",
+            severity="info",
+            source="runtime",
+            name="Latency Warning",
+            summary="Latency remained above the informational threshold.",
+        ),
+    ]
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/alerts/history", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "event_id": "evt-latest",
+                "alert_id": "runtime-critical",
+                "name": "Runtime Halted",
+                "severity": "critical",
+                "source": "runtime",
+                "triggered_at": "2026-03-16T09:00:00Z",
+                "summary": "Runtime entered a blocked state.",
+                "symbol": None,
+                "strategy": None,
+            },
+            {
+                "event_id": "evt-same-time-b",
+                "alert_id": "latency-warning",
+                "name": "Latency Warning",
+                "severity": "info",
+                "source": "runtime",
+                "triggered_at": "2026-03-16T08:30:00Z",
+                "summary": "Latency remained above the informational threshold.",
+                "symbol": None,
+                "strategy": None,
+            },
+            {
+                "event_id": "evt-same-time-a",
+                "alert_id": "latency-warning",
+                "name": "Latency Warning",
+                "severity": "info",
+                "source": "runtime",
+                "triggered_at": "2026-03-16T08:30:00Z",
+                "summary": "Latency exceeded the informational threshold.",
+                "symbol": None,
+                "strategy": None,
+            },
+            {
+                "event_id": "evt-older",
+                "alert_id": "drawdown-warning",
+                "name": "Drawdown Warning",
+                "severity": "warning",
+                "source": "risk",
+                "triggered_at": "2026-03-16T08:00:00Z",
+                "summary": "Drawdown crossed the warning threshold.",
+                "symbol": "BTCUSDT",
+                "strategy": "RSI2",
+            },
+        ],
+        "total": 4,
+    }
+
+
+def test_alert_history_requires_authentication_and_allows_higher_read_roles(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    api_main.app.state.alert_history_store = [
+        _create_history_event(
+            event_id="evt-1",
+            alert_id="drawdown-warning",
+            triggered_at="2026-03-16T08:00:00Z",
+        )
+    ]
+
+    with TestClient(api_main.app) as client:
+        unauthorized = client.get("/alerts/history")
+        forbidden = client.get("/alerts/history", headers=OPERATOR_HEADERS)
+
+    assert unauthorized.status_code == 401
+    assert forbidden.status_code == 200

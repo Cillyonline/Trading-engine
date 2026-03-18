@@ -1,5 +1,10 @@
-import { FormEvent, useState } from 'react';
-import { ManualAnalysisResponse, runManualAnalysis } from '../services/dashboardApi';
+import { FormEvent, useEffect, useState } from 'react';
+import {
+  AlertHistoryItem,
+  ManualAnalysisResponse,
+  fetchAlertHistory,
+  runManualAnalysis,
+} from '../services/dashboardApi';
 
 type AnalysisSignal = {
   symbol?: string;
@@ -27,6 +32,48 @@ function OwnerDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [alertHistory, setAlertHistory] = useState<AlertHistoryItem[]>([]);
+  const [alertHistoryStatus, setAlertHistoryStatus] = useState('Loading recent alerts...');
+  const [alertHistoryError, setAlertHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAlertHistory() {
+      setAlertHistoryStatus('Loading recent alerts...');
+      setAlertHistoryError(null);
+
+      try {
+        const response = await fetchAlertHistory();
+        if (!isMounted) {
+          return;
+        }
+
+        setAlertHistory(response.items);
+        setAlertHistoryStatus(
+          response.items.length === 0
+            ? 'No recent alerts returned by /alerts/history.'
+            : `Loaded ${response.items.length} recent alerts from /alerts/history.`
+        );
+      } catch (requestError) {
+        if (!isMounted) {
+          return;
+        }
+
+        setAlertHistory([]);
+        setAlertHistoryError(
+          requestError instanceof Error ? requestError.message : 'Alert history request failed.'
+        );
+        setAlertHistoryStatus('Alert history unavailable.');
+      }
+    }
+
+    void loadAlertHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   async function handleRunAnalysis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,14 +132,15 @@ function OwnerDashboard() {
     <main className="runtime-entry-layout">
       <section className="runtime-entry-hero">
         <div>
-          <p className="eyebrow">Phase 36 Runtime UI</p>
-          <h1>Browser Analysis Entrypoint</h1>
+          <p className="eyebrow">Phase 41 Alert Dashboard</p>
+          <h1>Operator Dashboard</h1>
           <p className="hero-copy">
-            Use <code>/ui</code> to launch the supported runtime analysis flow, review the selected
-            input set, and inspect the returned signal package.
+            Use <code>/ui</code> to review recent read-only alert history, launch the supported runtime
+            analysis flow, and inspect the returned signal package.
           </p>
         </div>
         <nav className="runtime-entry-nav" aria-label="Runtime entry navigation">
+          <a href="#recent-alerts">Recent Alerts</a>
           <a href="#run-analysis">Start Analysis</a>
           <a href="#entry-flow">Entry Flow</a>
           <a href="#analysis-results">Results</a>
@@ -100,6 +148,10 @@ function OwnerDashboard() {
       </section>
 
       <section id="entry-flow" className="runtime-card-grid" aria-label="runtime-entry-flow">
+        <article className="runtime-card">
+          <h2>Recent alerts</h2>
+          <p>Inspect deterministic, read-only alert history directly from the dashboard.</p>
+        </article>
         <article className="runtime-card">
           <h2>Primary workflow</h2>
           <p>Provide an ingestion run, market, symbol, strategy, and lookback window.</p>
@@ -112,6 +164,47 @@ function OwnerDashboard() {
           <h2>Expected outcome</h2>
           <p>Each run returns the canonical analysis run id together with any signals emitted for the request.</p>
         </article>
+      </section>
+
+      <section id="recent-alerts" className="runtime-card" aria-label="recent-alerts-panel">
+        <div className="section-heading">
+          <h2>Recent Alerts</h2>
+          <p>Read-only alert history fetched from <code>/alerts/history</code>.</p>
+        </div>
+        <p className="section-status">{alertHistoryStatus}</p>
+        {alertHistoryError ? <p role="alert" className="runtime-alert">{alertHistoryError}</p> : null}
+        {alertHistory.length === 0 ? (
+          <p className="empty-state">No recent alerts available for this dashboard session.</p>
+        ) : (
+          <div className="table-wrap">
+            <table aria-label="Recent alerts table">
+              <thead>
+                <tr>
+                  <th>Triggered</th>
+                  <th>Name</th>
+                  <th>Severity</th>
+                  <th>Source</th>
+                  <th>Symbol</th>
+                  <th>Strategy</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertHistory.map((alert) => (
+                  <tr key={alert.event_id}>
+                    <td>{alert.triggered_at}</td>
+                    <td>{alert.name}</td>
+                    <td>{alert.severity}</td>
+                    <td>{alert.source}</td>
+                    <td>{alert.symbol ?? '-'}</td>
+                    <td>{alert.strategy ?? '-'}</td>
+                    <td>{alert.summary}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section id="run-analysis" className="runtime-card" aria-label="manual-analysis-controls">
