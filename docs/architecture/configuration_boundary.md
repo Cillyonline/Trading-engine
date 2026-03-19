@@ -1,192 +1,195 @@
-# Canonical Configuration Boundary
+# Canonical Configuration Ownership
 
 ## Purpose
 
-This document defines the canonical validated configuration boundary for
-runtime, environment, and strategy-related inputs.
+This document defines the single source of truth for configuration ownership
+across strategy configuration, runtime request configuration, validation,
+normalization, and documentation references.
 
-It is a contract document for issue `#605`. It does not implement the boundary
-and it does not refactor existing consumers. Its purpose is to remove
-precedence, ownership, and file-scope ambiguity before implementation begins.
+It is a documentation-only contract for issue `#697`. It does not refactor
+configuration code, remove inline defaults, or change runtime behavior. Its
+purpose is to stop ownership drift before later implementation issues move code.
 
-## Included Sources
+## Current Ownership Points Verified Manually
 
-The canonical boundary includes every raw input that changes runtime behavior,
-request behavior, or strategy behavior.
+Manual validation against the current config flow shows that ownership is
+currently split across these locations:
 
-### 1. Process environment inputs
-
-These are process-scoped values read from the environment today:
-
-- `CILLY_LOG_LEVEL` read in `src/api/main.py`
-- `CILLY_PORTFOLIO_POSITIONS` read in
-  `src/cilly_trading/engine/portfolio/state.py`
-
-Future environment-backed runtime switches belong to the same boundary even if
-their final parsing location moves.
-
-### 2. Process-wide runtime defaults and feature gates
-
-These are code-defined defaults or toggles that affect process behavior today:
-
-- `EXTERNAL_DATA_ENABLED` in `src/cilly_trading/config/external_data.py`
-- `SIGNALS_READ_MAX_LIMIT` in `src/api/config.py`
-- any future process-wide defaults that are currently embedded in consumers
-
-These values are part of the canonical boundary even when they are presently
-stored as module constants.
-
-### 3. Request-scoped runtime inputs
-
-These are raw request inputs that shape one API read or one engine run today:
-
-- request defaults and constraints in `src/api/main.py`
-- `market_type`, `lookback_days`, `min_score`, `limit`, and similar request
-  fields
-- `strategy_config`, `preset_id`, `preset_ids`, and preset payload parameters
-- inline `default_strategy_configs` currently merged in `src/api/main.py`
-
-Request models remain the transport surface, but their runtime defaults and
-override semantics belong to the canonical configuration boundary.
-
-### 4. Strategy schema artifacts
-
-These are the strategy-specific configuration artifacts that already exist:
-
-- `ConfigKeySpec`
-- `RSI2_SCHEMA`
-- `TURTLE_SCHEMA`
-- `normalize_rsi2_config(...)`
-- `normalize_turtle_config(...)`
-
-Those artifacts currently live in
-`src/cilly_trading/strategies/config_schema.py` and are part of the canonical
-boundary because they define the allowed structure, types, defaults, and
-invariants of strategy configuration.
-
-## Excluded Sources
-
-The following are outside this contract:
-
-- consumer-specific implementation details after configuration has already been
-  resolved
-- database rows, snapshots, and persisted analysis artifacts
-- UI-based config editing flows
-- secret-management or credential-distribution work
-- refactoring unrelated config consumers
-
-## Ownership Model
-
-The authoritative owner of runtime configuration loading is the configuration
-boundary under `src/cilly_trading/config`.
-
-The intended ownership split is:
-
-- `src/cilly_trading/config` owns process-scoped loading, precedence, and
-  validated runtime objects
-- `src/cilly_trading/strategies/config_schema.py` owns strategy-specific key
-  catalogs, coercion rules, defaults, aliases, and cross-field validation
-- API request models own only request transport validation that is necessary to
-  parse HTTP input
-- engine and API consumers own no additional defaults or precedence rules
-
-This means consumer modules may gather raw inputs, but they are not the final
-authority for combining defaults, environment overrides, and strategy overrides.
-
-## Validation and Defaulting Expectations
-
-The follow-up implementation should apply these rules:
-
-### Validation
-
-- Raw values are parsed and validated exactly once at the boundary.
-- Invalid process-scoped configuration fails fast during startup or boundary
-  initialization.
-- Invalid request-scoped configuration fails at request-entry validation and is
-  not recovered through silent fallback.
-- Invalid explicit strategy values are rejected by the strategy schema layer.
-- Unknown strategy keys are rejected at the boundary.
-- Alias resolution happens before strategy validation completes.
-
-### Defaulting
-
-- Defaults come only from canonical boundary definitions.
-- Missing process-scoped values may use documented boundary defaults.
-- Missing request-scoped values may use documented boundary defaults.
-- Missing strategy keys may use schema-defined defaults.
-- An explicitly provided invalid value must not be replaced silently with a
-  default.
-
-### Precedence
-
-The canonical precedence order is:
-
-1. boundary-defined base defaults
-2. validated process-scoped environment overrides
-3. validated boundary-owned runtime or preset defaults for the current request
-4. validated explicit request overrides
-
-Within the strategy subdocument, the order is:
-
-1. strategy schema defaults
-2. boundary-owned default strategy bundle for the selected strategy, if one
-   exists
-3. explicit preset or request strategy overrides
-
-No consumer may add another precedence layer outside this order.
-
-## Intended Authoritative Loading Boundary
-
-The intended runtime flow is:
-
-1. process startup loads process-scoped config once through the canonical
-   boundary
-2. request entrypoints submit raw request inputs to the canonical boundary
-3. the boundary returns validated runtime and strategy config objects
-4. engine and API consumers execute only against those resolved objects
-
-Under this contract:
-
-- `src/api/main.py` is a caller of the boundary, not the owner of config
-  defaulting
-- inline defaults in consumer modules are temporary raw artifacts that must move
-  behind the boundary in follow-up work
-- strategy normalization is invoked by the boundary, not reimplemented by
-  request handlers
-
-## Minimal Initial Implementation File Scope
-
-The first implementation slice should stay narrow and modify only these files:
-
-- `src/cilly_trading/config/__init__.py`
-- `src/cilly_trading/config/external_data.py`
-- `src/api/config.py`
-- `src/cilly_trading/strategies/config_schema.py`
-
-That initial slice is responsible only for defining the canonical runtime
-boundary primitives:
-
-- process-scoped config entrypoints
-- process-wide defaults and feature-gate definitions
-- strategy-schema validation/defaulting interfaces
-- exported helpers that later consumer-wiring issues can call
-
-Consumer rewiring in `src/api/main.py`, engine modules, or other request paths
-is intentionally out of this initial slice and should be handled by separate
-follow-up issues after the boundary primitives exist.
-
-## Manual Review Checklist for #605
-
-Manual design review should confirm that this contract accounts for the current
-artifact classes below without leaving precedence decisions open:
-
-| Artifact class | Current examples | Boundary decision |
+| Current source | Current role in config flow | Ownership risk |
 | --- | --- | --- |
-| Env gates | `CILLY_LOG_LEVEL`, `CILLY_PORTFOLIO_POSITIONS` | process-scoped, boundary-owned |
-| Runtime constants | `EXTERNAL_DATA_ENABLED`, `SIGNALS_READ_MAX_LIMIT` | process-scoped defaults, boundary-owned |
-| API defaults | request model defaults and `default_strategy_configs` in `src/api/main.py` | raw request inputs today, boundary-owned precedence later |
-| Strategy schema artifacts | `RSI2_SCHEMA`, `TURTLE_SCHEMA`, normalization helpers | strategy-owned validation/defaulting, called by boundary |
+| `src/api/main.py` request models | Defines transport defaults and request constraints for fields such as `market_type`, `lookback_days`, `min_score`, and `limit` | API layer appears to own runtime defaults |
+| `src/api/main.py` `default_strategy_configs` | Supplies request-time strategy defaults before execution | Strategy defaults live outside strategy schema ownership |
+| `src/cilly_trading/strategies/config_schema.py` `ConfigKeySpec` and per-strategy schema tuples | Defines strategy keys, schema defaults, coercion, and some per-key validation | Schema ownership overlaps with API defaults |
+| `src/cilly_trading/strategies/config_schema.py` normalization helpers | Applies coercion, default fill-in, and cross-field repair for known strategies | Normalization semantics are separate from API merge semantics |
+| `src/api/config.py` and `src/cilly_trading/config/external_data.py` | Hold process-wide constants and runtime toggles | Process defaults are distributed across modules |
+| Architecture and strategy docs | Describe parts of the flow in separate documents | Documentation can describe the same rule in multiple places |
 
-Success for this review is that a follow-up implementer can begin the boundary
-work without making new decisions about source inclusion, validation ownership,
-defaulting behavior, or precedence order.
+This issue defines who owns those responsibilities without changing the current
+implementation locations yet.
+
+## Canonical Ownership Model
+
+Configuration ownership is assigned by responsibility, not by the module that
+currently happens to contain a default.
+
+The canonical owners are:
+
+| Responsibility | Canonical owner | What that owner controls | What that owner does not control |
+| --- | --- | --- | --- |
+| Process-wide runtime defaults and environment-backed runtime config | Runtime configuration boundary under `src/cilly_trading/config` | Process-scoped defaults, environment parsing, precedence for process config, validated runtime config objects | Strategy key catalogs, request transport schemas |
+| Strategy configuration defaults, aliases, coercion, and cross-field normalization | Strategy schema layer in `src/cilly_trading/strategies/config_schema.py` | Canonical strategy keys, default values, allowed types, alias handling, normalization rules, cross-field validation | HTTP parsing, endpoint-specific request shape |
+| Request transport parsing | API request models and query models in `src/api/main.py` | HTTP payload shape, basic request-entry validation needed to parse a request | Canonical ownership of runtime defaults, strategy defaults, or normalization semantics |
+| Documentation references for config behavior | This document | Ownership rules, boundary rules, precedence rules, and documentation-routing rules | Repeating detailed default tables or transport examples that belong elsewhere |
+
+## Single Source of Truth Rules
+
+The single source of truth is determined by decision type:
+
+- Strategy config defaults are owned by the strategy schema layer.
+- Strategy config validation is owned by the strategy schema layer.
+- Strategy config normalization is owned by the strategy schema layer.
+- Process-wide runtime defaults are owned by the runtime configuration boundary.
+- Request model defaults are transport conveniences today, not canonical config
+  ownership.
+- Documentation that needs to state who owns a config rule must point to this
+  document instead of redefining ownership locally.
+
+If an implementation artifact conflicts with this ownership model, the artifact
+is treated as temporary placement and a follow-up issue must align code to the
+owner defined here.
+
+## Responsibility Boundaries
+
+### 1. Strategy Config Defaults
+
+Canonical owner: `src/cilly_trading/strategies/config_schema.py`
+
+Rules:
+
+- The authoritative default for a strategy key comes from the strategy schema,
+  not from API-layer merge dictionaries.
+- A strategy-specific default bundle may exist as a boundary-level input, but
+  it is an override source consumed by the boundary, not a second owner of the
+  default catalog.
+- Consumer modules must not invent or persist their own strategy default sets.
+- Inline dictionaries such as `default_strategy_configs` are current-state
+  implementation artifacts, not long-term authorities.
+
+### 2. Validation
+
+Canonical owners:
+
+- Request-entry transport validation: API request and query models.
+- Runtime config validation: runtime configuration boundary.
+- Strategy config validation: strategy schema layer.
+
+Rules:
+
+- API models validate only enough to parse HTTP input safely.
+- API models must not become the owner of strategy semantics.
+- The runtime configuration boundary validates process-scoped runtime inputs and
+  any request-scoped runtime fields it canonically resolves.
+- The strategy schema layer validates known strategy keys, allowed value types,
+  aliases, and cross-field invariants.
+- Consumers after boundary resolution must treat config as already validated and
+  must not silently revalidate into different semantics.
+
+### 3. Normalization
+
+Canonical owner: strategy schema layer for strategy config; runtime
+configuration boundary for process/runtime config.
+
+Rules:
+
+- Normalization means canonical key selection, type coercion, default fill-in,
+  and deterministic cross-field repair for configuration the owner owns.
+- Strategy normalization belongs in the strategy schema layer because it depends
+  on strategy-specific keys and invariants.
+- Runtime normalization for process-scoped values belongs in the runtime
+  configuration boundary.
+- API handlers may package raw request input, but they do not own canonical
+  normalization behavior.
+- Engine and strategy consumers must not apply a second normalization pass that
+  changes previously resolved semantics.
+
+### 4. Documentation References
+
+Canonical owner: this document for ownership and boundary decisions.
+
+Rules:
+
+- Documents that describe strategy behavior may mention config keys and examples
+  but must not redefine which layer owns defaults, validation, or
+  normalization.
+- Documents that describe API payloads may document request fields but must not
+  claim ownership of config semantics beyond transport parsing.
+- When another document needs an ownership statement, it should reference this
+  document and keep only context-specific details locally.
+- Future issues may add detailed implementation docs, but those docs must
+  inherit ownership from this document instead of restating competing rules.
+
+## Precedence and Flow
+
+This issue does not change runtime behavior, but the intended canonical
+resolution order is:
+
+1. runtime-boundary process defaults
+2. validated environment overrides
+3. strategy schema defaults
+4. boundary-level strategy default bundle for the selected strategy, if one is
+   explicitly defined
+5. validated request or preset overrides
+
+Within that flow:
+
+- The API layer may collect raw request values.
+- The boundary resolves runtime configuration ownership.
+- The strategy schema layer resolves strategy configuration ownership.
+- Execution consumes only resolved configuration objects.
+
+No consumer may add a separate hidden precedence layer after canonical
+resolution.
+
+## Boundary Rules
+
+The following rules are mandatory for later implementation issues:
+
+- One responsibility, one owner. A layer may consume another layer's config but
+  must not become a second authority for the same decision.
+- Defaults must be defined where the corresponding validation semantics live.
+- Validation and normalization for the same config domain must stay in the same
+  ownership layer.
+- Request parsing is not equivalent to config ownership.
+- Consumer convenience must not create new canonical defaults.
+- Documentation examples are informative only unless they point back to the
+  canonical owner defined here.
+- If current code still embeds defaults in a non-owner layer, follow-up issues
+  must preserve behavior first and then move ownership without changing the
+  contract.
+
+## Implementation Readiness for Follow-up Issues
+
+Later issues can use this document without making new ownership decisions:
+
+- Move API-layer strategy defaults behind the canonical owner without changing
+  effective behavior.
+- Align request handling so transport parsing stays in `src/api/main.py` while
+  strategy semantics stay in `src/cilly_trading/strategies/config_schema.py`.
+- Consolidate process-wide runtime defaults under `src/cilly_trading/config`
+  without changing existing runtime behavior.
+- Update related docs to reference this file instead of defining duplicate
+  ownership rules.
+
+## Manual Validation Performed
+
+Manual validation for issue `#697` consisted of source review of:
+
+- `src/api/main.py`
+- `src/cilly_trading/strategies/config_schema.py`
+- `src/api/config.py`
+- `src/cilly_trading/config/external_data.py`
+- existing config-related architecture and strategy docs under `docs/architecture`
+
+That review confirmed that configuration responsibilities are presently
+distributed across API defaults, schema defaults, normalization helpers, and
+documentation, which is why this ownership contract is required.
