@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal, Mapping, Sequence
 
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
@@ -10,7 +11,7 @@ from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
 from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.order_execution_model import (
     DeterministicExecutionConfig,
-    Fill,
+    ExecutionEvent,
     Order,
     Position,
     _execute_order,
@@ -25,7 +26,7 @@ class PipelineResult:
     """Result payload for orchestrated pipeline execution."""
 
     status: Literal["executed", "rejected"]
-    fills: list[Fill]
+    fills: list[ExecutionEvent]
     position: Position
     risk_decision: RiskDecision
 
@@ -46,15 +47,25 @@ def run_pipeline(
 
     state = lifecycle_store.get_state(risk_request.strategy_id)
     risk_decision = risk_gate.evaluate(risk_request)
-    orders = _extract_orders(signal)
+    normalized_position = _extract_position(
+        position,
+        strategy_id=risk_request.strategy_id,
+        symbol=risk_request.symbol,
+    )
+    orders = _extract_orders(
+        signal,
+        strategy_id=risk_request.strategy_id,
+        symbol=risk_request.symbol,
+        position_id=normalized_position.position_id,
+    )
     snapshot = _extract_snapshot(signal)
     emit_structured_engine_log(
         "order_submission.attempt",
-        payload={
-            "request_id": risk_request.request_id,
-            "strategy_id": risk_request.strategy_id,
-            "symbol": risk_request.symbol,
-            "order_count": len(orders),
+            payload={
+                "request_id": risk_request.request_id,
+                "strategy_id": risk_request.strategy_id,
+                "symbol": risk_request.symbol,
+                "order_count": len(orders),
             "snapshot_key": _extract_snapshot_key(snapshot),
             "lifecycle_state": state.value,
             "risk_decision": risk_decision.decision,
@@ -85,14 +96,14 @@ def run_pipeline(
         return PipelineResult(
             status="rejected",
             fills=[],
-            position=position,
+            position=normalized_position,
             risk_decision=risk_decision,
         )
 
     fills, updated_position = _execute_order(
         orders=orders,
         snapshot=snapshot,
-        position=position,
+        position=normalized_position,
         config=execution_config,
         risk_decision=risk_decision,
     )
@@ -115,11 +126,70 @@ def run_pipeline(
     )
 
 
-def _extract_orders(signal: Mapping[str, object]) -> Sequence[Order]:
+def _extract_orders(
+    signal: Mapping[str, object],
+    *,
+    strategy_id: str,
+    symbol: str,
+    position_id: str,
+) -> Sequence[Order]:
     orders = signal.get("orders")
     if not isinstance(orders, Sequence):
         raise ValueError("Signal must define 'orders' as a sequence")
-    return orders  # type: ignore[return-value]
+    normalized_orders: list[Order] = []
+    for order in orders:
+        if isinstance(order, Order):
+            normalized_orders.append(order)
+            continue
+        if isinstance(order, Mapping):
+            normalized_orders.append(Order.model_validate(order))
+            continue
+        if all(hasattr(order, field) for field in ("id", "side", "quantity", "created_snapshot_key", "sequence")):
+            normalized_orders.append(
+                Order(
+                    order_id=str(order.id),
+                    strategy_id=str(strategy_id),
+                    symbol=str(symbol),
+                    sequence=int(order.sequence),
+                    side=str(order.side),
+                    order_type="market",
+                    time_in_force="day",
+                    status="created",
+                    quantity=Decimal(str(order.quantity)),
+                    created_at=str(order.created_snapshot_key),
+                    position_id=position_id,
+                )
+            )
+            continue
+        normalized_orders.append(Order.model_validate(order))
+    return normalized_orders
+
+
+def _extract_position(position: object, *, strategy_id: str, symbol: str) -> Position:
+    if isinstance(position, Position):
+        return position
+    if isinstance(position, Mapping):
+        return Position.model_validate(position)
+    if all(hasattr(position, field) for field in ("quantity", "avg_price")):
+        quantity = Decimal(str(position.quantity))
+        avg_price = Decimal(str(position.avg_price))
+        status = "flat" if quantity == Decimal("0") else "open"
+        return Position(
+            position_id="runtime-position",
+            strategy_id=strategy_id,
+            symbol=symbol,
+            direction="long",
+            status=status,
+            opened_at="legacy-position",
+            quantity_opened=quantity,
+            quantity_closed=Decimal("0"),
+            net_quantity=quantity,
+            average_entry_price=avg_price,
+            order_ids=[],
+            execution_event_ids=[],
+            trade_ids=[],
+        )
+    return Position.model_validate(position)
 
 
 def _extract_snapshot(signal: Mapping[str, object]) -> Mapping[str, object]:

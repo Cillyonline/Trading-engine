@@ -1,8 +1,4 @@
-"""Deterministic market order execution model for backtesting.
-
-This module defines deterministic market order filling, slippage, commission,
-and position transition behavior.
-"""
+"""Deterministic market-order execution model for backtesting."""
 
 from __future__ import annotations
 
@@ -14,71 +10,12 @@ from typing import Any, Literal, Mapping, Sequence
 from risk.contracts import RiskDecision
 
 from cilly_trading.engine.risk import enforce_approved_risk_decision
-
-
-@dataclass(frozen=True)
-class Order:
-    """Represents an order submitted to the deterministic executor.
-
-    Args:
-        id: Stable order identifier.
-        side: Order side (``"BUY"`` or ``"SELL"``).
-        quantity: Requested quantity.
-        created_snapshot_key: Snapshot key where the order was created.
-        sequence: Monotonic sequence number for deterministic tie-breaking.
-    """
-
-    id: str
-    side: Literal["BUY", "SELL"]
-    quantity: Decimal
-    created_snapshot_key: str
-    sequence: int
-
-
-@dataclass(frozen=True)
-class Fill:
-    """Represents a deterministic full fill for an order.
-
-    Args:
-        order_id: Filled order identifier.
-        fill_price: Deterministic execution price including slippage.
-        quantity: Filled quantity.
-        commission: Deterministic commission amount.
-    """
-
-    order_id: str
-    fill_price: Decimal
-    quantity: Decimal
-    commission: Decimal
-
-
-@dataclass(frozen=True)
-class Position:
-    """Represents deterministic position state.
-
-    Args:
-        quantity: Current position quantity.
-        avg_price: Weighted average entry price for remaining quantity.
-    """
-
-    quantity: Decimal
-    avg_price: Decimal
+from cilly_trading.models import ExecutionEvent, Order, Position, compute_execution_event_id
 
 
 @dataclass(frozen=True)
 class DeterministicExecutionConfig:
-    """Configuration for deterministic order execution.
-
-    Args:
-        slippage_bps: Fixed slippage in basis points.
-        commission_per_order: Fixed deterministic commission per order.
-        price_scale: Decimal scale for prices.
-        money_scale: Decimal scale for commission amounts.
-        quantity_scale: Decimal scale for quantity tracking.
-        fill_timing: Fill timing mode. ``"next_snapshot"`` fills an order only
-            after its creation snapshot. ``"same_snapshot"`` allows filling on
-            creation snapshot.
-    """
+    """Configuration for deterministic order execution."""
 
     slippage_bps: int
     commission_per_order: Decimal
@@ -105,7 +42,7 @@ def _execute_order(
     position: Position,
     config: DeterministicExecutionConfig,
     risk_decision: RiskDecision | None,
-) -> tuple[list[Fill], Position]:
+) -> tuple[list[ExecutionEvent], Position]:
     _enforce_orchestrator_caller()
     model = _DeterministicExecutionModel()
     return model._execute(
@@ -128,83 +65,137 @@ class _DeterministicExecutionModel:
         position: Position,
         config: DeterministicExecutionConfig,
         risk_decision: RiskDecision | None,
-    ) -> tuple[list[Fill], Position]:
-        """Executes ready orders for a snapshot in deterministic order.
-
-        Args:
-            orders: Orders that may be filled at this snapshot.
-            snapshot: Market snapshot providing ``open`` or ``price``.
-            position: Existing position state.
-            config: Deterministic execution settings.
-            risk_decision: Mandatory explicit pre-execution risk decision.
-
-        Returns:
-            A tuple containing ordered fills and updated position.
-
-        Raises:
-            ValueError: If a required price is missing, a quantity is invalid,
-                or an order attempts to sell more than current position.
-        """
-
+    ) -> tuple[list[ExecutionEvent], Position]:
         enforce_approved_risk_decision(risk_decision)
 
         snapshot_key = self._snapshot_key(snapshot)
         base_price = self._extract_fill_price(snapshot, config)
-        current = Position(
-            quantity=self._q(position.quantity, config.quantity_scale),
-            avg_price=self._q(position.avg_price, config.price_scale),
-        )
+        current = position
         ordered_orders = sorted(
             orders,
-            key=lambda order: (order.created_snapshot_key, order.sequence, order.id),
+            key=lambda order: (order.created_at, order.sequence, order.order_id),
         )
 
-        fills: list[Fill] = []
+        execution_events: list[ExecutionEvent] = []
         for order in ordered_orders:
             quantity = self._q(order.quantity, config.quantity_scale)
             if quantity <= Decimal("0"):
-                raise ValueError(f"Order quantity must be positive: {order.id}")
+                raise ValueError(f"Order quantity must be positive: {order.order_id}")
             if not self._is_ready(order=order, snapshot_key=snapshot_key, config=config):
                 continue
 
-            fill_price = self._apply_slippage(price=base_price, side=order.side, config=config)
+            execution_price = self._apply_slippage(price=base_price, side=order.side, config=config)
             commission = self._q(config.commission_per_order, config.money_scale)
-            fills.append(
-                Fill(
-                    order_id=order.id,
-                    fill_price=fill_price,
-                    quantity=quantity,
-                    commission=commission,
-                )
+            event = ExecutionEvent(
+                event_id=compute_execution_event_id(
+                    order_id=order.order_id,
+                    event_type="filled",
+                    occurred_at=snapshot_key,
+                    sequence=len(execution_events) + 1,
+                ),
+                order_id=order.order_id,
+                strategy_id=order.strategy_id,
+                symbol=order.symbol,
+                side=order.side,
+                event_type="filled",
+                occurred_at=snapshot_key,
+                sequence=len(execution_events) + 1,
+                execution_quantity=quantity,
+                execution_price=execution_price,
+                commission=commission,
+                position_id=order.position_id or current.position_id,
+                trade_id=order.trade_id,
             )
-            current = self._apply_fill(position=current, side=order.side, quantity=quantity, fill_price=fill_price, config=config)
+            execution_events.append(event)
+            current = self._apply_fill(
+                position=current,
+                order=order,
+                event=event,
+                config=config,
+            )
 
-        return fills, current
+        return execution_events, current
 
     def _apply_fill(
         self,
         *,
         position: Position,
-        side: Literal["BUY", "SELL"],
-        quantity: Decimal,
-        fill_price: Decimal,
+        order: Order,
+        event: ExecutionEvent,
         config: DeterministicExecutionConfig,
     ) -> Position:
-        if side == "BUY":
-            new_qty = self._q(position.quantity + quantity, config.quantity_scale)
-            if new_qty == Decimal("0"):
-                return Position(quantity=Decimal("0"), avg_price=Decimal("0"))
-            weighted = (position.avg_price * position.quantity) + (fill_price * quantity)
-            avg_price = self._q(weighted / new_qty, config.price_scale)
-            return Position(quantity=new_qty, avg_price=avg_price)
+        quantity = event.execution_quantity
+        execution_price = event.execution_price
+        if quantity is None or execution_price is None:
+            raise ValueError("fill events must define execution_quantity and execution_price")
 
-        if quantity > position.quantity:
+        order_ids = self._merge_ids(position.order_ids, order.order_id)
+        event_ids = self._merge_ids(position.execution_event_ids, event.event_id)
+        trade_ids = self._merge_ids(position.trade_ids, order.trade_id)
+
+        if order.side == "BUY":
+            quantity_opened = self._q(position.quantity_opened + quantity, config.quantity_scale)
+            net_quantity = self._q(position.net_quantity + quantity, config.quantity_scale)
+            if quantity_opened == Decimal("0"):
+                average_entry_price = Decimal("0")
+            else:
+                weighted = (
+                    position.average_entry_price * position.quantity_opened
+                ) + (execution_price * quantity)
+                average_entry_price = self._q(weighted / quantity_opened, config.price_scale)
+
+            return Position.model_validate(
+                {
+                    **position.model_dump(mode="python"),
+                    "opened_at": position.opened_at if position.status != "flat" else event.occurred_at,
+                    "status": "open",
+                    "closed_at": None,
+                    "quantity_opened": quantity_opened,
+                    "net_quantity": net_quantity,
+                    "average_entry_price": average_entry_price,
+                    "order_ids": order_ids,
+                    "execution_event_ids": event_ids,
+                    "trade_ids": trade_ids,
+                }
+            )
+
+        if quantity > position.net_quantity:
             raise ValueError("SELL quantity exceeds current position quantity")
 
-        remaining = self._q(position.quantity - quantity, config.quantity_scale)
-        if remaining == Decimal("0"):
-            return Position(quantity=Decimal("0"), avg_price=Decimal("0"))
-        return Position(quantity=remaining, avg_price=self._q(position.avg_price, config.price_scale))
+        quantity_closed = self._q(position.quantity_closed + quantity, config.quantity_scale)
+        net_quantity = self._q(position.net_quantity - quantity, config.quantity_scale)
+        previous_exit_notional = (
+            position.average_exit_price * position.quantity_closed
+            if position.average_exit_price is not None
+            else Decimal("0")
+        )
+        average_exit_price = self._q(
+            (previous_exit_notional + (execution_price * quantity)) / quantity_closed,
+            config.price_scale,
+        )
+        realized_pnl = self._q(
+            (position.realized_pnl or Decimal("0"))
+            + ((execution_price - position.average_entry_price) * quantity),
+            config.money_scale,
+        )
+
+        status = "closed" if net_quantity == Decimal("0") else "open"
+        closed_at = event.occurred_at if status == "closed" else None
+
+        return Position.model_validate(
+            {
+                **position.model_dump(mode="python"),
+                "status": status,
+                "closed_at": closed_at,
+                "quantity_closed": quantity_closed,
+                "net_quantity": net_quantity,
+                "average_exit_price": average_exit_price,
+                "realized_pnl": realized_pnl,
+                "order_ids": order_ids,
+                "execution_event_ids": event_ids,
+                "trade_ids": trade_ids,
+            }
+        )
 
     def _is_ready(
         self,
@@ -214,8 +205,8 @@ class _DeterministicExecutionModel:
         config: DeterministicExecutionConfig,
     ) -> bool:
         if config.fill_timing == "same_snapshot":
-            return order.created_snapshot_key <= snapshot_key
-        return order.created_snapshot_key < snapshot_key
+            return order.created_at <= snapshot_key
+        return order.created_at < snapshot_key
 
     def _extract_fill_price(self, snapshot: Mapping[str, Any], config: DeterministicExecutionConfig) -> Decimal:
         if snapshot.get("open") is not None:
@@ -248,10 +239,16 @@ class _DeterministicExecutionModel:
     def _q(self, value: Decimal, scale: Decimal) -> Decimal:
         return value.quantize(scale, rounding=ROUND_HALF_UP)
 
+    def _merge_ids(self, current_ids: Sequence[str], candidate: str | None) -> list[str]:
+        values = set(current_ids)
+        if candidate is not None:
+            values.add(candidate)
+        return sorted(values)
+
 
 __all__ = [
     "DeterministicExecutionConfig",
-    "Fill",
+    "ExecutionEvent",
     "Order",
     "Position",
 ]
