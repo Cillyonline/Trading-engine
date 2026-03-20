@@ -11,6 +11,15 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from cilly_trading.trading_lifecycle import (
+    OrderLifecycleState,
+    PositionLifecycleState,
+    TradeLifecycleState,
+    validate_order_state_invariants,
+    validate_position_state_invariants,
+    validate_trade_state_invariants,
+)
+
 
 Stage = Literal["setup", "entry_confirmed"]
 MarketType = Literal["stock", "crypto"]
@@ -282,22 +291,21 @@ class CanonicalOrder(TradingCoreBase):
 
     @model_validator(mode="after")
     def _validate_lifecycle(self) -> "CanonicalOrder":
-        if self.filled_quantity > self.quantity:
-            raise ValueError("filled_quantity must not exceed quantity")
+        order_status = OrderLifecycleState(self.status)
+        validate_order_state_invariants(
+            status=order_status,
+            quantity=self.quantity,
+            filled_quantity=self.filled_quantity,
+        )
 
-        if self.status in {"partially_filled", "filled"}:
+        if order_status in {
+            OrderLifecycleState.PARTIALLY_FILLED,
+            OrderLifecycleState.FILLED,
+        }:
             if self.average_fill_price is None:
                 raise ValueError("average_fill_price is required for filled orders")
             if self.last_execution_event_id is None:
                 raise ValueError("last_execution_event_id is required for filled orders")
-        elif self.filled_quantity != Decimal("0"):
-            raise ValueError("filled_quantity must be zero unless status is partially_filled or filled")
-
-        if self.status == "filled" and self.filled_quantity != self.quantity:
-            raise ValueError("filled orders must have filled_quantity equal to quantity")
-
-        if self.status == "partially_filled" and self.filled_quantity >= self.quantity:
-            raise ValueError("partially_filled orders must have filled_quantity less than quantity")
 
         return self
 
@@ -361,13 +369,15 @@ class CanonicalPosition(TradingCoreBase):
 
     @model_validator(mode="after")
     def _validate_position_state(self) -> "CanonicalPosition":
-        expected_net = self.quantity_opened - self.quantity_closed
-        if self.net_quantity != expected_net:
-            raise ValueError("net_quantity must equal quantity_opened minus quantity_closed")
-        if self.quantity_closed > self.quantity_opened:
-            raise ValueError("quantity_closed must not exceed quantity_opened")
+        position_status = PositionLifecycleState(self.status)
+        validate_position_state_invariants(
+            status=position_status,
+            quantity_opened=self.quantity_opened,
+            quantity_closed=self.quantity_closed,
+            net_quantity=self.net_quantity,
+        )
 
-        if self.status == "flat":
+        if position_status == PositionLifecycleState.FLAT:
             if any(
                 value != Decimal("0")
                 for value in (
@@ -380,12 +390,12 @@ class CanonicalPosition(TradingCoreBase):
                 raise ValueError("flat positions must have zero quantities and zero average_entry_price")
             if self.closed_at is not None:
                 raise ValueError("flat positions must not define closed_at")
-        elif self.status == "open":
+        elif position_status == PositionLifecycleState.OPEN:
             if self.net_quantity <= Decimal("0"):
                 raise ValueError("open positions must have positive net_quantity")
             if self.closed_at is not None:
                 raise ValueError("open positions must not define closed_at")
-        elif self.status == "closed":
+        elif position_status == PositionLifecycleState.CLOSED:
             if self.net_quantity != Decimal("0"):
                 raise ValueError("closed positions must have zero net_quantity")
             if self.closed_at is None:
@@ -426,15 +436,19 @@ class CanonicalTrade(TradingCoreBase):
 
     @model_validator(mode="after")
     def _validate_trade_state(self) -> "CanonicalTrade":
-        if self.quantity_closed > self.quantity_opened:
-            raise ValueError("quantity_closed must not exceed quantity_opened")
+        trade_status = TradeLifecycleState(self.status)
+        validate_trade_state_invariants(
+            status=trade_status,
+            quantity_opened=self.quantity_opened,
+            quantity_closed=self.quantity_closed,
+        )
 
-        if self.status == "open":
+        if trade_status == TradeLifecycleState.OPEN:
             if self.quantity_closed >= self.quantity_opened:
                 raise ValueError("open trades must retain positive remaining quantity")
             if self.closed_at is not None:
                 raise ValueError("open trades must not define closed_at")
-        elif self.status == "closed":
+        elif trade_status == TradeLifecycleState.CLOSED:
             if self.quantity_closed != self.quantity_opened:
                 raise ValueError("closed trades must have quantity_closed equal to quantity_opened")
             if self.closed_at is None:
