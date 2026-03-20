@@ -8,6 +8,8 @@ import api.main as api_main
 from api.config import SIGNALS_READ_MAX_LIMIT
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
     db_path = tmp_path / "signals_read.db"
@@ -47,6 +49,7 @@ def test_read_signals_happy_path(tmp_path: Path, monkeypatch) -> None:
 
     response = client.get(
         "/signals",
+        headers=READ_ONLY_HEADERS,
         params={
             "symbol": "AAPL",
             "from": "2025-01-01T00:00:00+00:00",
@@ -68,6 +71,7 @@ def test_read_signals_happy_path(tmp_path: Path, monkeypatch) -> None:
 
     response_desc = client.get(
         "/signals",
+        headers=READ_ONLY_HEADERS,
         params={
             "symbol": "AAPL",
             "sort": "created_at_desc",
@@ -90,7 +94,7 @@ def test_read_signals_empty_result(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/signals", params={"symbol": "MISSING"})
+    response = client.get("/signals", headers=READ_ONLY_HEADERS, params={"symbol": "MISSING"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["items"] == []
@@ -108,7 +112,7 @@ def test_read_signals_invalid_params(tmp_path: Path, monkeypatch) -> None:
         {"limit": 0},
         {"from": "2025-01-02T00:00:00+00:00", "to": "2025-01-01T00:00:00+00:00"},
     ]:
-        response = client.get("/signals", params=params)
+        response = client.get("/signals", headers=READ_ONLY_HEADERS, params=params)
         assert response.status_code == 422
 
 
@@ -119,7 +123,7 @@ def test_read_signals_limit_boundary(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/signals", params={"limit": SIGNALS_READ_MAX_LIMIT})
+    response = client.get("/signals", headers=READ_ONLY_HEADERS, params={"limit": SIGNALS_READ_MAX_LIMIT})
     assert response.status_code == 200
 
 
@@ -136,7 +140,11 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response_start = client.get("/signals", params={"start": "2025-01-02T00:00:00+00:00"})
+    response_start = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"start": "2025-01-02T00:00:00+00:00"},
+    )
     assert response_start.status_code == 200
     payload_start = response_start.json()
     assert payload_start["total"] == 2
@@ -145,7 +153,11 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
         "2025-01-02T00:00:00+00:00",
     ]
 
-    response_end = client.get("/signals", params={"end": "2025-01-02T00:00:00+00:00"})
+    response_end = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"end": "2025-01-02T00:00:00+00:00"},
+    )
     assert response_end.status_code == 200
     payload_end = response_end.json()
     assert payload_end["total"] == 2
@@ -156,6 +168,7 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
 
     response_range = client.get(
         "/signals",
+        headers=READ_ONLY_HEADERS,
         params={
             "start": "2025-01-02T00:00:00+00:00",
             "end": "2025-01-02T00:00:00+00:00",
@@ -180,7 +193,11 @@ def test_read_signals_filters_strategy_and_preset(tmp_path: Path, monkeypatch) -
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/signals", params={"strategy": "RSI2", "preset": "H1"})
+    response = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"strategy": "RSI2", "preset": "H1"},
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] == 1
@@ -199,9 +216,20 @@ def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/signals")
+    response = client.get("/signals", headers=READ_ONLY_HEADERS)
     assert response.status_code == 200
     payload = response.json()
     assert payload["limit"] == 50
     assert payload["total"] == 60
     assert len(payload["items"]) == 50
+
+
+def test_read_signals_requires_authenticated_role(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/signals")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}

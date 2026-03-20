@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 import api.main as api_main
@@ -425,3 +426,72 @@ def test_manual_analysis_strategy_config_float_idempotent(
     assert response_third.status_code == 200
     third_body = response_third.json()
     assert third_body["analysis_run_id"] != first_body["analysis_run_id"]
+
+
+def test_manual_analysis_requires_authenticated_role(tmp_path: Path, monkeypatch) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+
+    client = TestClient(api_main.app)
+    response = client.post(
+        "/analysis/run",
+        json={
+            "ingestion_run_id": str(uuid.uuid4()),
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+def test_analysis_run_repository_duplicate_save_is_idempotent(tmp_path: Path) -> None:
+    repo = _make_analysis_repo(tmp_path)
+    run_id = "run-001"
+    request_payload = {"symbol": "AAPL", "strategy": "RSI2"}
+    result_payload = {"analysis_run_id": run_id, "signals": []}
+
+    repo.save_run(
+        analysis_run_id=run_id,
+        ingestion_run_id="ingestion-001",
+        request_payload=request_payload,
+        result_payload=result_payload,
+    )
+    repo.save_run(
+        analysis_run_id=run_id,
+        ingestion_run_id="ingestion-001",
+        request_payload=request_payload,
+        result_payload=result_payload,
+    )
+
+    saved = repo.get_run(run_id)
+    assert saved is not None
+    assert saved["ingestion_run_id"] == "ingestion-001"
+    assert saved["request"] == request_payload
+    assert saved["result"] == result_payload
+
+
+def test_analysis_run_repository_rejects_conflicting_duplicate_save(tmp_path: Path) -> None:
+    repo = _make_analysis_repo(tmp_path)
+    run_id = "run-001"
+
+    repo.save_run(
+        analysis_run_id=run_id,
+        ingestion_run_id="ingestion-001",
+        request_payload={"symbol": "AAPL", "strategy": "RSI2"},
+        result_payload={"analysis_run_id": run_id, "signals": []},
+    )
+
+    with pytest.raises(ValueError, match="analysis_run_id already exists"):
+        repo.save_run(
+            analysis_run_id=run_id,
+            ingestion_run_id="ingestion-002",
+            request_payload={"symbol": "MSFT", "strategy": "RSI2"},
+            result_payload={"analysis_run_id": run_id, "signals": [{"symbol": "MSFT"}]},
+        )

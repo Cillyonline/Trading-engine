@@ -11,6 +11,8 @@ from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.strategies.rsi2 import Rsi2Strategy
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
     db_path = tmp_path / "api_smoke.db"
@@ -68,7 +70,11 @@ def test_api_smoke_engine_db_api(tmp_path: Path, monkeypatch) -> None:
     assert len(signals) >= 1
 
     client = TestClient(api_main.app)
-    response = client.get("/signals", params={"symbol": "AAPL", "strategy": "RSI2"})
+    response = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"symbol": "AAPL", "strategy": "RSI2"},
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -88,7 +94,7 @@ def test_api_smoke_signals_empty(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "signal_repo", repo)
 
     client = TestClient(api_main.app)
-    response = client.get("/signals")
+    response = client.get("/signals", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()

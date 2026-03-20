@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def test_operator_workbench_ui_surface_is_reachable(monkeypatch) -> None:
     def _start() -> str:
@@ -73,7 +75,7 @@ def test_operator_workbench_strategy_metadata_read_api(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", _start)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/strategies")
+        response = client.get("/strategies", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()

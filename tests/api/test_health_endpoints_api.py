@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _runtime_payload(mode: str = "running") -> dict[str, object]:
     return {
@@ -28,7 +30,7 @@ def test_health_engine_reports_runtime_readiness(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "_health_now", lambda: fixed_now)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health/engine")
+        response = client.get("/health/engine", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -50,7 +52,7 @@ def test_health_data_reports_unavailable_when_data_source_is_missing(monkeypatch
     monkeypatch.setattr(api_main, "_health_now", lambda: fixed_now)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health/data")
+        response = client.get("/health/data", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -70,7 +72,7 @@ def test_health_guards_reports_blocking_state(monkeypatch) -> None:
     monkeypatch.setenv("CILLY_EXECUTION_KILL_SWITCH_ACTIVE", "true")
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health/guards")
+        response = client.get("/health/guards", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -101,6 +103,6 @@ def test_health_endpoints_are_deterministic_for_identical_state(monkeypatch, tmp
 
     with TestClient(api_main.app) as client:
         for path in ("/health", "/health/engine", "/health/data", "/health/guards"):
-            first = client.get(path).json()
-            second = client.get(path).json()
+            first = client.get(path, headers=READ_ONLY_HEADERS).json()
+            second = client.get(path, headers=READ_ONLY_HEADERS).json()
             assert first == second

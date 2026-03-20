@@ -15,6 +15,7 @@ from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 OWNER_HEADERS = {api_main.ROLE_HEADER_NAME: "owner"}
 OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
 
 
 class _RuntimeStateStub:
@@ -213,7 +214,7 @@ def test_engine_requests_are_blocked_when_runtime_not_running(tmp_path: Path, mo
                 },
             ),
         ]:
-            headers = OPERATOR_HEADERS if path == "/analysis/run" else None
+            headers = OPERATOR_HEADERS
             response = client.post(path, headers=headers, json=payload)
             assert response.status_code == 503
             assert response.json() == {
@@ -237,6 +238,7 @@ def test_engine_requests_work_normally_when_runtime_running(monkeypatch) -> None
     with TestClient(api_main.app) as client:
         response = client.post(
             "/strategy/analyze",
+            headers=OPERATOR_HEADERS,
             json={
                 "ingestion_run_id": "not-a-uuid",
                 "symbol": "AAPL",
@@ -269,6 +271,7 @@ def test_engine_requests_are_blocked_when_runtime_paused(tmp_path: Path, monkeyp
     with TestClient(api_main.app) as client:
         response = client.post(
             "/strategy/analyze",
+            headers=OPERATOR_HEADERS,
             json={
                 "ingestion_run_id": ingestion_run_id,
                 "symbol": "AAPL",
@@ -349,7 +352,7 @@ def test_pause_during_in_progress_analysis_does_not_interrupt_execution(monkeypa
                 "lookback_days": 200,
             },
         )
-        introspection = client.get("/runtime/introspection")
+        introspection = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert calls["run"] == 1
     assert response.status_code == 200
@@ -367,7 +370,7 @@ def test_execution_start_endpoint_transitions_ready_runtime_to_running() -> None
         runtime.init()
 
         response = client.post("/execution/start", headers=OWNER_HEADERS)
-        introspection = client.get("/runtime/introspection")
+        introspection = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {"state": "running"}
@@ -379,7 +382,7 @@ def test_execution_start_endpoint_returns_conflict_for_paused_runtime() -> None:
     with TestClient(api_main.app) as client:
         client.post("/execution/pause", headers=OWNER_HEADERS)
         response = client.post("/execution/start", headers=OWNER_HEADERS)
-        introspection = client.get("/runtime/introspection")
+        introspection = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 409
     assert response.json() == {
@@ -392,7 +395,7 @@ def test_execution_start_endpoint_returns_conflict_for_paused_runtime() -> None:
 def test_execution_stop_endpoint_stops_running_runtime() -> None:
     with TestClient(api_main.app) as client:
         response = client.post("/execution/stop", headers=OWNER_HEADERS)
-        introspection = client.get("/runtime/introspection")
+        introspection = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {"state": "stopped"}
@@ -412,7 +415,7 @@ def test_execution_stop_endpoint_returns_ready_when_runtime_not_started(monkeypa
         runtime.init()
 
         response = client.post("/execution/stop", headers=OWNER_HEADERS)
-        introspection = client.get("/runtime/introspection")
+        introspection = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {"state": "ready"}

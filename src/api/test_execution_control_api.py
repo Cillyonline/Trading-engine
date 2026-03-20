@@ -21,7 +21,7 @@ def teardown_function() -> None:
 def test_execution_pause_endpoint_pauses_runtime_and_updates_state_views() -> None:
     with TestClient(api_main.app) as client:
         pause_response = client.post('/execution/pause', headers=OWNER_HEADERS)
-        introspection_response = client.get('/runtime/introspection')
+        introspection_response = client.get('/runtime/introspection', headers=READ_ONLY_HEADERS)
         system_state_response = client.get('/system/state', headers=READ_ONLY_HEADERS)
 
     assert pause_response.status_code == 200
@@ -124,7 +124,7 @@ def test_execution_stop_endpoint_requires_authenticated_role() -> None:
 def test_execution_pause_endpoint_forbids_operator_role_without_side_effect() -> None:
     with TestClient(api_main.app) as client:
         response = client.post('/execution/pause', headers=OPERATOR_HEADERS)
-        introspection_response = client.get('/runtime/introspection')
+        introspection_response = client.get('/runtime/introspection', headers=READ_ONLY_HEADERS)
         system_state_response = client.get('/system/state', headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 403
@@ -138,7 +138,7 @@ def test_execution_pause_endpoint_forbids_operator_role_without_side_effect() ->
 def test_execution_start_endpoint_forbids_operator_role_without_side_effect() -> None:
     with TestClient(api_main.app) as client:
         response = client.post('/execution/start', headers=OPERATOR_HEADERS)
-        introspection_response = client.get('/runtime/introspection')
+        introspection_response = client.get('/runtime/introspection', headers=READ_ONLY_HEADERS)
         system_state_response = client.get('/system/state', headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 403
@@ -152,7 +152,7 @@ def test_execution_start_endpoint_forbids_operator_role_without_side_effect() ->
 def test_execution_stop_endpoint_forbids_operator_role_without_side_effect() -> None:
     with TestClient(api_main.app) as client:
         response = client.post('/execution/stop', headers=OPERATOR_HEADERS)
-        introspection_response = client.get('/runtime/introspection')
+        introspection_response = client.get('/runtime/introspection', headers=READ_ONLY_HEADERS)
         system_state_response = client.get('/system/state', headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 403
@@ -161,3 +161,11 @@ def test_execution_stop_endpoint_forbids_operator_role_without_side_effect() -> 
     assert introspection_response.json()['mode'] == 'running'
     assert system_state_response.status_code == 200
     assert system_state_response.json()['status'] == 'running'
+
+
+def test_runtime_introspection_requires_authenticated_role() -> None:
+    with TestClient(api_main.app) as client:
+        response = client.get('/runtime/introspection')
+
+    assert response.status_code == 401
+    assert response.json() == {'detail': 'unauthorized'}

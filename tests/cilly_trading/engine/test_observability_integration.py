@@ -33,6 +33,8 @@ from cilly_trading.engine.telemetry.emitter import (
     reset_telemetry_emission_for_tests,
 )
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _load_provider_module():
     root = Path(__file__).resolve().parents[3]
@@ -232,10 +234,10 @@ def _configure_health_environment(
 def _read_health_payloads() -> dict[str, dict[str, Any]]:
     with TestClient(api_main.app) as client:
         return {
-            "/health": client.get("/health").json(),
-            "/health/engine": client.get("/health/engine").json(),
-            "/health/data": client.get("/health/data").json(),
-            "/health/guards": client.get("/health/guards").json(),
+            "/health": client.get("/health", headers=READ_ONLY_HEADERS).json(),
+            "/health/engine": client.get("/health/engine", headers=READ_ONLY_HEADERS).json(),
+            "/health/data": client.get("/health/data", headers=READ_ONLY_HEADERS).json(),
+            "/health/guards": client.get("/health/guards", headers=READ_ONLY_HEADERS).json(),
         }
 
 

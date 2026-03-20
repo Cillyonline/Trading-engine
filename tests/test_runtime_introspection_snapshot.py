@@ -10,6 +10,8 @@ import api.main as api_main
 import cilly_trading.engine.runtime_introspection as runtime_introspection
 from cilly_trading.engine.observability_extensions import RuntimeObservabilityRegistry
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 class _RuntimeStateStub:
     def __init__(self, state: str) -> None:
@@ -37,7 +39,7 @@ def test_runtime_introspection_snapshot_with_extensions(monkeypatch) -> None:
     )
 
     with TestClient(api_main.app) as client:
-        payload = client.get("/runtime/introspection").json()
+        payload = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json()
 
     snapshot_path = Path(__file__).parent / "fixtures" / "runtime_introspection_snapshot.json"
     expected = json.loads(snapshot_path.read_text())

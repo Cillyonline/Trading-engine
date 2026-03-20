@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 import api.main as api_main
 from api.order_events_sqlite import SqliteOrderEventRepository
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _make_repo(tmp_path: Path) -> SqliteOrderEventRepository:
     db_path = tmp_path / "order_events.db"
@@ -44,7 +46,11 @@ def test_execution_orders_api_contract(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "shutdown_engine_runtime", lambda: "stopped")
     with TestClient(api_main.app) as client:
-        response = client.get("/execution/orders", params={"limit": 10, "offset": 0})
+        response = client.get(
+            "/execution/orders",
+            headers=READ_ONLY_HEADERS,
+            params={"limit": 10, "offset": 0},
+        )
         openapi = client.get("/openapi.json").json()
 
     assert response.status_code == 200
@@ -92,8 +98,8 @@ def test_execution_orders_are_deterministically_sorted(tmp_path: Path, monkeypat
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "shutdown_engine_runtime", lambda: "stopped")
     with TestClient(api_main.app) as client:
-        first = client.get("/execution/orders")
-        second = client.get("/execution/orders")
+        first = client.get("/execution/orders", headers=READ_ONLY_HEADERS)
+        second = client.get("/execution/orders", headers=READ_ONLY_HEADERS)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -135,12 +141,17 @@ def test_execution_orders_filtering_and_pagination(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "shutdown_engine_runtime", lambda: "stopped")
     with TestClient(api_main.app) as client:
-        by_symbol = client.get("/execution/orders", params={"symbol": "AAPL"})
-        by_strategy = client.get("/execution/orders", params={"strategy": "RSI2"})
-        by_run = client.get("/execution/orders", params={"run_id": "run-1"})
-        by_order = client.get("/execution/orders", params={"order_id": "a-1"})
+        by_symbol = client.get("/execution/orders", headers=READ_ONLY_HEADERS, params={"symbol": "AAPL"})
+        by_strategy = client.get(
+            "/execution/orders",
+            headers=READ_ONLY_HEADERS,
+            params={"strategy": "RSI2"},
+        )
+        by_run = client.get("/execution/orders", headers=READ_ONLY_HEADERS, params={"run_id": "run-1"})
+        by_order = client.get("/execution/orders", headers=READ_ONLY_HEADERS, params={"order_id": "a-1"})
         paged = client.get(
             "/execution/orders",
+            headers=READ_ONLY_HEADERS,
             params={"symbol": "AAPL", "strategy": "RSI2", "limit": 1, "offset": 1},
         )
 
@@ -172,3 +183,16 @@ def test_execution_orders_filtering_and_pagination(tmp_path: Path, monkeypatch) 
     assert paged_payload["limit"] == 1
     assert paged_payload["offset"] == 1
     assert len(paged_payload["items"]) == 1
+
+
+def test_execution_orders_require_authenticated_role(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "order_event_repo", repo)
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "shutdown_engine_runtime", lambda: "stopped")
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/execution/orders")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}

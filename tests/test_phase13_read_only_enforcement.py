@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 @dataclass
 class _RuntimeStateStub:
@@ -89,7 +91,7 @@ def test_phase13_endpoints_are_side_effect_free(path: str, monkeypatch: pytest.M
     detector.capture_before()
 
     with TestClient(api_main.app) as client:
-        response = client.get(path)
+        response = client.get(path, headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     detector.assert_no_side_effects()
