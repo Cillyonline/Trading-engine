@@ -44,3 +44,10 @@ Issue `#718` defines one canonical trading-core vocabulary for `Trade`, `Positio
 2. `ExecutionEvent` records immutable lifecycle facts for that order.
 3. `Position` derives current or closed aggregate exposure from those facts.
 4. `Trade` derives the lifecycle summary tied to the position and linked execution events.
+
+## Lifecycle State Machine
+
+Deterministic lifecycle states, transition rules, transition-order checks, and transition invariants for `Order`, `Trade`, and `Position` are defined once in:
+
+- `docs/architecture/trading_lifecycle_state_machine.md`
+- `src/cilly_trading/trading_lifecycle.py`
