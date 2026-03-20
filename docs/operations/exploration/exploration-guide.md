@@ -164,7 +164,7 @@ curl -X GET "http://127.0.0.1:8000/signals?strategy=RSI2&limit=10" \
   -H "Accept: application/json"
 ```
 
-- Use filters (`symbol`, `strategy`, `preset`, `from`/`to`) and pagination (`limit`, `offset`) to inspect stored results. 【F:api/main.py†L341-L615】
+- Use filters (`symbol`, `strategy`, `timeframe`, `from`/`to`) and pagination (`limit`, `offset`) to inspect stored results. 【F:api/main.py†L341-L615】
 
 ---
 

@@ -159,7 +159,7 @@ def test_read_signals_filters_and_sorting(tmp_path: Path) -> None:
         ]
     )
 
-    items, total = repo.read_signals(strategy="RSI2", preset="H1")
+    items, total = repo.read_signals(strategy="RSI2", timeframe="H1")
     assert total == 1
     assert items[0]["symbol"] == "BBB"
 
@@ -174,3 +174,25 @@ def test_read_signals_filters_and_sorting(tmp_path: Path) -> None:
     items_asc, total_asc = repo.read_signals(sort="created_at_asc", limit=10)
     assert total_asc == 3
     assert [item["symbol"] for item in items_asc] == ["AAA", "BBB", "CCC"]
+
+
+def test_read_screener_results_respects_bounds(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(symbol="AAA", score=40.0, timestamp="2025-01-01T00:00:00+00:00"),
+            _base_signal(symbol="BBB", score=60.0, timestamp="2025-01-02T00:00:00+00:00"),
+            _base_signal(symbol="CCC", score=60.0, timestamp="2025-01-03T00:00:00+00:00"),
+            _base_signal(symbol="DDD", score=80.0, timestamp="2025-01-04T00:00:00+00:00"),
+        ]
+    )
+
+    items, total = repo.read_screener_results(
+        strategy="RSI2",
+        timeframe="D1",
+        limit=2,
+        offset=1,
+    )
+
+    assert total == 4
+    assert [item["symbol"] for item in items] == ["BBB", "CCC"]
