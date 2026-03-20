@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 import api.main as api_main
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _insert_ingestion_run(
     db_path: Path,
@@ -61,7 +63,7 @@ def test_ingestion_runs_ordering_and_limit(monkeypatch, tmp_path: Path) -> None:
 
     client = TestClient(api_main.app)
 
-    response = client.get("/ingestion/runs", params={"limit": 2})
+    response = client.get("/ingestion/runs", headers=READ_ONLY_HEADERS, params={"limit": 2})
     assert response.status_code == 200
 
     payload = response.json()
@@ -95,11 +97,11 @@ def test_ingestion_runs_limit_defaults_and_caps(monkeypatch, tmp_path: Path) -> 
 
     client = TestClient(api_main.app)
 
-    default_response = client.get("/ingestion/runs")
+    default_response = client.get("/ingestion/runs", headers=READ_ONLY_HEADERS)
     assert default_response.status_code == 200
     assert len(default_response.json()) == 20
 
-    capped_response = client.get("/ingestion/runs", params={"limit": 200})
+    capped_response = client.get("/ingestion/runs", headers=READ_ONLY_HEADERS, params={"limit": 200})
     assert capped_response.status_code == 200
     capped_payload = capped_response.json()
     assert len(capped_payload) == 100

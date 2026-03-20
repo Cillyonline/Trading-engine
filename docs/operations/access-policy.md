@@ -34,7 +34,7 @@ This contract is normative for the current operator-facing routes defined in `sr
 - journal and audit inspection
 - execution control
 
-This contract does not cover `/ui` static assets or any future route that is not listed below. Runtime enforcement of this contract belongs in a separate implementation issue.
+This contract does not cover `/ui` static assets or any future route that is not listed below.
 
 ## Endpoint Permission Contract
 
@@ -66,6 +66,8 @@ All covered endpoints are protected. Anonymous access is out of contract. The mi
 | `POST` | `/strategy/analyze` | `mutating` | `operator` |
 | `POST` | `/analysis/run` | `mutating` | `operator` |
 | `POST` | `/screener/basic` | `mutating` | `operator` |
+| `POST` | `/execution/start` | `mutating` | `owner` |
+| `POST` | `/execution/stop` | `mutating` | `owner` |
 | `POST` | `/execution/pause` | `mutating` | `owner` |
 | `POST` | `/execution/resume` | `mutating` | `owner` |
 
@@ -73,7 +75,7 @@ Effective role permissions derived from the table:
 
 - `read_only` may call every listed `GET` endpoint and no listed `POST` endpoint.
 - `operator` may call every `read_only` endpoint plus `POST /strategy/analyze`, `POST /analysis/run`, and `POST /screener/basic`.
-- `owner` may call every covered endpoint, including `POST /execution/pause` and `POST /execution/resume`.
+- `owner` may call every covered endpoint, including `POST /execution/start`, `POST /execution/stop`, `POST /execution/pause`, and `POST /execution/resume`.
 
 ## Deterministic Denial Behavior
 

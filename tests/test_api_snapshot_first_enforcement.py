@@ -104,6 +104,7 @@ def test_strategy_analyze_requires_ingestion_run_id() -> None:
     client = TestClient(api_main.app)
     response = client.post(
         "/strategy/analyze",
+        headers=OPERATOR_HEADERS,
         json={
             "symbol": "AAPL",
             "strategy": "RSI2",
@@ -119,6 +120,7 @@ def test_screener_basic_requires_ingestion_run_id() -> None:
     client = TestClient(api_main.app)
     response = client.post(
         "/screener/basic",
+        headers=OPERATOR_HEADERS,
         json={
             "market_type": "stock",
             "lookback_days": 200,
@@ -169,6 +171,7 @@ def test_strategy_analyze_accepts_valid_ingestion_run_id(tmp_path: Path, monkeyp
     client = TestClient(api_main.app)
     response = client.post(
         "/strategy/analyze",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",
@@ -212,6 +215,7 @@ def test_strategy_analyze_rejects_missing_snapshot(tmp_path: Path, monkeypatch) 
     client = TestClient(api_main.app)
     response = client.post(
         "/strategy/analyze",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",
@@ -260,6 +264,7 @@ def test_strategy_analyze_rejects_invalid_snapshot_rows(tmp_path: Path, monkeypa
     client = TestClient(api_main.app)
     response = client.post(
         "/strategy/analyze",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "symbol": "AAPL",
@@ -312,6 +317,7 @@ def test_screener_basic_rejects_partial_snapshots(tmp_path: Path, monkeypatch) -
     client = TestClient(api_main.app)
     response = client.post(
         "/screener/basic",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "market_type": "stock",
@@ -365,6 +371,7 @@ def test_screener_basic_accepts_ready_snapshots(tmp_path: Path, monkeypatch) -> 
     client = TestClient(api_main.app)
     response = client.post(
         "/screener/basic",
+        headers=OPERATOR_HEADERS,
         json={
             "ingestion_run_id": ingestion_run_id,
             "market_type": "stock",

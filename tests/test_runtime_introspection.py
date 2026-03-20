@@ -5,6 +5,8 @@ import api.main as api_main
 from cilly_trading.engine.observability_extensions import RuntimeObservabilityRegistry
 import cilly_trading.engine.runtime_introspection as runtime_introspection
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 class _RuntimeStateStub:
     def __init__(self, state: str) -> None:
@@ -34,8 +36,8 @@ def test_runtime_introspection_contract_is_explicit_and_stable(monkeypatch) -> N
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
 
     with TestClient(api_main.app) as client:
-        first = client.get("/runtime/introspection")
-        second = client.get("/runtime/introspection")
+        first = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
+        second = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -97,7 +99,7 @@ def test_runtime_introspection_triggers_no_persistence_writes(monkeypatch) -> No
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
 
     with TestClient(api_main.app) as client:
-        response = client.get("/runtime/introspection")
+        response = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
 
@@ -111,6 +113,6 @@ def test_runtime_introspection_is_deterministic_across_repeated_calls(monkeypatc
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
 
     with TestClient(api_main.app) as client:
-        payloads = [client.get("/runtime/introspection").json() for _ in range(5)]
+        payloads = [client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json() for _ in range(5)]
 
     assert payloads[0] == payloads[1] == payloads[2] == payloads[3] == payloads[4]

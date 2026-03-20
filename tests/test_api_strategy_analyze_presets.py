@@ -13,6 +13,8 @@ from cilly_trading.engine import core as engine_core
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
+
 
 def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
     db_path = tmp_path / "strategy_analyze.db"
@@ -133,7 +135,7 @@ def test_strategy_analyze_multi_presets_returns_results(tmp_path: Path, monkeypa
         "strategy_config": {"oversold_threshold": 15.0},
     }
 
-    response = client.post("/strategy/analyze", json=payload)
+    response = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
 
     assert response.status_code == 200
     data = response.json()
@@ -162,7 +164,7 @@ def test_strategy_analyze_duplicate_preset_ids_rejected(
         "preset_ids": ["dup", "dup"],
     }
 
-    response = client.post("/strategy/analyze", json=payload)
+    response = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
 
     assert response.status_code == 422
 
@@ -182,7 +184,7 @@ def test_strategy_analyze_missing_preset_id_rejected(
         "preset_ids": [],
     }
 
-    response = client.post("/strategy/analyze", json=payload)
+    response = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
 
     assert response.status_code == 422
 
@@ -200,8 +202,8 @@ def test_strategy_analyze_deterministic_output(tmp_path: Path, monkeypatch) -> N
         "strategy_config": {"oversold_threshold": 15.0},
     }
 
-    response_one = client.post("/strategy/analyze", json=payload)
-    response_two = client.post("/strategy/analyze", json=payload)
+    response_one = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
+    response_two = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
 
     assert response_one.status_code == 200
     assert response_two.status_code == 200
@@ -223,7 +225,7 @@ def test_strategy_analyze_single_preset_backwards_compatible(
         "strategy_config": {"oversold_threshold": 15.0},
     }
 
-    response = client.post("/strategy/analyze", json=payload)
+    response = client.post("/strategy/analyze", headers=OPERATOR_HEADERS, json=payload)
 
     assert response.status_code == 200
     data = response.json()

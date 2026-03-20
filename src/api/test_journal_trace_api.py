@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _write_artifact(root: Path, run_id: str, artifact_name: str, payload: object) -> None:
     run_dir = root / run_id
@@ -27,7 +29,7 @@ def test_journal_artifacts_endpoint_lists_available_artifacts(monkeypatch, tmp_p
     monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", artifacts_root)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/journal/artifacts")
+        response = client.get("/journal/artifacts", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()
@@ -62,6 +64,7 @@ def test_decision_trace_endpoint_returns_trace_entries_from_artifact(
     with TestClient(api_main.app) as client:
         response = client.get(
             "/journal/decision-trace",
+            headers=READ_ONLY_HEADERS,
             params={"run_id": "run-trace", "artifact_name": "decision_trace.json"},
         )
 
@@ -72,4 +75,3 @@ def test_decision_trace_endpoint_returns_trace_entries_from_artifact(
     assert payload["total_entries"] == 2
     assert payload["entries"][0]["step"] == "risk_check"
     assert payload["entries"][1]["reason"] == "approved"
-

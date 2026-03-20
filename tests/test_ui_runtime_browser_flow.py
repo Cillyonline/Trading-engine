@@ -248,6 +248,7 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(tmp_path: Path, monke
 
         signals_response = client.get(
             "/signals",
+            headers=READ_ONLY_HEADERS,
             params={
                 "ingestion_run_id": ingestion_run_id,
                 "symbol": "AAPL",

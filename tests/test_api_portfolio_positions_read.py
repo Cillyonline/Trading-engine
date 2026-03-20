@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 import api.main as api_main
 from tests.utils.json_schema_validator import validate_json_schema
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _test_client(monkeypatch: object) -> TestClient:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
@@ -33,7 +35,7 @@ def test_portfolio_positions_returns_current_positions(monkeypatch) -> None:
     monkeypatch.setenv("CILLY_PORTFOLIO_POSITIONS", json.dumps(positions_payload))
 
     with _test_client(monkeypatch) as client:
-        response = client.get("/portfolio/positions")
+        response = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     payload = response.json()
@@ -69,7 +71,7 @@ def test_portfolio_positions_response_schema(monkeypatch) -> None:
     monkeypatch.setenv("CILLY_PORTFOLIO_POSITIONS", json.dumps(positions_payload))
 
     with _test_client(monkeypatch) as client:
-        payload = client.get("/portfolio/positions").json()
+        payload = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS).json()
 
     schema = api_main.PortfolioPositionsResponse.model_json_schema()
     errors = validate_json_schema(payload, schema)
@@ -103,8 +105,8 @@ def test_portfolio_positions_output_is_deterministic(monkeypatch) -> None:
     monkeypatch.setenv("CILLY_PORTFOLIO_POSITIONS", json.dumps(positions_payload))
 
     with _test_client(monkeypatch) as client:
-        first = client.get("/portfolio/positions")
-        second = client.get("/portfolio/positions")
+        first = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS)
+        second = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS)
 
     assert first.status_code == 200
     assert second.status_code == 200

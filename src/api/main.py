@@ -889,13 +889,13 @@ def _strategy_display_name(strategy_key: str) -> str:
 
 
 @app.get("/health")
-def health() -> Dict[str, str]:
+def health(_: str = Depends(_require_role("read_only"))) -> Dict[str, str]:
     _assert_phase_13_read_only_endpoint("/health")
     return _runtime_health_payload()
 
 
 @app.get("/health/engine")
-def health_engine() -> Dict[str, Any]:
+def health_engine(_: str = Depends(_require_role("read_only"))) -> Dict[str, Any]:
     payload = _runtime_health_payload()
     mode = payload["mode"]
     ready = mode in {"ready", "running", "paused"}
@@ -911,7 +911,7 @@ def health_engine() -> Dict[str, Any]:
 
 
 @app.get("/health/data")
-def health_data() -> Dict[str, Any]:
+def health_data(_: str = Depends(_require_role("read_only"))) -> Dict[str, Any]:
     checked_at = _health_now()
     db_path = Path(_resolve_analysis_db_path())
     ready = db_path.exists()
@@ -928,7 +928,7 @@ def health_data() -> Dict[str, Any]:
 
 
 @app.get("/health/guards")
-def health_guards() -> Dict[str, Any]:
+def health_guards(_: str = Depends(_require_role("read_only"))) -> Dict[str, Any]:
     checked_at = _health_now()
     guard_status = read_compliance_guard_status()
     blocking = guard_status.compliance.blocking
@@ -1099,7 +1099,7 @@ def read_compliance_guard_status(
 
 
 @app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
-def runtime_introspection() -> RuntimeIntrospectionResponse:
+def runtime_introspection(_: str = Depends(_require_role("read_only"))) -> RuntimeIntrospectionResponse:
     _assert_phase_13_read_only_endpoint("/runtime/introspection")
     payload = get_runtime_introspection_payload()
     payload.setdefault("extensions", [])
@@ -1189,7 +1189,9 @@ def _portfolio_position_response(
     summary="Portfolio Positions",
     description="Read-only current portfolio positions for operator inspection.",
 )
-def read_portfolio_positions() -> PortfolioPositionsResponse:
+def read_portfolio_positions(
+    _: str = Depends(_require_role("read_only")),
+) -> PortfolioPositionsResponse:
     state = load_portfolio_state_from_env()
     items = [_portfolio_position_response(position) for position in state.positions]
     return PortfolioPositionsResponse(positions=items, total=len(items))
@@ -1374,7 +1376,10 @@ def _to_watchlist_response(watchlist: Any) -> WatchlistResponse:
 
 
 @app.get("/ingestion/runs", response_model=List[IngestionRunItemResponse])
-def read_ingestion_runs(limit: int = Depends(_get_ingestion_runs_limit)) -> List[IngestionRunItemResponse]:
+def read_ingestion_runs(
+    limit: int = Depends(_get_ingestion_runs_limit),
+    _: str = Depends(_require_role("read_only")),
+) -> List[IngestionRunItemResponse]:
     rows = analysis_run_repo.list_ingestion_runs(limit=limit)
     return [IngestionRunItemResponse(**row) for row in rows]
 
@@ -1533,6 +1538,7 @@ def execute_watchlist(
 def read_journal_artifacts(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    _: str = Depends(_require_role("read_only")),
 ) -> JournalArtifactListResponse:
     files = _iter_journal_artifact_files()
     files.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
@@ -1558,7 +1564,11 @@ def read_journal_artifacts(
     "/journal/artifacts/{run_id}/{artifact_name}",
     response_model=JournalArtifactContentResponse,
 )
-def read_journal_artifact_content(run_id: str, artifact_name: str) -> JournalArtifactContentResponse:
+def read_journal_artifact_content(
+    run_id: str,
+    artifact_name: str,
+    _: str = Depends(_require_role("read_only")),
+) -> JournalArtifactContentResponse:
     path = _resolve_journal_artifact_path(run_id=run_id, artifact_name=artifact_name)
     content_type, content = _read_journal_artifact_content(path)
     return JournalArtifactContentResponse(
@@ -1573,6 +1583,7 @@ def read_journal_artifact_content(run_id: str, artifact_name: str) -> JournalArt
 def read_decision_trace(
     run_id: str = Query(..., min_length=1),
     artifact_name: str = Query(default="audit.json", min_length=1),
+    _: str = Depends(_require_role("read_only")),
 ) -> DecisionTraceResponse:
     path = _resolve_journal_artifact_path(run_id=run_id, artifact_name=artifact_name)
     _, content = _read_journal_artifact_content(path)
@@ -1587,7 +1598,7 @@ def read_decision_trace(
 
 
 @app.get("/strategies", response_model=StrategyMetadataResponse)
-def read_strategies() -> StrategyMetadataResponse:
+def read_strategies(_: str = Depends(_require_role("read_only"))) -> StrategyMetadataResponse:
     items: List[StrategyMetadataItemResponse] = []
     for strategy_key in get_registered_strategy_keys():
         default_config = default_strategy_configs.get(strategy_key, {})
@@ -1603,7 +1614,10 @@ def read_strategies() -> StrategyMetadataResponse:
 
 
 @app.get("/signals", response_model=SignalReadResponseDTO)
-def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> SignalReadResponseDTO:
+def read_signals(
+    params: SignalsReadQuery = Depends(_get_signals_query),
+    _: str = Depends(_require_role("read_only")),
+) -> SignalReadResponseDTO:
     effective_from = params.from_ or params.start
     effective_to = params.to or params.end
     items, total = signal_repo.read_signals(
@@ -1647,6 +1661,7 @@ def read_signals(params: SignalsReadQuery = Depends(_get_signals_query)) -> Sign
 @app.get("/execution/orders", response_model=ExecutionOrdersReadResponse)
 def read_execution_orders(
     params: ExecutionOrdersReadQuery = Depends(_get_execution_orders_query),
+    _: str = Depends(_require_role("read_only")),
 ) -> ExecutionOrdersReadResponse:
     items, total = order_event_repo.read_order_events(
         symbol=params.symbol,
@@ -1669,6 +1684,7 @@ def read_execution_orders(
 @app.get("/screener/v2/results", response_model=ScreenerResultsResponse)
 def read_screener_results(
     params: ScreenerResultsQuery = Depends(_get_screener_results_query),
+    _: str = Depends(_require_role("read_only")),
 ) -> ScreenerResultsResponse:
     items = signal_repo.read_screener_results(
         strategy=params.strategy,
@@ -1684,7 +1700,10 @@ def read_screener_results(
 
 
 @app.post("/strategy/analyze", response_model=StrategyAnalyzeResponse)
-def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
+def analyze_strategy(
+    req: StrategyAnalyzeRequest,
+    _: str = Depends(_require_role("operator")),
+) -> StrategyAnalyzeResponse:
     logger.info(
         "Strategy analyze start: symbol=%s strategy=%s market_type=%s lookback_days=%s",
         req.symbol,
@@ -1876,7 +1895,10 @@ def manual_analysis(
 
 
 @app.post("/screener/basic", response_model=ScreenerResponse)
-def basic_screener(req: ScreenerRequest) -> ScreenerResponse:
+def basic_screener(
+    req: ScreenerRequest,
+    _: str = Depends(_require_role("operator")),
+) -> ScreenerResponse:
     _require_ingestion_run(req.ingestion_run_id)
     if req.symbols is None or len(req.symbols) == 0:
         if req.market_type == "stock":

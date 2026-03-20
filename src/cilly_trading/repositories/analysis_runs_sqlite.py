@@ -149,29 +149,54 @@ class SqliteAnalysisRunRepository:
             request_payload: Request-Daten als JSON-serialisierbares Dict.
             result_payload: Ergebnis-Daten als JSON-serialisierbares Dict.
         """
+        serialized_request = json.dumps(request_payload, sort_keys=True)
+        serialized_result = json.dumps(result_payload, sort_keys=True)
         conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO analysis_runs (
-                analysis_run_id,
-                ingestion_run_id,
-                request_payload,
-                result_payload,
-                created_at
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO analysis_runs (
+                    analysis_run_id,
+                    ingestion_run_id,
+                    request_payload,
+                    result_payload,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (
+                    analysis_run_id,
+                    ingestion_run_id,
+                    serialized_request,
+                    serialized_result,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
-            VALUES (?, ?, ?, ?, ?);
-            """,
-            (
-                analysis_run_id,
-                ingestion_run_id,
-                json.dumps(request_payload, sort_keys=True),
-                json.dumps(result_payload, sort_keys=True),
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        )
-        conn.commit()
-        conn.close()
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT ingestion_run_id, request_payload, result_payload
+                FROM analysis_runs
+                WHERE analysis_run_id = ?;
+                """,
+                (analysis_run_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise
+            if (
+                row["ingestion_run_id"] == ingestion_run_id
+                and row["request_payload"] == serialized_request
+                and row["result_payload"] == serialized_result
+            ):
+                return
+            raise ValueError("analysis_run_id already exists with different persisted payload")
+        finally:
+            conn.close()
 
     def save_analysis_run(
         self,

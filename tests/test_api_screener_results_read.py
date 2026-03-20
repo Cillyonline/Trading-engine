@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 import api.main as api_main
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 def _make_repo(tmp_path: Path) -> SqliteSignalRepository:
     db_path = tmp_path / "screener_results.db"
@@ -48,6 +50,7 @@ def test_read_screener_results_ordering_and_min_score(tmp_path: Path, monkeypatc
 
     response = client.get(
         "/screener/v2/results",
+        headers=READ_ONLY_HEADERS,
         params={
             "strategy": "RSI2",
             "timeframe": "D1",
@@ -85,6 +88,7 @@ def test_read_screener_results_filters_strategy_and_timeframe(
 
     response = client.get(
         "/screener/v2/results",
+        headers=READ_ONLY_HEADERS,
         params={
             "strategy": "TURTLE",
             "timeframe": "H1",
@@ -95,3 +99,17 @@ def test_read_screener_results_filters_strategy_and_timeframe(
 
     assert payload["total"] == 3
     assert [item["symbol"] for item in payload["items"]] == ["AAC", "BBB", "AAA"]
+
+
+def test_read_screener_results_requires_authenticated_role(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get(
+        "/screener/v2/results",
+        params={"strategy": "RSI2", "timeframe": "D1"},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
