@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from cilly_trading.db import init_db, DEFAULT_DB_PATH  # type: ignore
-from cilly_trading.models import Trade
+from cilly_trading.models import PersistedTradePayload
 from cilly_trading.repositories import TradeRepository
 
 
@@ -30,7 +30,7 @@ class SqliteTradeRepository(TradeRepository):
         conn.row_factory = sqlite3.Row
         return conn
 
-    def save_trade(self, trade: Trade) -> int:
+    def save_trade(self, trade: PersistedTradePayload) -> int:
         conn = self._get_connection()
         cur = conn.cursor()
 
@@ -90,7 +90,7 @@ class SqliteTradeRepository(TradeRepository):
 
         return int(trade_id)
 
-    def list_trades(self, limit: int = 100) -> List[Trade]:
+    def list_trades(self, limit: int = 100) -> List[PersistedTradePayload]:
         conn = self._get_connection()
         cur = conn.cursor()
 
@@ -121,9 +121,9 @@ class SqliteTradeRepository(TradeRepository):
         rows = cur.fetchall()
         conn.close()
 
-        result: List[Trade] = []
+        result: List[PersistedTradePayload] = []
         for row in rows:
-            trade: Trade = {
+            trade: PersistedTradePayload = {
                 "id": row["id"],
                 "symbol": row["symbol"],
                 "strategy": row["strategy"],
