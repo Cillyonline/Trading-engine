@@ -27,9 +27,20 @@ class SqliteAnalysisRunRepository:
         init_db(self._db_path)
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
+
+    @staticmethod
+    def _deserialize_run_row(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "analysis_run_id": row["analysis_run_id"],
+            "ingestion_run_id": row["ingestion_run_id"],
+            "request": json.loads(row["request_payload"]),
+            "result": json.loads(row["result_payload"]),
+            "created_at": row["created_at"],
+        }
 
     def ingestion_run_exists(self, ingestion_run_id: str) -> bool:
         conn = self._get_connection()
@@ -124,13 +135,7 @@ class SqliteAnalysisRunRepository:
         if row is None:
             return None
 
-        return {
-            "analysis_run_id": row["analysis_run_id"],
-            "ingestion_run_id": row["ingestion_run_id"],
-            "request": json.loads(row["request_payload"]),
-            "result": json.loads(row["result_payload"]),
-            "created_at": row["created_at"],
-        }
+        return self._deserialize_run_row(row)
 
     def save_run(
         self,
@@ -139,7 +144,7 @@ class SqliteAnalysisRunRepository:
         ingestion_run_id: str,
         request_payload: Dict[str, Any],
         result_payload: Dict[str, Any],
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Speichert einen Analyse-Run mit Request- und Result-Payload.
 
@@ -174,12 +179,34 @@ class SqliteAnalysisRunRepository:
                 ),
             )
             conn.commit()
+            cur.execute(
+                """
+                SELECT
+                    analysis_run_id,
+                    ingestion_run_id,
+                    request_payload,
+                    result_payload,
+                    created_at
+                FROM analysis_runs
+                WHERE analysis_run_id = ?;
+                """,
+                (analysis_run_id,),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("persisted analysis run could not be reloaded")
+            return self._deserialize_run_row(row)
         except sqlite3.IntegrityError:
             conn.rollback()
             cur = conn.cursor()
             cur.execute(
                 """
-                SELECT ingestion_run_id, request_payload, result_payload
+                SELECT
+                    analysis_run_id,
+                    ingestion_run_id,
+                    request_payload,
+                    result_payload,
+                    created_at
                 FROM analysis_runs
                 WHERE analysis_run_id = ?;
                 """,
@@ -188,12 +215,8 @@ class SqliteAnalysisRunRepository:
             row = cur.fetchone()
             if row is None:
                 raise
-            if (
-                row["ingestion_run_id"] == ingestion_run_id
-                and row["request_payload"] == serialized_request
-                and row["result_payload"] == serialized_result
-            ):
-                return
+            if row["request_payload"] == serialized_request:
+                return self._deserialize_run_row(row)
             raise ValueError("analysis_run_id already exists with different persisted payload")
         finally:
             conn.close()
@@ -203,14 +226,14 @@ class SqliteAnalysisRunRepository:
         analysis_run: AnalysisRun,
         *,
         result_payload: Dict[str, Any],
-    ) -> None:
+    ) -> Dict[str, Any]:
         """Persist an analysis run using the existing schema.
 
         Args:
             analysis_run: AnalysisRun entity containing IDs and request payload.
             result_payload: Result payload to persist.
         """
-        self.save_run(
+        return self.save_run(
             analysis_run_id=analysis_run.analysis_run_id,
             ingestion_run_id=analysis_run.ingestion_run_id,
             request_payload=analysis_run.request_payload,

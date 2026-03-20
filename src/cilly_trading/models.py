@@ -59,6 +59,9 @@ class Signal(TypedDict, total=False):
     """
     Einheitliches Signalmodell gemäß MVP-Spezifikation.
     """
+    signal_id: str
+    analysis_run_id: str
+    ingestion_run_id: str
     symbol: str
     strategy: str
     direction: Direction

@@ -49,6 +49,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
         CREATE TABLE IF NOT EXISTS signals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id TEXT,
             analysis_run_id TEXT,
             ingestion_run_id TEXT,
             symbol TEXT NOT NULL,
@@ -67,6 +68,10 @@ def init_db(db_path: Optional[Path] = None) -> None:
         );
         """
     )
+    cur.execute("PRAGMA table_info(signals);")
+    signal_columns = {row["name"] for row in cur.fetchall()}
+    if "signal_id" not in signal_columns:
+        cur.execute("ALTER TABLE signals ADD COLUMN signal_id TEXT;")
     cur.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_signals_timestamp
@@ -89,6 +94,13 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_signals_symbol_strategy_timestamp
           ON signals(symbol, strategy, timestamp);
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_analysis_run_signal_id_unique
+          ON signals(analysis_run_id, signal_id)
+          WHERE analysis_run_id IS NOT NULL AND signal_id IS NOT NULL;
         """
     )
 

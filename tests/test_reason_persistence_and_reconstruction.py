@@ -98,10 +98,12 @@ def _signal_with_reasons():
 def test_persist_reasons_roundtrip(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
     signal = _signal_with_reasons()
+    expected_signal_id = compute_signal_id(signal)
 
     repo.save_signals([signal])
 
     rows = repo.list_signals(limit=1)
+    assert rows[0]["signal_id"] == expected_signal_id
     assert rows[0]["analysis_run_id"] == signal["analysis_run_id"]
     assert rows[0]["ingestion_run_id"] == signal["ingestion_run_id"]
     assert rows[0]["reasons"] == signal["reasons"]

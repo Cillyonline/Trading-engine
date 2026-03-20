@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from cilly_trading.models import compute_signal_id
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 
@@ -38,13 +40,15 @@ def test_save_signals_empty_list_is_noop(tmp_path: Path) -> None:
 
 def test_roundtrip_minimal_signal(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path)
+    signal = _base_signal(symbol="MSFT")
 
-    repo.save_signals([_base_signal(symbol="MSFT")])
+    repo.save_signals([signal])
 
     rows = repo.list_signals(limit=10)
     assert len(rows) == 1
 
     s = rows[0]
+    assert s["signal_id"] == compute_signal_id(signal)
     assert s["symbol"] == "MSFT"
     assert s["strategy"] == "RSI2"
     assert s["direction"] == "long"
@@ -196,3 +200,33 @@ def test_read_screener_results_respects_bounds(tmp_path: Path) -> None:
 
     assert total == 4
     assert [item["symbol"] for item in items] == ["BBB", "CCC"]
+
+
+def test_save_signals_deduplicates_same_analysis_run_and_signal_id(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    signal = _base_signal(
+        analysis_run_id="analysis-run-1",
+        signal_id="signal-001",
+    )
+
+    repo.save_signals([signal])
+    repo.save_signals([signal])
+
+    rows = repo.list_signals(limit=10)
+    assert len(rows) == 1
+    assert rows[0]["signal_id"] == "signal-001"
+
+    conn = sqlite3.connect(tmp_path / "test_signals.db")
+    try:
+        row_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM signals
+            WHERE analysis_run_id = ? AND signal_id = ?;
+            """,
+            ("analysis-run-1", "signal-001"),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert row_count == 1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import sqlite3
 import uuid
@@ -451,6 +452,59 @@ def test_manual_analysis_requires_authenticated_role(tmp_path: Path, monkeypatch
     assert response.json() == {"detail": "unauthorized"}
 
 
+def test_manual_analysis_returns_persisted_result_when_duplicate_save_races(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    signal_repo = _make_signal_repo(tmp_path)
+    analysis_repo = _make_analysis_repo(tmp_path)
+    persisted_lookup = analysis_repo.get_run
+    queued_signals = [
+        [{"symbol": "AAPL", "strategy": "RSI2", "score": 1.0}],
+        [{"symbol": "AAPL", "strategy": "RSI2", "score": 2.0}],
+    ]
+
+    monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+    monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+    monkeypatch.setattr(api_main, "_require_ingestion_run", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(api_main, "_require_snapshot_ready", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(api_main, "create_strategy", lambda _name: object())
+    monkeypatch.setattr(
+        api_main,
+        "trigger_operator_analysis_run",
+        lambda **_kwargs: queued_signals.pop(0),
+    )
+
+    state = {"calls": 0}
+
+    def _stale_get_run(run_id: str) -> dict[str, object] | None:
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return None
+        if state["calls"] == 2:
+            return None
+        return persisted_lookup(run_id)
+
+    monkeypatch.setattr(analysis_repo, "get_run", _stale_get_run)
+
+    client = TestClient(api_main.app)
+    payload = {
+        "ingestion_run_id": str(uuid.uuid4()),
+        "symbol": "AAPL",
+        "strategy": "RSI2",
+        "market_type": "stock",
+        "lookback_days": 200,
+    }
+
+    first_response = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
+    second_response = client.post("/analysis/run", headers=OPERATOR_HEADERS, json=payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json() == second_response.json()
+    assert first_response.json()["signals"] == [{"symbol": "AAPL", "strategy": "RSI2", "score": 1.0}]
+
+
 def test_analysis_run_repository_duplicate_save_is_idempotent(tmp_path: Path) -> None:
     repo = _make_analysis_repo(tmp_path)
     run_id = "run-001"
@@ -475,6 +529,64 @@ def test_analysis_run_repository_duplicate_save_is_idempotent(tmp_path: Path) ->
     assert saved["ingestion_run_id"] == "ingestion-001"
     assert saved["request"] == request_payload
     assert saved["result"] == result_payload
+
+
+def test_analysis_run_repository_duplicate_save_reuses_persisted_result_for_same_request(
+    tmp_path: Path,
+) -> None:
+    repo = _make_analysis_repo(tmp_path)
+    run_id = "run-001"
+    request_payload = {"symbol": "AAPL", "strategy": "RSI2"}
+    first_result = {"analysis_run_id": run_id, "signals": []}
+    second_result = {"analysis_run_id": run_id, "signals": [{"symbol": "AAPL"}]}
+
+    persisted_first = repo.save_run(
+        analysis_run_id=run_id,
+        ingestion_run_id="ingestion-001",
+        request_payload=request_payload,
+        result_payload=first_result,
+    )
+    persisted_second = repo.save_run(
+        analysis_run_id=run_id,
+        ingestion_run_id="ingestion-999",
+        request_payload=request_payload,
+        result_payload=second_result,
+    )
+
+    assert persisted_first["result"] == first_result
+    assert persisted_second["result"] == first_result
+    assert repo.get_run(run_id) == persisted_first
+
+
+def test_analysis_run_repository_duplicate_save_is_safe_under_concurrent_requests(
+    tmp_path: Path,
+) -> None:
+    repo = _make_analysis_repo(tmp_path)
+    run_id = "run-001"
+    request_payload = {"symbol": "AAPL", "strategy": "RSI2"}
+    result_payload = {"analysis_run_id": run_id, "signals": []}
+
+    def _save() -> dict[str, object]:
+        return repo.save_run(
+            analysis_run_id=run_id,
+            ingestion_run_id="ingestion-001",
+            request_payload=request_payload,
+            result_payload=result_payload,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        persisted = [future.result() for future in [executor.submit(_save), executor.submit(_save)]]
+
+    assert persisted[0]["result"] == result_payload
+    assert persisted[1]["result"] == result_payload
+
+    conn = sqlite3.connect(tmp_path / "analysis.db")
+    try:
+        row_count = conn.execute("SELECT COUNT(*) FROM analysis_runs WHERE analysis_run_id = ?;", (run_id,)).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert row_count == 1
 
 
 def test_analysis_run_repository_rejects_conflicting_duplicate_save(tmp_path: Path) -> None:
