@@ -1541,14 +1541,16 @@ def execute_watchlist(
         ],
     }
 
-    analysis_run_repo.save_run(
+    persisted_run = analysis_run_repo.save_run(
         analysis_run_id=computed_run_id,
         ingestion_run_id=req.ingestion_run_id,
         request_payload=run_request_payload,
         result_payload=response_payload,
     )
 
-    return WatchlistExecutionResponse(**response_payload)
+    if persisted_run is None:
+        return WatchlistExecutionResponse(**response_payload)
+    return WatchlistExecutionResponse(**persisted_run["result"])
 
 
 @app.get("/journal/artifacts", response_model=JournalArtifactListResponse)
@@ -1903,14 +1905,16 @@ def manual_analysis(
         "signals": filtered_signals,
     }
 
-    analysis_run_repo.save_run(
+    persisted_run = analysis_run_repo.save_run(
         analysis_run_id=computed_run_id,
         ingestion_run_id=req.ingestion_run_id,
         request_payload=run_request_payload,
         result_payload=response_payload,
     )
 
-    return ManualAnalysisResponse(**response_payload)
+    if persisted_run is None:
+        return ManualAnalysisResponse(**response_payload)
+    return ManualAnalysisResponse(**persisted_run["result"])
 
 
 @app.post("/screener/basic", response_model=ScreenerResponse)

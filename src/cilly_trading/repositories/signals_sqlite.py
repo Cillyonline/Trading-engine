@@ -34,8 +34,9 @@ class SqliteSignalRepository(SignalRepository):
         self._ensure_signal_columns()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
 
     def _ensure_signal_columns(self) -> None:
@@ -44,6 +45,8 @@ class SqliteSignalRepository(SignalRepository):
         cur.execute("PRAGMA table_info(signals);")
         columns = {row["name"] for row in cur.fetchall()}
         missing_columns = []
+        if "signal_id" not in columns:
+            missing_columns.append(("signal_id", "TEXT"))
         if "analysis_run_id" not in columns:
             missing_columns.append(("analysis_run_id", "TEXT"))
         if "ingestion_run_id" not in columns:
@@ -53,8 +56,14 @@ class SqliteSignalRepository(SignalRepository):
 
         for column_name, column_type in missing_columns:
             cur.execute(f"ALTER TABLE signals ADD COLUMN {column_name} {column_type};")
-        if missing_columns:
-            conn.commit()
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_analysis_run_signal_id_unique
+              ON signals(analysis_run_id, signal_id)
+              WHERE analysis_run_id IS NOT NULL AND signal_id IS NOT NULL;
+            """
+        )
+        conn.commit()
         conn.close()
 
     def _serialize_reasons(self, reasons: Optional[List[SignalReason]]) -> Optional[str]:
@@ -85,7 +94,8 @@ class SqliteSignalRepository(SignalRepository):
 
         cur.executemany(
             """
-            INSERT INTO signals (
+            INSERT OR IGNORE INTO signals (
+                signal_id,
                 analysis_run_id,
                 ingestion_run_id,
                 symbol,
@@ -103,6 +113,7 @@ class SqliteSignalRepository(SignalRepository):
                 reasons_json
             )
             VALUES (
+                :signal_id,
                 :analysis_run_id,
                 :ingestion_run_id,
                 :symbol,
@@ -122,6 +133,10 @@ class SqliteSignalRepository(SignalRepository):
             """,
             [
                 {
+                    "signal_id": (
+                        s.get("signal_id")
+                        or (compute_signal_id(s) if s.get("timestamp") else None)
+                    ),
                     "analysis_run_id": s.get("analysis_run_id"),
                     "ingestion_run_id": s.get("ingestion_run_id"),
                     "symbol": s["symbol"],
@@ -157,6 +172,7 @@ class SqliteSignalRepository(SignalRepository):
             """
             SELECT
                 id,
+                signal_id,
                 analysis_run_id,
                 ingestion_run_id,
                 symbol,
@@ -185,6 +201,7 @@ class SqliteSignalRepository(SignalRepository):
         result: List[Signal] = []
         for row in rows:
             signal: Signal = {
+                "signal_id": row["signal_id"],
                 "analysis_run_id": row["analysis_run_id"],
                 "ingestion_run_id": row["ingestion_run_id"],
                 "symbol": row["symbol"],
@@ -201,6 +218,8 @@ class SqliteSignalRepository(SignalRepository):
                 signal.pop("analysis_run_id")
             if signal["ingestion_run_id"] is None:
                 signal.pop("ingestion_run_id")
+            if signal["signal_id"] is None:
+                signal.pop("signal_id")
             reasons = self._deserialize_reasons(row["reasons_json"])
             if reasons is not None:
                 signal["reasons"] = reasons
@@ -272,6 +291,7 @@ class SqliteSignalRepository(SignalRepository):
         data_query = f"""
             SELECT
                 id,
+                signal_id,
                 analysis_run_id,
                 ingestion_run_id,
                 symbol,
@@ -300,6 +320,7 @@ class SqliteSignalRepository(SignalRepository):
         result: List[Signal] = []
         for row in rows:
             signal: Signal = {
+                "signal_id": row["signal_id"],
                 "analysis_run_id": row["analysis_run_id"],
                 "ingestion_run_id": row["ingestion_run_id"],
                 "symbol": row["symbol"],
@@ -316,6 +337,8 @@ class SqliteSignalRepository(SignalRepository):
                 signal.pop("analysis_run_id")
             if signal["ingestion_run_id"] is None:
                 signal.pop("ingestion_run_id")
+            if signal["signal_id"] is None:
+                signal.pop("signal_id")
             reasons = self._deserialize_reasons(row["reasons_json"])
             if reasons is not None:
                 signal["reasons"] = reasons
