@@ -84,3 +84,16 @@ def test_compliance_guard_status_endpoint_requires_authenticated_role(monkeypatc
 
     assert response.status_code == 401
     assert response.json() == {"detail": "unauthorized"}
+
+
+def test_compliance_guard_status_endpoint_rejects_invalid_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        response = client.get(
+            "/compliance/guards/status",
+            headers={api_main.ROLE_HEADER_NAME: "auditor"},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}

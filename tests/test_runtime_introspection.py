@@ -104,6 +104,63 @@ def test_runtime_introspection_triggers_no_persistence_writes(monkeypatch) -> No
     assert response.status_code == 200
 
 
+def test_runtime_introspection_rejects_missing_and_invalid_roles(monkeypatch) -> None:
+    runtime = _RuntimeStateStub("running")
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "get_runtime_controller", lambda: runtime)
+    monkeypatch.setattr(runtime_introspection, "get_runtime_controller", lambda: runtime)
+    monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+
+    with TestClient(api_main.app) as client:
+        missing = client.get("/runtime/introspection")
+        invalid = client.get(
+            "/runtime/introspection",
+            headers={api_main.ROLE_HEADER_NAME: "auditor"},
+        )
+
+    assert missing.status_code == 401
+    assert missing.json() == {"detail": "unauthorized"}
+    assert invalid.status_code == 401
+    assert invalid.json() == {"detail": "unauthorized"}
+
+
+def test_system_state_uses_internal_helper_not_runtime_route_handler(monkeypatch) -> None:
+    payload = {
+        "schema_version": "v1",
+        "status": "running",
+        "runtime": {
+            "schema_version": "v1",
+            "runtime_id": "runtime-test",
+            "mode": "running",
+            "timestamps": {
+                "started_at": "2025-01-01T00:00:00+00:00",
+                "updated_at": "2025-01-01T00:00:00+00:00",
+            },
+            "ownership": {"owner_tag": "engine"},
+            "extensions": [],
+        },
+        "metadata": {
+            "read_only": True,
+            "source": "engine_control_plane",
+        },
+    }
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "get_system_state_payload", lambda: payload)
+    monkeypatch.setattr(
+        api_main,
+        "runtime_introspection",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("route handler reused")),
+    )
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/system/state", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json() == payload
+
+
 def test_runtime_introspection_is_deterministic_across_repeated_calls(monkeypatch) -> None:
     runtime = _RuntimeStateStub("running")
 

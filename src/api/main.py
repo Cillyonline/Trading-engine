@@ -930,7 +930,7 @@ def health_data(_: str = Depends(_require_role("read_only"))) -> Dict[str, Any]:
 @app.get("/health/guards")
 def health_guards(_: str = Depends(_require_role("read_only"))) -> Dict[str, Any]:
     checked_at = _health_now()
-    guard_status = read_compliance_guard_status()
+    guard_status = _build_compliance_guard_status_response()
     blocking = guard_status.compliance.blocking
 
     return {
@@ -1050,10 +1050,7 @@ def _load_compliance_guard_status_sources() -> tuple[dict[str, object], Complian
     return guard_config, portfolio_state
 
 
-@app.get("/compliance/guards/status", response_model=ComplianceGuardStatusResponse)
-def read_compliance_guard_status(
-    _: str = Depends(_require_role("read_only")),
-) -> ComplianceGuardStatusResponse:
+def _build_compliance_guard_status_response() -> ComplianceGuardStatusResponse:
     guard_config, portfolio_state = _load_compliance_guard_status_sources()
 
     drawdown_threshold = configured_drawdown_threshold(config=guard_config)
@@ -1098,12 +1095,29 @@ def read_compliance_guard_status(
     )
 
 
-@app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
-def runtime_introspection(_: str = Depends(_require_role("read_only"))) -> RuntimeIntrospectionResponse:
-    _assert_phase_13_read_only_endpoint("/runtime/introspection")
+def _build_runtime_introspection_response() -> RuntimeIntrospectionResponse:
     payload = get_runtime_introspection_payload()
     payload.setdefault("extensions", [])
     return RuntimeIntrospectionResponse(**payload)
+
+
+def _build_system_state_response() -> SystemStateResponse:
+    payload = get_system_state_payload()
+    payload["runtime"].setdefault("extensions", [])
+    return SystemStateResponse(**payload)
+
+
+@app.get("/compliance/guards/status", response_model=ComplianceGuardStatusResponse)
+def read_compliance_guard_status(
+    _: str = Depends(_require_role("read_only")),
+) -> ComplianceGuardStatusResponse:
+    return _build_compliance_guard_status_response()
+
+
+@app.get("/runtime/introspection", response_model=RuntimeIntrospectionResponse)
+def runtime_introspection(_: str = Depends(_require_role("read_only"))) -> RuntimeIntrospectionResponse:
+    _assert_phase_13_read_only_endpoint("/runtime/introspection")
+    return _build_runtime_introspection_response()
 
 
 @app.get(
@@ -1113,9 +1127,7 @@ def runtime_introspection(_: str = Depends(_require_role("read_only"))) -> Runti
     description="Read-only system runtime state for operator inspection.",
 )
 def system_state(_: str = Depends(_require_role("read_only"))) -> SystemStateResponse:
-    payload = get_system_state_payload()
-    payload["runtime"].setdefault("extensions", [])
-    return SystemStateResponse(**payload)
+    return _build_system_state_response()
 
 
 @app.post(
