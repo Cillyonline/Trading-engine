@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Protocol
 
-from cilly_trading.models import Signal, Trade
+from cilly_trading.models import ExecutionEvent, Order, PersistedTradePayload, Signal, Trade
 
 
 class SignalRepository(Protocol):
@@ -35,19 +35,79 @@ class SignalRepository(Protocol):
 
 class TradeRepository(Protocol):
     """
-    Abstraktes Interface fuer das Speichern und Laden von Trades.
+    Legacy-Interface fuer das Speichern und Laden von Paper-Trading-Trade-Payloads.
     """
 
-    def save_trade(self, trade: Trade) -> int:
+    def save_trade(self, trade: PersistedTradePayload) -> int:
         """
         Speichert einen Trade und gibt die neue Trade-ID zurueck.
         """
         ...
 
-    def list_trades(self, limit: int = 100) -> List[Trade]:
+    def list_trades(self, limit: int = 100) -> List[PersistedTradePayload]:
         """
         Liefert die letzten `limit` Trades, absteigend nach id.
         """
+        ...
+
+
+class CanonicalExecutionRepository(Protocol):
+    """Persistence boundary for canonical Order/ExecutionEvent/Trade entities."""
+
+    def save_order(self, order: Order) -> None:
+        """Persist or replace a canonical order by identity."""
+        ...
+
+    def get_order(self, order_id: str) -> Optional[Order]:
+        """Load a canonical order by ID."""
+        ...
+
+    def list_orders(
+        self,
+        *,
+        strategy_id: Optional[str] = None,
+        symbol: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Order]:
+        """List canonical orders in deterministic order."""
+        ...
+
+    def save_execution_events(self, events: List[ExecutionEvent]) -> None:
+        """Append immutable canonical execution events."""
+        ...
+
+    def list_execution_events(
+        self,
+        *,
+        strategy_id: Optional[str] = None,
+        symbol: Optional[str] = None,
+        order_id: Optional[str] = None,
+        trade_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[ExecutionEvent]:
+        """List canonical execution events in deterministic replay order."""
+        ...
+
+    def save_trade(self, trade: Trade) -> None:
+        """Persist or replace a canonical derived trade by identity."""
+        ...
+
+    def get_trade(self, trade_id: str) -> Optional[Trade]:
+        """Load a canonical trade by ID."""
+        ...
+
+    def list_trades(
+        self,
+        *,
+        strategy_id: Optional[str] = None,
+        symbol: Optional[str] = None,
+        position_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Trade]:
+        """List canonical trades in deterministic order."""
         ...
 
 
@@ -87,6 +147,7 @@ class WatchlistRepository(Protocol):
 __all__ = [
     "SignalRepository",
     "TradeRepository",
+    "CanonicalExecutionRepository",
     "Watchlist",
     "WatchlistRepository",
 ]
