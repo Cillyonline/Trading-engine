@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from api.config import SCREENER_RESULTS_READ_MAX_LIMIT
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
@@ -61,6 +62,8 @@ def test_read_screener_results_ordering_and_min_score(tmp_path: Path, monkeypatc
     payload = response.json()
 
     assert payload["total"] == 3
+    assert payload["limit"] == 50
+    assert payload["offset"] == 0
     assert [item["symbol"] for item in payload["items"]] == ["CCC", "AAA", "BBB"]
 
     for item in payload["items"]:
@@ -98,7 +101,47 @@ def test_read_screener_results_filters_strategy_and_timeframe(
     payload = response.json()
 
     assert payload["total"] == 3
+    assert payload["limit"] == 50
+    assert payload["offset"] == 0
     assert [item["symbol"] for item in payload["items"]] == ["AAC", "BBB", "AAA"]
+
+
+def test_read_screener_results_pagination_and_validation(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(symbol="AAA", score=10.0),
+            _base_signal(symbol="BBB", score=20.0),
+            _base_signal(symbol="CCC", score=30.0),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    paged = client.get(
+        "/screener/v2/results",
+        headers=READ_ONLY_HEADERS,
+        params={"strategy": "RSI2", "timeframe": "D1", "limit": 1, "offset": 1},
+    )
+    invalid = client.get(
+        "/screener/v2/results",
+        headers=READ_ONLY_HEADERS,
+        params={
+            "strategy": "RSI2",
+            "timeframe": "D1",
+            "limit": SCREENER_RESULTS_READ_MAX_LIMIT + 1,
+        },
+    )
+
+    assert paged.status_code == 200
+    paged_payload = paged.json()
+    assert paged_payload["total"] == 3
+    assert paged_payload["limit"] == 1
+    assert paged_payload["offset"] == 1
+    assert [item["symbol"] for item in paged_payload["items"]] == ["BBB"]
+
+    assert invalid.status_code == 422
 
 
 def test_read_screener_results_requires_authenticated_role(tmp_path: Path, monkeypatch) -> None:

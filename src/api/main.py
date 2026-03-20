@@ -21,7 +21,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,7 +37,7 @@ from cilly_trading.compliance.drawdown_guard import (
 from cilly_trading.compliance.kill_switch import is_kill_switch_active
 from cilly_trading.portfolio import PortfolioState as CompliancePortfolioState
 from .alerts_api import build_alerts_router
-from .config import SIGNALS_READ_MAX_LIMIT
+from .config import SCREENER_RESULTS_READ_MAX_LIMIT, SIGNALS_READ_MAX_LIMIT
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.core import (
     EngineConfig,
@@ -336,12 +336,10 @@ class SignalsReadQuery(BaseModel):
 
     symbol: Optional[str] = Field(default=None)
     strategy: Optional[str] = Field(default=None)
-    preset: Optional[str] = Field(default=None)
+    timeframe: Optional[str] = Field(default=None)
     ingestion_run_id: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
-    start: Optional[datetime] = Field(default=None)
-    end: Optional[datetime] = Field(default=None)
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")
     limit: int = Field(
         default=50,
@@ -391,6 +389,8 @@ class ScreenerResultsQuery(BaseModel):
     strategy: str
     timeframe: str
     min_score: Optional[float] = Field(default=None, ge=0.0)
+    limit: int = Field(default=50, ge=1, le=SCREENER_RESULTS_READ_MAX_LIMIT)
+    offset: int = Field(default=0, ge=0)
 
 
 class ScreenerResultItem(BaseModel):
@@ -406,6 +406,8 @@ class ScreenerResultItem(BaseModel):
 
 class ScreenerResultsResponse(BaseModel):
     items: List[ScreenerResultItem]
+    limit: int
+    offset: int
     total: int
 
     model_config = ConfigDict(extra="forbid")
@@ -1225,25 +1227,26 @@ def _require_engine_runtime_running() -> None:
 
 
 def _get_signals_query(
+    request: Request,
     symbol: Optional[str] = Query(default=None),
     strategy: Optional[str] = Query(default=None),
-    preset: Optional[str] = Query(default=None),
+    timeframe: Optional[str] = Query(default=None),
     ingestion_run_id: Optional[str] = Query(default=None),
     from_: Optional[datetime] = Query(default=None, alias="from"),
     to: Optional[datetime] = Query(default=None, alias="to"),
-    start: Optional[datetime] = Query(default=None),
-    end: Optional[datetime] = Query(default=None),
     sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
     limit: int = Query(default=50, ge=1, le=SIGNALS_READ_MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
 ) -> SignalsReadQuery:
-    if start is not None and from_ is not None and start != from_:
-        raise HTTPException(status_code=422, detail="start conflicts with from")
-    if end is not None and to is not None and end != to:
-        raise HTTPException(status_code=422, detail="end conflicts with to")
+    if "preset" in request.query_params:
+        raise HTTPException(status_code=422, detail="preset query parameter is not supported; use timeframe")
+    if "start" in request.query_params:
+        raise HTTPException(status_code=422, detail="start query parameter is not supported; use from")
+    if "end" in request.query_params:
+        raise HTTPException(status_code=422, detail="end query parameter is not supported; use to")
 
-    resolved_from = start if start is not None else from_
-    resolved_to = end if end is not None else to
+    resolved_from = from_
+    resolved_to = to
 
     if resolved_from is not None and resolved_to is not None and resolved_from > resolved_to:
         raise HTTPException(status_code=422, detail="from must be less than or equal to to")
@@ -1251,12 +1254,10 @@ def _get_signals_query(
     return SignalsReadQuery(
         symbol=symbol,
         strategy=strategy,
-        preset=preset,
+        timeframe=timeframe,
         ingestion_run_id=ingestion_run_id,
         from_=resolved_from,
         to=resolved_to,
-        start=start,
-        end=end,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -1291,11 +1292,15 @@ def _get_screener_results_query(
     strategy: str = Query(...),
     timeframe: str = Query(...),
     min_score: Optional[float] = Query(default=None, ge=0.0),
+    limit: int = Query(default=50, ge=1, le=SCREENER_RESULTS_READ_MAX_LIMIT),
+    offset: int = Query(default=0, ge=0),
 ) -> ScreenerResultsQuery:
     return ScreenerResultsQuery(
         strategy=strategy,
         timeframe=timeframe,
         min_score=min_score,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -1630,15 +1635,13 @@ def read_signals(
     params: SignalsReadQuery = Depends(_get_signals_query),
     _: str = Depends(_require_role("read_only")),
 ) -> SignalReadResponseDTO:
-    effective_from = params.from_ or params.start
-    effective_to = params.to or params.end
     items, total = signal_repo.read_signals(
         symbol=params.symbol,
         strategy=params.strategy,
-        preset=params.preset,
+        timeframe=params.timeframe,
         ingestion_run_id=params.ingestion_run_id,
-        from_=effective_from,
-        to=effective_to,
+        from_=params.from_,
+        to=params.to,
         sort=params.sort,
         limit=params.limit,
         offset=params.offset,
@@ -1698,16 +1701,20 @@ def read_screener_results(
     params: ScreenerResultsQuery = Depends(_get_screener_results_query),
     _: str = Depends(_require_role("read_only")),
 ) -> ScreenerResultsResponse:
-    items = signal_repo.read_screener_results(
+    items, total = signal_repo.read_screener_results(
         strategy=params.strategy,
         timeframe=params.timeframe,
         min_score=params.min_score,
+        limit=params.limit,
+        offset=params.offset,
     )
     response_items = [ScreenerResultItem(**item) for item in items]
 
     return ScreenerResultsResponse(
         items=response_items,
-        total=len(response_items),
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
     )
 
 

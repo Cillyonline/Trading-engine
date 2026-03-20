@@ -347,20 +347,17 @@ Read stored signals with pagination and optional filtering.
 | --- | --- | --- | --- | --- |
 | `symbol` | string | optional | none | Symbol filter (e.g., `AAPL`, `BTC/USDT`). |
 | `strategy` | string | optional | none | Strategy filter (e.g., `RSI2`, `TURTLE`). |
-| `preset` | string | optional | none | Preset filter (e.g., `D1`). |
+| `timeframe` | string | optional | none | Persisted signal timeframe filter (e.g., `D1`). |
 | `from` | string (ISO-8601 datetime) | optional | none | Start time (inclusive) for `created_at`. |
 | `to` | string (ISO-8601 datetime) | optional | none | End time (inclusive) for `created_at`. |
-| `start` | string (ISO-8601 datetime) | optional | none | Alias for `from` (must not conflict). |
-| `end` | string (ISO-8601 datetime) | optional | none | Alias for `to` (must not conflict). |
 | `sort` | string | optional | `created_at_desc` | One of `created_at_asc`, `created_at_desc`. |
 | `limit` | integer | optional | `50` | Range `1..500`. |
 | `offset` | integer | optional | `0` | Must be `>= 0`. |
 
 **Validation rules:**
 
-- `start` and `from` cannot both be present with different values.
-- `end` and `to` cannot both be present with different values.
-- Resolved `from` must be `<=` resolved `to`.
+- `preset`, `start`, and `end` are not accepted on this endpoint.
+- `from` must be `<=` `to` when both are provided.
 - `limit` must be within `1..500`.
 
 ### Success response
@@ -399,8 +396,9 @@ Read stored signals with pagination and optional filtering.
 
 | Status | Error body shape | Error detail | Trigger |
 | --- | --- | --- | --- |
-| 422 | `{"detail":"start conflicts with from"}` | `start conflicts with from` | `start` and `from` provided with different values. |
-| 422 | `{"detail":"end conflicts with to"}` | `end conflicts with to` | `end` and `to` provided with different values. |
+| 422 | `{"detail":"preset query parameter is not supported; use timeframe"}` | `preset query parameter is not supported; use timeframe` | Legacy `preset` query parameter is provided. |
+| 422 | `{"detail":"start query parameter is not supported; use from"}` | `start query parameter is not supported; use from` | Legacy `start` query parameter is provided. |
+| 422 | `{"detail":"end query parameter is not supported; use to"}` | `end query parameter is not supported; use to` | Legacy `end` query parameter is provided. |
 | 422 | `{"detail":"from must be less than or equal to to"}` | `from must be less than or equal to to` | Resolved `from` is later than resolved `to`. |
 | 422 | Pydantic validation list | varies | Invalid query parameter types or constraints (e.g., `limit` outside `1..500`). |
 
@@ -440,11 +438,14 @@ Read screener results filtered by strategy and timeframe.
 | `strategy` | string | required | none | Strategy name. |
 | `timeframe` | string | required | none | Timeframe filter (e.g., `D1`). |
 | `min_score` | number | optional | none | Minimum score filter (`>= 0`). |
+| `limit` | integer | optional | `50` | Range `1..500`. |
+| `offset` | integer | optional | `0` | Must be `>= 0`. |
 
 **Validation rules:**
 
 - `strategy` and `timeframe` are required.
 - `min_score` must be `>= 0` when provided.
+- `limit` must be within `1..500`.
 
 ### Success response
 
@@ -462,11 +463,13 @@ Read screener results filtered by strategy and timeframe.
         "created_at": "2024-01-15T09:30:00Z"
       }
     ],
+    "limit": 50,
+    "offset": 0,
     "total": 1
   }
   ```
 
-**Empty/no-result behavior:** Returns `items: []` and `total: 0`.
+**Empty/no-result behavior:** Returns `items: []`, the provided `limit/offset`, and `total: 0`.
 
 ### Errors
 
@@ -479,7 +482,7 @@ Read screener results filtered by strategy and timeframe.
 **Request:**
 
 ```bash
-curl -s "http://localhost:8000/screener/v2/results?strategy=TURTLE&timeframe=D1"
+curl -s "http://localhost:8000/screener/v2/results?strategy=TURTLE&timeframe=D1&limit=25&offset=0"
 ```
 
 **Response:**
@@ -487,6 +490,8 @@ curl -s "http://localhost:8000/screener/v2/results?strategy=TURTLE&timeframe=D1"
 ```json
 {
   "items": [],
+  "limit": 25,
+  "offset": 0,
   "total": 0
 }
 ```

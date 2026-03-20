@@ -222,7 +222,7 @@ class SqliteSignalRepository(SignalRepository):
         *,
         symbol: Optional[str] = None,
         strategy: Optional[str] = None,
-        preset: Optional[str] = None,
+        timeframe: Optional[str] = None,
         ingestion_run_id: Optional[str] = None,
         from_: Optional[datetime] = None,
         to: Optional[datetime] = None,
@@ -239,9 +239,9 @@ class SqliteSignalRepository(SignalRepository):
         if strategy is not None:
             where_clauses.append("strategy = ?")
             params.append(strategy)
-        if preset is not None:
+        if timeframe is not None:
             where_clauses.append("timeframe = ?")
-            params.append(preset)
+            params.append(timeframe)
         if ingestion_run_id is not None:
             where_clauses.append("ingestion_run_id = ?")
             params.append(ingestion_run_id)
@@ -338,7 +338,9 @@ class SqliteSignalRepository(SignalRepository):
         strategy: str,
         timeframe: str,
         min_score: Optional[float] = None,
-    ) -> List[dict]:
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[dict], int]:
         where_clauses = ["strategy = ?", "timeframe = ?", "stage = ?"]
         params: List[object] = [strategy, timeframe, "setup"]
 
@@ -351,6 +353,9 @@ class SqliteSignalRepository(SignalRepository):
 
         conn = self._get_connection()
         cur = conn.cursor()
+        cur.execute(f"SELECT COUNT(*) FROM signals {where_sql};", params)
+        total = int(cur.fetchone()[0])
+
         query = f"""
             SELECT
                 symbol,
@@ -361,9 +366,11 @@ class SqliteSignalRepository(SignalRepository):
                 timestamp
             FROM signals
             {where_sql}
-            {order_sql};
+            {order_sql}
+            LIMIT ?
+            OFFSET ?;
         """
-        cur.execute(query, params)
+        cur.execute(query, [*params, limit, offset])
         rows = cur.fetchall()
         conn.close()
 
@@ -380,7 +387,7 @@ class SqliteSignalRepository(SignalRepository):
                 }
             )
 
-        return result
+        return result, total
 
 
 def reconstruct_signal_explanation(signal: Signal) -> dict:

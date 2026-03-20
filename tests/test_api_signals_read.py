@@ -87,6 +87,23 @@ def test_read_signals_happy_path(tmp_path: Path, monkeypatch) -> None:
     ]
 
 
+def test_read_signals_openapi_exposes_timeframe_not_legacy_filters(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    parameters = response.json()["paths"]["/signals"]["get"]["parameters"]
+    parameter_names = {item["name"] for item in parameters}
+
+    assert "timeframe" in parameter_names
+    assert "preset" not in parameter_names
+    assert "start" not in parameter_names
+    assert "end" not in parameter_names
+
+
 def test_read_signals_empty_result(tmp_path: Path, monkeypatch) -> None:
     repo = _make_repo(tmp_path)
     repo.save_signals([_base_signal(symbol="AAPL")])
@@ -111,6 +128,9 @@ def test_read_signals_invalid_params(tmp_path: Path, monkeypatch) -> None:
         {"limit": SIGNALS_READ_MAX_LIMIT + 1},
         {"limit": 0},
         {"from": "2025-01-02T00:00:00+00:00", "to": "2025-01-01T00:00:00+00:00"},
+        {"preset": "D1"},
+        {"start": "2025-01-01T00:00:00+00:00"},
+        {"end": "2025-01-01T00:00:00+00:00"},
     ]:
         response = client.get("/signals", headers=READ_ONLY_HEADERS, params=params)
         assert response.status_code == 422
@@ -127,7 +147,7 @@ def test_read_signals_limit_boundary(tmp_path: Path, monkeypatch) -> None:
     assert response.status_code == 200
 
 
-def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> None:
+def test_read_signals_time_filters_from_to(tmp_path: Path, monkeypatch) -> None:
     repo = _make_repo(tmp_path)
     repo.save_signals(
         [
@@ -143,7 +163,7 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
     response_start = client.get(
         "/signals",
         headers=READ_ONLY_HEADERS,
-        params={"start": "2025-01-02T00:00:00+00:00"},
+        params={"from": "2025-01-02T00:00:00+00:00"},
     )
     assert response_start.status_code == 200
     payload_start = response_start.json()
@@ -156,7 +176,7 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
     response_end = client.get(
         "/signals",
         headers=READ_ONLY_HEADERS,
-        params={"end": "2025-01-02T00:00:00+00:00"},
+        params={"to": "2025-01-02T00:00:00+00:00"},
     )
     assert response_end.status_code == 200
     payload_end = response_end.json()
@@ -170,8 +190,8 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
         "/signals",
         headers=READ_ONLY_HEADERS,
         params={
-            "start": "2025-01-02T00:00:00+00:00",
-            "end": "2025-01-02T00:00:00+00:00",
+            "from": "2025-01-02T00:00:00+00:00",
+            "to": "2025-01-02T00:00:00+00:00",
         },
     )
     assert response_range.status_code == 200
@@ -180,7 +200,7 @@ def test_read_signals_time_filters_start_end(tmp_path: Path, monkeypatch) -> Non
     assert payload_range["items"][0]["created_at"] == "2025-01-02T00:00:00+00:00"
 
 
-def test_read_signals_filters_strategy_and_preset(tmp_path: Path, monkeypatch) -> None:
+def test_read_signals_filters_strategy_and_timeframe(tmp_path: Path, monkeypatch) -> None:
     repo = _make_repo(tmp_path)
     repo.save_signals(
         [
@@ -196,7 +216,7 @@ def test_read_signals_filters_strategy_and_preset(tmp_path: Path, monkeypatch) -
     response = client.get(
         "/signals",
         headers=READ_ONLY_HEADERS,
-        params={"strategy": "RSI2", "preset": "H1"},
+        params={"strategy": "RSI2", "timeframe": "H1"},
     )
     assert response.status_code == 200
     payload = response.json()
