@@ -90,6 +90,37 @@ def test_health_guards_reports_blocking_state(monkeypatch) -> None:
     }
 
 
+def test_health_guards_requires_valid_authenticated_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        missing = client.get("/health/guards")
+        invalid = client.get("/health/guards", headers={api_main.ROLE_HEADER_NAME: "auditor"})
+
+    assert missing.status_code == 401
+    assert missing.json() == {"detail": "unauthorized"}
+    assert invalid.status_code == 401
+    assert invalid.json() == {"detail": "unauthorized"}
+
+
+def test_health_guards_uses_internal_guard_helper_not_route_handler(monkeypatch) -> None:
+    fixed_now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "_health_now", lambda: fixed_now)
+    monkeypatch.setattr(
+        api_main,
+        "read_compliance_guard_status",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("route handler reused")),
+    )
+
+    with TestClient(api_main.app) as client:
+        response = client.get("/health/guards", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()["subsystem"] == "guards"
+
+
 def test_health_endpoints_are_deterministic_for_identical_state(monkeypatch, tmp_path) -> None:
     fixed_now = datetime(2026, 1, 1, 12, 0, 30, tzinfo=timezone.utc)
     existing_db_path = tmp_path / "analysis.db"

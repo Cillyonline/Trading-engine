@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 import api.main as api_main
@@ -28,6 +29,29 @@ def test_system_state_requires_read_only_role(monkeypatch) -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"] == "unauthorized"
+
+
+def test_system_state_rejects_invalid_role(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+
+    with TestClient(api_main.app) as client:
+        response = client.get(
+            "/system/state",
+            headers={api_main.ROLE_HEADER_NAME: "auditor"},
+        )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+def test_require_role_rejects_insufficient_role() -> None:
+    enforce_owner_role = api_main._require_role("owner")
+
+    with pytest.raises(api_main.HTTPException) as exc_info:
+        enforce_owner_role("read_only")
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "forbidden"
 
 
 def test_system_state_returns_read_only_runtime_payload(monkeypatch) -> None:
