@@ -16,6 +16,7 @@ Use this order:
 
 ## API Usage
 - [API usage](operations/api/usage.md)
+- [Trading core inspection API](api/trading_core_inspection.md)
 - [Phase 39 runtime chart data contract](operations/api/runtime_chart_data_contract.md)
 - Legacy compatibility alias: `docs/api/runtime_chart_data_contract.md`
 
