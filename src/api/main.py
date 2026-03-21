@@ -17,6 +17,7 @@ import logging
 import os
 import json
 import uuid
+from decimal import Decimal
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
@@ -64,8 +65,16 @@ from cilly_trading.engine.portfolio import (
 )
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.runtime_state import get_system_state_payload
-from cilly_trading.models import SignalReadItemDTO, SignalReadResponseDTO
+from cilly_trading.models import (
+    ExecutionEvent,
+    Order,
+    Position,
+    SignalReadItemDTO,
+    SignalReadResponseDTO,
+    Trade,
+)
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
+from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 from cilly_trading.strategies.registry import (
@@ -378,6 +387,84 @@ class ExecutionOrdersReadResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: List[ExecutionOrderEventItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
+class TradingCoreOrdersReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    order_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class TradingCoreExecutionEventsReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    order_id: Optional[str] = Field(default=None)
+    trade_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class TradingCoreTradesReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    position_id: Optional[str] = Field(default=None)
+    trade_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class TradingCorePositionsReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    position_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class TradingCoreOrdersReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[Order]
+    limit: int
+    offset: int
+    total: int
+
+
+class TradingCoreExecutionEventsReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[ExecutionEvent]
+    limit: int
+    offset: int
+    total: int
+
+
+class TradingCoreTradesReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[Trade]
+    limit: int
+    offset: int
+    total: int
+
+
+class TradingCorePositionsReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[Position]
     limit: int
     offset: int
     total: int
@@ -704,6 +791,7 @@ ANALYSIS_DB_PATH: Optional[str] = None
 
 signal_repo = SqliteSignalRepository()
 order_event_repo = SqliteOrderEventRepository(db_path=DEFAULT_DB_PATH)
+canonical_execution_repo = SqliteCanonicalExecutionRepository(db_path=DEFAULT_DB_PATH)
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 watchlist_repo = SqliteWatchlistRepository(db_path=DEFAULT_DB_PATH)
 
@@ -1288,6 +1376,227 @@ def _get_execution_orders_query(
     )
 
 
+def _get_trading_core_orders_query(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    order_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> TradingCoreOrdersReadQuery:
+    return TradingCoreOrdersReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        order_id=order_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _get_trading_core_execution_events_query(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    order_id: Optional[str] = Query(default=None),
+    trade_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> TradingCoreExecutionEventsReadQuery:
+    return TradingCoreExecutionEventsReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        order_id=order_id,
+        trade_id=trade_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _get_trading_core_trades_query(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    position_id: Optional[str] = Query(default=None),
+    trade_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> TradingCoreTradesReadQuery:
+    return TradingCoreTradesReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        position_id=position_id,
+        trade_id=trade_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _get_trading_core_positions_query(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    position_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> TradingCorePositionsReadQuery:
+    return TradingCorePositionsReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        position_id=position_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def _paginate_items(items: list[Any], *, limit: int, offset: int) -> tuple[list[Any], int]:
+    total = len(items)
+    return items[offset : offset + limit], total
+
+
+def _sum_decimals(values: list[Decimal]) -> Decimal:
+    return sum(values, Decimal("0"))
+
+
+def _weighted_average(*, values: list[tuple[Decimal, Decimal]]) -> Optional[Decimal]:
+    total_weight = _sum_decimals([weight for _, weight in values])
+    if total_weight <= Decimal("0"):
+        return None
+    weighted_sum = _sum_decimals([value * weight for value, weight in values])
+    return weighted_sum / total_weight
+
+
+def _build_trading_core_positions(
+    *,
+    strategy_id: Optional[str] = None,
+    symbol: Optional[str] = None,
+    position_id: Optional[str] = None,
+) -> list[Position]:
+    trades = canonical_execution_repo.list_trades(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        position_id=position_id,
+        limit=1_000_000,
+        offset=0,
+    )
+    if not trades:
+        return []
+
+    orders = canonical_execution_repo.list_orders(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        limit=1_000_000,
+        offset=0,
+    )
+    events = canonical_execution_repo.list_execution_events(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        limit=1_000_000,
+        offset=0,
+    )
+
+    target_position_ids = {trade.position_id for trade in trades}
+    orders_by_position: dict[str, list[Order]] = {}
+    events_by_position: dict[str, list[ExecutionEvent]] = {}
+    trades_by_position: dict[str, list[Trade]] = {}
+
+    for trade in trades:
+        trades_by_position.setdefault(trade.position_id, []).append(trade)
+    for order in orders:
+        if order.position_id is None or order.position_id not in target_position_ids:
+            continue
+        orders_by_position.setdefault(order.position_id, []).append(order)
+    for event in events:
+        if event.position_id is None or event.position_id not in target_position_ids:
+            continue
+        events_by_position.setdefault(event.position_id, []).append(event)
+
+    positions: list[Position] = []
+    for current_position_id in sorted(target_position_ids):
+        position_trades = trades_by_position.get(current_position_id, [])
+        if not position_trades:
+            continue
+
+        position_orders = orders_by_position.get(current_position_id, [])
+        position_events = events_by_position.get(current_position_id, [])
+
+        strategy_ids = {trade.strategy_id for trade in position_trades}
+        symbols = {trade.symbol for trade in position_trades}
+        directions = {trade.direction for trade in position_trades}
+        if len(strategy_ids) != 1 or len(symbols) != 1 or len(directions) != 1:
+            raise HTTPException(status_code=500, detail="trading_core_position_inconsistent")
+
+        quantity_opened = _sum_decimals([trade.quantity_opened for trade in position_trades])
+        quantity_closed = _sum_decimals([trade.quantity_closed for trade in position_trades])
+        net_quantity = quantity_opened - quantity_closed
+
+        opened_at = min(trade.opened_at for trade in position_trades)
+        closed_at_candidates = [trade.closed_at for trade in position_trades if trade.closed_at is not None]
+
+        if quantity_opened == Decimal("0") and quantity_closed == Decimal("0"):
+            status: Literal["flat", "open", "closed"] = "flat"
+        elif net_quantity == Decimal("0"):
+            status = "closed"
+        else:
+            status = "open"
+
+        average_entry_price = _weighted_average(
+            values=[(trade.average_entry_price, trade.quantity_opened) for trade in position_trades]
+        ) or Decimal("0")
+
+        average_exit_price = _weighted_average(
+            values=[
+                (trade.average_exit_price, trade.quantity_closed)
+                for trade in position_trades
+                if trade.average_exit_price is not None and trade.quantity_closed > Decimal("0")
+            ]
+        )
+
+        realized_pnl_values = [trade.realized_pnl for trade in position_trades if trade.realized_pnl is not None]
+        realized_pnl = _sum_decimals(realized_pnl_values) if realized_pnl_values else None
+
+        order_ids = sorted(
+            set(
+                [order.order_id for order in position_orders]
+                + [order_id for trade in position_trades for order_id in trade.opening_order_ids]
+                + [order_id for trade in position_trades for order_id in trade.closing_order_ids]
+            )
+        )
+        execution_event_ids = sorted(
+            set(
+                [event.event_id for event in position_events]
+                + [event_id for trade in position_trades for event_id in trade.execution_event_ids]
+            )
+        )
+        trade_ids = sorted([trade.trade_id for trade in position_trades])
+
+        positions.append(
+            Position.model_validate(
+                {
+                    "position_id": current_position_id,
+                    "strategy_id": next(iter(strategy_ids)),
+                    "symbol": next(iter(symbols)),
+                    "direction": next(iter(directions)),
+                    "status": status,
+                    "opened_at": opened_at,
+                    "closed_at": max(closed_at_candidates) if status == "closed" and closed_at_candidates else None,
+                    "quantity_opened": quantity_opened,
+                    "quantity_closed": quantity_closed,
+                    "net_quantity": net_quantity,
+                    "average_entry_price": average_entry_price,
+                    "average_exit_price": average_exit_price,
+                    "realized_pnl": realized_pnl if status == "closed" else None,
+                    "order_ids": order_ids,
+                    "execution_event_ids": execution_event_ids,
+                    "trade_ids": trade_ids,
+                }
+            )
+        )
+
+    return sorted(
+        positions,
+        key=lambda item: (
+            item.opened_at,
+            item.position_id,
+        ),
+    )
+
+
 def _get_screener_results_query(
     strategy: str = Query(...),
     timeframe: str = Query(...),
@@ -1692,6 +2001,111 @@ def read_execution_orders(
     response_items = [ExecutionOrderEventItemResponse(**item) for item in items]
     return ExecutionOrdersReadResponse(
         items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get("/trading-core/orders", response_model=TradingCoreOrdersReadResponse)
+def read_trading_core_orders(
+    params: TradingCoreOrdersReadQuery = Depends(_get_trading_core_orders_query),
+    _: str = Depends(_require_role("read_only")),
+) -> TradingCoreOrdersReadResponse:
+    if params.order_id:
+        order = canonical_execution_repo.get_order(params.order_id)
+        all_items = [] if order is None else [order]
+        if params.strategy_id is not None:
+            all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+        if params.symbol is not None:
+            all_items = [item for item in all_items if item.symbol == params.symbol]
+    else:
+        all_items = canonical_execution_repo.list_orders(
+            strategy_id=params.strategy_id,
+            symbol=params.symbol,
+            limit=1_000_000,
+            offset=0,
+        )
+
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return TradingCoreOrdersReadResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get(
+    "/trading-core/execution-events",
+    response_model=TradingCoreExecutionEventsReadResponse,
+)
+def read_trading_core_execution_events(
+    params: TradingCoreExecutionEventsReadQuery = Depends(_get_trading_core_execution_events_query),
+    _: str = Depends(_require_role("read_only")),
+) -> TradingCoreExecutionEventsReadResponse:
+    all_items = canonical_execution_repo.list_execution_events(
+        strategy_id=params.strategy_id,
+        symbol=params.symbol,
+        order_id=params.order_id,
+        trade_id=params.trade_id,
+        limit=1_000_000,
+        offset=0,
+    )
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return TradingCoreExecutionEventsReadResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get("/trading-core/trades", response_model=TradingCoreTradesReadResponse)
+def read_trading_core_trades(
+    params: TradingCoreTradesReadQuery = Depends(_get_trading_core_trades_query),
+    _: str = Depends(_require_role("read_only")),
+) -> TradingCoreTradesReadResponse:
+    if params.trade_id:
+        trade = canonical_execution_repo.get_trade(params.trade_id)
+        all_items = [] if trade is None else [trade]
+        if params.strategy_id is not None:
+            all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+        if params.symbol is not None:
+            all_items = [item for item in all_items if item.symbol == params.symbol]
+        if params.position_id is not None:
+            all_items = [item for item in all_items if item.position_id == params.position_id]
+    else:
+        all_items = canonical_execution_repo.list_trades(
+            strategy_id=params.strategy_id,
+            symbol=params.symbol,
+            position_id=params.position_id,
+            limit=1_000_000,
+            offset=0,
+        )
+
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return TradingCoreTradesReadResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get("/trading-core/positions", response_model=TradingCorePositionsReadResponse)
+def read_trading_core_positions(
+    params: TradingCorePositionsReadQuery = Depends(_get_trading_core_positions_query),
+    _: str = Depends(_require_role("read_only")),
+) -> TradingCorePositionsReadResponse:
+    all_items = _build_trading_core_positions(
+        strategy_id=params.strategy_id,
+        symbol=params.symbol,
+        position_id=params.position_id,
+    )
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return TradingCorePositionsReadResponse(
+        items=page,
         limit=params.limit,
         offset=params.offset,
         total=total,
