@@ -11,6 +11,7 @@ from cilly_trading.models import (
     Position,
     Trade,
     TRADING_CORE_ENTITIES,
+    TRADING_CORE_RISK_BASELINE,
     TRADING_CORE_RELATIONSHIPS,
     compute_execution_event_id,
     serialize_trading_core_entity,
@@ -31,6 +32,10 @@ def _order_payload(**overrides: object) -> dict[str, object]:
         "status": "created",
         "quantity": Decimal("2"),
         "filled_quantity": Decimal("0"),
+        "entry_price": Decimal("100.10"),
+        "stop_price": Decimal("95.00"),
+        "planned_exposure": Decimal("200.20"),
+        "max_risk": Decimal("10.20"),
         "created_at": "2024-01-01T00:00:00Z",
         "position_id": "pos-1",
         "trade_id": "trade-1",
@@ -57,6 +62,8 @@ def _event_payload(**overrides: object) -> dict[str, object]:
         "execution_quantity": Decimal("2"),
         "execution_price": Decimal("100.10"),
         "commission": Decimal("1.25"),
+        "fill_exposure": Decimal("200.20"),
+        "realized_pnl_delta": Decimal("0"),
         "position_id": "pos-1",
         "trade_id": "trade-1",
     }
@@ -76,6 +83,8 @@ def _position_payload(**overrides: object) -> dict[str, object]:
         "quantity_closed": Decimal("0"),
         "net_quantity": Decimal("2"),
         "average_entry_price": Decimal("100.10"),
+        "exposure_notional": Decimal("200.20"),
+        "unrealized_pnl": Decimal("1.80"),
         "order_ids": ["ord-1"],
         "execution_event_ids": ["evt-b", "evt-a"],
         "trade_ids": ["trade-1"],
@@ -96,6 +105,8 @@ def _trade_payload(**overrides: object) -> dict[str, object]:
         "quantity_opened": Decimal("2"),
         "quantity_closed": Decimal("0"),
         "average_entry_price": Decimal("100.10"),
+        "exposure_notional": Decimal("200.20"),
+        "unrealized_pnl": Decimal("1.80"),
         "opening_order_ids": ["ord-1"],
         "closing_order_ids": [],
         "execution_event_ids": ["evt-b", "evt-a"],
@@ -113,6 +124,10 @@ def test_trading_core_entity_responsibilities_are_explicit() -> None:
         relationship["from_entity"] == "Trade" and relationship["to_entity"] == "ExecutionEvent"
         for relationship in TRADING_CORE_RELATIONSHIPS
     )
+    assert TRADING_CORE_RISK_BASELINE["Order"]["required"] == ("entry_price", "stop_price")
+    assert "planned_exposure" in TRADING_CORE_RISK_BASELINE["Order"]["derived"]
+    assert "max_risk" in TRADING_CORE_RISK_BASELINE["Order"]["derived"]
+    assert "unrealized_pnl" in TRADING_CORE_RISK_BASELINE["Position"]["derived"]
 
 
 def test_representative_payloads_validate_and_relationships_hold() -> None:
@@ -150,6 +165,29 @@ def test_trading_core_serialization_is_deterministic() -> None:
     assert serialize_trading_core_entity(trade_a) == serialize_trading_core_entity(trade_b)
 
 
+def test_order_risk_fields_are_deterministic_with_decimal_normalization() -> None:
+    order_a = validate_trading_core_entity(
+        "order",
+        _order_payload(
+            entry_price=Decimal("100.1000"),
+            stop_price=Decimal("95.0000"),
+            planned_exposure=Decimal("200.2000"),
+            max_risk=Decimal("10.2000"),
+        ),
+    )
+    order_b = validate_trading_core_entity(
+        "order",
+        _order_payload(
+            entry_price=Decimal("100.10"),
+            stop_price=Decimal("95.00"),
+            planned_exposure=Decimal("200.20"),
+            max_risk=Decimal("10.20"),
+        ),
+    )
+
+    assert serialize_trading_core_entity(order_a) == serialize_trading_core_entity(order_b)
+
+
 def test_negative_order_validation_rejects_invalid_fill_state() -> None:
     with pytest.raises(ValidationError):
         Order.model_validate(
@@ -162,14 +200,34 @@ def test_negative_order_validation_rejects_invalid_fill_state() -> None:
         )
 
 
+def test_negative_order_validation_rejects_invalid_stop_entry_invariant() -> None:
+    with pytest.raises(ValidationError):
+        Order.model_validate(_order_payload(stop_price=Decimal("100.10")))
+
+
+def test_negative_order_validation_rejects_risk_derived_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        Order.model_validate(_order_payload(planned_exposure=Decimal("200.21")))
+
+
 def test_negative_execution_event_validation_rejects_missing_fill_fields() -> None:
     with pytest.raises(ValidationError):
         ExecutionEvent.model_validate(_event_payload(execution_price=None))
 
 
+def test_negative_execution_event_validation_rejects_fill_exposure_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        ExecutionEvent.model_validate(_event_payload(fill_exposure=Decimal("200.21")))
+
+
 def test_negative_position_validation_rejects_incorrect_net_quantity() -> None:
     with pytest.raises(ValidationError):
         Position.model_validate(_position_payload(net_quantity=Decimal("3")))
+
+
+def test_negative_position_validation_rejects_incorrect_exposure_notional() -> None:
+    with pytest.raises(ValidationError):
+        Position.model_validate(_position_payload(exposure_notional=Decimal("200.21")))
 
 
 def test_negative_trade_validation_rejects_closed_trade_without_exit_fields() -> None:
@@ -181,6 +239,21 @@ def test_negative_trade_validation_rejects_closed_trade_without_exit_fields() ->
                 closed_at=None,
                 average_exit_price=None,
                 realized_pnl=None,
+            )
+        )
+
+
+def test_negative_trade_validation_rejects_closed_trade_with_unrealized_pnl() -> None:
+    with pytest.raises(ValidationError):
+        Trade.model_validate(
+            _trade_payload(
+                status="closed",
+                quantity_closed=Decimal("2"),
+                closed_at="2024-01-03T00:00:00Z",
+                average_exit_price=Decimal("101.00"),
+                realized_pnl=Decimal("1.80"),
+                exposure_notional=Decimal("0"),
+                unrealized_pnl=Decimal("0.10"),
             )
         )
 

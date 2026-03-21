@@ -44,6 +44,7 @@ ExecutionEventType = Literal["created", "submitted", "partially_filled", "filled
 
 
 TRADING_CORE_MODEL_VERSION = "1.0.0"
+TRADING_CORE_RISK_BASELINE_VERSION = "1.0.0"
 
 TRADING_CORE_ENTITIES: Dict[str, Dict[str, str]] = {
     "Order": {
@@ -94,6 +95,29 @@ TRADING_CORE_RELATIONSHIPS: tuple[dict[str, str], ...] = (
         "description": "Trade.execution_event_ids records the execution events that formed the trade lifecycle.",
     },
 )
+
+TRADING_CORE_RISK_BASELINE: Dict[str, Dict[str, tuple[str, ...] | str]] = {
+    "Order": {
+        "required": ("entry_price", "stop_price"),
+        "derived": ("planned_exposure", "max_risk"),
+        "notes": "entry_price and stop_price define baseline per-order risk for long entries.",
+    },
+    "ExecutionEvent": {
+        "required": (),
+        "derived": ("fill_exposure", "realized_pnl_delta"),
+        "notes": "execution risk fields are fill-derived and optional on immutable lifecycle facts.",
+    },
+    "Position": {
+        "required": (),
+        "derived": ("exposure_notional", "unrealized_pnl"),
+        "notes": "position exposure/unrealized state is derived from aggregate execution state.",
+    },
+    "Trade": {
+        "required": (),
+        "derived": ("exposure_notional", "unrealized_pnl", "realized_pnl"),
+        "notes": "trade risk state is derived from opened vs closed quantity and lifecycle state.",
+    },
+}
 
 
 class EntryZone(TypedDict):
@@ -282,6 +306,10 @@ class CanonicalOrder(TradingCoreBase):
     status: OrderStatus
     quantity: Decimal = Field(gt=Decimal("0"))
     filled_quantity: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
+    entry_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
+    stop_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
+    planned_exposure: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    max_risk: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
     created_at: str = Field(min_length=1)
     submitted_at: Optional[str] = None
     average_fill_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
@@ -307,6 +335,27 @@ class CanonicalOrder(TradingCoreBase):
             if self.last_execution_event_id is None:
                 raise ValueError("last_execution_event_id is required for filled orders")
 
+        has_entry = self.entry_price is not None
+        has_stop = self.stop_price is not None
+        if has_entry != has_stop:
+            raise ValueError("entry_price and stop_price must both be set or both be omitted")
+        if self.side == "SELL" and any(
+            value is not None for value in (self.entry_price, self.stop_price, self.planned_exposure, self.max_risk)
+        ):
+            raise ValueError("SELL orders must not define long-entry risk baseline fields")
+
+        if has_entry and has_stop:
+            if self.stop_price >= self.entry_price:
+                raise ValueError("stop_price must be lower than entry_price for long-entry risk")
+            expected_exposure = self.quantity * self.entry_price
+            expected_max_risk = self.quantity * (self.entry_price - self.stop_price)
+            if self.planned_exposure is not None and self.planned_exposure != expected_exposure:
+                raise ValueError("planned_exposure must equal quantity multiplied by entry_price")
+            if self.max_risk is not None and self.max_risk != expected_max_risk:
+                raise ValueError("max_risk must equal quantity multiplied by (entry_price - stop_price)")
+        elif self.planned_exposure is not None or self.max_risk is not None:
+            raise ValueError("derived order risk fields require both entry_price and stop_price")
+
         return self
 
 
@@ -322,6 +371,8 @@ class CanonicalExecutionEvent(TradingCoreBase):
     execution_quantity: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
     execution_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
     commission: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    fill_exposure: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    realized_pnl_delta: Optional[Decimal] = None
     position_id: Optional[str] = Field(default=None, min_length=1)
     trade_id: Optional[str] = Field(default=None, min_length=1)
 
@@ -335,11 +386,20 @@ class CanonicalExecutionEvent(TradingCoreBase):
                 raise ValueError("execution_price is required for fill events")
             if self.commission is None:
                 raise ValueError("commission is required for fill events")
+            expected_fill_exposure = self.execution_quantity * self.execution_price
+            if self.fill_exposure is not None and self.fill_exposure != expected_fill_exposure:
+                raise ValueError("fill_exposure must equal execution_quantity multiplied by execution_price")
         elif any(
             value is not None
-            for value in (self.execution_quantity, self.execution_price, self.commission)
+            for value in (
+                self.execution_quantity,
+                self.execution_price,
+                self.commission,
+                self.fill_exposure,
+                self.realized_pnl_delta,
+            )
         ):
-            raise ValueError("non-fill events must not define execution payload fields")
+            raise ValueError("non-fill events must not define execution or risk payload fields")
 
         return self
 
@@ -357,7 +417,9 @@ class CanonicalPosition(TradingCoreBase):
     net_quantity: Decimal
     average_entry_price: Decimal = Field(ge=Decimal("0"))
     average_exit_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
+    exposure_notional: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
     realized_pnl: Optional[Decimal] = None
+    unrealized_pnl: Optional[Decimal] = None
     order_ids: List[str] = Field(default_factory=list)
     execution_event_ids: List[str] = Field(default_factory=list)
     trade_ids: List[str] = Field(default_factory=list)
@@ -408,6 +470,15 @@ class CanonicalPosition(TradingCoreBase):
         if self.quantity_closed > Decimal("0") and self.average_exit_price is None:
             raise ValueError("average_exit_price is required when quantity_closed is positive")
 
+        expected_exposure_notional = self.net_quantity * self.average_entry_price
+        if self.exposure_notional is not None and self.exposure_notional != expected_exposure_notional:
+            raise ValueError("exposure_notional must equal net_quantity multiplied by average_entry_price")
+        if position_status in {PositionLifecycleState.FLAT, PositionLifecycleState.CLOSED} and self.unrealized_pnl not in {
+            None,
+            Decimal("0"),
+        }:
+            raise ValueError("flat and closed positions must not have non-zero unrealized_pnl")
+
         return self
 
 
@@ -424,7 +495,9 @@ class CanonicalTrade(TradingCoreBase):
     quantity_closed: Decimal = Field(default=Decimal("0"), ge=Decimal("0"))
     average_entry_price: Decimal = Field(gt=Decimal("0"))
     average_exit_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
+    exposure_notional: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
     realized_pnl: Optional[Decimal] = None
+    unrealized_pnl: Optional[Decimal] = None
     opening_order_ids: List[str] = Field(default_factory=list)
     closing_order_ids: List[str] = Field(default_factory=list)
     execution_event_ids: List[str] = Field(default_factory=list)
@@ -460,6 +533,15 @@ class CanonicalTrade(TradingCoreBase):
 
         if self.quantity_closed > Decimal("0") and self.average_exit_price is None:
             raise ValueError("average_exit_price is required when quantity_closed is positive")
+
+        remaining_quantity = self.quantity_opened - self.quantity_closed
+        expected_exposure_notional = remaining_quantity * self.average_entry_price
+        if self.exposure_notional is not None and self.exposure_notional != expected_exposure_notional:
+            raise ValueError(
+                "exposure_notional must equal remaining quantity multiplied by average_entry_price"
+            )
+        if trade_status == TradeLifecycleState.CLOSED and self.unrealized_pnl not in {None, Decimal("0")}:
+            raise ValueError("closed trades must not have non-zero unrealized_pnl")
 
         return self
 

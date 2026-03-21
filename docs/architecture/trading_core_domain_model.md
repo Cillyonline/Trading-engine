@@ -1,6 +1,7 @@
 # Trading Core Domain Model
 
 Issue `#718` defines one canonical trading-core vocabulary for `Trade`, `Position`, `Order`, and `ExecutionEvent`.
+Issue `#726` adds a bounded shared risk baseline vocabulary reused across trading-core entities.
 
 ## Canonical Entities
 
@@ -22,6 +23,24 @@ Issue `#718` defines one canonical trading-core vocabulary for `Trade`, `Positio
 - `Trade` requires lifecycle identity and aggregate state: `trade_id`, `position_id`, `strategy_id`, `symbol`, `direction`, `status`, `opened_at`, `quantity_opened`, `quantity_closed`, and `average_entry_price`.
 - `Trade` optional fields are lifecycle-dependent: `closed_at`, `average_exit_price`, and `realized_pnl`.
 
+## Risk Baseline Vocabulary
+
+The trading core exposes one bounded risk vocabulary with explicit required vs derived ownership.
+
+| Entity | Required risk fields | Derived risk fields | Invariants |
+| --- | --- | --- | --- |
+| `Order` | `entry_price`, `stop_price` (when order-level baseline risk is provided) | `planned_exposure`, `max_risk` | `entry_price` and `stop_price` must be provided together; `stop_price < entry_price` for long entries; `planned_exposure = quantity * entry_price`; `max_risk = quantity * (entry_price - stop_price)` |
+| `ExecutionEvent` | none | `fill_exposure`, `realized_pnl_delta` | fill events may define risk deltas; if `fill_exposure` is set then `fill_exposure = execution_quantity * execution_price`; non-fill events must not define execution/risk payload fields |
+| `Position` | none | `exposure_notional`, `realized_pnl`, `unrealized_pnl` | `exposure_notional = net_quantity * average_entry_price`; flat/closed positions must not carry non-zero `unrealized_pnl` |
+| `Trade` | none | `exposure_notional`, `realized_pnl`, `unrealized_pnl` | `exposure_notional = (quantity_opened - quantity_closed) * average_entry_price`; closed trades must not carry non-zero `unrealized_pnl` |
+
+Boundaries:
+
+- `Order` owns baseline entry/stop intent.
+- `ExecutionEvent` owns immutable fill facts and optional fill-level risk deltas.
+- `Position` and `Trade` own derived realized/unrealized and exposure state.
+- Portfolio-level policy and allocation are out of scope.
+
 ## Relationships
 
 - `ExecutionEvent.order_id -> Order.order_id`
@@ -30,6 +49,7 @@ Issue `#718` defines one canonical trading-core vocabulary for `Trade`, `Positio
 - `Trade.execution_event_ids -> ExecutionEvent.event_id`
 - `Position.execution_event_ids -> ExecutionEvent.event_id`
 - `Trade` and `Position` may both reference the same `Order` and `ExecutionEvent` identifiers, but only `Order` and `ExecutionEvent` are authoritative sources
+- `Order` baseline entry/stop fields provide the anchor for risk semantics reused by later `Trade` and `Position` derivatives
 
 ## Determinism Rules
 
