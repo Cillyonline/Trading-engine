@@ -53,7 +53,12 @@ _ORDER_ALLOWED_TRANSITIONS_MUTABLE: dict[OrderLifecycleState, frozenset[OrderLif
             OrderLifecycleState.REJECTED,
         }
     ),
-    OrderLifecycleState.PARTIALLY_FILLED: frozenset({OrderLifecycleState.FILLED}),
+    OrderLifecycleState.PARTIALLY_FILLED: frozenset(
+        {
+            OrderLifecycleState.FILLED,
+            OrderLifecycleState.CANCELLED,
+        }
+    ),
     OrderLifecycleState.FILLED: frozenset(),
     OrderLifecycleState.CANCELLED: frozenset(),
     OrderLifecycleState.REJECTED: frozenset(),
@@ -207,15 +212,21 @@ def validate_order_state_invariants(
     if filled_quantity > quantity:
         raise TradingLifecycleInvariantError("Order invariant violation: filled_quantity must not exceed quantity")
 
-    if status in {
-        OrderLifecycleState.CREATED,
-        OrderLifecycleState.SUBMITTED,
-        OrderLifecycleState.CANCELLED,
-        OrderLifecycleState.REJECTED,
-    }:
+    if status in {OrderLifecycleState.CREATED, OrderLifecycleState.SUBMITTED, OrderLifecycleState.REJECTED}:
         if filled_quantity != Decimal("0"):
             raise TradingLifecycleInvariantError(
                 "Order invariant violation: non-fill states must have filled_quantity equal to zero"
+            )
+        return
+
+    if status == OrderLifecycleState.CANCELLED:
+        if filled_quantity < Decimal("0"):
+            raise TradingLifecycleInvariantError(
+                "Order invariant violation: cancelled state requires non-negative filled_quantity"
+            )
+        if filled_quantity > quantity:
+            raise TradingLifecycleInvariantError(
+                "Order invariant violation: cancelled state requires filled_quantity less than or equal to quantity"
             )
         return
 
@@ -373,4 +384,3 @@ def validate_position_transition_invariants(
         quantity_closed=target.quantity_closed,
         net_quantity=target.net_quantity,
     )
-

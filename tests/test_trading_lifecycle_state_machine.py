@@ -43,6 +43,7 @@ VALID_ORDER_TRANSITIONS = {
     (OrderLifecycleState.SUBMITTED, OrderLifecycleState.CANCELLED),
     (OrderLifecycleState.SUBMITTED, OrderLifecycleState.REJECTED),
     (OrderLifecycleState.PARTIALLY_FILLED, OrderLifecycleState.FILLED),
+    (OrderLifecycleState.PARTIALLY_FILLED, OrderLifecycleState.CANCELLED),
 }
 
 VALID_TRADE_TRANSITIONS = {
@@ -214,6 +215,25 @@ def test_regression_model_validation_uses_canonical_lifecycle_invariants() -> No
             "created_at": "2024-01-01T00:00:00Z",
             "average_fill_price": Decimal("100.1"),
             "last_execution_event_id": "evt-1",
+        }
+    )
+
+    Order.model_validate(
+        {
+            "order_id": "ord-cancelled-partial",
+            "strategy_id": "s1",
+            "symbol": "AAPL",
+            "sequence": 2,
+            "side": "BUY",
+            "order_type": "market",
+            "time_in_force": "day",
+            "status": "cancelled",
+            "quantity": Decimal("2"),
+            "filled_quantity": Decimal("1"),
+            "created_at": "2024-01-01T00:00:00Z",
+            "submitted_at": "2024-01-01T00:01:00Z",
+            "average_fill_price": Decimal("100.1"),
+            "last_execution_event_id": "evt-cancelled",
         }
     )
 
