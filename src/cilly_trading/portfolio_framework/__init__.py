@@ -3,8 +3,12 @@
 from cilly_trading.portfolio_framework.capital_allocation_policy import (
     CapitalAllocationAssessment,
     CapitalAllocationRules,
+    SignalAllocationDecision,
+    SignalAllocationInput,
+    SignalAllocationPlan,
     StrategyAllocationAssessment,
     StrategyAllocationRule,
+    allocate_prioritized_signals,
     assess_capital_allocation,
 )
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
@@ -19,6 +23,9 @@ from cilly_trading.portfolio_framework.exposure_aggregator import (
 __all__ = [
     "CapitalAllocationAssessment",
     "CapitalAllocationRules",
+    "SignalAllocationDecision",
+    "SignalAllocationInput",
+    "SignalAllocationPlan",
     "StrategyAllocationAssessment",
     "StrategyAllocationRule",
     "PortfolioExposureSummary",
@@ -28,5 +35,6 @@ __all__ = [
     "StrategyExposure",
     "SymbolExposure",
     "aggregate_portfolio_exposure",
+    "allocate_prioritized_signals",
     "assess_capital_allocation",
 ]

@@ -1,8 +1,9 @@
-"""Deterministic capital allocation policy enforcement for portfolio state."""
+"""Deterministic capital allocation policy and signal prioritization model."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from cilly_trading.portfolio_framework.contract import PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
@@ -82,6 +83,81 @@ class CapitalAllocationAssessment:
     strategy_assessments: tuple[StrategyAllocationAssessment, ...]
 
 
+@dataclass(frozen=True)
+class SignalAllocationInput:
+    """Immutable candidate signal used for deterministic prioritization.
+
+    Attributes:
+        signal_id: Stable signal identifier used in deterministic ordering.
+        strategy_id: Strategy identifier that owns the signal.
+        symbol: Instrument symbol.
+        side: Signal direction.
+        priority_score: Higher score means higher priority.
+        requested_notional: Absolute notional requested by the signal.
+        position_size_cap_notional: Optional bounded size hook for this signal.
+        deterministic_tie_breaker: Optional explicit final tie-break key.
+    """
+
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    side: Literal["buy", "sell"]
+    priority_score: float
+    requested_notional: float
+    position_size_cap_notional: float | None = None
+    deterministic_tie_breaker: str = ""
+
+
+@dataclass(frozen=True)
+class SignalAllocationDecision:
+    """Deterministic allocation output row for one signal candidate.
+
+    Attributes:
+        rank: Deterministic processing rank (1-based).
+        signal_id: Stable signal identifier.
+        strategy_id: Strategy identifier.
+        symbol: Instrument symbol.
+        side: Signal direction.
+        priority_score: Signal priority score.
+        requested_notional: Absolute notional requested by the signal.
+        allocated_notional: Bounded notional granted by the allocator.
+        allocation_status: Allocation outcome for this signal.
+        rejection_reason: Deterministic reason when allocation is zero.
+        position_size_cap_notional: Optional per-signal size cap applied.
+        remaining_global_cap_notional: Remaining global notional after this row.
+        remaining_strategy_cap_notional: Remaining strategy notional after this row.
+    """
+
+    rank: int
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    side: Literal["buy", "sell"]
+    priority_score: float
+    requested_notional: float
+    allocated_notional: float
+    allocation_status: Literal["accepted", "partially_allocated", "rejected"]
+    rejection_reason: str | None
+    position_size_cap_notional: float | None
+    remaining_global_cap_notional: float
+    remaining_strategy_cap_notional: float
+
+
+@dataclass(frozen=True)
+class SignalAllocationPlan:
+    """Deterministic portfolio signal allocation plan under bounded capital.
+
+    Attributes:
+        decisions: Deterministic per-signal allocation decisions.
+        selected_signal_ids: Accepted or partially accepted signal ids in rank order.
+        remaining_global_cap_notional: Remaining global capacity after allocation.
+    """
+
+    decisions: tuple[SignalAllocationDecision, ...]
+    selected_signal_ids: tuple[str, ...]
+    remaining_global_cap_notional: float
+
+
 def assess_capital_allocation(
     state: PortfolioState,
     rules: CapitalAllocationRules,
@@ -141,6 +217,146 @@ def assess_capital_allocation(
         global_within_cap=global_within_cap,
         strategy_assessments=strategy_assessments,
     )
+
+
+def allocate_prioritized_signals(
+    *,
+    state: PortfolioState,
+    rules: CapitalAllocationRules,
+    candidates: tuple[SignalAllocationInput, ...],
+    max_selected_signals: int | None = None,
+) -> SignalAllocationPlan:
+    """Allocate bounded capital across competing signals deterministically.
+
+    Prioritization order is:
+    1) higher priority_score first
+    2) strategy_id ascending
+    3) symbol ascending
+    4) signal_id ascending
+    5) deterministic_tie_breaker ascending
+
+    Args:
+        state: Portfolio state used to compute current consumed capacity.
+        rules: Global and per-strategy allocation caps.
+        candidates: Competing signal candidates.
+        max_selected_signals: Optional cap for accepted signal count.
+
+    Returns:
+        SignalAllocationPlan: Deterministic bounded allocation plan.
+    """
+
+    assessment = assess_capital_allocation(state, rules)
+    strategy_remaining = {
+        row.strategy_id: max(0.0, row.effective_allowed_notional - row.current_absolute_notional)
+        for row in assessment.strategy_assessments
+    }
+    global_remaining = max(
+        0.0,
+        assessment.global_cap_notional - assessment.total_absolute_notional,
+    )
+
+    ordered_candidates = tuple(
+        sorted(
+            candidates,
+            key=lambda row: (
+                -row.priority_score,
+                row.strategy_id,
+                row.symbol,
+                row.signal_id,
+                row.deterministic_tie_breaker,
+            ),
+        )
+    )
+
+    selected_count = 0
+    decisions: list[SignalAllocationDecision] = []
+    selected_signal_ids: list[str] = []
+
+    for rank, candidate in enumerate(ordered_candidates, start=1):
+        strategy_cap_remaining = strategy_remaining.get(candidate.strategy_id, 0.0)
+        requested_notional = abs(candidate.requested_notional)
+        per_signal_cap = (
+            None
+            if candidate.position_size_cap_notional is None
+            else max(0.0, candidate.position_size_cap_notional)
+        )
+
+        if requested_notional == 0.0:
+            allocated_notional = 0.0
+            status: Literal["accepted", "partially_allocated", "rejected"] = "rejected"
+            reason = "invalid_requested_notional"
+        elif max_selected_signals is not None and selected_count >= max_selected_signals:
+            allocated_notional = 0.0
+            status = "rejected"
+            reason = "max_selected_signals_reached"
+        else:
+            bounded_notional = min(
+                _bound_notional_inputs(
+                    requested_notional=requested_notional,
+                    global_remaining=global_remaining,
+                    strategy_remaining=strategy_cap_remaining,
+                    per_signal_cap=per_signal_cap,
+                )
+            )
+
+            if bounded_notional <= 0.0:
+                allocated_notional = 0.0
+                status = "rejected"
+                reason = "insufficient_capacity"
+            elif bounded_notional == requested_notional:
+                allocated_notional = bounded_notional
+                status = "accepted"
+                reason = None
+            else:
+                allocated_notional = bounded_notional
+                status = "partially_allocated"
+                reason = None
+
+        if allocated_notional > 0.0:
+            global_remaining = max(0.0, global_remaining - allocated_notional)
+            strategy_cap_remaining = max(0.0, strategy_cap_remaining - allocated_notional)
+            strategy_remaining[candidate.strategy_id] = strategy_cap_remaining
+            selected_count += 1
+            selected_signal_ids.append(candidate.signal_id)
+
+        decisions.append(
+            SignalAllocationDecision(
+                rank=rank,
+                signal_id=candidate.signal_id,
+                strategy_id=candidate.strategy_id,
+                symbol=candidate.symbol,
+                side=candidate.side,
+                priority_score=candidate.priority_score,
+                requested_notional=requested_notional,
+                allocated_notional=allocated_notional,
+                allocation_status=status,
+                rejection_reason=reason,
+                position_size_cap_notional=per_signal_cap,
+                remaining_global_cap_notional=global_remaining,
+                remaining_strategy_cap_notional=strategy_cap_remaining,
+            )
+        )
+
+    return SignalAllocationPlan(
+        decisions=tuple(decisions),
+        selected_signal_ids=tuple(selected_signal_ids),
+        remaining_global_cap_notional=global_remaining,
+    )
+
+
+def _bound_notional_inputs(
+    *,
+    requested_notional: float,
+    global_remaining: float,
+    strategy_remaining: float,
+    per_signal_cap: float | None,
+) -> tuple[float, ...]:
+    """Build deterministic bounded notional inputs for min-cap sizing."""
+
+    bounds: list[float] = [requested_notional, global_remaining, strategy_remaining]
+    if per_signal_cap is not None:
+        bounds.append(per_signal_cap)
+    return tuple(bounds)
 
 
 def _assess_strategy(

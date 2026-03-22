@@ -85,3 +85,65 @@ The following guardrails are mandatory:
 - Immutable contracts.
 - Coverage expectations are defined and maintained for framework behavior.
 - Enforcement must be test-verified.
+
+## 9. RISK-P43 Bounded Allocation and Prioritization Model
+
+Issue `#729` defines a single bounded model for portfolio allocation and signal prioritization when capital is constrained.
+
+### 9.1 Inputs
+
+- `PortfolioState`
+  - Current account equity and open positions.
+- `CapitalAllocationRules`
+  - Global portfolio cap as percent of equity.
+  - Per-strategy cap and deterministic strategy score.
+- `SignalAllocationInput[]`
+  - `signal_id`, `strategy_id`, `symbol`, `side`, `priority_score`, `requested_notional`.
+  - Optional `position_size_cap_notional` as a bounded per-signal sizing hook.
+  - Optional `deterministic_tie_breaker` for explicit final ordering key.
+- Optional `max_selected_signals`
+  - Bounded selected-position count hook.
+
+### 9.2 Outputs
+
+- `SignalAllocationPlan`
+  - Deterministic `decisions` for every candidate.
+  - `selected_signal_ids` in deterministic processing order.
+  - `remaining_global_cap_notional` after all decisions.
+- `SignalAllocationDecision` (per candidate)
+  - Contains requested and allocated notional, status (`accepted`, `partially_allocated`, `rejected`), rejection reason, and remaining capacities after the decision.
+
+### 9.3 Prioritization and Tie-Breaking Rules
+
+Candidates are sorted with a stable deterministic key:
+
+1. `priority_score` descending
+2. `strategy_id` ascending
+3. `symbol` ascending
+4. `signal_id` ascending
+5. `deterministic_tie_breaker` ascending
+
+This ordering is reproducible and independent of input tuple order.
+
+### 9.4 Bounded Sizing Rule
+
+Each candidate receives:
+
+`allocated_notional = min(requested_notional, global_remaining, strategy_remaining, optional position_size_cap_notional)`
+
+Where:
+- `global_remaining` is derived from global cap minus current absolute notional usage.
+- `strategy_remaining` is derived from strategy effective cap minus current strategy absolute notional.
+
+If the bounded result is:
+- equal to requested: `accepted`
+- greater than 0 but less than requested: `partially_allocated`
+- 0: `rejected` with deterministic reason
+
+If `max_selected_signals` is reached, further signals are rejected with `max_selected_signals_reached`.
+
+### 9.5 Non-Goals Kept Intact
+
+- No optimizer research or objective-function search.
+- No execution routing or brokerage integration.
+- No rebalancing engine expansion.
