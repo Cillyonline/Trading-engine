@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 from cilly_trading.portfolio_framework.contract import PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
@@ -82,6 +83,75 @@ class CapitalAllocationAssessment:
     strategy_assessments: tuple[StrategyAllocationAssessment, ...]
 
 
+@dataclass(frozen=True)
+class PrioritizedAllocationSignal:
+    """Candidate signal to prioritize for bounded notional allocation.
+
+    Attributes:
+        signal_id: Stable signal identifier.
+        strategy_id: Strategy identifier that produced the signal.
+        symbol: Instrument symbol for this opportunity.
+        priority_score: Higher score means higher allocation priority.
+        requested_notional: Requested notional amount for this signal.
+        signal_timestamp: ISO-8601 timestamp used in deterministic ordering.
+        max_position_notional: Optional per-signal cap used as a bounded sizing hook.
+    """
+
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    priority_score: float
+    requested_notional: float
+    signal_timestamp: str
+    max_position_notional: float | None = None
+
+
+@dataclass(frozen=True)
+class PrioritizedAllocationConfig:
+    """Configuration for deterministic constrained-capital signal allocation.
+
+    Attributes:
+        available_capital_notional: Total notional budget for this allocation run.
+        max_positions: Maximum number of accepted signals.
+        default_position_cap_notional: Default per-position notional cap.
+        min_allocation_notional: Minimum notional required for an accepted allocation.
+    """
+
+    available_capital_notional: float
+    max_positions: int
+    default_position_cap_notional: float
+    min_allocation_notional: float = 0.0
+
+
+@dataclass(frozen=True)
+class PrioritizedAllocationDecision:
+    """Deterministic allocation decision row for one candidate signal."""
+
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    priority_rank: int
+    tie_break_key: tuple[float, str, str, str, str]
+    requested_notional: float
+    bounded_requested_notional: float
+    allocated_notional: float
+    accepted: bool
+    rejection_reason: str | None
+
+
+@dataclass(frozen=True)
+class PrioritizedAllocationResult:
+    """Deterministic bounded allocation result."""
+
+    decisions: tuple[PrioritizedAllocationDecision, ...]
+    accepted_signal_ids: tuple[str, ...]
+    total_allocated_notional: float
+    remaining_capital_notional: float
+
+
+BoundedPositionSizingHook = Callable[[PrioritizedAllocationSignal, float], float]
+
+
 def assess_capital_allocation(
     state: PortfolioState,
     rules: CapitalAllocationRules,
@@ -143,6 +213,105 @@ def assess_capital_allocation(
     )
 
 
+def allocate_prioritized_signals(
+    *,
+    signals: tuple[PrioritizedAllocationSignal, ...],
+    config: PrioritizedAllocationConfig,
+    bounded_position_sizing_hook: BoundedPositionSizingHook | None = None,
+) -> PrioritizedAllocationResult:
+    """Allocate limited capital across competing signals deterministically.
+
+    Prioritization and tie-breaking order:
+    1) priority_score DESC
+    2) signal_timestamp ASC
+    3) strategy_id ASC
+    4) symbol ASC
+    5) signal_id ASC
+    """
+
+    ranked_signals = tuple(sorted(signals, key=_priority_sort_key))
+    remaining_capital = max(config.available_capital_notional, 0.0)
+    accepted_positions = 0
+
+    decisions: list[PrioritizedAllocationDecision] = []
+
+    for index, signal in enumerate(ranked_signals):
+        priority_rank = index + 1
+        tie_break_key = _priority_sort_key(signal)
+        bounded_requested_notional = _bounded_requested_notional(signal=signal, config=config)
+
+        allocation_budget_available = (
+            remaining_capital > 0.0
+            and accepted_positions < config.max_positions
+            and bounded_requested_notional >= config.min_allocation_notional
+        )
+
+        if not allocation_budget_available:
+            decisions.append(
+                PrioritizedAllocationDecision(
+                    signal_id=signal.signal_id,
+                    strategy_id=signal.strategy_id,
+                    symbol=signal.symbol,
+                    priority_rank=priority_rank,
+                    tie_break_key=tie_break_key,
+                    requested_notional=signal.requested_notional,
+                    bounded_requested_notional=bounded_requested_notional,
+                    allocated_notional=0.0,
+                    accepted=False,
+                    rejection_reason=_allocation_rejection_reason(
+                        remaining_capital=remaining_capital,
+                        accepted_positions=accepted_positions,
+                        config=config,
+                        bounded_requested_notional=bounded_requested_notional,
+                    ),
+                )
+            )
+            continue
+
+        proposed_notional = min(bounded_requested_notional, remaining_capital)
+        allocated_notional = _apply_bounded_position_sizing_hook(
+            signal=signal,
+            proposed_notional=proposed_notional,
+            bounded_position_sizing_hook=bounded_position_sizing_hook,
+        )
+        allocated_notional = min(max(allocated_notional, 0.0), proposed_notional)
+
+        if allocated_notional >= config.min_allocation_notional:
+            accepted = True
+            rejection_reason = None
+            accepted_positions += 1
+            remaining_capital -= allocated_notional
+        else:
+            accepted = False
+            rejection_reason = "below_min_allocation_after_bounded_sizing"
+            allocated_notional = 0.0
+
+        decisions.append(
+            PrioritizedAllocationDecision(
+                signal_id=signal.signal_id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                priority_rank=priority_rank,
+                tie_break_key=tie_break_key,
+                requested_notional=signal.requested_notional,
+                bounded_requested_notional=bounded_requested_notional,
+                allocated_notional=allocated_notional,
+                accepted=accepted,
+                rejection_reason=rejection_reason,
+            )
+        )
+
+    accepted_signal_ids = tuple(item.signal_id for item in decisions if item.accepted)
+    total_allocated_notional = sum(item.allocated_notional for item in decisions)
+
+    return PrioritizedAllocationResult(
+        decisions=tuple(decisions),
+        accepted_signal_ids=accepted_signal_ids,
+        total_allocated_notional=total_allocated_notional,
+        remaining_capital_notional=remaining_capital,
+    )
+
+
 def _assess_strategy(
     *,
     rule: StrategyAllocationRule,
@@ -180,6 +349,57 @@ def _assess_strategy(
         effective_allowed_notional=effective_allowed_notional,
         within_cap=current_absolute_notional <= effective_allowed_notional,
     )
+
+
+def _priority_sort_key(signal: PrioritizedAllocationSignal) -> tuple[float, str, str, str, str]:
+    return (
+        -signal.priority_score,
+        signal.signal_timestamp,
+        signal.strategy_id,
+        signal.symbol,
+        signal.signal_id,
+    )
+
+
+def _bounded_requested_notional(
+    *,
+    signal: PrioritizedAllocationSignal,
+    config: PrioritizedAllocationConfig,
+) -> float:
+    configured_cap = max(config.default_position_cap_notional, 0.0)
+    signal_cap = (
+        configured_cap
+        if signal.max_position_notional is None
+        else max(signal.max_position_notional, 0.0)
+    )
+    return min(max(signal.requested_notional, 0.0), signal_cap)
+
+
+def _apply_bounded_position_sizing_hook(
+    *,
+    signal: PrioritizedAllocationSignal,
+    proposed_notional: float,
+    bounded_position_sizing_hook: BoundedPositionSizingHook | None,
+) -> float:
+    if bounded_position_sizing_hook is None:
+        return proposed_notional
+    return bounded_position_sizing_hook(signal, proposed_notional)
+
+
+def _allocation_rejection_reason(
+    *,
+    remaining_capital: float,
+    accepted_positions: int,
+    config: PrioritizedAllocationConfig,
+    bounded_requested_notional: float,
+) -> str:
+    if accepted_positions >= config.max_positions:
+        return "position_limit_reached"
+    if remaining_capital <= 0.0:
+        return "capital_exhausted"
+    if bounded_requested_notional < config.min_allocation_notional:
+        return "below_min_allocation"
+    return "not_allocated"
 
 
 def _build_reasons(

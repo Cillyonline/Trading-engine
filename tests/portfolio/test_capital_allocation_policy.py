@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from cilly_trading.portfolio_framework.capital_allocation_policy import (
+    PrioritizedAllocationConfig,
+    PrioritizedAllocationSignal,
     CapitalAllocationRules,
     StrategyAllocationRule,
+    allocate_prioritized_signals,
     assess_capital_allocation,
 )
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
@@ -139,3 +142,176 @@ def test_assessment_is_deterministic_for_identical_input() -> None:
     assessment_b = assess_capital_allocation(state, rules)
 
     assert assessment_a == assessment_b
+
+
+def test_prioritization_orders_by_score_then_tie_breakers() -> None:
+    """Signals are ordered by explicit deterministic priority and tie-break keys."""
+    config = PrioritizedAllocationConfig(
+        available_capital_notional=1000.0,
+        max_positions=10,
+        default_position_cap_notional=500.0,
+    )
+    signals = (
+        PrioritizedAllocationSignal(
+            signal_id="sig-3",
+            strategy_id="beta",
+            symbol="ETHUSDT",
+            priority_score=80.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T10:00:00Z",
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-1",
+            strategy_id="alpha",
+            symbol="BTCUSDT",
+            priority_score=90.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T10:00:00Z",
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-2",
+            strategy_id="alpha",
+            symbol="ADAUSDT",
+            priority_score=90.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T09:00:00Z",
+        ),
+    )
+
+    result = allocate_prioritized_signals(signals=signals, config=config)
+
+    assert [item.signal_id for item in result.decisions] == ["sig-2", "sig-1", "sig-3"]
+    assert [item.priority_rank for item in result.decisions] == [1, 2, 3]
+
+
+def test_constrained_capital_and_position_limit_are_enforced_deterministically() -> None:
+    """Limited capital and max position count deterministically gate accepted signals."""
+    config = PrioritizedAllocationConfig(
+        available_capital_notional=130.0,
+        max_positions=2,
+        default_position_cap_notional=100.0,
+    )
+    signals = (
+        PrioritizedAllocationSignal(
+            signal_id="sig-a",
+            strategy_id="s1",
+            symbol="BTCUSDT",
+            priority_score=100.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T09:00:00Z",
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-b",
+            strategy_id="s1",
+            symbol="ETHUSDT",
+            priority_score=95.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T09:01:00Z",
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-c",
+            strategy_id="s2",
+            symbol="SOLUSDT",
+            priority_score=90.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T09:02:00Z",
+        ),
+    )
+
+    result = allocate_prioritized_signals(signals=signals, config=config)
+
+    assert result.accepted_signal_ids == ("sig-a", "sig-b")
+    assert result.total_allocated_notional == 130.0
+    assert result.remaining_capital_notional == 0.0
+    assert result.decisions[0].allocated_notional == 100.0
+    assert result.decisions[1].allocated_notional == 30.0
+    assert result.decisions[2].accepted is False
+    assert result.decisions[2].rejection_reason == "position_limit_reached"
+
+
+def test_deterministic_ordering_and_tie_breaking_is_reproducible() -> None:
+    """Equal score/timestamp signals are resolved using stable lexical tie-breakers."""
+    config = PrioritizedAllocationConfig(
+        available_capital_notional=500.0,
+        max_positions=10,
+        default_position_cap_notional=100.0,
+    )
+    signals = (
+        PrioritizedAllocationSignal(
+            signal_id="sig-2",
+            strategy_id="alpha",
+            symbol="ETHUSDT",
+            priority_score=75.0,
+            requested_notional=90.0,
+            signal_timestamp="2026-03-22T11:00:00Z",
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-1",
+            strategy_id="alpha",
+            symbol="ETHUSDT",
+            priority_score=75.0,
+            requested_notional=90.0,
+            signal_timestamp="2026-03-22T11:00:00Z",
+        ),
+    )
+
+    result_a = allocate_prioritized_signals(signals=signals, config=config)
+    result_b = allocate_prioritized_signals(signals=signals, config=config)
+
+    assert result_a == result_b
+    assert [item.signal_id for item in result_a.decisions] == ["sig-1", "sig-2"]
+    assert result_a.decisions[0].tie_break_key < result_a.decisions[1].tie_break_key
+
+
+def test_regression_input_permutation_and_bounded_sizing_hook_remain_deterministic() -> None:
+    """Regression: input order does not change outcome and bounded hook remains stable."""
+    config = PrioritizedAllocationConfig(
+        available_capital_notional=200.0,
+        max_positions=3,
+        default_position_cap_notional=120.0,
+        min_allocation_notional=10.0,
+    )
+    signals_a = (
+        PrioritizedAllocationSignal(
+            signal_id="sig-x",
+            strategy_id="s2",
+            symbol="SOLUSDT",
+            priority_score=50.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T10:00:00Z",
+            max_position_notional=80.0,
+        ),
+        PrioritizedAllocationSignal(
+            signal_id="sig-y",
+            strategy_id="s1",
+            symbol="BTCUSDT",
+            priority_score=60.0,
+            requested_notional=100.0,
+            signal_timestamp="2026-03-22T10:00:00Z",
+        ),
+    )
+    signals_b = tuple(reversed(signals_a))
+
+    def bounded_position_sizing_hook(
+        signal: PrioritizedAllocationSignal,
+        proposed_notional: float,
+    ) -> float:
+        if signal.signal_id == "sig-y":
+            return proposed_notional * 0.5
+        return proposed_notional
+
+    result_a = allocate_prioritized_signals(
+        signals=signals_a,
+        config=config,
+        bounded_position_sizing_hook=bounded_position_sizing_hook,
+    )
+    result_b = allocate_prioritized_signals(
+        signals=signals_b,
+        config=config,
+        bounded_position_sizing_hook=bounded_position_sizing_hook,
+    )
+
+    assert result_a == result_b
+    assert result_a.accepted_signal_ids == ("sig-y", "sig-x")
+    assert result_a.total_allocated_notional == 130.0
+    assert result_a.remaining_capital_notional == 70.0
