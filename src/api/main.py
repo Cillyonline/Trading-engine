@@ -63,7 +63,6 @@ from cilly_trading.engine.portfolio import (
     PortfolioPosition as PortfolioInspectionPosition,
     load_portfolio_state_from_env,
 )
-from cilly_trading.engine.paper_inspection import build_paper_inspection_snapshot
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import (
@@ -1625,6 +1624,7 @@ def _resolve_paper_starting_cash() -> Decimal:
 def _load_paper_inspection_snapshot():
     persisted: list[PersistedTradePayload] = paper_trade_repo.list_trades(limit=1_000_000)
     ordered_persisted = list(reversed(persisted))
+    from cilly_trading.engine.paper_inspection import build_paper_inspection_snapshot
     return build_paper_inspection_snapshot(
         ordered_persisted,
         starting_cash=_resolve_paper_starting_cash(),
