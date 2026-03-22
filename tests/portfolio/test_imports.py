@@ -11,6 +11,7 @@ MODULES = [
     "cilly_trading.portfolio_framework.capital_allocation_policy",
     "cilly_trading.portfolio_framework.contract",
     "cilly_trading.portfolio_framework.exposure_aggregator",
+    "cilly_trading.portfolio_framework.guardrails",
 ]
 
 FORBIDDEN_PREFIXES = (
