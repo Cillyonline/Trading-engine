@@ -6,6 +6,10 @@ from typing import Any, Dict, List, Mapping
 
 import pytest
 
+from cilly_trading.engine.backtest_execution_contract import (
+    BacktestExecutionAssumptions,
+    BacktestRunContract,
+)
 from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
 from cilly_trading.engine.journal.execution_journal import EXECUTION_JOURNAL_SCHEMA
 from tests.utils.json_schema_validator import validate_json_schema
@@ -204,3 +208,71 @@ def test_backtest_runner_persists_execution_journal_artifacts(tmp_path: Path) ->
     assert phases[0] == ("run", "started")
     assert phases[-1] == ("run", "completed")
     assert any(phase == ("snapshot", "processed") for phase in phases)
+
+
+def test_backtest_runner_artifact_contains_explicit_run_contract(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {"id": "s1", "timestamp": "2024-01-01T00:00:00Z", "symbol": "AAPL", "open": "100"},
+            {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "run-config",
+            run_id="contract-run",
+            strategy_name="REFERENCE",
+            strategy_params={"alpha": "1"},
+            run_contract=BacktestRunContract(
+                execution_assumptions=BacktestExecutionAssumptions(
+                    slippage_bps=7,
+                    commission_per_order=7,
+                )
+            ),
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    run_config = payload["run_config"]
+    assert run_config["contract_version"] == "1.0.0"
+    assert run_config["execution_assumptions"]["slippage_bps"] == 7
+    assert run_config["execution_assumptions"]["commission_per_order"] == "7"
+    assert run_config["reproducibility_metadata"]["run_id"] == "contract-run"
+    assert run_config["reproducibility_metadata"]["strategy_name"] == "REFERENCE"
+
+
+def test_backtest_runner_emits_deterministic_orders_fills_positions(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {
+                "id": "s2",
+                "timestamp": "2024-01-02T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "110",
+            },
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "flow", run_id="flow-run"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert len(payload["orders"]) == 1
+    assert len(payload["fills"]) == 1
+    assert len(payload["positions"]) == 1
+    assert payload["fills"][0]["occurred_at"] == "2024-01-02T00:00:00Z"
