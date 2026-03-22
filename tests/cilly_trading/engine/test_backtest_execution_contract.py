@@ -10,9 +10,11 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestExecutionAssumptions,
     BacktestRunContract,
     BacktestSignalTranslationConfig,
+    build_cost_slippage_metrics_baseline,
     serialize_fills,
     serialize_orders,
     serialize_positions,
+    sort_snapshots,
     simulate_execution_flow,
 )
 from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
@@ -50,8 +52,12 @@ def _sample_flow_snapshots() -> list[dict[str, object]]:
 def test_contract_validation_rejects_invalid_execution_assumptions() -> None:
     with pytest.raises(ValueError, match="slippage_bps"):
         BacktestExecutionAssumptions(slippage_bps=-1)
+    with pytest.raises(ValueError, match="slippage_bps"):
+        BacktestExecutionAssumptions(slippage_bps=251)
     with pytest.raises(ValueError, match="commission_per_order"):
         BacktestExecutionAssumptions(commission_per_order=Decimal("-0.01"))
+    with pytest.raises(ValueError, match="commission_per_order"):
+        BacktestExecutionAssumptions(commission_per_order=Decimal("25.01"))
     with pytest.raises(ValueError, match="partial_fills_allowed"):
         BacktestExecutionAssumptions(partial_fills_allowed=True)
 
@@ -127,6 +133,66 @@ def test_reproducibility_flow_serialization_is_deterministic() -> None:
     assert serialize_orders(result_a.orders) == serialize_orders(result_b.orders)
     assert serialize_fills(result_a.fills) == serialize_fills(result_b.fills)
     assert serialize_positions(result_a.positions) == serialize_positions(result_b.positions)
+
+
+def test_cost_slippage_baseline_reports_expected_cost_delta() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+    flow = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-costs",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    baseline = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=flow.fills,
+        execution_assumptions=run_contract.execution_assumptions,
+    )
+
+    assert baseline["summary"]["total_commission"] == 2.0
+    assert baseline["summary"]["total_slippage_cost"] == 0.33
+    assert baseline["summary"]["total_transaction_cost"] == 2.33
+    assert baseline["summary"]["ending_equity_cost_aware"] == 99999.67
+    assert baseline["summary"]["ending_equity_cost_free"] == 100002.0
+    assert baseline["summary"]["fill_count"] == 2
+
+
+def test_cost_slippage_baseline_is_reproducible() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+    flow = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-repro-baseline",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    first = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=flow.fills,
+        execution_assumptions=run_contract.execution_assumptions,
+    )
+    second = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=flow.fills,
+        execution_assumptions=run_contract.execution_assumptions,
+    )
+
+    assert first == second
 
 
 def test_negative_configuration_invalid_signal_mapping_fails() -> None:

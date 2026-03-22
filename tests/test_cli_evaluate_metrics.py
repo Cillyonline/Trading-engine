@@ -89,3 +89,46 @@ def test_cli_evaluate_missing_artifact_exit_20(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 20
+
+
+def test_cli_evaluate_accepts_backtest_artifact_with_baseline_outputs(tmp_path: Path) -> None:
+    snapshots_path = tmp_path / "snapshots.json"
+    snapshots_path.write_text(
+        json.dumps(
+            [
+                {"id": "s1", "timestamp": "2024-01-01T00:00:00Z", "price": 100},
+                {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "price": 101},
+                {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "price": 102},
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    backtest_out = tmp_path / "bt-out"
+    backtest_result = _run_cli(
+        [
+            "backtest",
+            "--snapshots",
+            str(snapshots_path),
+            "--strategy",
+            "REFERENCE",
+            "--out",
+            str(backtest_out),
+        ]
+    )
+    assert backtest_result.returncode == 0
+
+    evaluate_out = tmp_path / "eval-out"
+    evaluate_result = _run_cli(
+        [
+            "evaluate",
+            "--artifact",
+            str(backtest_out / "backtest-result.json"),
+            "--out",
+            str(evaluate_out),
+        ]
+    )
+    assert evaluate_result.returncode == 0
+
+    metrics_payload = json.loads((evaluate_out / "metrics-result.json").read_text(encoding="utf-8"))
+    assert metrics_payload["total_return"] == 0.0

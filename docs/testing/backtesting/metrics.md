@@ -18,6 +18,17 @@ The evaluation input consists of three artifacts:
 - `equity_curve`: ordered equity observations with timestamped equity values.
 - `trades`: closed-trade records with realized `pnl` and trade identifiers.
 
+For issue `#728`, backtest artifacts now include deterministic baseline artifacts directly:
+
+- `summary` (cost-aware baseline): `start_equity`, `end_equity`.
+- `equity_curve` (cost-aware baseline): canonical timestamp/equity series.
+- `trades`: currently an empty deterministic list for the baseline phase.
+- `metrics_baseline`: deterministic comparison object with:
+  - `assumptions` (explicit cost/slippage assumptions from run config),
+  - `summary` (starting/ending equity, total commission, total slippage cost, total transaction cost, fill count),
+  - `equity_curve.cost_free` and `equity_curve.cost_aware`,
+  - `metrics.cost_free`, `metrics.cost_aware`, and `metrics.deltas`.
+
 ## Canonical Ordering Rules
 
 The evaluator SHALL operate on canonicalized sequences:
@@ -220,3 +231,22 @@ Reproducibility validation requirements:
 - SHA-256 hash equality across all 3 produced artifacts is required.
 - Raw byte-equality across all 3 produced artifacts is required.
 - These checks are covered by CI and SHALL be enforced in continuous validation.
+
+# 7. Cost/Slippage Baseline Rules
+
+The deterministic baseline in this phase uses bounded assumptions:
+
+- `slippage_bps` range: `[0, 250]`.
+- `commission_per_order` range: `[0, 25]`.
+
+Cost model:
+
+- Slippage is side-aware and adverse (`BUY` increases fill price, `SELL` decreases fill price).
+- Commission is fixed per filled order.
+- Total transaction cost is `total_commission + total_slippage_cost`.
+
+Cost-aware vs cost-free comparison:
+
+- `cost_free` uses reference snapshot fill price (`open` or fallback `price`) and zero costs.
+- `cost_aware` uses executed fill price plus commission.
+- For identical fills with non-zero assumptions, `ending_equity_cost_aware` SHALL be less than `ending_equity_cost_free`.
