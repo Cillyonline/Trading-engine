@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Mapping, Sequence
 
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
 
+from cilly_trading.metrics import compute_backtest_metrics
 from cilly_trading.engine.pipeline.orchestrator import (
     DeterministicExecutionConfig,
     ExecutionEvent,
@@ -19,7 +20,11 @@ from cilly_trading.engine.pipeline.orchestrator import (
 from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 
 SUPPORTED_RUN_CONTRACT_VERSION = "1.0.0"
+BASELINE_VERSION = "1.0.0"
 DEFAULT_ACTION_TO_SIDE: dict[str, Literal["BUY", "SELL"]] = {"BUY": "BUY", "SELL": "SELL"}
+MAX_SLIPPAGE_BPS = 250
+MAX_COMMISSION_PER_ORDER = Decimal("25")
+DEFAULT_STARTING_EQUITY = Decimal("100000")
 
 
 @dataclass(frozen=True)
@@ -85,8 +90,14 @@ class BacktestExecutionAssumptions:
     def __post_init__(self) -> None:
         if self.slippage_bps < 0:
             raise ValueError("Execution assumption slippage_bps must be >= 0")
+        if self.slippage_bps > MAX_SLIPPAGE_BPS:
+            raise ValueError(f"Execution assumption slippage_bps must be <= {MAX_SLIPPAGE_BPS}")
         if self.commission_per_order < Decimal("0"):
             raise ValueError("Execution assumption commission_per_order must be >= 0")
+        if self.commission_per_order > MAX_COMMISSION_PER_ORDER:
+            raise ValueError(
+                f"Execution assumption commission_per_order must be <= {MAX_COMMISSION_PER_ORDER}"
+            )
         if self.partial_fills_allowed:
             raise ValueError("Execution assumption partial_fills_allowed must be false")
 
@@ -381,3 +392,195 @@ def serialize_fills(fills: Sequence[ExecutionEvent]) -> list[dict[str, Any]]:
 
 def serialize_positions(positions: Sequence[Position]) -> list[dict[str, Any]]:
     return [position.model_dump(mode="json") for position in positions]
+
+
+def build_cost_slippage_metrics_baseline(
+    *,
+    ordered_snapshots: Sequence[Mapping[str, Any]],
+    fills: Sequence[ExecutionEvent],
+    execution_assumptions: BacktestExecutionAssumptions,
+) -> dict[str, Any]:
+    """Build deterministic cost-aware vs cost-free baseline outputs."""
+
+    snapshot_rows = [dict(snapshot) for snapshot in ordered_snapshots]
+    if not snapshot_rows:
+        return {
+            "baseline_version": BASELINE_VERSION,
+            "assumptions": execution_assumptions.to_payload(),
+            "summary": {
+                "starting_equity": float(DEFAULT_STARTING_EQUITY),
+                "ending_equity_cost_free": float(DEFAULT_STARTING_EQUITY),
+                "ending_equity_cost_aware": float(DEFAULT_STARTING_EQUITY),
+                "total_transaction_cost": 0.0,
+                "total_commission": 0.0,
+                "total_slippage_cost": 0.0,
+                "fill_count": 0,
+            },
+            "equity_curve": {
+                "cost_free": [],
+                "cost_aware": [],
+            },
+            "metrics": {
+                "cost_free": compute_backtest_metrics(
+                    summary={
+                        "start_equity": float(DEFAULT_STARTING_EQUITY),
+                        "end_equity": float(DEFAULT_STARTING_EQUITY),
+                    },
+                    equity_curve=[],
+                    trades=[],
+                ),
+                "cost_aware": compute_backtest_metrics(
+                    summary={
+                        "start_equity": float(DEFAULT_STARTING_EQUITY),
+                        "end_equity": float(DEFAULT_STARTING_EQUITY),
+                    },
+                    equity_curve=[],
+                    trades=[],
+                ),
+                "deltas": {},
+            },
+            "trades": [],
+        }
+
+    fills_by_snapshot: dict[str, list[ExecutionEvent]] = {}
+    for fill in fills:
+        fills_by_snapshot.setdefault(fill.occurred_at, []).append(fill)
+    for key in fills_by_snapshot:
+        fills_by_snapshot[key] = sorted(
+            fills_by_snapshot[key],
+            key=lambda event: (event.sequence, event.order_id, event.event_id),
+        )
+
+    cash_cost_free = DEFAULT_STARTING_EQUITY
+    cash_cost_aware = DEFAULT_STARTING_EQUITY
+    net_quantity = Decimal("0")
+    total_commission = Decimal("0")
+    total_slippage_cost = Decimal("0")
+
+    cost_free_curve: list[dict[str, Any]] = []
+    cost_aware_curve: list[dict[str, Any]] = []
+
+    for index, snapshot in enumerate(snapshot_rows):
+        snapshot_key = resolve_snapshot_key(snapshot)
+        reference_price = _snapshot_fill_reference_price(snapshot)
+        snapshot_fills = fills_by_snapshot.get(snapshot_key, [])
+        if snapshot_fills and reference_price is None:
+            raise ValueError("Snapshot must contain either 'open' or 'price'")
+
+        for fill in snapshot_fills:
+            if fill.execution_quantity is None or fill.execution_price is None:
+                continue
+            quantity = fill.execution_quantity
+            execution_price = fill.execution_price
+            commission = fill.commission if fill.commission is not None else Decimal("0")
+
+            reference_notional = reference_price * quantity
+            execution_notional = execution_price * quantity
+
+            total_commission += commission
+            total_slippage_cost += abs(execution_price - reference_price) * quantity
+
+            if fill.side == "BUY":
+                cash_cost_free -= reference_notional
+                cash_cost_aware -= execution_notional + commission
+                net_quantity += quantity
+            else:
+                cash_cost_free += reference_notional
+                cash_cost_aware += execution_notional - commission
+                net_quantity -= quantity
+
+        if reference_price is None:
+            if net_quantity != Decimal("0"):
+                raise ValueError("Snapshot must contain either 'open' or 'price' when position is open")
+            mark_to_market_notional = Decimal("0")
+        else:
+            mark_to_market_notional = net_quantity * reference_price
+        equity_cost_free = cash_cost_free + mark_to_market_notional
+        equity_cost_aware = cash_cost_aware + mark_to_market_notional
+
+        point_timestamp = snapshot.get("timestamp", index)
+        cost_free_curve.append(
+            {
+                "timestamp": point_timestamp,
+                "equity": _round_money(equity_cost_free),
+            }
+        )
+        cost_aware_curve.append(
+            {
+                "timestamp": point_timestamp,
+                "equity": _round_money(equity_cost_aware),
+            }
+        )
+
+    start_equity = _round_money(DEFAULT_STARTING_EQUITY)
+    end_equity_cost_free = cost_free_curve[-1]["equity"]
+    end_equity_cost_aware = cost_aware_curve[-1]["equity"]
+
+    summary_cost_free = {
+        "start_equity": start_equity,
+        "end_equity": end_equity_cost_free,
+    }
+    summary_cost_aware = {
+        "start_equity": start_equity,
+        "end_equity": end_equity_cost_aware,
+    }
+
+    metrics_cost_free = compute_backtest_metrics(
+        summary=summary_cost_free,
+        equity_curve=cost_free_curve,
+        trades=[],
+    )
+    metrics_cost_aware = compute_backtest_metrics(
+        summary=summary_cost_aware,
+        equity_curve=cost_aware_curve,
+        trades=[],
+    )
+
+    deltas: dict[str, float | None] = {}
+    for key, value in metrics_cost_aware.items():
+        cost_free_value = metrics_cost_free.get(key)
+        if isinstance(value, (int, float)) and isinstance(cost_free_value, (int, float)):
+            deltas[key] = _round_metric(float(value) - float(cost_free_value))
+        else:
+            deltas[key] = None
+
+    total_transaction_cost = total_commission + total_slippage_cost
+    return {
+        "baseline_version": BASELINE_VERSION,
+        "assumptions": execution_assumptions.to_payload(),
+        "summary": {
+            "starting_equity": start_equity,
+            "ending_equity_cost_free": end_equity_cost_free,
+            "ending_equity_cost_aware": end_equity_cost_aware,
+            "total_transaction_cost": _round_money(total_transaction_cost),
+            "total_commission": _round_money(total_commission),
+            "total_slippage_cost": _round_money(total_slippage_cost),
+            "fill_count": len(fills),
+        },
+        "equity_curve": {
+            "cost_free": cost_free_curve,
+            "cost_aware": cost_aware_curve,
+        },
+        "metrics": {
+            "cost_free": metrics_cost_free,
+            "cost_aware": metrics_cost_aware,
+            "deltas": deltas,
+        },
+        "trades": [],
+    }
+
+
+def _snapshot_fill_reference_price(snapshot: Mapping[str, Any]) -> Decimal | None:
+    if snapshot.get("open") is not None:
+        return Decimal(str(snapshot["open"]))
+    if snapshot.get("price") is not None:
+        return Decimal(str(snapshot["price"]))
+    return None
+
+
+def _round_money(value: Decimal) -> float:
+    return float(value.quantize(Decimal("0.01")))
+
+
+def _round_metric(value: float) -> float:
+    return float(Decimal(str(value)).quantize(Decimal("0.000000000001")))

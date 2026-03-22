@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
 
 from cilly_trading.engine.backtest_execution_contract import (
     BacktestRunContract,
+    build_cost_slippage_metrics_baseline,
     serialize_fills,
     serialize_orders,
     serialize_positions,
@@ -219,12 +220,6 @@ class BacktestRunner:
         invocation_log: List[str],
         config: BacktestRunnerConfig,
     ) -> Dict[str, Any]:
-        flow_result = simulate_execution_flow(
-            snapshots=processed_snapshots,
-            run_id=config.run_id,
-            strategy_name=config.strategy_name,
-            run_contract=config.run_contract,
-        )
         if not processed_snapshots:
             snapshot_mode = "timestamp"
             start = None
@@ -239,6 +234,18 @@ class BacktestRunner:
             else:
                 raise ValueError("Snapshots must consistently define either 'timestamp' or 'snapshot_key'")
             start, end = self._snapshot_boundaries(processed_snapshots, snapshot_mode)
+
+        flow_result = simulate_execution_flow(
+            snapshots=processed_snapshots,
+            run_id=config.run_id,
+            strategy_name=config.strategy_name,
+            run_contract=config.run_contract,
+        )
+        metrics_baseline = build_cost_slippage_metrics_baseline(
+            ordered_snapshots=processed_snapshots,
+            fills=flow_result.fills,
+            execution_assumptions=config.run_contract.execution_assumptions,
+        )
 
         return {
             "artifact_version": "1",
@@ -274,6 +281,13 @@ class BacktestRunner:
             "orders": serialize_orders(flow_result.orders),
             "fills": serialize_fills(flow_result.fills),
             "positions": serialize_positions(flow_result.positions),
+            "summary": {
+                "start_equity": metrics_baseline["summary"]["starting_equity"],
+                "end_equity": metrics_baseline["summary"]["ending_equity_cost_aware"],
+            },
+            "equity_curve": metrics_baseline["equity_curve"]["cost_aware"],
+            "trades": metrics_baseline["trades"],
+            "metrics_baseline": metrics_baseline,
         }
 
     def _snapshot_boundaries(

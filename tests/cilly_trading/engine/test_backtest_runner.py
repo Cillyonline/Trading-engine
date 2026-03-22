@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Mapping
 
@@ -276,3 +277,60 @@ def test_backtest_runner_emits_deterministic_orders_fills_positions(tmp_path: Pa
     assert len(payload["fills"]) == 1
     assert len(payload["positions"]) == 1
     assert payload["fills"][0]["occurred_at"] == "2024-01-02T00:00:00Z"
+    assert "summary" in payload
+    assert "equity_curve" in payload
+    assert "metrics_baseline" in payload
+    assert payload["summary"]["start_equity"] == 100000.0
+
+
+def test_backtest_runner_metrics_baseline_cost_aware_differs_from_cost_free(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {
+                "id": "s2",
+                "timestamp": "2024-01-02T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "101",
+                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {
+                "id": "s3",
+                "timestamp": "2024-01-03T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "102",
+            },
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "baseline",
+            run_contract=BacktestRunContract(
+                execution_assumptions=BacktestExecutionAssumptions(
+                    slippage_bps=10,
+                    commission_per_order=Decimal("1"),
+                    fill_timing="next_snapshot",
+                )
+            ),
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    baseline = payload["metrics_baseline"]
+
+    assert baseline["summary"]["total_transaction_cost"] > 0.0
+    assert (
+        baseline["summary"]["ending_equity_cost_aware"]
+        < baseline["summary"]["ending_equity_cost_free"]
+    )
+    assert baseline["metrics"]["cost_aware"]["total_return"] < baseline["metrics"]["cost_free"]["total_return"]
