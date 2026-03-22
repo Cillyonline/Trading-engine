@@ -161,3 +161,61 @@ Coverage includes:
 - constrained-capital tests
 - deterministic ordering and tie-break tests
 - regression tests
+
+## 10. Portfolio Guardrail Model (Issue #730)
+
+Portfolio-level aggregate risk guardrails are enforced with a deterministic pure-function policy in:
+
+- `src/cilly_trading/portfolio_framework/guardrails.py`
+
+### 10.1 Guardrail Inputs
+
+- `PortfolioState` (immutable positions + account equity)
+- `PortfolioGuardrailLimits` with explicit bounded limits:
+  - `max_gross_exposure_pct`
+  - `max_abs_net_exposure_pct`
+  - `max_offset_exposure_pct`
+  - `max_strategy_concentration_pct`
+  - `max_symbol_concentration_pct`
+  - `max_position_concentration_pct`
+
+### 10.2 Deterministic Exposure Guardrails
+
+- Gross exposure guardrail: `gross_exposure_pct <= max_gross_exposure_pct`
+- Absolute net exposure guardrail: `abs(net_exposure_pct) <= max_abs_net_exposure_pct`
+- Offsetting/conflicting aggregate risk guardrail:
+  - `offset_exposure_pct = gross_exposure_pct - abs(net_exposure_pct)`
+  - `offset_exposure_pct <= max_offset_exposure_pct`
+
+The offset guardrail intentionally captures portfolios where gross risk is high but net appears small because exposures offset each other.
+
+### 10.3 Deterministic Concentration Guardrails
+
+Concentration is measured as share of total portfolio gross notional:
+
+- Strategy concentration: `strategy_absolute_notional / total_absolute_notional`
+- Symbol concentration: `symbol_absolute_notional / total_absolute_notional`
+- Position concentration: `position_absolute_notional / total_absolute_notional`
+
+Guardrails are enforced against the observed maxima for each concentration dimension.
+
+Zero-gross portfolios are explicitly bounded: concentration ratios are defined as `0.0` when denominator is zero.
+
+### 10.4 Assessment Output
+
+`PortfolioGuardrailAssessment` returns:
+
+- approval status (`approved`)
+- deterministic ordered violation reasons (`reasons`)
+- the underlying deterministic exposure summary (`exposure_summary`)
+- derived aggregate metrics (`absolute_net_exposure_pct`, `offset_exposure_pct`)
+- observed concentration maxima for strategy/symbol/position
+
+### 10.5 Bounded Scope
+
+This model is intentionally bounded and reusable:
+
+- no correlation-aware risk math
+- no broker/live enforcement
+- no optimization/re-ranking logic
+- pure deterministic transformations suitable for later simulation and execution phases

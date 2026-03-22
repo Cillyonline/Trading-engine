@@ -21,10 +21,17 @@ from cilly_trading.portfolio_framework.exposure_aggregator import (
     SymbolExposure,
     aggregate_portfolio_exposure,
 )
+from cilly_trading.portfolio_framework.guardrails import (
+    PortfolioGuardrailAssessment,
+    PortfolioGuardrailLimits,
+    assess_portfolio_guardrails,
+)
 __all__ = [
     "BoundedPositionSizingHook",
     "CapitalAllocationAssessment",
     "CapitalAllocationRules",
+    "PortfolioGuardrailAssessment",
+    "PortfolioGuardrailLimits",
     "PrioritizedAllocationConfig",
     "PrioritizedAllocationDecision",
     "PrioritizedAllocationResult",
@@ -37,6 +44,7 @@ __all__ = [
     "PositionExposure",
     "StrategyExposure",
     "SymbolExposure",
+    "assess_portfolio_guardrails",
     "aggregate_portfolio_exposure",
     "allocate_prioritized_signals",
     "assess_capital_allocation",
