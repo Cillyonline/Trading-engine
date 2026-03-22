@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
 
+from cilly_trading.engine.backtest_execution_contract import (
+    BacktestRunContract,
+    serialize_fills,
+    serialize_orders,
+    serialize_positions,
+    simulate_execution_flow,
+)
 from cilly_trading.engine.journal.execution_journal import (
     build_execution_journal_artifact,
     write_execution_journal_artifact,
@@ -48,6 +55,7 @@ class BacktestRunnerConfig:
     strategy_params: Mapping[str, Any] = field(default_factory=dict)
     engine_name: str = "cilly_trading_engine"
     engine_version: str | None = None
+    run_contract: BacktestRunContract = field(default_factory=BacktestRunContract)
 
 
 class BacktestRunner:
@@ -211,6 +219,12 @@ class BacktestRunner:
         invocation_log: List[str],
         config: BacktestRunnerConfig,
     ) -> Dict[str, Any]:
+        flow_result = simulate_execution_flow(
+            snapshots=processed_snapshots,
+            run_id=config.run_id,
+            strategy_name=config.strategy_name,
+            run_contract=config.run_contract,
+        )
         if not processed_snapshots:
             snapshot_mode = "timestamp"
             start = None
@@ -248,11 +262,18 @@ class BacktestRunner:
                 "version": None,
                 "params": dict(config.strategy_params),
             },
+            "run_config": config.run_contract.to_payload(
+                run_id=config.run_id,
+                strategy_name=config.strategy_name,
+                strategy_params=config.strategy_params,
+                engine_name=config.engine_name,
+                engine_version=config.engine_version,
+            ),
             "invocation_log": invocation_log,
             "processed_snapshots": processed_snapshots,
-            "orders": [],
-            "fills": [],
-            "positions": [],
+            "orders": serialize_orders(flow_result.orders),
+            "fills": serialize_fills(flow_result.fills),
+            "positions": serialize_positions(flow_result.positions),
         }
 
     def _snapshot_boundaries(

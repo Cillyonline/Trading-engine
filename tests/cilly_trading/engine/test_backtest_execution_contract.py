@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+
+from cilly_trading.engine.backtest_execution_contract import (
+    BacktestExecutionAssumptions,
+    BacktestRunContract,
+    BacktestSignalTranslationConfig,
+    serialize_fills,
+    serialize_orders,
+    serialize_positions,
+    simulate_execution_flow,
+)
+from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
+
+
+def _sample_flow_snapshots() -> list[dict[str, object]]:
+    return [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [
+                {"signal_id": "sig-buy", "action": "BUY", "quantity": "2", "symbol": "AAPL"},
+            ],
+        },
+        {
+            "id": "s2",
+            "timestamp": "2024-01-02T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "110",
+            "signals": [
+                {"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"},
+            ],
+        },
+        {
+            "id": "s3",
+            "timestamp": "2024-01-03T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "111",
+        },
+    ]
+
+
+def test_contract_validation_rejects_invalid_execution_assumptions() -> None:
+    with pytest.raises(ValueError, match="slippage_bps"):
+        BacktestExecutionAssumptions(slippage_bps=-1)
+    with pytest.raises(ValueError, match="commission_per_order"):
+        BacktestExecutionAssumptions(commission_per_order=Decimal("-0.01"))
+    with pytest.raises(ValueError, match="partial_fills_allowed"):
+        BacktestExecutionAssumptions(partial_fills_allowed=True)
+
+
+def test_contract_validation_rejects_invalid_contract_version() -> None:
+    with pytest.raises(ValueError, match="Unsupported backtest contract_version"):
+        BacktestRunContract(contract_version="2.0.0")
+
+
+def test_representative_backtest_flow_next_snapshot() -> None:
+    result = simulate_execution_flow(
+        snapshots=_sample_flow_snapshots(),
+        run_id="run-1",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(
+            execution_assumptions=BacktestExecutionAssumptions(
+                slippage_bps=10,
+                commission_per_order=Decimal("1.25"),
+                fill_timing="next_snapshot",
+            )
+        ),
+    )
+
+    assert len(result.orders) == 2
+    assert len(result.fills) == 2
+    assert result.fills[0].order_id.endswith(":sig-buy:1")
+    assert result.fills[0].occurred_at == "2024-01-02T00:00:00Z"
+    assert result.fills[1].order_id.endswith(":sig-sell:2")
+    assert result.fills[1].occurred_at == "2024-01-03T00:00:00Z"
+    assert result.positions[0].status == "open"
+    assert result.positions[0].net_quantity == Decimal("1.00000000")
+
+
+def test_representative_backtest_flow_same_snapshot() -> None:
+    result = simulate_execution_flow(
+        snapshots=_sample_flow_snapshots(),
+        run_id="run-2",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(
+            execution_assumptions=BacktestExecutionAssumptions(
+                slippage_bps=0,
+                commission_per_order=Decimal("0"),
+                fill_timing="same_snapshot",
+            )
+        ),
+    )
+
+    assert len(result.fills) == 2
+    assert result.fills[0].occurred_at == "2024-01-01T00:00:00Z"
+    assert result.fills[1].occurred_at == "2024-01-02T00:00:00Z"
+
+
+def test_reproducibility_flow_serialization_is_deterministic() -> None:
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=3,
+            commission_per_order=Decimal("0.55"),
+        )
+    )
+    result_a = simulate_execution_flow(
+        snapshots=_sample_flow_snapshots(),
+        run_id="run-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+    result_b = simulate_execution_flow(
+        snapshots=_sample_flow_snapshots(),
+        run_id="run-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    assert serialize_orders(result_a.orders) == serialize_orders(result_b.orders)
+    assert serialize_fills(result_a.fills) == serialize_fills(result_b.fills)
+    assert serialize_positions(result_a.positions) == serialize_positions(result_b.positions)
+
+
+def test_negative_configuration_invalid_signal_mapping_fails() -> None:
+    with pytest.raises(ValueError, match="Signal action mapping must not be empty"):
+        BacktestSignalTranslationConfig(action_to_side={})
+
+
+def test_negative_configuration_invalid_signal_payload_fails(tmp_path: Path) -> None:
+    class _NoopStrategy:
+        def on_run_start(self, config):  # type: ignore[no-untyped-def]
+            return None
+
+        def on_snapshot(self, snapshot, config):  # type: ignore[no-untyped-def]
+            return None
+
+        def on_run_end(self, config):  # type: ignore[no-untyped-def]
+            return None
+
+    snapshots_path = tmp_path / "snapshots.json"
+    snapshots_path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "s1",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "symbol": "AAPL",
+                    "open": "100",
+                    "signals": [{"signal_id": "sig-1", "action": "BUY", "quantity": "0"}],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    snapshots = json.loads(snapshots_path.read_text(encoding="utf-8"))
+
+    runner = BacktestRunner()
+    with pytest.raises(ValueError, match="Signal quantity must be > 0"):
+        runner.run(
+            snapshots=snapshots,
+            strategy_factory=lambda: _NoopStrategy(),
+            config=BacktestRunnerConfig(output_dir=tmp_path / "out"),
+        )
