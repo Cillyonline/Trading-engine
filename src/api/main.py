@@ -1,12 +1,12 @@
 """
-FastAPI-Anwendung für die Cilly Trading Engine (MVP).
+FastAPI application for the Cilly Trading Engine (MVP).
 
-Enthaltene Endpunkte:
+Included endpoints:
 - GET /health
 - POST /strategy/analyze
 - POST /screener/basic
 
-Strategien:
+Strategies:
 - RSI2 (Rebound)
 - TURTLE (Breakout)
 """
@@ -63,11 +63,13 @@ from cilly_trading.engine.portfolio import (
     PortfolioPosition as PortfolioInspectionPosition,
     load_portfolio_state_from_env,
 )
+from cilly_trading.engine.paper_inspection import build_paper_inspection_snapshot
 from cilly_trading.engine.runtime_introspection import get_runtime_introspection_payload
 from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import (
     ExecutionEvent,
     Order,
+    PersistedTradePayload,
     Position,
     SignalReadItemDTO,
     SignalReadResponseDTO,
@@ -76,6 +78,7 @@ from cilly_trading.models import (
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
+from cilly_trading.repositories.trades_sqlite import SqliteTradeRepository
 from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 from cilly_trading.strategies.registry import (
     StrategyNotRegisteredError,
@@ -88,17 +91,17 @@ from cilly_trading.strategies.registry import (
 
 def configure_logging() -> None:
     """
-    Zentrale Logging-Konfiguration für die Cilly Trading Engine.
-    Wird einmalig beim App-Start ausgeführt.
+    Central logging configuration for the Cilly Trading Engine.
+    Runs once during app startup.
 
-    Hinweis: Uvicorn mit --reload kann Module mehrfach importieren.
-    Daher verhindern wir doppelte Handler.
+    Note: Uvicorn with --reload can import modules multiple times.
+    This guard prevents duplicate handlers.
     """
     log_level = os.getenv("CILLY_LOG_LEVEL", "INFO").upper()
 
     root_logger = logging.getLogger()
     if root_logger.handlers:
-        # Logging ist bereits konfiguriert (z. B. durch Reload / anderes Setup)
+        # Logging is already configured (for example by reload or another setup).
         return
 
     logging.basicConfig(
@@ -111,7 +114,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
-# --- Pydantic-Modelle für Requests/Responses ---
+# --- Pydantic models for requests/responses ---
 
 
 class PresetConfig(BaseModel):
@@ -434,6 +437,27 @@ class TradingCorePositionsReadQuery(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class PaperTradesReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    position_id: Optional[str] = Field(default=None)
+    trade_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
+class PaperPositionsReadQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    position_id: Optional[str] = Field(default=None)
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
+
+
 class TradingCoreOrdersReadResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -462,6 +486,45 @@ class TradingCoreTradesReadResponse(BaseModel):
 
 
 class TradingCorePositionsReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[Position]
+    limit: int
+    offset: int
+    total: int
+
+
+class PaperAccountStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    starting_cash: Decimal
+    cash: Decimal
+    equity: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    total_pnl: Decimal
+    open_positions: int
+    open_trades: int
+    closed_trades: int
+    as_of: Optional[str] = None
+
+
+class PaperAccountReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account: PaperAccountStateResponse
+
+
+class PaperTradesReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[Trade]
+    limit: int
+    offset: int
+    total: int
+
+
+class PaperPositionsReadResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: List[Position]
@@ -792,6 +855,7 @@ ANALYSIS_DB_PATH: Optional[str] = None
 signal_repo = SqliteSignalRepository()
 order_event_repo = SqliteOrderEventRepository(db_path=DEFAULT_DB_PATH)
 canonical_execution_repo = SqliteCanonicalExecutionRepository(db_path=DEFAULT_DB_PATH)
+paper_trade_repo = SqliteTradeRepository(db_path=DEFAULT_DB_PATH)
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 watchlist_repo = SqliteWatchlistRepository(db_path=DEFAULT_DB_PATH)
 
@@ -1299,6 +1363,104 @@ def read_portfolio_positions(
     return PortfolioPositionsResponse(positions=items, total=len(items))
 
 
+@app.get(
+    "/paper/account",
+    response_model=PaperAccountReadResponse,
+    summary="Paper Account",
+    description="Read-only paper account state for deterministic operator inspection.",
+)
+def read_paper_account(
+    _: str = Depends(_require_role("read_only")),
+) -> PaperAccountReadResponse:
+    snapshot = _load_paper_inspection_snapshot()
+    return PaperAccountReadResponse(
+        account=PaperAccountStateResponse(
+            starting_cash=snapshot.account.starting_cash,
+            cash=snapshot.account.cash,
+            equity=snapshot.account.equity,
+            realized_pnl=snapshot.account.realized_pnl,
+            unrealized_pnl=snapshot.account.unrealized_pnl,
+            total_pnl=snapshot.account.total_pnl,
+            open_positions=snapshot.account.open_positions,
+            open_trades=snapshot.account.open_trades,
+            closed_trades=snapshot.account.closed_trades,
+            as_of=snapshot.account.as_of,
+        )
+    )
+
+
+@app.get("/paper/trades", response_model=PaperTradesReadResponse)
+def read_paper_trades(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    position_id: Optional[str] = Query(default=None),
+    trade_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _: str = Depends(_require_role("read_only")),
+) -> PaperTradesReadResponse:
+    params = PaperTradesReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        position_id=position_id,
+        trade_id=trade_id,
+        limit=limit,
+        offset=offset,
+    )
+    snapshot = _load_paper_inspection_snapshot()
+    all_items = list(snapshot.trades)
+    if params.strategy_id is not None:
+        all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+    if params.symbol is not None:
+        all_items = [item for item in all_items if item.symbol == params.symbol]
+    if params.position_id is not None:
+        all_items = [item for item in all_items if item.position_id == params.position_id]
+    if params.trade_id is not None:
+        all_items = [item for item in all_items if item.trade_id == params.trade_id]
+
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return PaperTradesReadResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+@app.get("/paper/positions", response_model=PaperPositionsReadResponse)
+def read_paper_positions(
+    strategy_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    position_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    _: str = Depends(_require_role("read_only")),
+) -> PaperPositionsReadResponse:
+    params = PaperPositionsReadQuery(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        position_id=position_id,
+        limit=limit,
+        offset=offset,
+    )
+    snapshot = _load_paper_inspection_snapshot()
+    all_items = list(snapshot.positions)
+    if params.strategy_id is not None:
+        all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+    if params.symbol is not None:
+        all_items = [item for item in all_items if item.symbol == params.symbol]
+    if params.position_id is not None:
+        all_items = [item for item in all_items if item.position_id == params.position_id]
+
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return PaperPositionsReadResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
 def _require_engine_runtime_running() -> None:
     if not ENGINE_RUNTIME_GUARD_ACTIVE:
         return
@@ -1447,6 +1609,26 @@ def _get_trading_core_positions_query(
 def _paginate_items(items: list[Any], *, limit: int, offset: int) -> tuple[list[Any], int]:
     total = len(items)
     return items[offset : offset + limit], total
+
+
+def _resolve_paper_starting_cash() -> Decimal:
+    raw_value = os.getenv("CILLY_PAPER_ACCOUNT_STARTING_CASH", "100000")
+    try:
+        value = Decimal(raw_value)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="paper_account_starting_cash_invalid") from exc
+    if value < Decimal("0"):
+        raise HTTPException(status_code=500, detail="paper_account_starting_cash_invalid")
+    return value
+
+
+def _load_paper_inspection_snapshot():
+    persisted: list[PersistedTradePayload] = paper_trade_repo.list_trades(limit=1_000_000)
+    ordered_persisted = list(reversed(persisted))
+    return build_paper_inspection_snapshot(
+        ordered_persisted,
+        starting_cash=_resolve_paper_starting_cash(),
+    )
 
 
 def _sum_decimals(values: list[Decimal]) -> Decimal:
