@@ -12,6 +12,17 @@ All endpoints require `X-Cilly-Role: read_only` (or a higher role).
 
 No mutation endpoints are introduced by this surface.
 
+## Authoritative State Ownership
+
+Paper inspection state is authoritative only when derived from Trading Core entities:
+
+- Orders: canonical `Order` entities (`core_orders`)
+- Execution lifecycle facts: canonical `ExecutionEvent` entities (`core_execution_events`)
+- Trades: canonical `Trade` entities (`core_trades`)
+- Positions: derived canonical `Position` entities assembled from canonical trades/orders/execution events
+
+No `/paper/*` runtime endpoint uses legacy `trades` table payloads as the source of truth.
+
 ## Paper Account State
 
 `GET /paper/account` returns one explicit bounded state payload (all monetary fields use 4-decimal precision):
@@ -29,10 +40,21 @@ No mutation endpoints are introduced by this surface.
 
 Starting cash defaults to `100000` and can be overridden via `CILLY_PAPER_ACCOUNT_STARTING_CASH` (must be numeric and non-negative).
 
+`GET /paper/account` is derived from canonical Trading Core state:
+
+- `realized_pnl`: sum of canonical `Trade.realized_pnl` (null treated as `0`)
+- `unrealized_pnl`: sum of canonical `Trade.unrealized_pnl` (null treated as `0`)
+- `open_trades` / `closed_trades`: canonical `Trade.status`
+- `open_positions`: derived canonical `Position.status`
+- `cash`: `starting_cash + realized_pnl`
+- `equity`: `cash + unrealized_pnl`
+- `total_pnl`: `realized_pnl + unrealized_pnl`
+- `as_of`: max non-null timestamp across canonical trade open/close timestamps
+
 ## Trading Core Alignment
 
-- `GET /paper/trades` returns canonical `Trade` entities.
-- `GET /paper/positions` returns canonical `Position` entities derived from paper trades.
+- `GET /paper/trades` returns canonical `Trade` entities from Trading Core persistence.
+- `GET /paper/positions` returns canonical `Position` entities derived from canonical Trading Core entities.
 - Position/trade lifecycle state semantics follow the same canonical model constraints as Trading Core.
 
 ## Deterministic Ordering
@@ -65,5 +87,3 @@ Starting cash defaults to `100000` and can be overridden via `CILLY_PAPER_ACCOUN
   "total": 0
 }
 ```
-
-The JSON example block above is intentionally closed to keep the document valid for markdown renderers.

@@ -26,6 +26,14 @@ The repository contains a deterministic engine-level paper-trading simulator. It
 - Paper order states use the canonical Trading Core order status values.
 - Transition legality and invariant checks are validated through the shared lifecycle guardrails.
 - Fill/cancel lifecycle events use canonical execution event shapes and deterministic event identity.
+- Paper inspection/account state is derived from canonical Trading Core entities (`Order`, `ExecutionEvent`, `Trade`) and derived canonical `Position` state, without legacy paper-trade payloads as authoritative truth.
+
+## Runtime State Flow (Authoritative)
+1. Paper order lifecycle simulator produces canonical order and execution-event transitions.
+2. Canonical entities are persisted through the Trading Core repository boundary.
+3. Canonical trades are read from Trading Core persistence for paper inspection.
+4. Canonical positions are deterministically derived from canonical trade/order/event relations.
+5. Paper account totals (`cash`, `equity`, `pnl`) are derived from canonical trade and position state.
 
 ## Explicit Boundaries
 - No live trading is implemented.
