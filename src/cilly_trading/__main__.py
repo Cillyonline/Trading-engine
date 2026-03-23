@@ -25,6 +25,15 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--artifact", required=True)
     evaluate_parser.add_argument("--out", required=True)
 
+    compare_parser = subparsers.add_parser("compare-strategies")
+    compare_parser.add_argument("--snapshots", required=True)
+    compare_parser.add_argument("--strategy", action="append", required=True)
+    compare_parser.add_argument("--out", required=True)
+    compare_parser.add_argument("--run-id", default="deterministic")
+    compare_parser.add_argument("--benchmark-strategy", default=None)
+    compare_parser.add_argument("--strategy-module", action="append", default=None)
+    compare_parser.add_argument("--strategy-config", default=None)
+
     return parser
 
 
@@ -51,6 +60,20 @@ def main(argv: list[str] | None = None) -> int:
         return run_evaluate(
             artifact_path=Path(args.artifact),
             out_dir=Path(args.out),
+        )
+
+    if args.command == "compare-strategies":
+        from .cli.compare_strategies_cli import run_compare_strategies
+
+        strategy_config_path = Path(args.strategy_config) if args.strategy_config else None
+        return run_compare_strategies(
+            snapshots_path=Path(args.snapshots),
+            strategy_names=list(args.strategy),
+            out_dir=Path(args.out),
+            run_id=args.run_id,
+            benchmark_strategy=args.benchmark_strategy,
+            strategy_modules=args.strategy_module,
+            strategy_config_path=strategy_config_path,
         )
 
     parser.print_usage()

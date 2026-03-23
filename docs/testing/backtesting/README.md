@@ -6,6 +6,7 @@ Backtesting runs a strategy against historical snapshots and writes deterministi
 ## Usage
 ```bash
 python -m cilly_trading backtest --snapshots <PATH> --strategy <NAME> --out <DIR> [--run-id <STR>] [--strategy-module <PYMOD>]...
+python -m cilly_trading compare-strategies --snapshots <PATH> --strategy <NAME> --strategy <NAME> --out <DIR> [--run-id <STR>] [--benchmark-strategy <NAME>] [--strategy-config <JSON_PATH>] [--strategy-module <PYMOD>]...
 ```
 
 - `--snapshots`: Path to a JSON file containing snapshot data.
@@ -13,6 +14,11 @@ python -m cilly_trading backtest --snapshots <PATH> --strategy <NAME> --out <DIR
 - `--out`: Output directory for backtest artifacts.
 - `--run-id` (default deterministic): Optional run identifier; when omitted, a deterministic identifier is used.
 - `--strategy-module` (optional, repeatable, imports module(s) before strategy resolution): Optional module path to import before strategy lookup; may be provided multiple times.
+- `compare-strategies`: Runs the bounded comparable strategy evaluation harness for two or more strategies against the same snapshots.
+
+## Comparable Harness
+- Detailed contract and workflow: `docs/testing/backtesting/strategy_comparison_harness.md`
+- Output artifact: `strategy-comparison.json` + `strategy-comparison.sha256`
 
 ## Determinism Rules
 - Determinism guard is installed during backtest execution and uninstalled in a finally block.
