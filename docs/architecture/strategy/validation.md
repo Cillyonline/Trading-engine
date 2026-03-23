@@ -1,36 +1,69 @@
-# Strategy Registry Validation
+﻿# Strategy Registry Validation
 
 ## Purpose
 
-Strategy registry validation enforces deterministic and schema-safe strategy registrations before any registry write occurs.
+Strategy registry validation enforces deterministic, schema-safe onboarding before any strategy registration is written.
 
-## Fail-fast Behavior
+## Fail-fast behavior
 
-`register_strategy(...)` validates key, metadata, factory signature, and factory output before mutating the registry.
-If validation fails, registration is rejected and registry state remains unchanged.
+`register_strategy(...)` validates key, metadata, factory signature, and factory output before mutating registry state.
+If validation fails, registration is rejected and the registry remains unchanged.
 
-## What Is Validated
+## Controlled onboarding metadata
+
+Required metadata fields:
+
+- `pack_id`
+- `version`
+- `deterministic_hash`
+- `dependencies`
+- `comparison_group`
+- `documentation`
+- `test_coverage`
+
+Validation rules:
+
+- Required metadata fields must exist.
+- Unsupported metadata fields are rejected.
+- Required string fields must be non-empty.
+- `version` must follow SemVer (`MAJOR.MINOR.PATCH`).
+- `dependencies` must be sorted, unique, and contain non-empty strings.
+- `comparison_group` must match `^[a-z0-9][a-z0-9_-]*$`.
+
+## Documentation expectations
+
+`documentation` must include:
+
+- `architecture`: path under `docs/architecture/*.md`
+- `operations`: path under `docs/operations/*.md`
+
+## Test expectations
+
+`test_coverage` must include:
+
+- `contract`: path under `tests/*.py`
+- `registry`: path under `tests/*.py`
+- `negative`: path under `tests/*.py`
+
+All three test paths must be distinct.
+
+## Factory and key validation
 
 - Strategy key must be a non-empty string and is normalized to uppercase.
-- Metadata must be a dictionary.
-- Required metadata fields must exist: `pack_id`, `version`, `deterministic_hash`, `dependencies`.
-- Required field types are enforced.
-- Required string fields must not be empty.
-- `version` must follow SemVer (`MAJOR.MINOR.PATCH`).
-- `dependencies` must be deterministic (sorted, non-duplicated, non-empty string entries).
 - Factory must be callable.
 - Factory must accept no arguments (`no args`, `no *args`, `no **kwargs`).
 - Factory must return a strategy-compatible object with stable `name` and callable `generate_signals`.
-- Duplicate registration keys are rejected before any write.
+- Duplicate keys are rejected before any write.
 
-## Error Semantics
+## Error semantics
 
-Validation failures raise `StrategyValidationError` with deterministic, explicit error messages.
-Duplicate registration also raises `StrategyValidationError` with message format:
-`strategy already registered: <KEY>`.
+Validation failures raise `StrategyValidationError` with explicit deterministic messages.
+Duplicate registration uses:
 
-## Out of Scope
+- `strategy already registered: <KEY>`
 
-- Performance metrics
-- Ranking logic
-- Backtesting integration
+## Out of scope
+
+- performance benchmarking
+- ranking logic
+- backtesting integration redesign

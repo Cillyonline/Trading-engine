@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
@@ -28,6 +28,16 @@ def _metadata(**overrides):
         "version": "1.2.3",
         "deterministic_hash": "abc123",
         "dependencies": [],
+        "comparison_group": "validation-group",
+        "documentation": {
+            "architecture": "docs/architecture/strategy/onboarding_contract.md",
+            "operations": "docs/operations/analyst-workflow.md",
+        },
+        "test_coverage": {
+            "contract": "tests/strategies/test_strategy_onboarding_contract.py",
+            "registry": "tests/strategies/test_strategy_registry.py",
+            "negative": "tests/strategies/test_strategy_validation.py",
+        },
     }
     payload.update(overrides)
     return payload
@@ -40,12 +50,16 @@ def setup_function() -> None:
 def test_missing_metadata_fields_raises_strategy_validation_error() -> None:
     with pytest.raises(
         StrategyValidationError,
-        match="metadata missing required fields: deterministic_hash",
+        match="metadata missing required fields:",
     ):
         register_strategy(
             "alpha",
             _ValidStrategy,
-            metadata={"pack_id": "pack-alpha", "version": "1.2.3", "dependencies": []},
+            metadata={
+                "pack_id": "pack-alpha",
+                "version": "1.2.3",
+                "dependencies": [],
+            },
         )
 
 
@@ -55,6 +69,41 @@ def test_invalid_semver_raises_strategy_validation_error() -> None:
         match="metadata field 'version' must be valid semver",
     ):
         register_strategy("alpha", _ValidStrategy, metadata=_metadata(version="1.2"))
+
+
+def test_invalid_documentation_paths_raise_strategy_validation_error() -> None:
+    with pytest.raises(
+        StrategyValidationError,
+        match=r"metadata field 'documentation\.architecture' must point to docs/architecture/\*\.md",
+    ):
+        register_strategy(
+            "alpha",
+            _ValidStrategy,
+            metadata=_metadata(
+                documentation={
+                    "architecture": "docs/phases/phase-1.md",
+                    "operations": "docs/operations/analyst-workflow.md",
+                }
+            ),
+        )
+
+
+def test_invalid_test_coverage_paths_raise_strategy_validation_error() -> None:
+    with pytest.raises(
+        StrategyValidationError,
+        match=r"metadata field 'test_coverage\.contract' must point to tests/\*\.py",
+    ):
+        register_strategy(
+            "alpha",
+            _ValidStrategy,
+            metadata=_metadata(
+                test_coverage={
+                    "contract": "src/cilly_trading/strategies/registry.py",
+                    "registry": "tests/strategies/test_strategy_registry.py",
+                    "negative": "tests/strategies/test_strategy_validation.py",
+                }
+            ),
+        )
 
 
 def test_non_callable_factory_raises_strategy_validation_error() -> None:

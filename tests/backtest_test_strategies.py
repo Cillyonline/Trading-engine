@@ -3,7 +3,8 @@ from __future__ import annotations
 import time
 from typing import Any, Mapping
 
-from cilly_trading.strategies.registry import DuplicateStrategyRegistrationError, register_strategy
+from cilly_trading.strategies.registry import register_strategy
+from cilly_trading.strategies.validation import StrategyValidationError
 
 
 class DeterminismViolationStrategy:
@@ -37,7 +38,17 @@ try:
             "version": "1.0.0",
             "deterministic_hash": "test-time-violation",
             "dependencies": [],
+            "comparison_group": "test-only",
+            "documentation": {
+                "architecture": "docs/architecture/strategy/onboarding_contract.md",
+                "operations": "docs/operations/analyst-workflow.md",
+            },
+            "test_coverage": {
+                "contract": "tests/strategies/test_strategy_onboarding_contract.py",
+                "registry": "tests/strategies/test_strategy_registry.py",
+                "negative": "tests/strategies/test_strategy_validation.py",
+            },
         },
     )
-except DuplicateStrategyRegistrationError:
+except StrategyValidationError:
     pass

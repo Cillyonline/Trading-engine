@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import pytest
 
@@ -6,6 +6,7 @@ from cilly_trading.strategies.registry import (
     create_registered_strategies,
     create_strategy,
     get_registered_strategies,
+    get_registered_strategy_metadata,
     initialize_default_registry,
     register_strategy,
     reset_registry,
@@ -28,12 +29,22 @@ class _StrategyB:
         return []
 
 
-def _metadata(pack_id: str) -> dict:
+def _metadata(pack_id: str, comparison_group: str = "test-group") -> dict:
     return {
         "pack_id": pack_id,
         "version": "1.0.0",
         "deterministic_hash": f"{pack_id}-hash",
         "dependencies": [],
+        "comparison_group": comparison_group,
+        "documentation": {
+            "architecture": "docs/architecture/strategy/onboarding_contract.md",
+            "operations": "docs/operations/analyst-workflow.md",
+        },
+        "test_coverage": {
+            "contract": "tests/strategies/test_strategy_onboarding_contract.py",
+            "registry": "tests/strategies/test_strategy_registry.py",
+            "negative": "tests/strategies/test_strategy_validation.py",
+        },
     }
 
 
@@ -66,6 +77,20 @@ def test_registered_strategies_are_returned_in_stable_sorted_order() -> None:
     keys = [entry.key for entry in get_registered_strategies()]
 
     assert keys == ["BETA", "ZETA"]
+
+
+def test_registry_returns_strategy_metadata_for_comparison_alignment() -> None:
+    register_strategy("alpha", _StrategyA, metadata=_metadata("pack-a", comparison_group="control"))
+
+    entries = get_registered_strategies()
+    assert entries[0].metadata["comparison_group"] == "control"
+
+    metadata_by_key = get_registered_strategy_metadata()
+    assert list(metadata_by_key.keys()) == ["ALPHA"]
+    assert metadata_by_key["ALPHA"]["pack_id"] == "pack-a"
+    assert metadata_by_key["ALPHA"]["test_coverage"]["registry"] == (
+        "tests/strategies/test_strategy_registry.py"
+    )
 
 
 def test_smoke_run_is_deterministic_and_uses_registry_only() -> None:
