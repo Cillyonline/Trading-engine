@@ -68,7 +68,6 @@ from cilly_trading.engine.runtime_state import get_system_state_payload
 from cilly_trading.models import (
     ExecutionEvent,
     Order,
-    PersistedTradePayload,
     Position,
     SignalReadItemDTO,
     SignalReadResponseDTO,
@@ -77,7 +76,6 @@ from cilly_trading.models import (
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
-from cilly_trading.repositories.trades_sqlite import SqliteTradeRepository
 from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 from cilly_trading.strategies.registry import (
     StrategyNotRegisteredError,
@@ -854,7 +852,6 @@ ANALYSIS_DB_PATH: Optional[str] = None
 signal_repo = SqliteSignalRepository()
 order_event_repo = SqliteOrderEventRepository(db_path=DEFAULT_DB_PATH)
 canonical_execution_repo = SqliteCanonicalExecutionRepository(db_path=DEFAULT_DB_PATH)
-paper_trade_repo = SqliteTradeRepository(db_path=DEFAULT_DB_PATH)
 analysis_run_repo = SqliteAnalysisRunRepository(db_path=DEFAULT_DB_PATH)
 watchlist_repo = SqliteWatchlistRepository(db_path=DEFAULT_DB_PATH)
 
@@ -1371,19 +1368,48 @@ def read_portfolio_positions(
 def read_paper_account(
     _: str = Depends(_require_role("read_only")),
 ) -> PaperAccountReadResponse:
-    snapshot = _load_paper_inspection_snapshot()
+    paper_trades = canonical_execution_repo.list_trades(
+        limit=1_000_000,
+        offset=0,
+    )
+    paper_positions = _build_trading_core_positions(
+        strategy_id=None,
+        symbol=None,
+        position_id=None,
+    )
+
+    starting_cash = _resolve_paper_starting_cash()
+    realized_pnl = _sum_decimals([trade.realized_pnl or Decimal("0") for trade in paper_trades])
+    unrealized_pnl = _sum_decimals([trade.unrealized_pnl or Decimal("0") for trade in paper_trades])
+    total_pnl = realized_pnl + unrealized_pnl
+    cash = starting_cash + realized_pnl
+    equity = cash + unrealized_pnl
+    open_positions = sum(1 for position in paper_positions if position.status == "open")
+    open_trades = sum(1 for trade in paper_trades if trade.status == "open")
+    closed_trades = sum(1 for trade in paper_trades if trade.status == "closed")
+
+    as_of_candidates = [
+        value
+        for value in [
+            *[trade.closed_at for trade in paper_trades],
+            *[trade.opened_at for trade in paper_trades],
+        ]
+        if value is not None
+    ]
+    as_of = max(as_of_candidates) if as_of_candidates else None
+
     return PaperAccountReadResponse(
         account=PaperAccountStateResponse(
-            starting_cash=snapshot.account.starting_cash,
-            cash=snapshot.account.cash,
-            equity=snapshot.account.equity,
-            realized_pnl=snapshot.account.realized_pnl,
-            unrealized_pnl=snapshot.account.unrealized_pnl,
-            total_pnl=snapshot.account.total_pnl,
-            open_positions=snapshot.account.open_positions,
-            open_trades=snapshot.account.open_trades,
-            closed_trades=snapshot.account.closed_trades,
-            as_of=snapshot.account.as_of,
+            starting_cash=starting_cash,
+            cash=cash,
+            equity=equity,
+            realized_pnl=realized_pnl,
+            unrealized_pnl=unrealized_pnl,
+            total_pnl=total_pnl,
+            open_positions=open_positions,
+            open_trades=open_trades,
+            closed_trades=closed_trades,
+            as_of=as_of,
         )
     )
 
@@ -1406,16 +1432,23 @@ def read_paper_trades(
         limit=limit,
         offset=offset,
     )
-    snapshot = _load_paper_inspection_snapshot()
-    all_items = list(snapshot.trades)
-    if params.strategy_id is not None:
-        all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
-    if params.symbol is not None:
-        all_items = [item for item in all_items if item.symbol == params.symbol]
-    if params.position_id is not None:
-        all_items = [item for item in all_items if item.position_id == params.position_id]
-    if params.trade_id is not None:
-        all_items = [item for item in all_items if item.trade_id == params.trade_id]
+    if params.trade_id:
+        trade = canonical_execution_repo.get_trade(params.trade_id)
+        all_items = [] if trade is None else [trade]
+        if params.strategy_id is not None:
+            all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+        if params.symbol is not None:
+            all_items = [item for item in all_items if item.symbol == params.symbol]
+        if params.position_id is not None:
+            all_items = [item for item in all_items if item.position_id == params.position_id]
+    else:
+        all_items = canonical_execution_repo.list_trades(
+            strategy_id=params.strategy_id,
+            symbol=params.symbol,
+            position_id=params.position_id,
+            limit=1_000_000,
+            offset=0,
+        )
 
     page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
     return PaperTradesReadResponse(
@@ -1442,14 +1475,11 @@ def read_paper_positions(
         limit=limit,
         offset=offset,
     )
-    snapshot = _load_paper_inspection_snapshot()
-    all_items = list(snapshot.positions)
-    if params.strategy_id is not None:
-        all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
-    if params.symbol is not None:
-        all_items = [item for item in all_items if item.symbol == params.symbol]
-    if params.position_id is not None:
-        all_items = [item for item in all_items if item.position_id == params.position_id]
+    all_items = _build_trading_core_positions(
+        strategy_id=params.strategy_id,
+        symbol=params.symbol,
+        position_id=params.position_id,
+    )
 
     page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
     return PaperPositionsReadResponse(
@@ -1619,16 +1649,6 @@ def _resolve_paper_starting_cash() -> Decimal:
     if value < Decimal("0"):
         raise HTTPException(status_code=500, detail="paper_account_starting_cash_invalid")
     return value
-
-
-def _load_paper_inspection_snapshot():
-    persisted: list[PersistedTradePayload] = paper_trade_repo.list_trades(limit=1_000_000)
-    ordered_persisted = list(reversed(persisted))
-    from cilly_trading.engine.paper_inspection import build_paper_inspection_snapshot
-    return build_paper_inspection_snapshot(
-        ordered_persisted,
-        starting_cash=_resolve_paper_starting_cash(),
-    )
 
 
 def _sum_decimals(values: list[Decimal]) -> Decimal:
