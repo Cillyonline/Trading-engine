@@ -4,6 +4,9 @@ from cilly_trading.portfolio_framework.capital_allocation_policy import (
     BoundedPositionSizingHook,
     CapitalAllocationAssessment,
     CapitalAllocationRules,
+    PortfolioDecisionIntent,
+    PortfolioDecisionRecord,
+    PortfolioDecisionResult,
     PrioritizedAllocationConfig,
     PrioritizedAllocationDecision,
     PrioritizedAllocationResult,
@@ -12,6 +15,7 @@ from cilly_trading.portfolio_framework.capital_allocation_policy import (
     StrategyAllocationRule,
     allocate_prioritized_signals,
     assess_capital_allocation,
+    run_portfolio_decision_pipeline,
 )
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import (
@@ -30,6 +34,9 @@ __all__ = [
     "BoundedPositionSizingHook",
     "CapitalAllocationAssessment",
     "CapitalAllocationRules",
+    "PortfolioDecisionIntent",
+    "PortfolioDecisionRecord",
+    "PortfolioDecisionResult",
     "PortfolioGuardrailAssessment",
     "PortfolioGuardrailLimits",
     "PrioritizedAllocationConfig",
@@ -48,4 +55,5 @@ __all__ = [
     "aggregate_portfolio_exposure",
     "allocate_prioritized_signals",
     "assess_capital_allocation",
+    "run_portfolio_decision_pipeline",
 ]
