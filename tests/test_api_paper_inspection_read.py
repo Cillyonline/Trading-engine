@@ -6,6 +6,11 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from cilly_trading.engine.paper_order_lifecycle import (
+    PaperOrderLifecycleRequest,
+    PaperOrderLifecycleSimulator,
+    PaperOrderStep,
+)
 from cilly_trading.models import ExecutionEvent, Order, Trade
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from tests.utils.json_schema_validator import validate_json_schema
@@ -184,6 +189,66 @@ def _test_client(monkeypatch, repo: SqliteCanonicalExecutionRepository) -> TestC
     return TestClient(api_main.app)
 
 
+def _seed_lifecycle_data(repo: SqliteCanonicalExecutionRepository) -> None:
+    simulator = PaperOrderLifecycleSimulator()
+    lifecycle = simulator.run(
+        request=PaperOrderLifecycleRequest(
+            order_id="ord-lifecycle-1",
+            strategy_id="paper-strategy",
+            symbol="AAPL",
+            side="BUY",
+            quantity=Decimal("2"),
+            created_at="2025-01-01T09:00:00Z",
+            submitted_at="2025-01-01T09:00:01Z",
+            sequence=1,
+            position_id="pos-lifecycle-1",
+            trade_id="trade-lifecycle-1",
+        ),
+        steps=[
+            PaperOrderStep(
+                occurred_at="2025-01-01T09:00:10Z",
+                action="fill",
+                quantity=Decimal("1"),
+                price=Decimal("100"),
+                commission=Decimal("0"),
+            ),
+            PaperOrderStep(
+                occurred_at="2025-01-01T09:00:20Z",
+                action="fill",
+                quantity=Decimal("1"),
+                price=Decimal("101"),
+                commission=Decimal("0"),
+            ),
+        ],
+    )
+
+    repo.save_order(lifecycle.final_order)
+    repo.save_execution_events(list(lifecycle.execution_events))
+    repo.save_trade(
+        Trade.model_validate(
+            {
+                "trade_id": "trade-lifecycle-1",
+                "position_id": "pos-lifecycle-1",
+                "strategy_id": "paper-strategy",
+                "symbol": "AAPL",
+                "direction": "long",
+                "status": "open",
+                "opened_at": "2025-01-01T09:00:00Z",
+                "closed_at": None,
+                "quantity_opened": Decimal("2"),
+                "quantity_closed": Decimal("0"),
+                "average_entry_price": Decimal("100.5"),
+                "average_exit_price": None,
+                "realized_pnl": None,
+                "unrealized_pnl": Decimal("2"),
+                "opening_order_ids": ["ord-lifecycle-1"],
+                "closing_order_ids": [],
+                "execution_event_ids": [event.event_id for event in lifecycle.execution_events],
+            }
+        )
+    )
+
+
 def test_paper_endpoints_are_exposed_and_schema_valid(tmp_path: Path, monkeypatch) -> None:
     repo = _repo(tmp_path)
     _seed_core_data(repo)
@@ -192,18 +257,28 @@ def test_paper_endpoints_are_exposed_and_schema_valid(tmp_path: Path, monkeypatc
         trades = client.get("/paper/trades", headers=READ_ONLY_HEADERS)
         positions = client.get("/paper/positions", headers=READ_ONLY_HEADERS)
         account = client.get("/paper/account", headers=READ_ONLY_HEADERS)
+        reconciliation = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
         openapi = client.get("/openapi.json").json()
 
     assert trades.status_code == 200
     assert positions.status_code == 200
     assert account.status_code == 200
+    assert reconciliation.status_code == 200
     assert "/paper/trades" in openapi["paths"]
     assert "/paper/positions" in openapi["paths"]
     assert "/paper/account" in openapi["paths"]
+    assert "/paper/reconciliation" in openapi["paths"]
 
     assert validate_json_schema(trades.json(), api_main.PaperTradesReadResponse.model_json_schema()) == []
     assert validate_json_schema(positions.json(), api_main.PaperPositionsReadResponse.model_json_schema()) == []
     assert validate_json_schema(account.json(), api_main.PaperAccountReadResponse.model_json_schema()) == []
+    assert (
+        validate_json_schema(
+            reconciliation.json(),
+            api_main.PaperReconciliationReadResponse.model_json_schema(),
+        )
+        == []
+    )
 
 
 def test_paper_views_match_trading_core_authoritative_state(tmp_path: Path, monkeypatch) -> None:
@@ -246,3 +321,109 @@ def test_paper_account_is_derived_from_canonical_trades(tmp_path: Path, monkeypa
             "as_of": "2025-01-01T09:10:00Z",
         }
     }
+
+
+def test_paper_reconciliation_matches_deterministic_lifecycle_outputs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_lifecycle_data(repo)
+    monkeypatch.setenv("CILLY_PAPER_ACCOUNT_STARTING_CASH", "100000")
+
+    with _test_client(monkeypatch, repo) as client:
+        first_reconciliation = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
+        second_reconciliation = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
+        core_orders = client.get("/trading-core/orders", headers=READ_ONLY_HEADERS).json()
+        core_events = client.get("/trading-core/execution-events", headers=READ_ONLY_HEADERS).json()
+        core_trades = client.get("/trading-core/trades", headers=READ_ONLY_HEADERS).json()
+        core_positions = client.get("/trading-core/positions", headers=READ_ONLY_HEADERS).json()
+        paper_trades = client.get("/paper/trades", headers=READ_ONLY_HEADERS).json()
+        paper_positions = client.get("/paper/positions", headers=READ_ONLY_HEADERS).json()
+        paper_account = client.get("/paper/account", headers=READ_ONLY_HEADERS).json()
+
+    assert first_reconciliation.status_code == 200
+    assert second_reconciliation.status_code == 200
+    assert first_reconciliation.json() == second_reconciliation.json()
+
+    reconciliation = first_reconciliation.json()
+    assert reconciliation["ok"] is True
+    assert reconciliation["summary"] == {
+        "orders": 1,
+        "execution_events": 4,
+        "trades": 1,
+        "positions": 1,
+        "open_trades": 1,
+        "closed_trades": 0,
+        "open_positions": 1,
+        "mismatches": 0,
+    }
+    assert reconciliation["mismatch_items"] == []
+    assert reconciliation["account"] == paper_account["account"]
+
+    assert [item["status"] for item in core_orders["items"]] == ["filled"]
+    assert [item["event_type"] for item in core_events["items"]] == [
+        "created",
+        "submitted",
+        "partially_filled",
+        "filled",
+    ]
+    assert [item["trade_id"] for item in core_trades["items"]] == ["trade-lifecycle-1"]
+    assert [item["position_id"] for item in core_positions["items"]] == ["pos-lifecycle-1"]
+    assert paper_trades == core_trades
+    assert paper_positions == core_positions
+    assert paper_account == {
+        "account": {
+            "starting_cash": "100000",
+            "cash": "100000",
+            "equity": "100002",
+            "realized_pnl": "0",
+            "unrealized_pnl": "2",
+            "total_pnl": "2",
+            "open_positions": 1,
+            "open_trades": 1,
+            "closed_trades": 0,
+            "as_of": "2025-01-01T09:00:00Z",
+        }
+    }
+
+
+def test_paper_reconciliation_detects_missing_execution_event_reference(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_core_data(repo)
+    repo.save_trade(
+        _trade(
+            "trade-2",
+            position_id="pos-2",
+            status="open",
+            opened_at="2025-01-01T09:02:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="2.25",
+            order_id="ord-2",
+            event_id="evt-missing",
+        )
+    )
+
+    with _test_client(monkeypatch, repo) as client:
+        response = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["summary"]["mismatches"] == 2
+    assert payload["mismatch_items"] == [
+        {
+            "code": "position_execution_event_missing",
+            "message": "position references unknown execution_event_id=evt-missing",
+            "entity_type": "position",
+            "entity_id": "pos-2",
+        },
+        {
+            "code": "trade_execution_event_missing",
+            "message": "trade references unknown execution_event_id=evt-missing",
+            "entity_type": "trade",
+            "entity_id": "trade-2",
+        },
+    ]
