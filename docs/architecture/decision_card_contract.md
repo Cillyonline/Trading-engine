@@ -12,6 +12,14 @@ The contract separates:
 - explicit rationale requirements
 
 The canonical implementation is `src/cilly_trading/engine/decision_card_contract.py`.
+Deterministic evaluation logic is implemented in `src/cilly_trading/engine/qualification_engine.py`.
+
+## Active Version
+
+- Active contract version: `2.0.0`
+- This is a breaking revision from `1.0.0` because qualification action-state vocabulary changed from
+  `qualified | watchlist | rejected` to
+  `reject | watch | paper_candidate | paper_approved`.
 
 ## Canonical Vocabulary
 
@@ -44,7 +52,7 @@ Per-gate fields:
 Contract semantics:
 
 - blocking gate failures are terminal for qualification
-- a blocking failure requires qualification state `rejected` and color `red`
+- a blocking failure requires qualification state `reject` and color `red`
 - gate evidence must be explicit (no opaque gate result)
 
 ## Score Semantics
@@ -71,15 +79,25 @@ Hard-gate outcomes and score outcomes remain separate objects by contract.
 
 Qualification is explicit and not inferred from a single score field:
 
-- `state`: `qualified` | `watchlist` | `rejected`
+- `state`: `reject` | `watch` | `paper_candidate` | `paper_approved`
 - `color`: `green` | `yellow` | `red`
 - `summary`
 
 State-to-color mapping is fixed:
 
-- `qualified -> green`
-- `watchlist -> yellow`
-- `rejected -> red`
+- `reject -> red`
+- `watch -> yellow`
+- `paper_candidate -> yellow`
+- `paper_approved -> green`
+
+Deterministic action-state resolution:
+
+1. Any blocking hard-gate failure resolves to `reject` / `red`.
+2. If no blocking failure and confidence is `low` (or aggregate score is below the medium threshold), resolve to `watch` / `yellow`.
+3. If confidence is `high` and aggregate score is above the high threshold, resolve to `paper_approved` / `green`.
+4. Otherwise resolve to `paper_candidate` / `yellow`.
+
+This output is bounded to paper-trading readiness only and does not imply live-trading approval.
 
 ## Rationale Requirements
 
