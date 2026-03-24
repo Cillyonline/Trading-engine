@@ -170,6 +170,7 @@ class PortfolioDecisionIntent:
     allocated_notional: float
     capital_before_signal: float
     capital_after_signal: float
+    higher_priority_approved_signal_ids: tuple[str, ...]
     accepted: bool
     rejection_reason: str | None
 
@@ -184,6 +185,11 @@ class PortfolioDecisionRecord:
     intent: PortfolioDecisionIntent
     outcome: Literal["approved", "rejected", "constraint_hit"]
     outcome_reasons: tuple[str, ...]
+    primary_constraint: str | None
+    constraint_categories: tuple[
+        Literal["allocation", "capacity", "concentration", "exposure", "sizing"],
+        ...
+    ]
     proposed_state: PortfolioState | None
     allocation_assessment: CapitalAllocationAssessment | None
     guardrail_assessment: PortfolioGuardrailAssessment | None
@@ -389,6 +395,7 @@ def run_portfolio_decision_pipeline(
     approved_positions = 0
     working_state = state
     decisions: list[PortfolioDecisionRecord] = []
+    approved_signal_ids_in_order: list[str] = []
 
     for index, signal in enumerate(ranked_signals):
         priority_rank = index + 1
@@ -398,6 +405,7 @@ def run_portfolio_decision_pipeline(
             config=allocation_config,
         )
         capital_before_signal = remaining_capital
+        higher_priority_approved_signal_ids = tuple(approved_signal_ids_in_order)
         intent_rejection_reason = _allocation_rejection_reason(
             remaining_capital=remaining_capital,
             accepted_positions=approved_positions,
@@ -417,9 +425,11 @@ def run_portfolio_decision_pipeline(
                 allocated_notional=0.0,
                 capital_before_signal=capital_before_signal,
                 capital_after_signal=remaining_capital,
+                higher_priority_approved_signal_ids=higher_priority_approved_signal_ids,
                 accepted=False,
                 rejection_reason=intent_rejection_reason,
             )
+            outcome_reasons = (intent_rejection_reason,)
             decisions.append(
                 PortfolioDecisionRecord(
                     signal_id=signal.signal_id,
@@ -427,7 +437,9 @@ def run_portfolio_decision_pipeline(
                     symbol=signal.symbol,
                     intent=intent,
                     outcome="rejected",
-                    outcome_reasons=(intent_rejection_reason,),
+                    outcome_reasons=outcome_reasons,
+                    primary_constraint=intent_rejection_reason,
+                    constraint_categories=_classify_constraint_categories(outcome_reasons),
                     proposed_state=None,
                     allocation_assessment=None,
                     guardrail_assessment=None,
@@ -455,9 +467,11 @@ def run_portfolio_decision_pipeline(
                 allocated_notional=0.0,
                 capital_before_signal=capital_before_signal,
                 capital_after_signal=remaining_capital,
+                higher_priority_approved_signal_ids=higher_priority_approved_signal_ids,
                 accepted=False,
                 rejection_reason="below_min_allocation_after_bounded_sizing",
             )
+            outcome_reasons = ("below_min_allocation_after_bounded_sizing",)
             decisions.append(
                 PortfolioDecisionRecord(
                     signal_id=signal.signal_id,
@@ -465,7 +479,9 @@ def run_portfolio_decision_pipeline(
                     symbol=signal.symbol,
                     intent=intent,
                     outcome="rejected",
-                    outcome_reasons=("below_min_allocation_after_bounded_sizing",),
+                    outcome_reasons=outcome_reasons,
+                    primary_constraint="below_min_allocation_after_bounded_sizing",
+                    constraint_categories=_classify_constraint_categories(outcome_reasons),
                     proposed_state=None,
                     allocation_assessment=None,
                     guardrail_assessment=None,
@@ -494,6 +510,7 @@ def run_portfolio_decision_pipeline(
                 allocated_notional=allocated_notional,
                 capital_before_signal=capital_before_signal,
                 capital_after_signal=remaining_capital,
+                higher_priority_approved_signal_ids=higher_priority_approved_signal_ids,
                 accepted=True,
                 rejection_reason=None,
             )
@@ -505,6 +522,8 @@ def run_portfolio_decision_pipeline(
                     intent=intent,
                     outcome="constraint_hit",
                     outcome_reasons=constraint_reasons,
+                    primary_constraint=constraint_reasons[0] if constraint_reasons else None,
+                    constraint_categories=_classify_constraint_categories(constraint_reasons),
                     proposed_state=proposed_state,
                     allocation_assessment=allocation_assessment,
                     guardrail_assessment=guardrail_assessment,
@@ -515,6 +534,7 @@ def run_portfolio_decision_pipeline(
         remaining_capital -= allocated_notional
         approved_positions += 1
         working_state = proposed_state
+        approved_signal_ids_in_order.append(signal.signal_id)
         intent = PortfolioDecisionIntent(
             signal_id=signal.signal_id,
             strategy_id=signal.strategy_id,
@@ -526,6 +546,7 @@ def run_portfolio_decision_pipeline(
             allocated_notional=allocated_notional,
             capital_before_signal=capital_before_signal,
             capital_after_signal=remaining_capital,
+            higher_priority_approved_signal_ids=higher_priority_approved_signal_ids,
             accepted=True,
             rejection_reason=None,
         )
@@ -537,6 +558,8 @@ def run_portfolio_decision_pipeline(
                 intent=intent,
                 outcome="approved",
                 outcome_reasons=(),
+                primary_constraint=None,
+                constraint_categories=(),
                 proposed_state=proposed_state,
                 allocation_assessment=allocation_assessment,
                 guardrail_assessment=guardrail_assessment,
@@ -644,6 +667,41 @@ def _allocation_rejection_reason(
     if bounded_requested_notional < config.min_allocation_notional:
         return "below_min_allocation"
     return "not_allocated"
+
+
+def _classify_constraint_categories(
+    reasons: tuple[str, ...],
+) -> tuple[Literal["allocation", "capacity", "concentration", "exposure", "sizing"], ...]:
+    ordered_categories: list[
+        Literal["allocation", "capacity", "concentration", "exposure", "sizing"]
+    ] = []
+
+    for reason in reasons:
+        category = _constraint_category(reason)
+        if category not in ordered_categories:
+            ordered_categories.append(category)
+
+    return tuple(ordered_categories)
+
+
+def _constraint_category(
+    reason: str,
+) -> Literal["allocation", "capacity", "concentration", "exposure", "sizing"]:
+    if reason in {"position_limit_reached", "capital_exhausted"}:
+        return "capacity"
+    if reason in {"below_min_allocation", "below_min_allocation_after_bounded_sizing"}:
+        return "sizing"
+    if reason.startswith("global_cap_exceeded") or reason.startswith("strategy_cap_exceeded"):
+        return "allocation"
+    if "type=gross_exposure_pct" in reason or "type=abs_net_exposure_pct" in reason or "type=offset_exposure_pct" in reason:
+        return "exposure"
+    if (
+        "type=strategy_concentration_pct" in reason
+        or "type=symbol_concentration_pct" in reason
+        or "type=position_concentration_pct" in reason
+    ):
+        return "concentration"
+    raise ValueError(f"unsupported portfolio decision reason: {reason}")
 
 
 def _build_reasons(
