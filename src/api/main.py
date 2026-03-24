@@ -530,6 +530,37 @@ class PaperPositionsReadResponse(BaseModel):
     total: int
 
 
+class PaperReconciliationMismatchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+
+
+class PaperReconciliationSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    orders: int
+    execution_events: int
+    trades: int
+    positions: int
+    open_trades: int
+    closed_trades: int
+    open_positions: int
+    mismatches: int
+
+
+class PaperReconciliationReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    summary: PaperReconciliationSummaryResponse
+    account: PaperAccountStateResponse
+    mismatch_items: List[PaperReconciliationMismatchResponse]
+
+
 class ScreenerResultsQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1368,49 +1399,18 @@ def read_portfolio_positions(
 def read_paper_account(
     _: str = Depends(_require_role("read_only")),
 ) -> PaperAccountReadResponse:
-    paper_trades = canonical_execution_repo.list_trades(
-        limit=1_000_000,
-        offset=0,
-    )
-    paper_positions = _build_trading_core_positions(
-        strategy_id=None,
-        symbol=None,
-        position_id=None,
-    )
-
-    starting_cash = _resolve_paper_starting_cash()
-    realized_pnl = _sum_decimals([trade.realized_pnl or Decimal("0") for trade in paper_trades])
-    unrealized_pnl = _sum_decimals([trade.unrealized_pnl or Decimal("0") for trade in paper_trades])
-    total_pnl = realized_pnl + unrealized_pnl
-    cash = starting_cash + realized_pnl
-    equity = cash + unrealized_pnl
-    open_positions = sum(1 for position in paper_positions if position.status == "open")
-    open_trades = sum(1 for trade in paper_trades if trade.status == "open")
-    closed_trades = sum(1 for trade in paper_trades if trade.status == "closed")
-
-    as_of_candidates = [
-        value
-        for value in [
-            *[trade.closed_at for trade in paper_trades],
-            *[trade.opened_at for trade in paper_trades],
-        ]
-        if value is not None
-    ]
-    as_of = max(as_of_candidates) if as_of_candidates else None
-
     return PaperAccountReadResponse(
-        account=PaperAccountStateResponse(
-            starting_cash=starting_cash,
-            cash=cash,
-            equity=equity,
-            realized_pnl=realized_pnl,
-            unrealized_pnl=unrealized_pnl,
-            total_pnl=total_pnl,
-            open_positions=open_positions,
-            open_trades=open_trades,
-            closed_trades=closed_trades,
-            as_of=as_of,
-        )
+        account=_build_paper_account_state(
+            paper_trades=canonical_execution_repo.list_trades(
+                limit=1_000_000,
+                offset=0,
+            ),
+            paper_positions=_build_trading_core_positions(
+                strategy_id=None,
+                symbol=None,
+                position_id=None,
+            ),
+        ),
     )
 
 
@@ -1487,6 +1487,39 @@ def read_paper_positions(
         limit=params.limit,
         offset=params.offset,
         total=total,
+    )
+
+
+@app.get("/paper/reconciliation", response_model=PaperReconciliationReadResponse)
+def read_paper_reconciliation(
+    _: str = Depends(_require_role("read_only")),
+) -> PaperReconciliationReadResponse:
+    orders = canonical_execution_repo.list_orders(limit=1_000_000, offset=0)
+    execution_events = canonical_execution_repo.list_execution_events(limit=1_000_000, offset=0)
+    trades = canonical_execution_repo.list_trades(limit=1_000_000, offset=0)
+    positions = _build_trading_core_positions(strategy_id=None, symbol=None, position_id=None)
+    account = _build_paper_account_state(paper_trades=trades, paper_positions=positions)
+    mismatch_items = _build_paper_reconciliation_mismatches(
+        orders=orders,
+        execution_events=execution_events,
+        trades=trades,
+        positions=positions,
+        account=account,
+    )
+    return PaperReconciliationReadResponse(
+        ok=not mismatch_items,
+        summary=PaperReconciliationSummaryResponse(
+            orders=len(orders),
+            execution_events=len(execution_events),
+            trades=len(trades),
+            positions=len(positions),
+            open_trades=sum(1 for trade in trades if trade.status == "open"),
+            closed_trades=sum(1 for trade in trades if trade.status == "closed"),
+            open_positions=sum(1 for position in positions if position.status == "open"),
+            mismatches=len(mismatch_items),
+        ),
+        account=account,
+        mismatch_items=mismatch_items,
     )
 
 
@@ -1653,6 +1686,285 @@ def _resolve_paper_starting_cash() -> Decimal:
 
 def _sum_decimals(values: list[Decimal]) -> Decimal:
     return sum(values, Decimal("0"))
+
+
+def _build_paper_account_state(
+    *,
+    paper_trades: list[Trade],
+    paper_positions: list[Position],
+) -> PaperAccountStateResponse:
+    starting_cash = _resolve_paper_starting_cash()
+    realized_pnl = _sum_decimals([trade.realized_pnl or Decimal("0") for trade in paper_trades])
+    unrealized_pnl = _sum_decimals([trade.unrealized_pnl or Decimal("0") for trade in paper_trades])
+    total_pnl = realized_pnl + unrealized_pnl
+    cash = starting_cash + realized_pnl
+    equity = cash + unrealized_pnl
+    open_positions = sum(1 for position in paper_positions if position.status == "open")
+    open_trades = sum(1 for trade in paper_trades if trade.status == "open")
+    closed_trades = sum(1 for trade in paper_trades if trade.status == "closed")
+
+    as_of_candidates = [
+        value
+        for value in [
+            *[trade.closed_at for trade in paper_trades],
+            *[trade.opened_at for trade in paper_trades],
+        ]
+        if value is not None
+    ]
+    as_of = max(as_of_candidates) if as_of_candidates else None
+
+    return PaperAccountStateResponse(
+        starting_cash=starting_cash,
+        cash=cash,
+        equity=equity,
+        realized_pnl=realized_pnl,
+        unrealized_pnl=unrealized_pnl,
+        total_pnl=total_pnl,
+        open_positions=open_positions,
+        open_trades=open_trades,
+        closed_trades=closed_trades,
+        as_of=as_of,
+    )
+
+
+def _build_paper_reconciliation_mismatches(
+    *,
+    orders: list[Order],
+    execution_events: list[ExecutionEvent],
+    trades: list[Trade],
+    positions: list[Position],
+    account: PaperAccountStateResponse,
+) -> list[PaperReconciliationMismatchResponse]:
+    mismatches: list[PaperReconciliationMismatchResponse] = []
+    orders_by_id = {order.order_id: order for order in orders}
+    execution_events_by_id = {event.event_id: event for event in execution_events}
+    trades_by_id = {trade.trade_id: trade for trade in trades}
+    positions_by_id = {position.position_id: position for position in positions}
+
+    for event in execution_events:
+        if event.order_id not in orders_by_id:
+            mismatches.append(
+                PaperReconciliationMismatchResponse(
+                    code="execution_event_order_missing",
+                    message=f"execution event references unknown order_id={event.order_id}",
+                    entity_type="execution_event",
+                    entity_id=event.event_id,
+                )
+            )
+
+    for trade in trades:
+        if trade.position_id not in positions_by_id:
+            mismatches.append(
+                PaperReconciliationMismatchResponse(
+                    code="trade_position_missing",
+                    message=f"trade references unknown position_id={trade.position_id}",
+                    entity_type="trade",
+                    entity_id=trade.trade_id,
+                )
+            )
+
+        for order_id in [*trade.opening_order_ids, *trade.closing_order_ids]:
+            order = orders_by_id.get(order_id)
+            if order is None:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="trade_order_missing",
+                        message=f"trade references unknown order_id={order_id}",
+                        entity_type="trade",
+                        entity_id=trade.trade_id,
+                    )
+                )
+                continue
+            if order.trade_id is not None and order.trade_id != trade.trade_id:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="trade_order_trade_mismatch",
+                        message=f"order trade_id={order.trade_id} does not match trade_id={trade.trade_id}",
+                        entity_type="trade",
+                        entity_id=trade.trade_id,
+                    )
+                )
+
+        for event_id in trade.execution_event_ids:
+            event = execution_events_by_id.get(event_id)
+            if event is None:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="trade_execution_event_missing",
+                        message=f"trade references unknown execution_event_id={event_id}",
+                        entity_type="trade",
+                        entity_id=trade.trade_id,
+                    )
+                )
+                continue
+            if event.trade_id is not None and event.trade_id != trade.trade_id:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="trade_execution_event_trade_mismatch",
+                        message=f"execution event trade_id={event.trade_id} does not match trade_id={trade.trade_id}",
+                        entity_type="trade",
+                        entity_id=trade.trade_id,
+                    )
+                )
+
+    for position in positions:
+        for trade_id in position.trade_ids:
+            trade = trades_by_id.get(trade_id)
+            if trade is None:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_trade_missing",
+                        message=f"position references unknown trade_id={trade_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+                continue
+            if trade.position_id != position.position_id:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_trade_position_mismatch",
+                        message=f"trade position_id={trade.position_id} does not match position_id={position.position_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+
+        for order_id in position.order_ids:
+            order = orders_by_id.get(order_id)
+            if order is None:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_order_missing",
+                        message=f"position references unknown order_id={order_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+                continue
+            if order.position_id is not None and order.position_id != position.position_id:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_order_position_mismatch",
+                        message=f"order position_id={order.position_id} does not match position_id={position.position_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+
+        for event_id in position.execution_event_ids:
+            event = execution_events_by_id.get(event_id)
+            if event is None:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_execution_event_missing",
+                        message=f"position references unknown execution_event_id={event_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+                continue
+            if event.position_id is not None and event.position_id != position.position_id:
+                mismatches.append(
+                    PaperReconciliationMismatchResponse(
+                        code="position_execution_event_position_mismatch",
+                        message=f"execution event position_id={event.position_id} does not match position_id={position.position_id}",
+                        entity_type="position",
+                        entity_id=position.position_id,
+                    )
+                )
+
+    expected_open_trades = sum(1 for trade in trades if trade.status == "open")
+    expected_closed_trades = sum(1 for trade in trades if trade.status == "closed")
+    expected_open_positions = sum(1 for position in positions if position.status == "open")
+    expected_realized_pnl = _sum_decimals([trade.realized_pnl or Decimal("0") for trade in trades])
+    expected_unrealized_pnl = _sum_decimals([trade.unrealized_pnl or Decimal("0") for trade in trades])
+    expected_total_pnl = expected_realized_pnl + expected_unrealized_pnl
+    expected_cash = account.starting_cash + expected_realized_pnl
+    expected_equity = expected_cash + expected_unrealized_pnl
+
+    if account.open_trades != expected_open_trades:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_open_trades_mismatch",
+                message=f"open_trades={account.open_trades} expected={expected_open_trades}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.closed_trades != expected_closed_trades:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_closed_trades_mismatch",
+                message=f"closed_trades={account.closed_trades} expected={expected_closed_trades}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.open_positions != expected_open_positions:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_open_positions_mismatch",
+                message=f"open_positions={account.open_positions} expected={expected_open_positions}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.realized_pnl != expected_realized_pnl:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_realized_pnl_mismatch",
+                message=f"realized_pnl={account.realized_pnl} expected={expected_realized_pnl}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.unrealized_pnl != expected_unrealized_pnl:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_unrealized_pnl_mismatch",
+                message=f"unrealized_pnl={account.unrealized_pnl} expected={expected_unrealized_pnl}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.total_pnl != expected_total_pnl:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_total_pnl_mismatch",
+                message=f"total_pnl={account.total_pnl} expected={expected_total_pnl}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.cash != expected_cash:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_cash_mismatch",
+                message=f"cash={account.cash} expected={expected_cash}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+    if account.equity != expected_equity:
+        mismatches.append(
+            PaperReconciliationMismatchResponse(
+                code="paper_account_equity_mismatch",
+                message=f"equity={account.equity} expected={expected_equity}",
+                entity_type="paper_account",
+                entity_id="account",
+            )
+        )
+
+    return sorted(
+        mismatches,
+        key=lambda mismatch: (
+            mismatch.code,
+            mismatch.entity_type or "",
+            mismatch.entity_id or "",
+            mismatch.message,
+        ),
+    )
 
 
 def _weighted_average(*, values: list[tuple[Decimal, Decimal]]) -> Optional[Decimal]:
