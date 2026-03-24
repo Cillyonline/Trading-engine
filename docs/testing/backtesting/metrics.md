@@ -22,12 +22,13 @@ For issue `#728`, backtest artifacts now include deterministic baseline artifact
 
 - `summary` (cost-aware baseline): `start_equity`, `end_equity`.
 - `equity_curve` (cost-aware baseline): canonical timestamp/equity series.
-- `trades`: currently an empty deterministic list for the baseline phase.
+- `trades`: deterministic closed-trade summaries for the covered round-trip path.
 - `metrics_baseline`: deterministic comparison object with:
   - `assumptions` (explicit cost/slippage assumptions from run config),
   - `summary` (starting/ending equity, total commission, total slippage cost, total transaction cost, fill count),
   - `equity_curve.cost_free` and `equity_curve.cost_aware`,
-  - `metrics.cost_free`, `metrics.cost_aware`, and `metrics.deltas`.
+  - `metrics.cost_free`, `metrics.cost_aware`, and `metrics.deltas`,
+  - `trades` (cost-aware closed-trade summaries used by the trader-facing artifact path).
 
 ## Canonical Ordering Rules
 
@@ -216,6 +217,8 @@ The output artifact is `metrics-result.json` with exact structure:
 }
 ```
 
+The fenced JSON example above is complete and closed before the following normative constraints.
+
 Normative constraints:
 
 - Keys SHALL be sorted lexicographically in serialized output.
@@ -249,4 +252,14 @@ Cost-aware vs cost-free comparison:
 
 - `cost_free` uses reference snapshot fill price (`open` or fallback `price`) and zero costs.
 - `cost_aware` uses executed fill price plus commission.
+- Closed-trade PnL in `trades` and `metrics_baseline.trades` is commission-aware on the cost-aware path.
+- Open positions do not produce synthetic closed trades; they remain visible through `positions`, `equity_curve`, and ending-equity state.
 - For identical fills with non-zero assumptions, `ending_equity_cost_aware` SHALL be less than `ending_equity_cost_free`.
+
+# 8. Test Execution Evidence
+
+Command used for the targeted backtest execution validation:
+
+```powershell
+python -m pytest tests\cilly_trading\engine\test_order_execution_model.py tests\cilly_trading\engine\test_backtest_execution_contract.py tests\cilly_trading\engine\test_backtest_runner.py
+```
