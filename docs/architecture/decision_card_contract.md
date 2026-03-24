@@ -75,6 +75,20 @@ Additional score fields:
 
 Hard-gate outcomes and score outcomes remain separate objects by contract.
 
+### Subsystem Input Integration
+
+The qualification engine supports explicit subsystem input paths:
+
+- `backtest_evidence` -> bounded `backtest_quality` score contribution
+- `portfolio_fit_input` -> bounded `portfolio_fit` score contribution
+- `sentiment_overlay` -> bounded aggregate overlay only (not a primary component category)
+
+Integration rules:
+
+- backtest evidence and portfolio-fit inputs are each bounded to `[0, 100]`
+- these paths replace their respective component values explicitly for the decision card
+- sentiment does not replace component categories and is never treated as primary alpha
+
 ## Qualification Output
 
 Qualification is explicit and not inferred from a single score field:
@@ -98,6 +112,17 @@ Deterministic action-state resolution:
 4. Otherwise resolve to `paper_candidate` / `yellow`.
 
 This output is bounded to paper-trading readiness only and does not imply live-trading approval.
+
+## Sentiment Overlay Boundaries
+
+Sentiment is modeled as a bounded overlay to aggregate score, not as an independent qualification source.
+
+- overlay is applied after weighted component aggregation
+- overlay score input is bounded to `[-1, 1]`
+- overlay points are bounded by a fixed cap and by stronger evidence layers (`backtest_quality`, `portfolio_fit`, `risk_alignment`)
+- missing sentiment yields neutral overlay (`0.0` points)
+- stale sentiment yields neutral overlay (`0.0` points)
+- stale/missing handling is explicit in rationale and metadata; no silent corruption is permitted
 
 ## Rationale Requirements
 

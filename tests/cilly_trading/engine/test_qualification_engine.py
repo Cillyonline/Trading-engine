@@ -8,7 +8,11 @@ from cilly_trading.engine.decision_card_contract import (
     HardGateResult,
 )
 from cilly_trading.engine.qualification_engine import (
+    BacktestEvidenceInput,
+    PortfolioFitInput,
     QualificationEngineInput,
+    SENTIMENT_OVERLAY_MAX_POINTS,
+    SentimentOverlayInput,
     assign_confidence_tier,
     compute_aggregate_score,
     evaluate_qualification,
@@ -73,6 +77,9 @@ def _engine_input(
     *,
     hard_gates: list[HardGateResult] | None = None,
     component_scores: list[ComponentScore] | None = None,
+    backtest_evidence: BacktestEvidenceInput | None = None,
+    portfolio_fit_input: PortfolioFitInput | None = None,
+    sentiment_overlay: SentimentOverlayInput | None = None,
 ) -> QualificationEngineInput:
     return QualificationEngineInput(
         decision_card_id="dc_20260324_AAPL_RSI2",
@@ -81,6 +88,9 @@ def _engine_input(
         strategy_id="RSI2",
         hard_gates=list(hard_gates or _base_hard_gates()),
         component_scores=list(component_scores or _base_component_scores()),
+        backtest_evidence=backtest_evidence,
+        portfolio_fit_input=portfolio_fit_input,
+        sentiment_overlay=sentiment_overlay,
         metadata={"analysis_run_id": "run_20260324_0810"},
     )
 
@@ -163,3 +173,131 @@ def test_qualification_state_regression_representative_scenarios() -> None:
     watch = evaluate_qualification(_engine_input(component_scores=watch_components))
     assert watch.qualification.state == "watch"
     assert watch.qualification.color == "yellow"
+
+
+def test_backtest_evidence_input_is_explicitly_integrated() -> None:
+    input_data = _engine_input(
+        backtest_evidence=BacktestEvidenceInput(
+            quality_score=55.0,
+            rationale="Backtest quality is reduced after stricter out-of-sample checks",
+            evidence=["oos_sharpe=0.74", "profit_factor=1.08"],
+        )
+    )
+    card = evaluate_qualification(input_data)
+
+    backtest_component = next(
+        component for component in card.score.component_scores if component.category == "backtest_quality"
+    )
+    assert backtest_component.score == 55.0
+    assert "input_path=backtest_evidence" in backtest_component.evidence
+    assert card.metadata["backtest_input_applied"] is True
+    assert "Backtest input path is explicitly integrated." in card.rationale.score_explanations
+
+
+def test_portfolio_fit_input_is_explicitly_integrated() -> None:
+    input_data = _engine_input(
+        portfolio_fit_input=PortfolioFitInput(
+            fit_score=52.0,
+            rationale="Portfolio fit weakens due to concentration drift",
+            evidence=["sector_weight=0.27", "corr_cluster=0.69"],
+        )
+    )
+    card = evaluate_qualification(input_data)
+
+    portfolio_component = next(
+        component for component in card.score.component_scores if component.category == "portfolio_fit"
+    )
+    assert portfolio_component.score == 52.0
+    assert "input_path=portfolio_fit_input" in portfolio_component.evidence
+    assert card.metadata["portfolio_fit_input_applied"] is True
+    assert "Portfolio-fit input path is explicitly integrated." in card.rationale.score_explanations
+
+
+def test_missing_sentiment_is_neutral_and_explicit() -> None:
+    card = evaluate_qualification(_engine_input())
+
+    assert card.metadata["sentiment_overlay_status"] == "missing"
+    assert card.metadata["sentiment_overlay_points"] == 0.0
+    assert card.score.aggregate_score == card.metadata["base_aggregate_score"]
+
+
+def test_stale_sentiment_is_neutral_and_explicit() -> None:
+    card = evaluate_qualification(
+        _engine_input(
+            sentiment_overlay=SentimentOverlayInput(
+                sentiment_score=0.90,
+                as_of_utc="2026-03-23T00:00:00Z",
+                rationale="Positive sentiment snapshot from earlier session",
+                evidence=["source=synthetic"],
+                stale_after_hours=12,
+            )
+        )
+    )
+
+    assert card.metadata["sentiment_overlay_status"] == "stale"
+    assert card.metadata["sentiment_overlay_points"] == 0.0
+    assert card.score.aggregate_score == card.metadata["base_aggregate_score"]
+
+
+def test_sentiment_overlay_impact_is_bounded_by_stronger_evidence_layers() -> None:
+    components = _base_component_scores()
+    components[1] = ComponentScore(
+        category="backtest_quality",
+        score=60.0,
+        rationale=components[1].rationale,
+        evidence=components[1].evidence,
+    )
+    components[2] = ComponentScore(
+        category="portfolio_fit",
+        score=50.0,
+        rationale=components[2].rationale,
+        evidence=components[2].evidence,
+    )
+    components[3] = ComponentScore(
+        category="risk_alignment",
+        score=40.0,
+        rationale=components[3].rationale,
+        evidence=components[3].evidence,
+    )
+    card = evaluate_qualification(
+        _engine_input(
+            component_scores=components,
+            sentiment_overlay=SentimentOverlayInput(
+                sentiment_score=1.0,
+                as_of_utc="2026-03-24T07:59:59Z",
+                rationale="Positive sentiment overlay",
+                evidence=["source=synthetic"],
+            ),
+        )
+    )
+
+    assert card.metadata["sentiment_overlay_status"] == "applied"
+    assert card.metadata["sentiment_overlay_points"] == 2.0
+    assert card.metadata["sentiment_overlay_cap_points"] == 2.0
+    assert card.metadata["sentiment_overlay_points"] <= card.metadata["sentiment_overlay_cap_points"]
+    assert card.metadata["sentiment_overlay_cap_points"] < SENTIMENT_OVERLAY_MAX_POINTS
+
+
+def test_sentiment_overlay_does_not_override_blocking_gate_rejection() -> None:
+    gates = _base_hard_gates()
+    gates[0] = HardGateResult(
+        gate_id="drawdown_safety",
+        status="fail",
+        blocking=True,
+        reason="Drawdown guard check failed",
+        failure_reason="Max drawdown breached threshold",
+        evidence=["max_dd=0.15", "threshold=0.12"],
+    )
+    card = evaluate_qualification(
+        _engine_input(
+            hard_gates=gates,
+            sentiment_overlay=SentimentOverlayInput(
+                sentiment_score=1.0,
+                as_of_utc="2026-03-24T08:05:00Z",
+                rationale="Positive sentiment overlay",
+                evidence=["source=synthetic"],
+            ),
+        )
+    )
+    assert card.qualification.state == "reject"
+    assert card.qualification.color == "red"
