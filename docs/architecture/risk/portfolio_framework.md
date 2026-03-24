@@ -254,5 +254,25 @@ The record also carries:
 - the capital-allocation assessment
 - the portfolio-guardrail assessment
 - deterministic ordered outcome reasons
+- `primary_constraint` for the first blocking reason in deterministic order
+- `constraint_categories` derived deterministically from the blocking reason set:
+  - `capacity`
+  - `allocation`
+  - `exposure`
+  - `concentration`
+  - `sizing`
 
 This removes the ambiguous partial path where allocation and exposure enforcement could be reasoned about separately instead of through one inspectable decision sequence.
+
+### 11.2 Competing-Signal Capacity Semantics
+
+When signals compete for constrained portfolio capacity, the pipeline remains strictly rank-ordered and inspectable:
+
+1. Higher-priority approved signals consume capital and position slots first.
+2. Lower-priority signals never displace earlier approvals.
+3. A capacity rejection is emitted explicitly with:
+   - `primary_constraint` of `capital_exhausted` or `position_limit_reached`
+   - `constraint_categories=("capacity",)`
+   - `intent.higher_priority_approved_signal_ids` listing the approved signals that consumed capacity earlier in the same run
+
+This keeps constrained-capacity behavior deterministic and operator-inspectable without introducing optimization or trader-readiness claims beyond the verified decision semantics.
