@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-DECISION_CARD_CONTRACT_VERSION = "1.0.0"
+DECISION_CARD_CONTRACT_VERSION = "2.0.0"
 
 DecisionComponentCategory = Literal[
     "signal_quality",
@@ -19,7 +19,7 @@ DecisionComponentCategory = Literal[
 ]
 DecisionConfidenceTier = Literal["low", "medium", "high"]
 HardGateStatus = Literal["pass", "fail"]
-QualificationState = Literal["qualified", "watchlist", "rejected"]
+QualificationState = Literal["reject", "watch", "paper_candidate", "paper_approved"]
 QualificationColor = Literal["green", "yellow", "red"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
@@ -31,9 +31,10 @@ REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
 )
 
 QUALIFICATION_COLOR_BY_STATE: dict[QualificationState, QualificationColor] = {
-    "qualified": "green",
-    "watchlist": "yellow",
-    "rejected": "red",
+    "reject": "red",
+    "watch": "yellow",
+    "paper_candidate": "yellow",
+    "paper_approved": "green",
 }
 
 
@@ -213,8 +214,8 @@ class DecisionCard(BaseModel):
 
     @model_validator(mode="after")
     def _validate_qualification_semantics(self) -> "DecisionCard":
-        if self.hard_gates.has_blocking_failure and self.qualification.state != "rejected":
-            raise ValueError("Blocking hard-gate failures require rejected qualification state")
+        if self.hard_gates.has_blocking_failure and self.qualification.state != "reject":
+            raise ValueError("Blocking hard-gate failures require reject qualification state")
         if self.hard_gates.has_blocking_failure and self.qualification.color != "red":
             raise ValueError("Blocking hard-gate failures require red qualification color")
         return self

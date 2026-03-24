@@ -7,15 +7,16 @@ import pytest
 from pydantic import ValidationError
 
 from cilly_trading.engine.decision_card_contract import (
+    DECISION_CARD_CONTRACT_VERSION,
     DecisionCard,
     serialize_decision_card,
     validate_decision_card,
 )
 
 
-def _valid_payload(*, qualification_state: str = "qualified", qualification_color: str = "green") -> dict[str, Any]:
+def _valid_payload(*, qualification_state: str = "paper_approved", qualification_color: str = "green") -> dict[str, Any]:
     return {
-        "contract_version": "1.0.0",
+        "contract_version": DECISION_CARD_CONTRACT_VERSION,
         "decision_card_id": "dc_20260324_AAPL_RSI2",
         "generated_at_utc": "2026-03-24T08:10:00Z",
         "symbol": "AAPL",
@@ -103,6 +104,7 @@ def test_decision_card_model_validation_representative_payload() -> None:
     card = validate_decision_card(_valid_payload())
 
     assert isinstance(card, DecisionCard)
+    assert card.contract_version == DECISION_CARD_CONTRACT_VERSION
     assert card.hard_gates.has_blocking_failure is False
     assert card.score.aggregate_score == 79.0
     assert [component.category for component in card.score.component_scores] == [
@@ -123,6 +125,7 @@ def test_decision_card_serialization_is_deterministic() -> None:
     serialized_b = serialize_decision_card(card_b)
     assert serialized_a == serialized_b
     assert serialized_a == card_a.to_canonical_json()
+    assert f'"contract_version":"{DECISION_CARD_CONTRACT_VERSION}"' in serialized_a
 
 
 def test_negative_validation_rejects_missing_component_category() -> None:
@@ -134,7 +137,7 @@ def test_negative_validation_rejects_missing_component_category() -> None:
 
 
 def test_negative_validation_rejects_gate_fail_without_failure_reason() -> None:
-    payload = _valid_payload(qualification_state="rejected", qualification_color="red")
+    payload = _valid_payload(qualification_state="reject", qualification_color="red")
     payload["hard_gates"]["gates"][0]["status"] = "fail"
     payload["hard_gates"]["gates"][0]["failure_reason"] = None
 
@@ -143,13 +146,13 @@ def test_negative_validation_rejects_gate_fail_without_failure_reason() -> None:
 
 
 def test_negative_validation_rejects_non_rejected_state_on_blocking_failure() -> None:
-    payload = _valid_payload(qualification_state="watchlist", qualification_color="yellow")
+    payload = _valid_payload(qualification_state="watch", qualification_color="yellow")
     payload["hard_gates"]["gates"][0]["status"] = "fail"
     payload["hard_gates"]["gates"][0]["failure_reason"] = "Exposure cap would be exceeded"
 
     with pytest.raises(
         ValidationError,
-        match="Blocking hard-gate failures require rejected qualification state",
+        match="Blocking hard-gate failures require reject qualification state",
     ):
         validate_decision_card(payload)
 
@@ -157,18 +160,19 @@ def test_negative_validation_rejects_non_rejected_state_on_blocking_failure() ->
 @pytest.mark.parametrize(
     ("state", "color"),
     [
-        ("qualified", "green"),
-        ("watchlist", "yellow"),
-        ("rejected", "red"),
+        ("paper_approved", "green"),
+        ("paper_candidate", "yellow"),
+        ("watch", "yellow"),
+        ("reject", "red"),
     ],
 )
 def test_representative_qualification_payloads_validate(state: str, color: str) -> None:
     payload = _valid_payload(qualification_state=state, qualification_color=color)
-    if state == "rejected":
+    if state == "reject":
         payload["hard_gates"]["gates"][0]["status"] = "fail"
         payload["hard_gates"]["gates"][0]["failure_reason"] = "Risk cap breach"
         payload["qualification"]["summary"] = "Opportunity is rejected because a blocking gate failed"
-    if state == "watchlist":
+    if state == "watch":
         payload["score"]["confidence_tier"] = "low"
         payload["score"]["confidence_reason"] = "Sample depth is limited for full qualification"
         payload["qualification"]["summary"] = "Opportunity requires further evidence before qualification"
