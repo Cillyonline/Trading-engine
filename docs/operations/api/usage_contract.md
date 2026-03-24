@@ -1047,6 +1047,81 @@ curl -s -X POST http://localhost:8000/watchlists/tech-growth/execute \
 
 ---
 
+## GET /decision-cards
+
+### Purpose
+
+Inspect decision-card outputs through a bounded read-only surface for operator and research review workflows.
+
+### Request
+
+**Query parameters:**
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| `run_id` | string | optional | none | Filter by artifact run directory. |
+| `symbol` | string | optional | none | Filter by decision-card symbol. |
+| `strategy_id` | string | optional | none | Filter by decision-card strategy ID. |
+| `decision_card_id` | string | optional | none | Filter by exact decision-card ID. |
+| `qualification_state` | string | optional | none | One of `reject`, `watch`, `paper_candidate`, `paper_approved`. |
+| `review_state` | string | optional | none | One of `ranked`, `blocked`, `approved` (`blocked` maps to `reject`, `approved` maps to `paper_approved`, `ranked` maps to non-reject states). |
+| `sort` | string | optional | `generated_at_desc` | One of `generated_at_desc`, `generated_at_asc`. |
+| `limit` | integer | optional | `50` | Range `1..500`. |
+| `offset` | integer | optional | `0` | Must be `>= 0`. |
+
+### Success response
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "items": [
+      {
+        "run_id": "run-a",
+        "artifact_name": "decision_card.json",
+        "decision_card_id": "dc-001",
+        "generated_at_utc": "2026-03-24T08:00:00Z",
+        "symbol": "AAPL",
+        "strategy_id": "RSI2",
+        "qualification_state": "paper_approved",
+        "qualification_color": "green",
+        "qualification_summary": "Opportunity is approved for bounded paper-trading only.",
+        "aggregate_score": 84.15,
+        "confidence_tier": "high",
+        "hard_gate_policy_version": "hard-gates.v1",
+        "hard_gate_blocking_failure": false,
+        "hard_gates": [],
+        "component_scores": [],
+        "rationale_summary": "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules.",
+        "gate_explanations": [],
+        "score_explanations": [],
+        "final_explanation": "Action state is deterministic and does not imply live-trading approval.",
+        "metadata": {}
+      }
+    ],
+    "limit": 50,
+    "offset": 0,
+    "total": 1
+  }
+  ```
+
+**Deterministic ordering:**
+
+- Primary: `generated_at_utc` (`DESC` by default, `ASC` when `sort=generated_at_asc`)
+- Tie-breakers: `decision_card_id ASC`, `run_id ASC`, `artifact_name ASC`
+
+**Empty/no-result behavior:** Returns `items: []` and `total: 0` when no matching decision cards are available.
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+| 403 | `{"detail":"forbidden"}` | `forbidden` | Caller has a valid role but lacks read access. |
+| 422 | Pydantic validation list | varies | Invalid query constraints or enum values (for example `limit=0` or unsupported `review_state`). |
+
+---
+
 ## POST /screener/basic
 
 ### Purpose

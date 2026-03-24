@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from cilly_trading.engine.analysis import trigger_operator_analysis_run
 from cilly_trading.compliance.daily_loss_guard import (
@@ -45,6 +45,7 @@ from cilly_trading.engine.core import (
     compute_analysis_run_id,
     run_watchlist_analysis,
 )
+from cilly_trading.engine.decision_card_contract import validate_decision_card
 from cilly_trading.engine.data import SnapshotDataError
 from cilly_trading.engine.health.evaluator import (
     RuntimeHealthSnapshot,
@@ -772,6 +773,82 @@ class DecisionTraceResponse(BaseModel):
     trace_id: Optional[str] = None
     entries: List[Dict[str, Any]]
     total_entries: int
+
+
+class DecisionCardHardGateInspectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gate_id: str
+    status: Literal["pass", "fail"]
+    blocking: bool
+    reason: str
+    evidence: List[str]
+    failure_reason: Optional[str] = None
+
+
+class DecisionCardComponentScoreInspectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category: Literal[
+        "signal_quality",
+        "backtest_quality",
+        "portfolio_fit",
+        "risk_alignment",
+        "execution_readiness",
+    ]
+    score: float
+    rationale: str
+    evidence: List[str]
+
+
+class DecisionCardInspectionItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    artifact_name: str
+    decision_card_id: str
+    generated_at_utc: str
+    symbol: str
+    strategy_id: str
+    qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    qualification_color: Literal["green", "yellow", "red"]
+    qualification_summary: str
+    aggregate_score: float
+    confidence_tier: Literal["low", "medium", "high"]
+    hard_gate_policy_version: str
+    hard_gate_blocking_failure: bool
+    hard_gates: List[DecisionCardHardGateInspectionResponse]
+    component_scores: List[DecisionCardComponentScoreInspectionResponse]
+    rationale_summary: str
+    gate_explanations: List[str]
+    score_explanations: List[str]
+    final_explanation: str
+    metadata: Dict[str, Any]
+
+
+class DecisionCardInspectionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: List[DecisionCardInspectionItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
+class DecisionCardInspectionQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None)
+    decision_card_id: Optional[str] = Field(default=None)
+    qualification_state: Optional[
+        Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    ] = Field(default=None)
+    review_state: Optional[Literal["ranked", "blocked", "approved"]] = Field(default=None)
+    sort: Literal["generated_at_desc", "generated_at_asc"] = Field(default="generated_at_desc")
+    limit: int = Field(default=50, ge=1, le=500)
+    offset: int = Field(default=0, ge=0)
 
 
 class WatchlistPayload(BaseModel):
@@ -2127,6 +2204,32 @@ def _get_screener_results_query(
     )
 
 
+def _get_decision_card_inspection_query(
+    run_id: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+    strategy_id: Optional[str] = Query(default=None),
+    decision_card_id: Optional[str] = Query(default=None),
+    qualification_state: Optional[
+        Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    ] = Query(default=None),
+    review_state: Optional[Literal["ranked", "blocked", "approved"]] = Query(default=None),
+    sort: Literal["generated_at_desc", "generated_at_asc"] = Query(default="generated_at_desc"),
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> DecisionCardInspectionQuery:
+    return DecisionCardInspectionQuery(
+        run_id=run_id,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        decision_card_id=decision_card_id,
+        qualification_state=qualification_state,
+        review_state=review_state,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
 def _iter_journal_artifact_files() -> List[tuple[str, Path]]:
     if not JOURNAL_ARTIFACTS_ROOT.exists() or not JOURNAL_ARTIFACTS_ROOT.is_dir():
         return []
@@ -2205,6 +2308,142 @@ def _extract_trace_entries(content: Any) -> tuple[Optional[str], List[Dict[str, 
         else:
             normalized_entries.append({"value": entry})
     return trace_id, normalized_entries
+
+
+def _extract_decision_card_candidates(content: Any) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+
+    def _walk(node: Any) -> None:
+        if isinstance(node, dict):
+            if {
+                "contract_version",
+                "decision_card_id",
+                "generated_at_utc",
+                "hard_gates",
+                "score",
+                "qualification",
+                "rationale",
+            }.issubset(node.keys()):
+                candidates.append(node)
+            for value in node.values():
+                if isinstance(value, (dict, list)):
+                    _walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(content)
+    return candidates
+
+
+def _matches_decision_card_review_state(
+    qualification_state: str,
+    review_state: Optional[Literal["ranked", "blocked", "approved"]],
+) -> bool:
+    if review_state is None:
+        return True
+    if review_state == "blocked":
+        return qualification_state == "reject"
+    if review_state == "approved":
+        return qualification_state == "paper_approved"
+    return qualification_state != "reject"
+
+
+def _decision_card_item_sort_key(
+    item: DecisionCardInspectionItemResponse,
+    *,
+    sort: Literal["generated_at_desc", "generated_at_asc"],
+) -> tuple[float, str, str, str]:
+    generated_at = datetime.fromisoformat(
+        item.generated_at_utc.replace("Z", "+00:00")
+        if item.generated_at_utc.endswith("Z")
+        else item.generated_at_utc
+    )
+    timestamp = generated_at.timestamp()
+    if sort == "generated_at_desc":
+        timestamp = -timestamp
+    return (timestamp, item.decision_card_id, item.run_id, item.artifact_name)
+
+
+def _build_decision_card_inspection_items(
+    params: DecisionCardInspectionQuery,
+) -> List[DecisionCardInspectionItemResponse]:
+    items: List[DecisionCardInspectionItemResponse] = []
+    seen: set[tuple[str, str, str, str]] = set()
+
+    for run_id, artifact_path in _iter_journal_artifact_files():
+        if params.run_id is not None and run_id != params.run_id:
+            continue
+
+        content_type, content = _read_journal_artifact_content(artifact_path)
+        if content_type != "json":
+            continue
+
+        for candidate in _extract_decision_card_candidates(content):
+            try:
+                card = validate_decision_card(candidate)
+            except (ValidationError, ValueError):
+                continue
+
+            if params.decision_card_id is not None and card.decision_card_id != params.decision_card_id:
+                continue
+            if params.symbol is not None and card.symbol != params.symbol:
+                continue
+            if params.strategy_id is not None and card.strategy_id != params.strategy_id:
+                continue
+            if (
+                params.qualification_state is not None
+                and card.qualification.state != params.qualification_state
+            ):
+                continue
+            if not _matches_decision_card_review_state(card.qualification.state, params.review_state):
+                continue
+
+            dedupe_key = (
+                run_id,
+                artifact_path.name,
+                card.decision_card_id,
+                card.to_canonical_json(),
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            items.append(
+                DecisionCardInspectionItemResponse(
+                    run_id=run_id,
+                    artifact_name=artifact_path.name,
+                    decision_card_id=card.decision_card_id,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    qualification_state=card.qualification.state,
+                    qualification_color=card.qualification.color,
+                    qualification_summary=card.qualification.summary,
+                    aggregate_score=card.score.aggregate_score,
+                    confidence_tier=card.score.confidence_tier,
+                    hard_gate_policy_version=card.hard_gates.policy_version,
+                    hard_gate_blocking_failure=card.hard_gates.has_blocking_failure,
+                    hard_gates=[
+                        DecisionCardHardGateInspectionResponse(**gate.model_dump(mode="python"))
+                        for gate in card.hard_gates.gates
+                    ],
+                    component_scores=[
+                        DecisionCardComponentScoreInspectionResponse(
+                            **component.model_dump(mode="python")
+                        )
+                        for component in card.score.component_scores
+                    ],
+                    rationale_summary=card.rationale.summary,
+                    gate_explanations=list(card.rationale.gate_explanations),
+                    score_explanations=list(card.rationale.score_explanations),
+                    final_explanation=card.rationale.final_explanation,
+                    metadata=dict(card.metadata),
+                )
+            )
+
+    items.sort(key=lambda item: _decision_card_item_sort_key(item, sort=params.sort))
+    return items
 
 
 def _to_watchlist_response(watchlist: Any) -> WatchlistResponse:
@@ -2436,6 +2675,29 @@ def read_decision_trace(
         trace_id=trace_id,
         entries=entries,
         total_entries=len(entries),
+    )
+
+
+@app.get(
+    "/decision-cards",
+    response_model=DecisionCardInspectionResponse,
+    summary="Decision Card Inspection",
+    description=(
+        "Read-only inspection surface for decision-card outputs with deterministic "
+        "ordering, filtering, and explanation fields."
+    ),
+)
+def read_decision_cards(
+    params: DecisionCardInspectionQuery = Depends(_get_decision_card_inspection_query),
+    _: str = Depends(_require_role("read_only")),
+) -> DecisionCardInspectionResponse:
+    all_items = _build_decision_card_inspection_items(params)
+    page, total = _paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return DecisionCardInspectionResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
     )
 
 
