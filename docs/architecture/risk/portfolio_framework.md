@@ -219,3 +219,40 @@ This model is intentionally bounded and reusable:
 - no broker/live enforcement
 - no optimization/re-ranking logic
 - pure deterministic transformations suitable for later simulation and execution phases
+
+## 11. Canonical Portfolio Decision Pipeline (Issue #759)
+
+Issue #759 closes the portfolio decision path in one canonical pure-function sequence:
+
+- `src/cilly_trading/portfolio_framework/capital_allocation_policy.py`
+- `run_portfolio_decision_pipeline(...)`
+
+The covered path is:
+
+1. Ranked signal input is sorted with the existing deterministic prioritization rules.
+2. An explicit `PortfolioDecisionIntent` is created for each ranked signal.
+3. If no valid allocation intent can be formed, the signal ends with outcome `rejected`.
+4. If an allocation intent exists, a proposed portfolio state is built from that intent.
+5. The proposed state is evaluated through both:
+   - `assess_capital_allocation(...)`
+   - `assess_portfolio_guardrails(...)`
+6. Only if both checks approve does the signal end with outcome `approved` and mutate the working portfolio state.
+7. If allocation intent exists but either enforcement layer fails, the signal ends with outcome `constraint_hit`, the reasons remain inspectable, and the working portfolio state is unchanged.
+
+### 11.1 Outcome Semantics
+
+`PortfolioDecisionRecord` exposes one explicit final outcome per signal:
+
+- `approved`
+- `rejected`
+- `constraint_hit`
+
+The record also carries:
+
+- the ranked allocation intent
+- any proposed portfolio state used for exposure approval
+- the capital-allocation assessment
+- the portfolio-guardrail assessment
+- deterministic ordered outcome reasons
+
+This removes the ambiguous partial path where allocation and exposure enforcement could be reasoned about separately instead of through one inspectable decision sequence.

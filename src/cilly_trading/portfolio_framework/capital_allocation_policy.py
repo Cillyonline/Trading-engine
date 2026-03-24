@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Literal
 
-from cilly_trading.portfolio_framework.contract import PortfolioState
+from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
+from cilly_trading.portfolio_framework.guardrails import (
+    PortfolioGuardrailAssessment,
+    PortfolioGuardrailLimits,
+    assess_portfolio_guardrails,
+)
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,8 @@ class PrioritizedAllocationSignal:
     requested_notional: float
     signal_timestamp: str
     max_position_notional: float | None = None
+    mark_price: float = 1.0
+    side: Literal["long", "short"] = "long"
 
 
 @dataclass(frozen=True)
@@ -146,6 +153,51 @@ class PrioritizedAllocationResult:
     decisions: tuple[PrioritizedAllocationDecision, ...]
     accepted_signal_ids: tuple[str, ...]
     total_allocated_notional: float
+    remaining_capital_notional: float
+
+
+@dataclass(frozen=True)
+class PortfolioDecisionIntent:
+    """Inspectable allocation intent for one ranked signal."""
+
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    priority_rank: int
+    tie_break_key: tuple[float, str, str, str, str]
+    requested_notional: float
+    bounded_requested_notional: float
+    allocated_notional: float
+    capital_before_signal: float
+    capital_after_signal: float
+    accepted: bool
+    rejection_reason: str | None
+
+
+@dataclass(frozen=True)
+class PortfolioDecisionRecord:
+    """Canonical decision record from ranked signal to final outcome."""
+
+    signal_id: str
+    strategy_id: str
+    symbol: str
+    intent: PortfolioDecisionIntent
+    outcome: Literal["approved", "rejected", "constraint_hit"]
+    outcome_reasons: tuple[str, ...]
+    proposed_state: PortfolioState | None
+    allocation_assessment: CapitalAllocationAssessment | None
+    guardrail_assessment: PortfolioGuardrailAssessment | None
+
+
+@dataclass(frozen=True)
+class PortfolioDecisionResult:
+    """Deterministic result for the canonical portfolio decision pipeline."""
+
+    decisions: tuple[PortfolioDecisionRecord, ...]
+    approved_signal_ids: tuple[str, ...]
+    rejected_signal_ids: tuple[str, ...]
+    constraint_hit_signal_ids: tuple[str, ...]
+    final_state: PortfolioState
     remaining_capital_notional: float
 
 
@@ -312,6 +364,198 @@ def allocate_prioritized_signals(
     )
 
 
+def run_portfolio_decision_pipeline(
+    *,
+    state: PortfolioState,
+    signals: tuple[PrioritizedAllocationSignal, ...],
+    allocation_config: PrioritizedAllocationConfig,
+    allocation_rules: CapitalAllocationRules,
+    guardrail_limits: PortfolioGuardrailLimits,
+    bounded_position_sizing_hook: BoundedPositionSizingHook | None = None,
+) -> PortfolioDecisionResult:
+    """Run the canonical ranked-signal to approval pipeline deterministically.
+
+    Sequence:
+    1) rank signal
+    2) build allocation intent
+    3) propose state mutation
+    4) enforce capital allocation assessment
+    5) enforce portfolio guardrails
+    6) emit explicit approved/rejected/constraint_hit outcome
+    """
+
+    ranked_signals = tuple(sorted(signals, key=_priority_sort_key))
+    remaining_capital = max(allocation_config.available_capital_notional, 0.0)
+    approved_positions = 0
+    working_state = state
+    decisions: list[PortfolioDecisionRecord] = []
+
+    for index, signal in enumerate(ranked_signals):
+        priority_rank = index + 1
+        tie_break_key = _priority_sort_key(signal)
+        bounded_requested_notional = _bounded_requested_notional(
+            signal=signal,
+            config=allocation_config,
+        )
+        capital_before_signal = remaining_capital
+        intent_rejection_reason = _allocation_rejection_reason(
+            remaining_capital=remaining_capital,
+            accepted_positions=approved_positions,
+            config=allocation_config,
+            bounded_requested_notional=bounded_requested_notional,
+        )
+
+        if intent_rejection_reason != "not_allocated":
+            intent = PortfolioDecisionIntent(
+                signal_id=signal.signal_id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                priority_rank=priority_rank,
+                tie_break_key=tie_break_key,
+                requested_notional=signal.requested_notional,
+                bounded_requested_notional=bounded_requested_notional,
+                allocated_notional=0.0,
+                capital_before_signal=capital_before_signal,
+                capital_after_signal=remaining_capital,
+                accepted=False,
+                rejection_reason=intent_rejection_reason,
+            )
+            decisions.append(
+                PortfolioDecisionRecord(
+                    signal_id=signal.signal_id,
+                    strategy_id=signal.strategy_id,
+                    symbol=signal.symbol,
+                    intent=intent,
+                    outcome="rejected",
+                    outcome_reasons=(intent_rejection_reason,),
+                    proposed_state=None,
+                    allocation_assessment=None,
+                    guardrail_assessment=None,
+                )
+            )
+            continue
+
+        proposed_notional = min(bounded_requested_notional, remaining_capital)
+        allocated_notional = _apply_bounded_position_sizing_hook(
+            signal=signal,
+            proposed_notional=proposed_notional,
+            bounded_position_sizing_hook=bounded_position_sizing_hook,
+        )
+        allocated_notional = min(max(allocated_notional, 0.0), proposed_notional)
+
+        if allocated_notional < allocation_config.min_allocation_notional:
+            intent = PortfolioDecisionIntent(
+                signal_id=signal.signal_id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                priority_rank=priority_rank,
+                tie_break_key=tie_break_key,
+                requested_notional=signal.requested_notional,
+                bounded_requested_notional=bounded_requested_notional,
+                allocated_notional=0.0,
+                capital_before_signal=capital_before_signal,
+                capital_after_signal=remaining_capital,
+                accepted=False,
+                rejection_reason="below_min_allocation_after_bounded_sizing",
+            )
+            decisions.append(
+                PortfolioDecisionRecord(
+                    signal_id=signal.signal_id,
+                    strategy_id=signal.strategy_id,
+                    symbol=signal.symbol,
+                    intent=intent,
+                    outcome="rejected",
+                    outcome_reasons=("below_min_allocation_after_bounded_sizing",),
+                    proposed_state=None,
+                    allocation_assessment=None,
+                    guardrail_assessment=None,
+                )
+            )
+            continue
+
+        proposed_state = _append_allocated_position(
+            state=working_state,
+            signal=signal,
+            allocated_notional=allocated_notional,
+        )
+        allocation_assessment = assess_capital_allocation(proposed_state, allocation_rules)
+        guardrail_assessment = assess_portfolio_guardrails(proposed_state, guardrail_limits)
+        constraint_reasons = allocation_assessment.reasons + guardrail_assessment.reasons
+
+        if constraint_reasons:
+            intent = PortfolioDecisionIntent(
+                signal_id=signal.signal_id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                priority_rank=priority_rank,
+                tie_break_key=tie_break_key,
+                requested_notional=signal.requested_notional,
+                bounded_requested_notional=bounded_requested_notional,
+                allocated_notional=allocated_notional,
+                capital_before_signal=capital_before_signal,
+                capital_after_signal=remaining_capital,
+                accepted=True,
+                rejection_reason=None,
+            )
+            decisions.append(
+                PortfolioDecisionRecord(
+                    signal_id=signal.signal_id,
+                    strategy_id=signal.strategy_id,
+                    symbol=signal.symbol,
+                    intent=intent,
+                    outcome="constraint_hit",
+                    outcome_reasons=constraint_reasons,
+                    proposed_state=proposed_state,
+                    allocation_assessment=allocation_assessment,
+                    guardrail_assessment=guardrail_assessment,
+                )
+            )
+            continue
+
+        remaining_capital -= allocated_notional
+        approved_positions += 1
+        working_state = proposed_state
+        intent = PortfolioDecisionIntent(
+            signal_id=signal.signal_id,
+            strategy_id=signal.strategy_id,
+            symbol=signal.symbol,
+            priority_rank=priority_rank,
+            tie_break_key=tie_break_key,
+            requested_notional=signal.requested_notional,
+            bounded_requested_notional=bounded_requested_notional,
+            allocated_notional=allocated_notional,
+            capital_before_signal=capital_before_signal,
+            capital_after_signal=remaining_capital,
+            accepted=True,
+            rejection_reason=None,
+        )
+        decisions.append(
+            PortfolioDecisionRecord(
+                signal_id=signal.signal_id,
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                intent=intent,
+                outcome="approved",
+                outcome_reasons=(),
+                proposed_state=proposed_state,
+                allocation_assessment=allocation_assessment,
+                guardrail_assessment=guardrail_assessment,
+            )
+        )
+
+    decision_rows = tuple(decisions)
+    return PortfolioDecisionResult(
+        decisions=decision_rows,
+        approved_signal_ids=tuple(item.signal_id for item in decision_rows if item.outcome == "approved"),
+        rejected_signal_ids=tuple(item.signal_id for item in decision_rows if item.outcome == "rejected"),
+        constraint_hit_signal_ids=tuple(
+            item.signal_id for item in decision_rows if item.outcome == "constraint_hit"
+        ),
+        final_state=working_state,
+        remaining_capital_notional=remaining_capital,
+    )
+
+
 def _assess_strategy(
     *,
     rule: StrategyAllocationRule,
@@ -452,3 +696,39 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator == 0.0:
         return 0.0
     return numerator / denominator
+
+
+def _append_allocated_position(
+    *,
+    state: PortfolioState,
+    signal: PrioritizedAllocationSignal,
+    allocated_notional: float,
+) -> PortfolioState:
+    signed_quantity = _signed_quantity_from_notional(
+        allocated_notional=allocated_notional,
+        mark_price=signal.mark_price,
+        side=signal.side,
+    )
+    return PortfolioState(
+        account_equity=state.account_equity,
+        positions=state.positions
+        + (
+            PortfolioPosition(
+                strategy_id=signal.strategy_id,
+                symbol=signal.symbol,
+                quantity=signed_quantity,
+                mark_price=signal.mark_price,
+            ),
+        ),
+    )
+
+
+def _signed_quantity_from_notional(
+    *,
+    allocated_notional: float,
+    mark_price: float,
+    side: Literal["long", "short"],
+) -> float:
+    safe_mark_price = max(mark_price, 1.0)
+    quantity = allocated_notional / safe_mark_price
+    return quantity if side == "long" else -quantity
