@@ -49,6 +49,11 @@ A change is considered DONE only if:
 - No scope creep beyond the linked Issue
 - Phase 6 gilt nur als abgeschlossen, wenn die Exit-Kriterien und die Exit-Checklist vollständig erfüllt sind: [phase-6-exit-criteria.md](../architecture/phase-6-exit-criteria.md), [checklists/phase-6-exit-checklist.md](../testing/checklists/phase-6-exit-checklist.md)
 
+## Canonical Staging Deployment Contract
+- For server deployment topology, runtime boundaries, environment/config separation, and non-productive scope, use:
+  [runtime/staging-first-deployment-topology.md](runtime/staging-first-deployment-topology.md)
+- The contract is staging-first and must not be interpreted as production or live-trading readiness.
+
 ## Deterministic Smoke Run – Local Execution
 
 ### Prerequisites
