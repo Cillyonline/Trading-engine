@@ -27,9 +27,10 @@ The canonical server target is a single non-productive staging host running:
 - no live execution integration
 
 Primary deployment profile:
-- `docker compose` using the repository `docker-compose.yml`
+- `docker compose` using
+  `docker/staging/docker-compose.staging.yml`
 - single service: `api`
-- mapped API port: `8000`
+- mapped API port: `18000` (host) to `8000` (container)
 - persistent volume mounted at `/data` for SQLite
 
 This topology is the bounded default for staging and later paper-trading mode.
@@ -54,14 +55,14 @@ It must not be described as production-ready.
 - Exactly one runtime authority instance per staging host.
 - API and runtime execute in the same process boundary in this topology.
 - Persistence is local SQLite; no distributed storage assumptions.
-- No external market/broker side effects are permitted.
+- No external market or broker side effects are permitted.
 
 ## Runtime Responsibilities and Service Boundaries
 
 ### API and control-plane boundary
 - Accepts and validates HTTP requests.
-- Exposes health/introspection/control endpoints.
-- Delegates lifecycle state transitions to engine-owned runtime controller.
+- Exposes health, introspection, and control endpoints.
+- Delegates lifecycle state transitions to the engine-owned runtime controller.
 
 ### Engine runtime boundary
 - Owns runtime lifecycle, analysis execution, and deterministic behavior
@@ -73,29 +74,29 @@ It must not be described as production-ready.
 ### Persistence boundary
 - SQLite is the only canonical persistence dependency for this topology.
 - Data durability is constrained to the mounted staging volume.
-- Schema/init behavior remains owned by existing DB initialization code.
+- Schema and init behavior remains owned by existing DB initialization code.
 
 ## Environment and Configuration Boundary
 Configuration is explicitly separated into bounded layers:
 
 1. Process environment layer:
-- `PYTHONPATH` for module resolution.
-- `CILLY_LOG_LEVEL` for logging verbosity.
+   - `PYTHONPATH` for module resolution.
+   - `CILLY_LOG_LEVEL` for logging verbosity.
 
 2. Runtime defaults/constants layer:
-- Runtime and API module constants (for example API read limits).
+   - Runtime and API module constants (for example API read limits).
 
 3. Request-scoped layer:
-- Endpoint request payload values and strategy/runtime request fields.
+   - Endpoint request payload values and strategy/runtime request fields.
 
 4. Strategy schema layer:
-- Strategy defaults, normalization, and validation semantics.
+   - Strategy defaults, normalization, and validation semantics.
 
 Authoritative config ownership rules are defined in:
 - `docs/architecture/configuration_boundary.md`
 
-This deployment contract only defines where configuration is supplied in staging
-operations, not new ownership semantics.
+This deployment contract defines where configuration is supplied in staging
+operations. It does not introduce new ownership semantics.
 
 ## Required Runtime Dependencies
 Required for canonical staging deployment:
@@ -105,40 +106,50 @@ Required for canonical staging deployment:
 
 Expected runtime artifacts and storage behavior:
 - SQLite database file stored in mounted volume.
-- smoke-run artifacts under `artifacts/smoke-run/` when smoke-run is executed.
-- no dependence on external broker services.
+- Smoke-run artifacts under `artifacts/smoke-run/` when smoke-run is executed.
+- No dependence on external broker services.
 
 ## Non-Productive Scope and Release Boundary
 This topology is non-productive by default.
 
 The deployment remains non-productive unless explicit future acceptance gates
 are passed, including at least:
-- paper-trading operator workflow acceptance.
-- explicit release/governance approval for mode change.
-- documented runtime safety and operational gate review.
+- paper-trading operator workflow acceptance
+- explicit release/governance approval for mode change
+- documented runtime safety and operational gate review
 
 Until those gates exist and are accepted, this topology must be treated as:
-- staging for controlled validation.
-- no live order execution.
-- no broker-integrated production behavior.
+- staging for controlled validation
+- no live order execution
+- no broker-integrated production behavior
 
 ## Validation and Verification Path
 
-### Documentation review
+### Canonical Staging Artifact Path
+- Docker image build:
+  `docker/staging/Dockerfile`
+- Compose stack:
+  `docker/staging/docker-compose.staging.yml`
+- Bounded validation command:
+  `python scripts/validate_staging_deployment.py`
+- Operator run instructions:
+  `docs/operations/runtime/staging-server-deployment.md`
+
+### Documentation Review
 - Confirm this document is the canonical topology reference for staging-first
   server deployment.
 
-### Config validation (compose profile)
+### Config Validation (Compose Profile)
 Run:
 
 ```bash
-docker compose config
+docker compose -f docker/staging/docker-compose.staging.yml config
 ```
 
 Pass condition:
 - Compose configuration resolves successfully.
 
-### Smoke-run verification path
+### Smoke-Run Verification Path
 Run:
 
 ```bash
@@ -148,7 +159,7 @@ PYTHONPATH=src python -c 'from cilly_trading.smoke_run import run_smoke_run; rai
 Pass condition:
 - Exit code `0` with the documented deterministic smoke-run stdout contract.
 
-### Full test suite gate
+### Full Test Suite Gate
 Run:
 
 ```bash
