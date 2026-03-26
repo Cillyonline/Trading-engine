@@ -41,6 +41,20 @@ The repository contains a deterministic engine-level paper-trading simulator. It
 - No owner-facing production runtime command for paper-trading execution is declared in the runbook.
 - This document does not claim a complete user-facing paper-trading product workflow.
 
+## Server Deployment Acceptance Gate
+For server-based paper usage, "running on a server" is not sufficient.
+
+Staging install readiness and paper-operational readiness are separate states:
+- Staging install readiness: deployment mechanics and runtime health checks pass.
+- Paper-operational readiness: staging readiness plus acceptance evidence defined
+  in `docs/operations/runtime/paper-deployment-acceptance-gate.md`.
+
+Operator sign-off must use:
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
+
+Passing the paper-operational gate still does not imply live-trading readiness
+or broker go-live approval.
+
 ## Roadmap Readiness Interpretation
 - Phase 24 focuses on documentation and governance alignment for the simulator and its boundaries.
 - Phase 44 remains the broader paper-trading product phase and should only be treated as complete when workflow, operator surfaces, and broader runtime handling are fully verified.
