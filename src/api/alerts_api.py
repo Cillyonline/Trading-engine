@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cilly_trading.alerts.alert_models import AlertEvent
 
+from .state import get_alert_configuration_store, get_alert_history_store
+
 
 class AlertConfigurationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -86,19 +88,11 @@ class AlertConfigurationDeleteResponse(BaseModel):
 
 
 def _get_store(request: Request) -> Dict[str, Dict[str, Any]]:
-    store = getattr(request.app.state, "alert_configuration_store", None)
-    if store is None:
-        store = {}
-        request.app.state.alert_configuration_store = store
-    return store
+    return get_alert_configuration_store(request)
 
 
 def _get_alert_history_store(request: Request) -> List[Dict[str, Any]]:
-    store = getattr(request.app.state, "alert_history_store", None)
-    if store is None:
-        store = []
-        request.app.state.alert_history_store = store
-    return store
+    return get_alert_history_store(request)
 
 
 def _sorted_items(store: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
