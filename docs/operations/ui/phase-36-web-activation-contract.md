@@ -83,7 +83,7 @@ The following repository evidence is sufficient to support later Phase 36 status
 
 | Evidence area | Repository basis |
 | --- | --- |
-| Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` |
+| Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` and includes the bounded API routers behind the documented workflow routes |
 | Browser workflow | `src/ui/index.html` loads `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and submits `POST /analysis/run` |
 | Route reachability tests | `tests/health_endpoint.py`, `src/api/test_operator_workbench_surface.py`, and `tests/test_ui_runtime_browser_flow.py` verify the `/ui` surface and its browser workflow |
 | Manual analysis behavior | `tests/test_api_manual_analysis_trigger.py` verifies the deterministic `POST /analysis/run` flow |
@@ -92,7 +92,7 @@ The following repository evidence is sufficient to support later Phase 36 status
 ## Review Checklist
 Reviewers should verify:
 
-1. `src/api/main.py` still mounts `/ui` as the runtime-served browser surface.
+1. `src/api/main.py` still mounts `/ui` as the runtime-served browser surface and includes the bounded API routers used by this workflow.
 2. `src/ui/index.html` still implements the bounded Phase 36 workflow described here.
 3. `/owner` is not presented anywhere as a runtime-equivalent route.
 4. The docs remain silent on unimplemented watchlist, trading-desk, alerts, paper-trading product, and live-trading claims.

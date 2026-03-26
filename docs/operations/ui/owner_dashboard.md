@@ -78,7 +78,7 @@ The frontend route structure in `frontend/src/App.tsx` may still reference `/own
 ## Evidence Pointers
 Use these repository artifacts when validating this document:
 
-1. `src/api/main.py` mounts `/ui` and defines `GET /system/state`, `POST /analysis/run`, watchlist CRUD routes, `POST /watchlists/{watchlist_id}/execute`, `GET /strategies`, `GET /signals`, `GET /journal/artifacts`, `GET /journal/decision-trace`, and `GET /execution/orders`.
+1. `src/api/main.py` mounts `/ui` and includes the bounded API routers serving `GET /system/state`, `POST /analysis/run`, watchlist CRUD routes, `POST /watchlists/{watchlist_id}/execute`, `GET /strategies`, `GET /signals`, `GET /journal/artifacts`, `GET /journal/decision-trace`, and `GET /execution/orders`.
 2. `src/ui/index.html` contains the runtime shell and the implemented browser workflow, including watchlist panels, chart-panel markers, and chart-source markers.
 3. `tests/api/test_health_endpoints_api.py` verifies the runtime health endpoint surface.
 4. `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers, watchlist panels, chart-panel markers, and linked runtime endpoints.
