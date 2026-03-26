@@ -1,7 +1,8 @@
 # ARCH-P45A API Module Split
 
 Issue: `#775`  
-Date: `2026-03-24`
+Date: `2026-03-24`  
+Updated: `2026-03-26` (`#790`)
 
 ## Summary
 
@@ -9,9 +10,14 @@ Date: `2026-03-24`
 
 - app creation
 - static `/ui` mount
-- startup/shutdown lifecycle hooks
-- dependency/repository wiring
+- bounded dependency/repository wiring
 - router inclusion
+
+Runtime lifecycle registration and mutable app-state setup are delegated to explicit bounded modules:
+
+- `src/api/composition/runtime_lifecycle.py`
+- `src/api/composition/router_wiring.py`
+- `src/api/state/alerts_state.py`
 
 Bounded routers own transport handlers:
 
@@ -43,7 +49,9 @@ API DTO/query model ownership moved from `main.py` into:
 - **Analysis router**: strategy analysis, manual analysis trigger, and basic screener transport endpoints.
 - **Services**: non-transport orchestration/helpers used by routers.
 - **Models**: request/response/query DTO definitions.
-- **Main module**: composition/wiring only (app, mount, lifecycle hooks, dependency/repository wiring, router inclusion) plus compatibility symbol exports with no helper/transport implementations.
+- **Main module**: composition/wiring only (app, mount, dependency/repository wiring, router inclusion) plus compatibility symbol exports with no helper/transport implementations.
+- **Composition modules**: runtime startup/shutdown registration and router inclusion wiring.
+- **State modules**: mutable alert app-state initialization and access.
 
 ## Behavior
 

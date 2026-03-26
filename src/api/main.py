@@ -45,7 +45,12 @@ from cilly_trading.strategies.registry import (
     initialize_default_registry,
 )
 
-from .alerts_api import build_alerts_router
+from .composition import (
+    ApiRouterWiring,
+    RuntimeLifecycleDependencies,
+    include_api_routers,
+    register_runtime_lifecycle,
+)
 from .models import (
     ComplianceGuardStatusResponse,
     DecisionCardInspectionResponse,
@@ -64,17 +69,8 @@ from .models import (
     TradingCoreTradesReadResponse,
 )
 from .order_events_sqlite import SqliteOrderEventRepository
-from .routers import (
-    AnalysisRouterDependencies,
-    ControlPlaneRouterDependencies,
-    InspectionRouterDependencies,
-    WatchlistsRouterDependencies,
-    build_analysis_router,
-    build_control_plane_router,
-    build_inspection_router,
-    build_watchlists_router,
-)
 from .services.composition_runtime_service import CompositionRuntimeService, configure_logging
+from .state import initialize_alert_state
 
 
 configure_logging()
@@ -86,8 +82,7 @@ app = FastAPI(
     description="MVP-API fuer die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
 )
 
-app.state.alert_configuration_store = {}
-app.state.alert_history_store = []
+initialize_alert_state(app)
 
 UI_DIRECTORY = Path(__file__).resolve().parent.parent / "ui"
 JOURNAL_ARTIFACTS_ROOT = Path(__file__).resolve().parents[2] / "runs" / "phase6"
@@ -172,90 +167,51 @@ runtime_introspection = _runtime_service.runtime_introspection
 system_state = _runtime_service.system_state
 
 
-@app.on_event("startup")
-def _startup_runtime() -> None:
+def _set_engine_runtime_guard_active(is_active: bool) -> None:
     global ENGINE_RUNTIME_GUARD_ACTIVE
-    start_engine_runtime()
-    ENGINE_RUNTIME_GUARD_ACTIVE = True
+    ENGINE_RUNTIME_GUARD_ACTIVE = is_active
 
 
-@app.on_event("shutdown")
-def _shutdown_runtime() -> None:
-    global ENGINE_RUNTIME_GUARD_ACTIVE
-    ENGINE_RUNTIME_GUARD_ACTIVE = False
-    try:
-        shutdown_engine_runtime()
-    except LifecycleTransitionError:
-        logger.exception("Engine runtime shutdown failed")
-
-
-app.include_router(build_alerts_router(_require_role))
-app.include_router(
-    build_control_plane_router(
-        deps=ControlPlaneRouterDependencies(
-            require_role=_require_role,
-            assert_phase_13_read_only_endpoint=_assert_phase_13_read_only_endpoint,
-            get_health_now=lambda: _health_now,
-            get_resolve_analysis_db_path=lambda: _resolve_analysis_db_path,
-            get_runtime_introspection_payload=lambda: get_runtime_introspection_payload,
-            get_runtime_health_evaluator=lambda: evaluate_runtime_health,
-            get_system_state_payload=lambda: get_system_state_payload,
-            get_start_engine_runtime=lambda: start_engine_runtime,
-            get_shutdown_engine_runtime=lambda: shutdown_engine_runtime,
-            get_pause_engine_runtime=lambda: pause_engine_runtime,
-            get_resume_engine_runtime=lambda: resume_engine_runtime,
-            get_lifecycle_transition_error=lambda: LifecycleTransitionError,
-        ),
-    )
+_startup_runtime, _shutdown_runtime = register_runtime_lifecycle(
+    app=app,
+    deps=RuntimeLifecycleDependencies(
+        logger=logger,
+        start_runtime=lambda: start_engine_runtime(),
+        shutdown_runtime=lambda: shutdown_engine_runtime(),
+        set_runtime_guard_active=_set_engine_runtime_guard_active,
+        lifecycle_transition_error=LifecycleTransitionError,
+    ),
 )
-app.include_router(
-    build_inspection_router(
-        deps=InspectionRouterDependencies(
-            require_role=_require_role,
-            get_analysis_run_repo=lambda: analysis_run_repo,
-            get_signal_repo=lambda: signal_repo,
-            get_order_event_repo=lambda: order_event_repo,
-            get_canonical_execution_repo=lambda: canonical_execution_repo,
-            get_journal_artifacts_root=lambda: JOURNAL_ARTIFACTS_ROOT,
-            get_default_strategy_configs=lambda: default_strategy_configs,
-        ),
-    )
-)
-app.include_router(
-    build_watchlists_router(
-        deps=WatchlistsRouterDependencies(
-            require_role=_require_role,
-            get_watchlist_repo=lambda: watchlist_repo,
-            get_analysis_run_repo=lambda: analysis_run_repo,
-            get_signal_repo=lambda: signal_repo,
-            get_default_strategy_configs=lambda: default_strategy_configs,
-            get_require_ingestion_run=lambda: _require_ingestion_run,
-            get_require_snapshot_ready=lambda: _require_snapshot_ready,
-            get_run_snapshot_analysis=lambda: _run_snapshot_analysis,
-            get_resolve_analysis_db_path=lambda: _resolve_analysis_db_path,
-            get_create_strategy=lambda: create_strategy,
-            get_create_registered_strategies=lambda: create_registered_strategies,
-            get_trigger_operator_analysis_run=lambda: trigger_operator_analysis_run,
-        ),
-    )
-)
-app.include_router(
-    build_analysis_router(
-        deps=AnalysisRouterDependencies(
-            require_role=_require_role,
-            get_analysis_run_repo=lambda: analysis_run_repo,
-            get_signal_repo=lambda: signal_repo,
-            get_watchlist_repo=lambda: watchlist_repo,
-            get_default_strategy_configs=lambda: default_strategy_configs,
-            get_require_ingestion_run=lambda: _require_ingestion_run,
-            get_require_snapshot_ready=lambda: _require_snapshot_ready,
-            get_run_snapshot_analysis=lambda: _run_snapshot_analysis,
-            get_resolve_analysis_db_path=lambda: _resolve_analysis_db_path,
-            get_create_strategy=lambda: create_strategy,
-            get_create_registered_strategies=lambda: create_registered_strategies,
-            get_trigger_operator_analysis_run=lambda: trigger_operator_analysis_run,
-        ),
-    )
+
+include_api_routers(
+    app=app,
+    wiring=ApiRouterWiring(
+        require_role=_require_role,
+        assert_phase_13_read_only_endpoint=_assert_phase_13_read_only_endpoint,
+        get_health_now=lambda: _health_now(),
+        get_resolve_analysis_db_path=lambda: _resolve_analysis_db_path(),
+        get_runtime_introspection_payload=lambda: get_runtime_introspection_payload(),
+        get_runtime_health_evaluator=lambda *args, **kwargs: evaluate_runtime_health(*args, **kwargs),
+        get_system_state_payload=lambda: get_system_state_payload(),
+        get_start_engine_runtime=lambda: start_engine_runtime(),
+        get_shutdown_engine_runtime=lambda: shutdown_engine_runtime(),
+        get_pause_engine_runtime=lambda: pause_engine_runtime(),
+        get_resume_engine_runtime=lambda: resume_engine_runtime(),
+        get_lifecycle_transition_error=lambda: LifecycleTransitionError,
+        get_analysis_run_repo=lambda: analysis_run_repo,
+        get_signal_repo=lambda: signal_repo,
+        get_order_event_repo=lambda: order_event_repo,
+        get_canonical_execution_repo=lambda: canonical_execution_repo,
+        get_journal_artifacts_root=lambda: JOURNAL_ARTIFACTS_ROOT,
+        get_default_strategy_configs=lambda: default_strategy_configs,
+        get_watchlist_repo=lambda: watchlist_repo,
+        get_require_ingestion_run=lambda *args, **kwargs: _require_ingestion_run(*args, **kwargs),
+        get_require_snapshot_ready=lambda *args, **kwargs: _require_snapshot_ready(*args, **kwargs),
+        get_run_snapshot_analysis=lambda *args, **kwargs: _run_snapshot_analysis(*args, **kwargs),
+        get_create_strategy=lambda strategy_name: create_strategy(strategy_name),
+        get_create_registered_strategies=lambda: create_registered_strategies(),
+        get_trigger_operator_analysis_run=lambda *args, **kwargs: trigger_operator_analysis_run(*args, **kwargs),
+    ),
 )
 
 
