@@ -123,6 +123,19 @@ Until those gates exist and are accepted, this topology must be treated as:
 - no live order execution
 - no broker-integrated production behavior
 
+## Install-Ready vs Paper-Operational Boundary
+In this repository, these are separate states:
+- `install-ready (staging)`: deployment and runtime mechanics are healthy on the
+  staging host.
+- `paper-operational`: install-ready plus explicit acceptance evidence for
+  backtesting, decision-card behavior, runtime health, and paper-trading
+  consistency.
+
+Passing staging deployment checks alone does not grant paper-operational status.
+The required gate and operator checklist are:
+- `docs/operations/runtime/paper-deployment-acceptance-gate.md`
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
+
 ## Validation and Verification Path
 
 ### Canonical Staging Artifact Path
@@ -172,5 +185,7 @@ Pass condition:
 ## Related References
 - `docs/operations/runbook.md`
 - `docs/operations/paper-trading.md`
+- `docs/operations/runtime/paper-deployment-acceptance-gate.md`
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
 - `docs/architecture/engine_runtime_lifecycle_contract.md`
 - `docs/architecture/configuration_boundary.md`
