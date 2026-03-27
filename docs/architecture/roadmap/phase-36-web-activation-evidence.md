@@ -1,7 +1,7 @@
 # Phase 36 Web Activation Evidence
 
 ## Purpose
-This note records the repository-verifiable evidence that supports Phase 36 roadmap and status reviews without overstating later phases.
+This note records repository-verifiable evidence for bounded Phase 36 status review.
 
 ## Canonical Runtime Surface
 - Canonical runtime browser URL: `/ui`
@@ -11,40 +11,44 @@ This note records the repository-verifiable evidence that supports Phase 36 road
 `/ui` is the Phase 36 runtime-served browser surface. `/owner` is not the canonical runtime entrypoint.
 
 ## Supported Phase 36 Browser Workflow
-The repository currently verifies this bounded browser workflow:
+The repository verifies this bounded workflow:
 
 1. Open `/ui`.
-2. Load runtime context already fetched by the page from:
+2. Load runtime context from:
    - `GET /system/state`
    - `GET /strategies`
    - `GET /signals`
    - `GET /journal/artifacts`
    - `GET /execution/orders`
 3. Submit manual analysis through `POST /analysis/run`.
-4. Review the returned `analysis_run_id` and signals in the same browser session.
-5. Inspect artifact preview, decision trace, and trade lifecycle evidence in-browser.
+4. Review returned `analysis_run_id` and signals.
+5. Inspect artifact preview, decision trace, and lifecycle evidence.
 
 ## Phase Boundary
-The current `/ui` shell is Phase 36 evidence for browser activation and bounded runtime analysis only.
+The current `/ui` shell is Phase 36 evidence for browser activation and manual-analysis runtime workflow only.
 
-It is not evidence of:
+It is not, by itself, evidence of:
+- Phase 37 ownership
+- Phase 39 chart-panel UI ownership
+- Phase 40 desk completion
+- Phase 41 notification-delivery completion
 
-- Phase 37 watchlist CRUD, persistence, ranking, or dedicated watchlist management UI
-- Phase 40 heatmaps, leaderboard views, richer opportunity dashboards, or broader trading-desk workflow
-- alerts or notifications
-- paper-trading product workflow
-- live-trading workflow
-- broker integration
+Shared-shell phase ownership rules are defined in:
+- `docs/architecture/ui-runtime-phase-ownership-boundary.md`
 
 ## Repository Evidence
 | Evidence area | Repository basis |
 | --- | --- |
-| Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` |
-| Browser workflow | `src/ui/index.html` loads `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and submits `POST /analysis/run` |
+| Runtime entrypoint | `src/api/main.py` mounts `/ui` |
+| Browser workflow | `src/ui/index.html` includes the bounded runtime flow |
 | `/ui` route reachability | `tests/health_endpoint.py` |
 | Runtime shell markers and linked endpoints | `src/api/test_operator_workbench_surface.py` |
 | End-to-end browser workflow | `tests/test_ui_runtime_browser_flow.py` |
 | Manual analysis action | `tests/test_api_manual_analysis_trigger.py` |
 
 ## Review Use
-Use this note together with `docs/operations/ui/phase-36-web-activation-contract.md` and `docs/operations/ui/owner_dashboard.md` when preparing any later Phase 36 roadmap or status update.
+Use this note together with:
+- `docs/operations/ui/phase-36-web-activation-contract.md`
+- `docs/operations/ui/owner_dashboard.md`
+- `docs/architecture/ui-runtime-phase-ownership-boundary.md`
+
