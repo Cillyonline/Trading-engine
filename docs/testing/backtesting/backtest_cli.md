@@ -58,6 +58,22 @@ Evidence alignment rule for covered outputs:
 
 - `metrics_baseline.assumptions` MUST match `run_config.execution_assumptions`.
 
+## Phase 42b -> 43 -> 44 Handoff Contract
+
+The produced artifact includes explicit downstream handoff metadata at `phase_handoff`:
+
+- `phase_handoff.required_evidence.phase_43_portfolio_simulation`: required evidence fields for Phase 43.
+- `phase_handoff.required_evidence.phase_44_paper_trading_readiness`: additional evidence fields for Phase 44.
+- `phase_handoff.authoritative_outputs.trader_interpretation`: authoritative outputs for trader-facing interpretation.
+- `phase_handoff.acceptance_gates.technically_valid_backtest_artifact`: structural validity gate only.
+- `phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready`: Phase 43 readiness evidence gate.
+- `phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready`: Phase 44 readiness evidence gate.
+
+Review interpretation rule:
+
+- A technically valid artifact is not automatically Phase 43/44 readiness evidence.
+- Phase 43/44 usage MUST follow the explicit handoff gate outcomes.
+
 ## Trader Interpretation Boundary
 
 The produced evidence is valid only for deterministic replay under the declared assumptions and snapshot input.

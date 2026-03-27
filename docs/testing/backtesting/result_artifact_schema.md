@@ -55,6 +55,21 @@ Top-level object keys and minimal semantics:
 - `orders` (required): array (may be empty)
 - `fills` (required): array (may be empty)
 - `positions` (required): array (may be empty)
+- `phase_handoff` (required): object
+  - `contract_version` (required): string
+  - `source_phase` (required): string literal `"42b"`
+  - `target_phases` (required): array containing `"43"` and `"44"`
+  - `required_evidence` (required): object
+    - `phase_43_portfolio_simulation` (required): array of field-path strings
+    - `phase_44_paper_trading_readiness` (required): array of field-path strings
+  - `authoritative_outputs` (required): object
+    - `trader_interpretation` (required): array of field-path strings
+  - `assumption_alignment` (required): object
+    - `run_config_execution_assumptions_match_metrics_baseline_assumptions` (required): boolean
+  - `acceptance_gates` (required): object
+    - `technically_valid_backtest_artifact` (required): object with `passed`, `missing_fields`, `reasons`
+    - `phase_43_portfolio_simulation_ready` (required): object with `passed`, `missing_fields`, `reasons`
+    - `phase_44_paper_trading_readiness_evidence_ready` (required): object with `passed`, `missing_fields`, `reasons`
 
 ## Hash reproducibility
 

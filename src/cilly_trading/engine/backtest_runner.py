@@ -14,6 +14,7 @@ from cilly_trading.engine.backtest_execution_contract import (
     serialize_positions,
     simulate_execution_flow,
 )
+from cilly_trading.engine.backtest_handoff_contract import build_phase_handoff_contract
 from cilly_trading.engine.journal.execution_journal import (
     build_execution_journal_artifact,
     write_execution_journal_artifact,
@@ -247,7 +248,7 @@ class BacktestRunner:
             execution_assumptions=config.run_contract.execution_assumptions,
         )
 
-        return {
+        payload = {
             "artifact_version": "1",
             "engine": {
                 "name": config.engine_name,
@@ -289,6 +290,8 @@ class BacktestRunner:
             "trades": metrics_baseline["trades"],
             "metrics_baseline": metrics_baseline,
         }
+        payload["phase_handoff"] = build_phase_handoff_contract(payload)
+        return payload
 
     def _snapshot_boundaries(
         self,
