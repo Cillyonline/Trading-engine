@@ -33,13 +33,12 @@ Use this order:
 - Legacy compatibility alias: `docs/ui/phase-39-test-plan.md`
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
   - Runtime-served operator UI is `/ui`.
-  - The current Phase 36 browser workflow uses `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, and `/execution/orders`.
-  - The current Phase 37 browser workflow on the same `/ui` surface uses `/watchlists`, `/watchlists/{watchlist_id}`, and `POST /watchlists/{watchlist_id}/execute`.
-  - The current Phase 39 browser workflow on the same `/ui` surface adds a bounded read-only chart panel fed by `POST /analysis/run`, `POST /watchlists/{watchlist_id}/execute`, and `GET /signals?limit=20&sort=created_at_desc`.
-  - The chart payload boundary for those existing routes is defined in `docs/operations/api/runtime_chart_data_contract.md`.
-  - The minimum verification gate for Phase 39 runtime charting is defined in `docs/operations/ui/phase-39-test-plan.md`.
-  - The Phase 39 charting contract and roadmap status remain bounded to read-only visual analysis on `/ui` and do not imply Phase 40 desk scope.
+  - Phase 36 bounded browser workflow: `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`.
+  - Phase 37 bounded workflow on the same `/ui` shell: `/watchlists`, `/watchlists/{watchlist_id}`, `POST /watchlists/{watchlist_id}/execute`.
+  - Shared-shell alert inspection marker on the same `/ui` shell: `GET /alerts/history`.
+  - Phase 39 claim boundary is contract-based (`docs/operations/api/runtime_chart_data_contract.md`) and must not be inferred from `/ui` section adjacency.
   - `/owner` is not a canonical runtime entrypoint.
+- [Shared /ui phase ownership boundary](architecture/ui-runtime-phase-ownership-boundary.md)
 - [Phase 36 web activation evidence](architecture/roadmap/phase-36-web-activation-evidence.md)
 - [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
 

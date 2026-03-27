@@ -1,38 +1,38 @@
-## Title
-Phase 41 operator dashboard alert history panel
+# Phase 41 - Alerts & Notification System Status
 
-## Goal
-Add a deterministic read-only alert history API and panel to the operator dashboard so operators can inspect recent alert events without accessing logs.
+Status: Planned  
+Scope: Notification delivery and routing workflows  
+Owner: Governance
 
-## Scope
-- Implement a read-only API endpoint at `/alerts/history` returning deterministic alert events sorted by `occurred_at` descending.
-- Ensure the endpoint supports pagination (`limit`, `offset`) and returns read-only results.
-- Add an operator dashboard alert panel in `/ui` that fetches `/alerts/history` and renders events.
-- Show deterministic rendering behavior for loaded state, empty state, and error state.
-- Keep all changes read-only on runtime data and do not alter alert generation logic.
+## Purpose
+This file defines the bounded Phase 41 status boundary and prevents inference from adjacent `/ui` sections.
 
-## Alert History API Contract
-- URI: `GET /alerts/history`
-- Authorization: `X-Cilly-Role: read_only` required.
-- Query params:
-  - `limit` (int, default 20, max 200)
-  - `offset` (int, default 0)
-- Response shape:
-  - `items`: list of deterministic `AlertEvent` objects
-  - `total`: total count of stored alert events
-- Ordering: deterministic descending by `occurred_at` then `event_id` as a tiebreaker.
+## Current Repository State
+- A read-only alert-history API exists at `GET /alerts/history`.
+- `/ui` includes a read-only "Recent Alerts" inspection card backed by that endpoint.
 
-## Dashboard UI Contract
-- `/ui` includes a Recent Alerts card with:
-  - Table header columns: Occurred, Severity, Event Type, Symbol, Source
-  - Empty-state placeholder when no events exist.
-  - Error message when fetch fails.
-- UI uses read-only header for fetch requests.
+These artifacts are shared-shell inspection surfaces. They are not sufficient evidence for Phase 41 completion.
 
-## Acceptance Criteria Mapping
-1. `/alerts/history` endpoint exists and is read-only.
-2. API response is deterministic and sorted by `occurred_at` descending.
-3. Operator dashboard displays recent alerts using `/alerts/history`.
-4. Dashboard renders deterministic empty-state and error-state.
-5. UI integration tests verify alert panel and API integration.
-6. Browser flow tests validate dashboard and endpoint presence.
+## Phase 41 Required Ownership
+Phase 41 covers delivery/notification workflows, including bounded evidence for:
+- alert routing
+- dispatch logic
+- subscriber or destination handling
+- notification-channel behavior (for example email, browser push, or equivalent)
+
+## Explicit Non-Inference Rule
+The following do **not** prove Phase 41 completion by themselves:
+- `GET /alerts/history`
+- `/ui` alert-history table markers (`id="alert-status"`, `id="alert-list"`)
+- read-only inspection of stored alert events
+
+## Evidence Boundary
+For now, `/alerts/history` and `/ui` alert-history UI are classified as:
+- shared-shell read-only inspection boundary
+
+Cross-phase ownership reference:
+- `docs/architecture/ui-runtime-phase-ownership-boundary.md`
+
+## Outcome
+Phase 41 remains `Planned` until repository-verifiable alert-delivery workflows are implemented and tested as a coherent bounded system.
+
