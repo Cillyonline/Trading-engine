@@ -68,9 +68,18 @@ The frontend route structure in `frontend/src/App.tsx` may still reference `/own
 ## Evidence Pointers
 Use these repository artifacts when validating this document:
 
+<<<<<<< HEAD
 1. `src/api/main.py` mounts `/ui` and exposes the linked runtime APIs.
 2. `src/ui/index.html` contains the runtime shell and browser workflow markers.
 3. `src/api/test_operator_workbench_surface.py` verifies `/ui` reachability and runtime markers.
 4. `tests/test_ui_runtime_browser_flow.py` verifies runtime browser flow, watchlist workflow, and shared-shell markers.
 5. `docs/architecture/ui-runtime-phase-ownership-boundary.md` defines phase ownership and non-inference boundaries for shared `/ui`.
+=======
+1. `src/api/main.py` mounts `/ui` and includes the bounded API routers serving `GET /system/state`, `POST /analysis/run`, watchlist CRUD routes, `POST /watchlists/{watchlist_id}/execute`, `GET /strategies`, `GET /signals`, `GET /journal/artifacts`, `GET /journal/decision-trace`, and `GET /execution/orders`.
+2. `src/ui/index.html` contains the runtime shell and the implemented browser workflow, including watchlist panels, chart-panel markers, and chart-source markers.
+3. `tests/api/test_health_endpoints_api.py` verifies the runtime health endpoint surface.
+4. `src/api/test_operator_workbench_surface.py` verifies the `/ui` shell markers, watchlist panels, chart-panel markers, and linked runtime endpoints.
+5. `tests/test_ui_runtime_browser_flow.py` verifies the browser workflow uses the existing runtime API surface for watchlist CRUD, execution, and deterministic chart-panel markers as well as the existing operator routes.
+6. `docs/operations/ui/phase-39-charting-contract.md` defines the bounded read-only charting scope implemented on the same `/ui` surface without expanding into later product phases.
+>>>>>>> origin/main
 

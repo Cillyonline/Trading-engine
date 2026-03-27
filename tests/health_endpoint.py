@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 
 import api.main as api_main
 
+READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
+
 
 class _SideEffectProbe:
     def __init__(self) -> None:
@@ -39,7 +41,7 @@ def test_health_endpoint_reports_runtime_health_from_simulated_snapshot(monkeypa
     monkeypatch.setattr(api_main, "_health_now", _health_now)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health")
+        response = client.get("/health", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -91,7 +93,7 @@ def test_health_endpoint_is_read_only_without_runtime_transitions_or_writes(monk
     monkeypatch.setattr(api_main.analysis_run_repo, "save_run", _unexpected_write)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health")
+        response = client.get("/health", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
@@ -126,7 +128,7 @@ def test_health_endpoint_reports_unavailable_boundary(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "_health_now", _health_now)
 
     with TestClient(api_main.app) as client:
-        response = client.get("/health")
+        response = client.get("/health", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
     assert response.json()["status"] == "unavailable"

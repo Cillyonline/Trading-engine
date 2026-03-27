@@ -1,17 +1,29 @@
 # ARCH-P45A API Module Split
 
 Issue: `#775`  
-Date: `2026-03-24`
+Date: `2026-03-24`  
+Updated: `2026-03-26` (`#790`)
 
 ## Summary
 
 `src/api/main.py` is now a composition root focused on:
 
 - app creation
+- alert/app-state initialization entrypoint
 - static `/ui` mount
-- startup/shutdown lifecycle hooks
-- dependency/repository wiring
+- lifecycle registration
 - router inclusion
+- `__main__` startup block
+
+Runtime lifecycle registration, repository assembly, default strategy config assembly, and compatibility/export wiring are delegated to explicit bounded modules:
+
+- `src/api/composition/runtime_settings.py`
+- `src/api/composition/repositories.py`
+- `src/api/composition/main_compat.py`
+- `src/api/composition/runtime_assembly.py`
+- `src/api/composition/runtime_lifecycle.py`
+- `src/api/composition/router_wiring.py`
+- `src/api/state/alerts_state.py`
 
 Bounded routers own transport handlers:
 
@@ -43,7 +55,9 @@ API DTO/query model ownership moved from `main.py` into:
 - **Analysis router**: strategy analysis, manual analysis trigger, and basic screener transport endpoints.
 - **Services**: non-transport orchestration/helpers used by routers.
 - **Models**: request/response/query DTO definitions.
-- **Main module**: composition/wiring only (app, mount, lifecycle hooks, dependency/repository wiring, router inclusion) plus compatibility symbol exports with no helper/transport implementations.
+- **Main module**: thin composition root only (app creation, alert-state init, `/ui` mount, lifecycle registration, router inclusion, `__main__`) plus compatibility symbol exports.
+- **Composition modules**: repository assembly, strategy-config assembly, compatibility export binding, runtime startup/shutdown registration, and router dependency wiring.
+- **State modules**: mutable alert app-state initialization and access.
 
 ## Behavior
 
