@@ -717,10 +717,11 @@ Support real market-data integrations directly.
 
 **Current Status Basis**
 - Provider abstraction, provider contracts, failover logic, and data guardrails exist.
-- No repo-verifiable direct Yahoo Finance, Binance, or CCXT production integration module was confirmed.
+- Direct provider loaders are repo-verifiable in `src/cilly_trading/engine/data.py` (`_load_stock_yahoo`, `_load_crypto_binance`, `load_ohlcv`).
+- Deterministic runtime-safe claims remain bounded to snapshot-only paths and evidence-backed runtime enforcement (`docs/operations/api/usage_contract.md` and `docs/architecture/phases/phase-38-status.md`).
 
 **Outcome**
-- The data-integration foundation exists, but the named real-provider integrations remain incomplete.
+- The repository has direct provider adapter presence, while production-trustworthy runtime integration remains a bounded evidence problem (snapshot boundary + runtime proof), not a missing-adapter problem.
 
 ---
 
@@ -1514,10 +1515,11 @@ Reale Marktdaten-Integrationen direkt unterstuetzen.
 
 **Aktuelle Statusbasis**
 - Provider-Abstraktion, Provider-Contracts, Failover-Logik und Data-Guardrails sind vorhanden.
-- Eine direkte Yahoo-Finance-, Binance- oder CCXT-Produktionsintegration wurde im Repo nicht bestaetigt.
+- Direkte Provider-Loader sind im Repository nachweisbar in `src/cilly_trading/engine/data.py` (`_load_stock_yahoo`, `_load_crypto_binance`, `load_ohlcv`).
+- Deterministische runtime-sichere Claims bleiben auf snapshot-only-Pfade und evidenzgebundene Runtime-Enforcement-Artefakte begrenzt (`docs/operations/api/usage_contract.md` und `docs/architecture/phases/phase-38-status.md`).
 
 **Ergebnis**
-- Das Fundament fuer Datenintegration existiert, aber die konkret benannten Provider-Integrationen sind noch unvollstaendig.
+- Das Repository hat direkte Provider-Adapter-Praesenz; die verbleibende Luecke ist kein fehlender Adapter, sondern ein begrenzter Evidenznachweis fuer produktionsvertrauenswuerdige Runtime-Integration.
 
 ---
 

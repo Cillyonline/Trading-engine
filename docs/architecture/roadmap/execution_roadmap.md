@@ -1,7 +1,7 @@
 # Execution Roadmap - Authoritative Phase Taxonomy
 
 Status: Authoritative  
-Scope: Audited phase taxonomy for Phases 5, 16, 17, 17b, 23, 25, 26, 27, and 37  
+Scope: Audited phase taxonomy for Phases 5, 16, 17, 17b, 23, 25, 26, 27, 37, and 38  
 Owner: Governance  
 
 ## Purpose
@@ -40,6 +40,7 @@ This file is the single authoritative in-repo source for audited phase-number me
 | Phase 26 | No authoritative in-repo phase taxonomy artifact was located during the audit. | This roadmap entry is the governing clarification for audited artifacts. |
 | Phase 27 | Risk Framework | `docs/architecture/phases/phase-27-status.md` |
 | Phase 37 | Watchlist Engine | `docs/architecture/phases/phase-37-status.md` |
+| Phase 38 | Market Data Integration | `docs/architecture/phases/phase-38-status.md` |
 
 ## Taxonomy Guardrails
 - Phase 17 and Phase 17b are not interchangeable: Phase 17 is the umbrella phase, and Phase 17b is the Owner Dashboard sub-phase.
@@ -143,3 +144,27 @@ Define Phase 37 using the bounded watchlist workflow that is verifiable in the r
 ### Acceptance Evidence Requirements
 - Repository-verifiable code and tests exist for watchlist persistence, CRUD, execution, ranking, and `/ui` watchlist behavior.
 - Roadmap and runtime-facing docs describe the watchlist workflow as bounded Phase 37 scope rather than as later-phase product completion.
+
+---
+
+## Phase 38
+
+### Goal
+Define Phase 38 using a bounded contract that separates direct provider adapter presence from deterministic runtime-safe usage claims.
+
+> Governance Note  
+> The implementation status of Phase 38 is explicitly documented in:  
+> `docs/architecture/phases/phase-38-status.md`
+
+### Verified Existing Artifacts
+- Direct provider-facing loader functions exist in `src/cilly_trading/engine/data.py`.
+- Provider registry/failover contract artifacts exist in `src/cilly_trading/engine/data/market_data_provider.py`.
+- Snapshot-only API behavior and deterministic/non-deterministic boundary language is documented in `docs/operations/api/usage_contract.md`.
+
+### Explicitly Out of Scope
+- Treating direct adapter presence as proof of production-ready runtime integration.
+- Claiming broker integration, live feeds, or websocket delivery under Phase 38.
+
+### Acceptance Evidence Requirements
+- Repository status wording must not claim direct provider integrations are absent where code exists.
+- Runtime-safe claims must include deterministic snapshot-bound usage evidence, not only adapter-presence evidence.

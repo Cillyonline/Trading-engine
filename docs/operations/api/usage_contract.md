@@ -175,6 +175,20 @@ No validation is performed on the number of rows, date coverage, or completeness
 - Direct engine calls to `cilly_trading.engine.core.run_watchlist_analysis` with `snapshot_only=False` (default) and without `ingestion_run_id` load data via `cilly_trading.engine.data.load_ohlcv`, which depends on current time (`_utc_now`) and external data sources (`yfinance` for stocks, `ccxt`/Binance for crypto). Results can vary over time or with upstream data changes.
 - If `snapshot_only=False` and snapshot data is missing or invalid, the engine may skip symbols instead of failing the request, which makes outcomes dependent on snapshot availability at runtime.
 
+### Direct provider adapter status vs runtime-safe usage claims
+
+The repository contains direct provider adapter code in `cilly_trading.engine.data` (`_load_stock_yahoo`, `_load_crypto_binance`, and `load_ohlcv`).
+
+This presence does **not** by itself establish a runtime-safe deterministic API integration claim.
+
+A repository-safe market-data claim must distinguish:
+
+- **Adapter presence:** direct provider code exists.
+- **Deterministic usage boundary:** runtime API entrypoints enforce snapshot-only paths (`load_ohlcv_snapshot`) with `ingestion_run_id`.
+- **Operational/runtime evidence:** tests verify snapshot-only endpoints do not call direct provider loaders in the deterministic API path.
+
+The snapshot-only API contract remains the authoritative deterministic runtime boundary.
+
 ### Error semantics (analysis endpoints)
 
 These errors are emitted by `/strategy/analyze`, `/analysis/run`, `/watchlists/{watchlist_id}/execute`, and `/screener/basic` unless the endpoint-specific section below narrows the behavior:
