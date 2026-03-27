@@ -36,32 +36,32 @@ def test_runtime_chart_data_contract_doc_closes_example_json_before_sections() -
     assert content.index("## Consumer Expectations") < content.index("## Explicit Non-Goals")
 
 
-def test_phase39_ui_doc_points_to_runtime_chart_data_contract() -> None:
+def test_phase39_ui_doc_defines_shared_shell_non_inference_boundary() -> None:
     content = (
         REPO_ROOT / "docs" / "ui" / "phase-39-charting-contract.md"
     ).read_text(encoding="utf-8")
 
-    assert "docs/api/runtime_chart_data_contract.md" in content
-    assert "existing runtime API routes" in content
-    assert "fallback-only" in content
+    assert content.startswith("# Phase 39 /ui Charting Evidence Boundary")
+    assert "shared runtime `/ui` surface" in content
+    assert "does not require dedicated chart-panel markers" in content
+    assert "What /ui Evidence Does Not Prove for Phase 39" in content
+    assert "docs/operations/api/runtime_chart_data_contract.md" in content
+    assert "tests/test_api_phase39_chart_contract.py" in content
 
 
-def test_phase39_test_plan_defines_minimum_runtime_charting_gate() -> None:
+def test_phase39_test_plan_defines_shared_shell_marker_gate_and_contract_gate() -> None:
     content = (
         REPO_ROOT / "docs" / "ui" / "phase-39-test-plan.md"
     ).read_text(encoding="utf-8")
 
     assert content.startswith("# Phase 39 Runtime Charting Test Plan")
-    assert "Runtime UI chart marker coverage" in content
-    assert "API contract verification for chart-data behavior" in content
-    assert "Phase 37 watchlist regression protection" in content
-    assert "Deterministic runtime behavior protection" in content
-    assert "#runtime-chart-panel" in content
-    assert "data-runtime-chart-boundary=\"phase39-visual-analysis\"" in content
-    assert "POST /analysis/run" in content
-    assert "POST /watchlists/{watchlist_id}/execute" in content
-    assert "GET /signals" in content
-    assert "fallback_only" in content
+    assert "Runtime /ui shared-shell marker coverage" in content
+    assert 'id="watchlist-form"' in content
+    assert 'id="watchlist-ranked-result-list"' in content
+    assert 'id="alert-status"' in content
+    assert 'id="alert-list"' in content
+    assert "No Phase 39 or Phase 40 features" in content
+    assert "Dedicated Phase 39 chart-panel markers are not required for this gate." in content
     assert "snapshot_first = true" in content
     assert "live_data_allowed = false" in content
     assert "market_data_product = false" in content
@@ -76,3 +76,4 @@ def test_docs_index_links_runtime_chart_data_contract() -> None:
 
     assert "api/runtime_chart_data_contract.md" in content
     assert "ui/phase-39-test-plan.md" in content
+

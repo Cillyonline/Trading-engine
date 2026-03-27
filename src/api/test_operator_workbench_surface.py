@@ -48,6 +48,11 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "/watchlists/{watchlist_id}" in response.text
     assert "/watchlists/{watchlist_id}/execute" in response.text
     assert "No Phase 39 or Phase 40 features" in response.text
+    assert "/alerts/history" in response.text
+    assert 'id="alert-status"' in response.text
+    assert 'id="alert-list"' in response.text
+    assert 'id="runtime-chart-panel"' not in response.text
+    assert "phase39-visual-analysis" not in response.text
     assert "Strategies" in response.text
     assert "Strategy List Panel" in response.text
     assert "Signals Panel" in response.text
