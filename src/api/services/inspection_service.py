@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from cilly_trading.engine.decision_card_contract import validate_decision_card
 from cilly_trading.engine.portfolio import (
     PortfolioPosition as PortfolioInspectionPosition,
-    load_portfolio_state_from_env,
+    load_portfolio_state_from_simulation_repository,
 )
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
 
@@ -130,8 +130,13 @@ def portfolio_position_response(
     )
 
 
-def read_portfolio_positions() -> PortfolioPositionsResponse:
-    state = load_portfolio_state_from_env()
+def read_portfolio_positions(
+    *,
+    deps: InspectionServiceDependencies,
+) -> PortfolioPositionsResponse:
+    state = load_portfolio_state_from_simulation_repository(
+        repository=deps.canonical_execution_repo,
+    )
     items = [portfolio_position_response(position) for position in state.positions]
     return PortfolioPositionsResponse(positions=items, total=len(items))
 
