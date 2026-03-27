@@ -28,3 +28,25 @@ def test_backtest_cli_doc_defines_trader_interpretation_boundary() -> None:
     assert "does **not** prove" in content
     assert "Live trading readiness." in content
     assert "Future performance" in content
+
+
+def test_backtest_cli_doc_defines_phase_handoff_contract_and_gate_distinction() -> None:
+    content = (REPO_ROOT / "docs" / "testing" / "backtesting" / "backtest_cli.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "## Phase 42b -> 43 -> 44 Handoff Contract" in content
+    assert "phase_handoff.required_evidence.phase_43_portfolio_simulation" in content
+    assert "phase_handoff.required_evidence.phase_44_paper_trading_readiness" in content
+    assert "technically valid artifact is not automatically Phase 43/44 readiness evidence" in content
+
+
+def test_backtest_architecture_doc_defines_canonical_handoff() -> None:
+    content = (REPO_ROOT / "docs" / "architecture" / "backtest_execution_contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "## Canonical Handoff (Phase 42b -> Phase 43 -> Phase 44)" in content
+    assert "phase_handoff.acceptance_gates.technically_valid_backtest_artifact" in content
+    assert "phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready" in content
+    assert "phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready" in content

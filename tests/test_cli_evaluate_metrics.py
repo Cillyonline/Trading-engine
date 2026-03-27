@@ -117,6 +117,14 @@ def test_cli_evaluate_accepts_backtest_artifact_with_baseline_outputs(tmp_path: 
         ]
     )
     assert backtest_result.returncode == 0
+    backtest_payload = json.loads((backtest_out / "backtest-result.json").read_text(encoding="utf-8"))
+    assert "phase_handoff" in backtest_payload
+    assert (
+        backtest_payload["phase_handoff"]["acceptance_gates"]["phase_43_portfolio_simulation_ready"][
+            "passed"
+        ]
+        is True
+    )
 
     evaluate_out = tmp_path / "eval-out"
     evaluate_result = _run_cli(

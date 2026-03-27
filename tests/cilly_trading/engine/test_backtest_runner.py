@@ -244,6 +244,14 @@ def test_backtest_runner_artifact_contains_explicit_run_contract(tmp_path: Path)
     assert run_config["execution_assumptions"]["commission_per_order"] == "7"
     assert run_config["reproducibility_metadata"]["run_id"] == "contract-run"
     assert run_config["reproducibility_metadata"]["strategy_name"] == "REFERENCE"
+    handoff = payload["phase_handoff"]
+    assert handoff["source_phase"] == "42b"
+    assert handoff["target_phases"] == ["43", "44"]
+    assert handoff["acceptance_gates"]["phase_43_portfolio_simulation_ready"]["passed"] is True
+    assert (
+        handoff["acceptance_gates"]["phase_44_paper_trading_readiness_evidence_ready"]["passed"]
+        is True
+    )
 
 
 def test_backtest_runner_emits_deterministic_orders_fills_positions(tmp_path: Path) -> None:
@@ -334,3 +342,9 @@ def test_backtest_runner_metrics_baseline_cost_aware_differs_from_cost_free(tmp_
         < baseline["summary"]["ending_equity_cost_free"]
     )
     assert baseline["metrics"]["cost_aware"]["total_return"] < baseline["metrics"]["cost_free"]["total_return"]
+    assert (
+        payload["phase_handoff"]["assumption_alignment"][
+            "run_config_execution_assumptions_match_metrics_baseline_assumptions"
+        ]
+        is True
+    )

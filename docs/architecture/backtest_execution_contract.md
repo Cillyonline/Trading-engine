@@ -74,3 +74,27 @@ For identical snapshots and identical run contract:
 
 The run artifact now surfaces both the explicit `run_config` contract and realized `orders` / `fills` / `positions`.
 
+## Canonical Handoff (Phase 42b -> Phase 43 -> Phase 44)
+
+The canonical handoff from backtest evidence is explicit in `backtest-result.json` under `phase_handoff`.
+
+- `phase_handoff.source_phase` MUST be `42b`.
+- `phase_handoff.target_phases` MUST include `43` and `44`.
+- `phase_handoff.required_evidence.phase_43_portfolio_simulation` defines the required fields for Phase 43 consumers.
+- `phase_handoff.required_evidence.phase_44_paper_trading_readiness` defines the additional required fields for Phase 44 evidence consumers.
+- `phase_handoff.authoritative_outputs.trader_interpretation` defines which outputs are authoritative for trader-facing interpretation.
+- `phase_handoff.assumption_alignment.run_config_execution_assumptions_match_metrics_baseline_assumptions` MUST be true before readiness evidence is considered valid.
+
+Acceptance gates are explicit and non-inferential:
+
+- `phase_handoff.acceptance_gates.technically_valid_backtest_artifact`
+  distinguishes "artifact is structurally valid" from downstream readiness claims.
+- `phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready`
+  indicates evidence is complete and aligned for Phase 43 portfolio simulation usage.
+- `phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready`
+  indicates evidence handoff completeness for Phase 44 readiness review.
+
+Boundary clarification:
+
+- Passing the handoff gates does not implement portfolio simulation or paper-trading workflows.
+- Passing the handoff gates does not imply live trading or broker readiness.
