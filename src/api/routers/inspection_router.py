@@ -251,7 +251,7 @@ def build_inspection_router(
     def read_portfolio_positions_handler(
         _: str = Depends(deps.require_role("read_only")),
     ) -> PortfolioPositionsResponse:
-        return inspection_service.read_portfolio_positions()
+        return inspection_service.read_portfolio_positions(deps=_service_dependencies(deps))
 
     @router.get(
         "/paper/account",
