@@ -26,6 +26,7 @@ Use this order:
 - [CLI usage](operations/cli/usage.md)
 - [Paper trading boundary](operations/paper-trading.md)
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
+- [Staging-first deployment topology and runtime contract](operations/runtime/staging-first-deployment-topology.md)
 
 ## UI Surfaces
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)

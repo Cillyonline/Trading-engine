@@ -1,190 +1,123 @@
 # Staging-First Deployment Topology and Runtime Contract
 
-## Purpose
-Define the canonical non-productive server deployment target for the engine.
-This contract is staging-first and paper-trading-ready only after explicit
-acceptance gates. It is not a production or live-trading declaration.
+## Goal
+Define the canonical staging-first deployment topology, runtime contract, and
+environment boundary for bounded non-live server operation.
 
-## Scope
-In scope:
-- Canonical server deployment target.
-- Runtime topology and process boundaries.
-- Environment and config separation.
-- Runtime dependencies and storage expectations.
-- Non-productive deployment scope and non-goals.
-
-Out of scope:
-- Live trading release.
-- Broker connectivity.
-- Full production HA design.
-- Dashboard redesign.
-
-## Canonical Deployment Target
-The canonical server target is a single non-productive staging host running:
-- one API/runtime process (`uvicorn api.main:app`)
-- one local SQLite persistence volume
+## Canonical Topology Claim
+Exactly one canonical staging-first topology is valid in this stage:
+- one staging host
+- one `api` service process (`uvicorn api.main:app`)
+- one local SQLite persistence volume mounted at `/data`
 - no broker process
-- no live execution integration
+- no live trading process
 
 Primary deployment profile:
-- `docker compose` using
-  `docker/staging/docker-compose.staging.yml`
-- single service: `api`
-- mapped API port: `18000` (host) to `8000` (container)
-- persistent volume mounted at `/data` for SQLite
+- `docker/staging/docker-compose.staging.yml`
+- host port `18000` mapped to container port `8000`
+- named volume `cilly_staging_data` mounted at `/data`
 
-This topology is the bounded default for staging and later paper-trading mode.
-It must not be described as production-ready.
+No alternative equal-status topology is defined for this stage.
 
 ## Runtime Topology
 
 ```text
-[Operator or automation client]
-            |
-            v
-    [HTTP API: FastAPI/Uvicorn]
-            |
-            v
-  [Engine runtime + control plane]
-            |
-            v
-      [SQLite at /data]
+[Operator client or bounded automation]
+                 |
+                 v
+       [HTTP API: FastAPI/Uvicorn]
+                 |
+                 v
+ [Engine runtime + control-plane lifecycle]
+                 |
+                 v
+        [SQLite persistence at /data]
 ```
 
-### Topology Rules
-- Exactly one runtime authority instance per staging host.
-- API and runtime execute in the same process boundary in this topology.
-- Persistence is local SQLite; no distributed storage assumptions.
-- No external market or broker side effects are permitted.
+## Runtime Contract and Service Boundary
+Required runtime services in this topology:
+- HTTP API service (`api.main:app`)
+- in-process engine runtime and control plane
+- SQLite persistence file on the mounted staging volume
 
-## Runtime Responsibilities and Service Boundaries
+Operating assumptions:
+- single runtime authority instance per staging host
+- API and runtime share one process boundary in this stage
+- bounded non-live operation only
+- deterministic runtime behavior remains enforced by existing runtime contracts
 
-### API and control-plane boundary
-- Accepts and validates HTTP requests.
-- Exposes health, introspection, and control endpoints.
-- Delegates lifecycle state transitions to the engine-owned runtime controller.
+Service boundaries:
+- API/control plane: request validation, health exposure, runtime control.
+- Engine runtime: lifecycle ownership, bounded execution orchestration, state
+  transitions (`init`, `ready`, `running`, `paused`, `stopping`, `stopped`).
+- Persistence: local SQLite durability only; no distributed storage or
+  multi-writer assumptions.
 
-### Engine runtime boundary
-- Owns runtime lifecycle, analysis execution, and deterministic behavior
-  contracts.
-- Owns enforcement of runtime state transitions (`init`, `ready`, `running`,
-  `paused`, `stopping`, `stopped`).
-- Must not imply broker execution responsibilities in staging.
+## Environment Boundary
+This deployment stage is explicitly bounded to staging and must not be mixed
+with production-like scope.
 
-### Persistence boundary
-- SQLite is the only canonical persistence dependency for this topology.
-- Data durability is constrained to the mounted staging volume.
-- Schema and init behavior remains owned by existing DB initialization code.
+Staging environment boundary:
+- non-live server operation only
+- no live order routing
+- no broker integration dependency
+- no production HA or horizontal scaling contract
 
-## Environment and Configuration Boundary
-Configuration is explicitly separated into bounded layers:
+Configuration layers for this stage:
+1. Process environment (`PYTHONPATH`, `CILLY_LOG_LEVEL`, `CILLY_LOG_FORMAT`).
+2. Runtime/API defaults from code-owned constants.
+3. Request-scoped parameters supplied by API clients.
+4. Strategy schema defaults and validation behavior.
 
-1. Process environment layer:
-   - `PYTHONPATH` for module resolution.
-   - `CILLY_LOG_LEVEL` for logging verbosity.
-
-2. Runtime defaults/constants layer:
-   - Runtime and API module constants (for example API read limits).
-
-3. Request-scoped layer:
-   - Endpoint request payload values and strategy/runtime request fields.
-
-4. Strategy schema layer:
-   - Strategy defaults, normalization, and validation semantics.
-
-Authoritative config ownership rules are defined in:
+Authoritative ownership of configuration semantics remains:
 - `docs/architecture/configuration_boundary.md`
 
-This deployment contract defines where configuration is supplied in staging
-operations. It does not introduce new ownership semantics.
+## Persistence, Logging, and Health Expectations
+Persistence expectations at topology level:
+- canonical persistence is SQLite at `/data/cilly_trading.db`
+- durability boundary is the mounted staging volume (`cilly_staging_data`)
+- volume removal resets staging state
 
-## Required Runtime Dependencies
-Required for canonical staging deployment:
-- Python runtime and project dependencies.
-- FastAPI/Uvicorn runtime entrypoint (`api.main:app`).
-- Writable filesystem path for SQLite data (`/data` in container profile).
+Logging expectations at topology level:
+- runtime logs emitted to stdout/stderr
+- JSON logging contract remains enabled through environment settings
+- no external observability backend is required for this stage
 
-Expected runtime artifacts and storage behavior:
-- SQLite database file stored in mounted volume.
-- Smoke-run artifacts under `artifacts/smoke-run/` when smoke-run is executed.
-- No dependence on external broker services.
+Health boundary expectations at topology level:
+- `GET /health` and `GET /health/*` remain the primary readiness boundary
+- readiness requires healthy engine runtime and data boundary
+- health checks are non-broker and non-live by design
 
-## Non-Productive Scope and Release Boundary
-This topology is non-productive by default.
+## Non-Goals and Excluded Runtime Modes
+Explicit non-goals for this deployment stage:
+- live trading
+- broker integrations
+- production high availability
+- multi-region or active-active runtime
+- unrelated UI redesign
+- strategy logic changes
 
-The deployment remains non-productive unless explicit future acceptance gates
-are passed, including at least:
-- paper-trading operator workflow acceptance
-- explicit release/governance approval for mode change
-- documented runtime safety and operational gate review
+Excluded runtime modes:
+- any runtime mode that places live market orders
+- any runtime mode requiring external broker connectivity
+- any runtime mode that assumes production SLO/SLA guarantees
 
-Until those gates exist and are accepted, this topology must be treated as:
-- staging for controlled validation
-- no live order execution
-- no broker-integrated production behavior
+## Install-Ready Versus Later Scope
+`install-ready (staging)` and `paper-operational` remain distinct:
+- `install-ready (staging)`: canonical topology is deployed and healthy.
+- `paper-operational`: additional accepted evidence beyond deployment health.
 
-## Install-Ready vs Paper-Operational Boundary
-In this repository, these are separate states:
-- `install-ready (staging)`: deployment and runtime mechanics are healthy on the
-  staging host.
-- `paper-operational`: install-ready plus explicit acceptance evidence for
-  backtesting, decision-card behavior, runtime health, and paper-trading
-  consistency.
-
-Passing staging deployment checks alone does not grant paper-operational status.
-The required gate and operator checklist are:
-- `docs/operations/runtime/paper-deployment-acceptance-gate.md`
-- `docs/operations/runtime/paper-deployment-operator-checklist.md`
+Passing staging deployment validation does not declare production readiness.
 
 ## Validation and Verification Path
-
-### Canonical Staging Artifact Path
-- Docker image build:
-  `docker/staging/Dockerfile`
-- Compose stack:
-  `docker/staging/docker-compose.staging.yml`
-- Bounded validation command:
-  `python scripts/validate_staging_deployment.py`
-- Operator run instructions:
-  `docs/operations/runtime/staging-server-deployment.md`
-
-### Documentation Review
-- Confirm this document is the canonical topology reference for staging-first
-  server deployment.
-
-### Config Validation (Compose Profile)
-Run:
-
-```bash
-docker compose -f docker/staging/docker-compose.staging.yml config
-```
-
-Pass condition:
-- Compose configuration resolves successfully.
-
-### Smoke-Run Verification Path
-Run:
-
-```bash
-PYTHONPATH=src python -c 'from cilly_trading.smoke_run import run_smoke_run; raise SystemExit(run_smoke_run())'
-```
-
-Pass condition:
-- Exit code `0` with the documented deterministic smoke-run stdout contract.
-
-### Full Test Suite Gate
-Run:
-
-```bash
-python -m pytest
-```
-
-Pass condition:
-- Full repository test suite remains green.
+Canonical validation references:
+- deployment runbook: `docs/operations/runtime/staging-server-deployment.md`
+- bounded validation command: `python scripts/validate_staging_deployment.py`
+- full repository gate: `python -m pytest`
 
 ## Related References
 - `docs/operations/runbook.md`
-- `docs/operations/paper-trading.md`
+- `docs/operations/runtime/staging-server-deployment.md`
 - `docs/operations/runtime/paper-deployment-acceptance-gate.md`
 - `docs/operations/runtime/paper-deployment-operator-checklist.md`
 - `docs/architecture/engine_runtime_lifecycle_contract.md`
