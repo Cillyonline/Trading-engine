@@ -31,6 +31,7 @@ Reproducibility constraints in this path:
   (`uv sync --frozen --no-dev` with `uv.lock`).
 - Runtime process entrypoint is fixed
   (`uvicorn api.main:app --host 0.0.0.0 --port 8000`).
+- Runtime SQLite path is fixed through `CILLY_DB_PATH=/data/cilly_trading.db`.
 - Legacy `requirements.txt` installation is non-canonical for first deployment
   in this repository contract.
 
@@ -54,6 +55,8 @@ Readiness expectations:
 Staging runtime observability contract:
 - Container logs are emitted to stdout and stderr.
 - `CILLY_LOG_LEVEL=INFO` and `CILLY_LOG_FORMAT=json` are set in compose.
+- API operational log lines are emitted as bounded JSON objects with
+  `timestamp`, `level`, `logger`, and `message`.
 - Engine structured events are emitted as deterministic JSON log lines
   (schema `cilly.engine.log.v1`).
 - Control-plane runtime visibility is available through `/health*`,
@@ -69,6 +72,8 @@ docker compose -f docker/staging/docker-compose.staging.yml logs -f api
 Runtime restart safety in this staging contract has two bounded expectations:
 - Process lifecycle can re-enter running state after a prior stopped state.
 - Container restart preserves SQLite-backed state through the mounted volume.
+- Validation proves persistence by creating a watchlist before restart and
+  reading the same watchlist after restart.
 
 Operational restart check:
 
@@ -87,6 +92,8 @@ Expected result:
   `/data`.
 - SQLite database file path resolves to
   `/data/cilly_trading.db` in this deployment profile.
+- Restart validation uses the same persisted SQLite file path before and after
+  API container restart.
 - Deleting the named volume removes persisted staging state.
 
 Reset command (destructive to staging state):
@@ -106,16 +113,24 @@ Validation stages:
 - Compose config resolution.
 - Compose up/build.
 - Health/readiness checks.
+- Operational log validation.
+- Restart-persistence probe creation.
 - API container restart.
 - Post-restart health/readiness checks.
+- Post-restart log validation.
+- Post-restart persistence verification.
 - Compose down cleanup (unless `--keep-running` is used).
 
 Expected success markers:
 - `STAGING_VALIDATE:CONFIG_OK`
 - `STAGING_VALIDATE:UP_OK`
 - `STAGING_VALIDATE:HEALTH_OK`
+- `STAGING_VALIDATE:LOGS_OK`
+- `STAGING_VALIDATE:PERSISTENCE_PROBE_OK`
 - `STAGING_VALIDATE:RESTART_OK`
 - `STAGING_VALIDATE:POST_RESTART_HEALTH_OK`
+- `STAGING_VALIDATE:POST_RESTART_LOGS_OK`
+- `STAGING_VALIDATE:PERSISTENCE_OK`
 - `STAGING_VALIDATE:DOWN_OK` (when `--keep-running` is not used)
 - `STAGING_VALIDATE:SUCCESS`
 

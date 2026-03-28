@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: docker/staging/Dockerfile
+    ports:
+      - "18000:8000"
+    working_dir: /data
+    environment:
+      PYTHONPATH: /app/src
+      CILLY_DB_PATH: /data/cilly_trading.db
+      CILLY_LOG_LEVEL: INFO
+      CILLY_LOG_FORMAT: json
+    volumes:
+      - cilly_staging_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json, urllib.request; request = urllib.request.Request('http://127.0.0.1:8000/health/engine', headers={'X-Cilly-Role': 'read_only'}); payload = json.load(urllib.request.urlopen(request, timeout=3)); raise SystemExit(0 if payload.get('ready') else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  cilly_staging_data:

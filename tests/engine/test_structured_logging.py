@@ -1,20 +1,22 @@
 from __future__ import annotations
 
-import json
 import importlib.util
+import io
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Literal
 from pathlib import Path
 import sys
 from typing import Any
+from typing import Literal
 
 import pandas as pd
 import pytest
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
 
+from api.services.composition_runtime_service import configure_logging
 from cilly_trading.engine.core import EngineConfig, run_watchlist_analysis
 from cilly_trading.engine.logging import (
     InMemoryEngineLogSink,
@@ -303,6 +305,34 @@ def test_structured_logs_are_observable_without_explicit_emitter(
     assert parsed["event"] == "analysis_run.started"
     assert parsed["event_index"] == 0
     assert parsed["payload"]["analysis_run_id"] == "run-default-emitter"
+
+
+def test_api_logging_config_supports_json_runtime_format(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root_logger = logging.getLogger()
+    original_handlers = list(root_logger.handlers)
+    original_level = root_logger.level
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+
+    root_logger.handlers = [handler]
+    root_logger.setLevel(logging.NOTSET)
+    monkeypatch.setenv("CILLY_LOG_LEVEL", "INFO")
+    monkeypatch.setenv("CILLY_LOG_FORMAT", "json")
+
+    try:
+        configure_logging()
+        logging.getLogger("ops.p46").info("deployment_start")
+    finally:
+        root_logger.handlers = original_handlers
+        root_logger.setLevel(original_level)
+
+    payload = json.loads(stream.getvalue().strip())
+    assert payload["level"] == "INFO"
+    assert payload["logger"] == "ops.p46"
+    assert payload["message"] == "deployment_start"
+    assert "timestamp" in payload
 
 
 def test_analysis_run_completed_status_reflects_signal_persistence_failure(

@@ -8,12 +8,25 @@ Init-Skript fuer die SQLite-Datenbank der Cilly Trading Engine.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
 
+DEFAULT_DB_PATH_ENV_VAR = "CILLY_DB_PATH"
+
+
+def resolve_default_db_path() -> Path:
+    """Resolve the canonical runtime DB path from the bounded process environment."""
+
+    configured_path = os.getenv(DEFAULT_DB_PATH_ENV_VAR)
+    if configured_path:
+        return Path(configured_path).expanduser()
+    return Path("cilly_trading.db")
+
+
 # Standard-Pfad fuer die Datenbankdatei (kann spaeter per ENV konfiguriert werden)
-DEFAULT_DB_PATH = Path("cilly_trading.db")
+DEFAULT_DB_PATH = resolve_default_db_path()
 
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:

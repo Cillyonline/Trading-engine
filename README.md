@@ -24,6 +24,8 @@ Start from these documents:
 
 - Operators validating a local environment should start here, then follow
   `docs/getting-started/getting-started.md` and `docs/getting-started/local-run.md`.
+- Operators validating the bounded staging server deployment path should use
+  `docs/operations/runtime/staging-server-deployment.md`.
 - Contributors or reviewers validating behavior and change scope should start
   here, then use `docs/testing/index.md` and `docs/architecture/`.
 

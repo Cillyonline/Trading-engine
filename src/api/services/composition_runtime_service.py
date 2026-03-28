@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -11,6 +14,21 @@ from ..models import ComplianceGuardStatusResponse, RuntimeIntrospectionResponse
 from . import analysis_service, control_plane_service
 
 
+class _JsonLogFormatter(logging.Formatter):
+    """Simple JSON formatter for bounded operational deployment logs."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, Any] = {
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, sort_keys=True, ensure_ascii=True)
+
+
 def configure_logging() -> None:
     """
     Central logging configuration for the Cilly Trading Engine.
@@ -19,18 +37,27 @@ def configure_logging() -> None:
     Note: Uvicorn with --reload can import modules multiple times.
     This guard prevents duplicate handlers.
     """
-    import os
-
     log_level = os.getenv("CILLY_LOG_LEVEL", "INFO").upper()
+    log_format = os.getenv("CILLY_LOG_FORMAT", "text").strip().lower()
+    formatter: logging.Formatter
+    if log_format == "json":
+        formatter = _JsonLogFormatter()
+    else:
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
 
     root_logger = logging.getLogger()
-    if root_logger.handlers:
+    root_logger.setLevel(log_level)
+
+    if not root_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(log_level)
+        handler.setFormatter(formatter)
+        root_logger.addHandler(handler)
         return
 
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
-    )
+    for handler in root_logger.handlers:
+        handler.setLevel(log_level)
+        handler.setFormatter(formatter)
 
 
 @dataclass
