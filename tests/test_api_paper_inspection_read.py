@@ -268,6 +268,8 @@ def test_paper_endpoints_are_exposed_and_schema_valid(tmp_path: Path, monkeypatc
     assert "/paper/positions" in openapi["paths"]
     assert "/paper/account" in openapi["paths"]
     assert "/paper/reconciliation" in openapi["paths"]
+    for path in ("/paper/trades", "/paper/positions", "/paper/account", "/paper/reconciliation"):
+        assert set(openapi["paths"][path].keys()) == {"get"}
 
     assert validate_json_schema(trades.json(), api_main.PaperTradesReadResponse.model_json_schema()) == []
     assert validate_json_schema(positions.json(), api_main.PaperPositionsReadResponse.model_json_schema()) == []

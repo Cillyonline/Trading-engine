@@ -25,6 +25,7 @@ Use this order:
 ## CLI Usage
 - [CLI usage](operations/cli/usage.md)
 - [Paper trading boundary](operations/paper-trading.md)
+- [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
 
 ## UI Surfaces
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
@@ -92,6 +93,12 @@ Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surfa
 Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
 - [Paper trading boundary](operations/paper-trading.md)
 - [Runbook](operations/runbook.md)
+
+### Phase 44 Reference Materials
+Phase 44 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+- [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
+- [Paper inspection and reconciliation API](api/paper_inspection.md)
+- [Paper deployment acceptance gate](operations/runtime/paper-deployment-acceptance-gate.md)
 
 ### Phase 37 Reference Materials
 Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.

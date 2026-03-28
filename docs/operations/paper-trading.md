@@ -57,4 +57,5 @@ or broker go-live approval.
 
 ## Roadmap Readiness Interpretation
 - Phase 24 focuses on documentation and governance alignment for the simulator and its boundaries.
+- Phase 44 is currently claimed only as one bounded operator runtime workflow across simulator evidence, canonical inspection, and reconciliation surfaces (see `docs/operations/runtime/phase-44-paper-operator-workflow.md`).
 - Phase 44 remains the broader paper-trading product phase and should only be treated as complete when workflow, operator surfaces, and broader runtime handling are fully verified.
