@@ -19,6 +19,10 @@ Primary deployment profile:
 
 No alternative equal-status topology is defined for this stage.
 
+## Canonical First-Deployment Install Path
+The canonical first-deployment install path in this stage is:
+- `docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+
 ## Runtime Topology
 
 ```text
