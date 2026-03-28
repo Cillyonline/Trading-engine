@@ -5,6 +5,10 @@ This runbook defines the bounded, reproducible server deployment path for
 non-productive staging mode. It is explicitly not a production or live-broker
 contract.
 
+## Canonical First-Deployment Install Path
+The canonical first-deployment install path in this repository is:
+- `docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+
 ## Deployment Artifacts
 - Image build file:
   `docker/staging/Dockerfile`
@@ -27,6 +31,8 @@ Reproducibility constraints in this path:
   (`uv sync --frozen --no-dev` with `uv.lock`).
 - Runtime process entrypoint is fixed
   (`uvicorn api.main:app --host 0.0.0.0 --port 8000`).
+- Legacy `requirements.txt` installation is non-canonical for first deployment
+  in this repository contract.
 
 ## Health and Readiness Checks
 Use read-only role headers for control-plane health endpoints.

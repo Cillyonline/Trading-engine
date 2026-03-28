@@ -1,7 +1,8 @@
 # Owner Runbook: Start / Stop / Logs / Reset Cheatsheet
 
 ## Purpose & Safety Notes
-This runbook gives owners a short, safe checklist to run, stop, monitor, and reset the local system.
+This runbook gives owners a short, safe checklist to run, stop, monitor, and
+reset the local system.
 
 - Use this checklist exactly as written.
 - Perform these steps only in your local environment.
@@ -10,17 +11,19 @@ This runbook gives owners a short, safe checklist to run, stop, monitor, and res
 ## Canonical startup path (owner default)
 Run from the repository root:
 
+### Startup command
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -e ".[test]"
 PYTHONPATH=src uvicorn api.main:app --reload
 ```
 
-What happens: FastAPI starts locally on port `8000`, and SQLite tables are initialized in `cilly_trading.db`.
+### What happens
+FastAPI starts locally on port `8000`, and SQLite tables are initialized in
+`cilly_trading.db`.
 
-Expected success signal (run in a second terminal):
-
+### Expected success signal
 ```bash
 curl http://127.0.0.1:8000/health
 ```
@@ -32,16 +35,13 @@ Expected response:
 ```
 
 ## Secondary / utility entrypoints (not the default owner path)
-- Module start (same API app, without typing the uvicorn target):
-  ```bash
-  PYTHONPATH=src python -m api.main
-  ```
-- Docker Compose start:
-  ```bash
-  docker compose up --build
-  ```
+```bash
+PYTHONPATH=src python -m api.main
+docker compose up --build
+```
 
-These are valid utility paths, but the canonical owner path is `PYTHONPATH=src uvicorn api.main:app --reload`.
+These are valid utility paths, but the canonical owner path is
+`PYTHONPATH=src uvicorn api.main:app --reload`.
 
 ## Stop
 Action (terminal where the server is running):
@@ -68,7 +68,7 @@ PYTHONPATH=src uvicorn api.main:app --reload 2>&1 | tee local-api.log
 What happens: logs stream to terminal and also to `local-api.log`.
 
 ## Reset / Cleanup
-> ⚠ WARNING — LOCAL DEVELOPMENT ONLY
+> WARNING - LOCAL DEVELOPMENT ONLY
 >
 > NEVER run this on production or shared systems.
 
@@ -85,7 +85,11 @@ Expected success signal:
 - After the next API start, `cilly_trading.db` is created again.
 
 ## Troubleshooting
-- If start fails, rerun the canonical startup command and read the first error line.
-- If `/health` fails while server is running, confirm the process uses `127.0.0.1:8000`.
-- If logs look empty, ensure you are looking at the terminal where `uvicorn` is running.
-- If reset appears ineffective, stop the API first, run `rm -f cilly_trading.db`, then start again.
+- If start fails, rerun the canonical startup command and read the first error
+  line.
+- If `/health` fails while server is running, confirm the process uses
+  `127.0.0.1:8000`.
+- If logs look empty, ensure you are looking at the terminal where `uvicorn` is
+  running.
+- If reset appears ineffective, stop the API first, run `rm -f cilly_trading.db`,
+  then start again.
