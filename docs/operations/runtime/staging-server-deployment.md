@@ -119,6 +119,17 @@ Expected success markers:
 - `STAGING_VALIDATE:DOWN_OK` (when `--keep-running` is not used)
 - `STAGING_VALIDATE:SUCCESS`
 
+## Acceptance-Gate Alignment
+This deployment runbook defines the `server-ready (staging)` boundary only.
+
+Status interpretation:
+- `server-ready (staging)`: staging validation and readiness checks pass.
+- `paper-install-ready`: requires the additional bounded acceptance gate in
+  `docs/operations/runtime/paper-deployment-acceptance-gate.md`.
+
+Required evidence output name used by the acceptance gate:
+- `EVIDENCE_STAGING_VALIDATION_LOG` (captures this runbook's validation output).
+
 ## Test Gate
 Repository validation remains mandatory:
 

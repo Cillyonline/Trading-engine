@@ -1,91 +1,128 @@
-# Paper Deployment Acceptance Gate (Staging -> Paper-Operational)
+# Paper Deployment Acceptance Gate (Staging -> Paper-Install-Ready)
 
 ## Purpose
-Define the explicit acceptance gate that must pass before a server deployment is
-treated as paper-operational for serious paper-trading usage.
+Define the explicit, bounded acceptance gate that separates:
+- `repository-runs-locally`, and
+- `server-ready (staging) + paper-install-ready (non-live)`.
 
-This gate exists to prevent a false equivalence between:
-- "the engine is installed and running on a server", and
-- "the engine is operationally ready for paper-trading decisions".
+The gate is binary and evidence-oriented. A deployment is either accepted or not
+accepted based on explicit required outputs.
 
 ## Scope
 In scope:
-- staging-to-paper acceptance gate definition
-- minimum evidence categories and pass requirements
-- operator-facing decision rule for paper-operational declaration
+- bounded server acceptance gate definition
+- exact validation sequence for staging server readiness
+- required evidence outputs for acceptance
+- explicit pass/fail criteria
+- wording alignment with deployment documentation
 
 Out of scope:
-- live-trading go-live criteria
-- broker launch process
-- product/marketing readiness claims
+- live-trading approval
+- broker integrations
+- strategy redesign
+- broad runtime redesign
 
-## Boundary: Server Install vs Paper-Operational
-Server install readiness is a prerequisite only. It means deployment mechanics
-and basic runtime health checks pass on a staging host.
+## Readiness States and Boundary
+- `repository-runs-locally`: local commands and tests can be executed.
+- `server-ready (staging)`: canonical staging deployment validation succeeds.
+- `paper-install-ready`: server-ready plus bounded paper evidence gate passes.
 
-Paper-operational readiness is a stricter state. It is reached only when all
-acceptance-gate evidence categories in this document are satisfied.
+Boundary rule:
+- Local run success alone must never be interpreted as server-ready.
+- Server-ready alone must never be interpreted as paper-install-ready.
+- Paper-install-ready requires all steps in the acceptance sequence below.
 
-Decision rule:
-- If any required evidence item is missing or fails, status remains `staging`.
-- Only when every required evidence item passes, status may be declared
-  `paper-operational`.
+## Bounded Acceptance Sequence (Canonical and Reproducible)
+Run steps in order from repository root.
 
-## Required Evidence Categories (Minimum)
+### Step 1 - Staging deployment validation
+Command:
+- `python scripts/validate_staging_deployment.py`
 
-### 1) Backtesting Evidence
-Minimum required evidence:
-- A bounded backtest evidence set exists for the exact strategy/config inputs
-  intended for paper usage.
-- Evidence includes run context (symbol universe, timeframe/window, config
-  identity, and execution timestamp).
-- The evidence shows deterministic reproducibility for the same inputs (no
-  unexplained result drift between repeated runs).
-- Any strategy candidate proposed for paper usage has no unresolved blocking
-  risk findings in the recorded evidence set.
+Required output markers:
+- `STAGING_VALIDATE:CONFIG_OK`
+- `STAGING_VALIDATE:UP_OK`
+- `STAGING_VALIDATE:HEALTH_OK`
+- `STAGING_VALIDATE:RESTART_OK`
+- `STAGING_VALIDATE:POST_RESTART_HEALTH_OK`
+- `STAGING_VALIDATE:SUCCESS`
 
-### 2) Decision-Card Behavior Evidence
-Minimum required evidence:
-- Decision cards are produced and reviewable for the candidates in scope.
-- Contract behavior is consistent with documented semantics in
-  `docs/architecture/decision_card_contract.md`.
-- Blocking hard-gate failures resolve to reject outcomes.
-- Candidates considered for paper operation resolve only through explicit
-  qualification states (`paper_candidate` or `paper_approved`), with rationale
-  fields present.
+Evidence output name:
+- `EVIDENCE_STAGING_VALIDATION_LOG`
 
-### 3) Runtime Health Evidence
-Minimum required evidence:
-- Staging deployment validation passes using
-  `python scripts/validate_staging_deployment.py`.
-- Required success markers are captured, including
-  `STAGING_VALIDATE:SUCCESS`.
-- Read-only health endpoints show readiness for `engine`, `data`, and `guards`
-  according to `docs/operations/runtime/staging-server-deployment.md`.
-- Restart validation is included and health remains ready after restart.
+### Step 2 - Explicit health/readiness evidence capture
+Commands:
+- `curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/engine`
+- `curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/data`
+- `curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/guards`
 
-### 4) Paper-Trading Consistency Evidence
-Minimum required evidence:
-- Paper-trading lifecycle behavior remains deterministic and bounded to
-  simulation-only semantics.
-- Canonical paper-trading tests remain passing, including
-  `tests/test_paper_trading_simulator.py`.
-- Paper inspection outputs are consistent with canonical order/event/trade
-  semantics documented in `docs/operations/paper-trading.md`.
-- Evidence explicitly confirms no live order routing or broker side effects.
+Required response conditions:
+- `/health/engine` -> `ready: true`
+- `/health/data` -> `ready: true`
+- `/health/guards` -> `ready: true` and allowing decision
 
-## Mandatory Validation Artifacts
-The following artifacts are required for gate review:
-- Completed operator checklist:
-  `docs/operations/runtime/paper-deployment-operator-checklist.md`
-- Captured staging validation output including success markers.
-- Captured repository test evidence (`python -m pytest` remains mandatory).
+Evidence output name:
+- `EVIDENCE_STAGING_HEALTH_SNAPSHOTS`
 
-## Operator Gate Outcome
-Use the operator checklist final decision rule:
-- Any `NO` item -> Gate result `NOT ACCEPTED`, deployment remains `staging`.
-- All items `YES` -> Gate result `ACCEPTED`, deployment may be treated as
-  `paper-operational` (still non-live, non-broker).
+### Step 3 - Paper consistency contract tests
+Command:
+- `python -m pytest tests/test_paper_trading_simulator.py tests/test_api_paper_inspection_read.py`
+
+Required result:
+- all selected tests pass
+
+Evidence output name:
+- `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT`
+
+### Step 4 - Full repository regression gate
+Command:
+- `python -m pytest`
+
+Required result:
+- full suite passes
+
+Evidence output name:
+- `EVIDENCE_FULL_PYTEST_OUTPUT`
+
+### Step 5 - Operator checklist completion
+Document:
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
+
+Required result:
+- every checklist item is `YES`
+
+Evidence output name:
+- `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST`
+
+## Required Evidence Outputs (Exact Set)
+The gate review package is complete only when all outputs below exist:
+1. `EVIDENCE_STAGING_VALIDATION_LOG`
+2. `EVIDENCE_STAGING_HEALTH_SNAPSHOTS`
+3. `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT`
+4. `EVIDENCE_FULL_PYTEST_OUTPUT`
+5. `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST`
+
+## Pass/Fail Criteria (Binary)
+PASS (`ACCEPTED: PAPER_INSTALL_READY`) requires all conditions:
+- every sequence step executed in order
+- every required marker/condition satisfied
+- every required evidence output present
+- checklist contains only `YES`
+
+FAIL (`NOT ACCEPTED: REMAIN STAGING`) if any condition is true:
+- any sequence step skipped
+- any required marker missing
+- any command exits non-zero
+- any evidence output missing
+- any checklist item is `NO` or blank
+
+## Wording Alignment Contract
+This acceptance gate and deployment runbook use the same boundary terms:
+- `server-ready (staging)` = deployment and health validation passed
+- `paper-install-ready` = server-ready plus this full acceptance gate passed
+
+Deployment reference:
+- `docs/operations/runtime/staging-server-deployment.md`
 
 ## Explicit Non-Goals Relative to Live Trading
 Passing this gate does not imply:
@@ -93,4 +130,3 @@ Passing this gate does not imply:
 - broker connectivity approval
 - capital-at-risk authorization
 - production incident/SRE maturity for live execution
-
