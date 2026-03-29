@@ -8,6 +8,7 @@ GOVERNANCE_DOC = REPO_ROOT / "docs" / "governance" / "qualification-claim-eviden
 ARCHITECTURE_DOC = REPO_ROOT / "docs" / "architecture" / "decision_card_contract.md"
 INSPECTION_DOC = REPO_ROOT / "docs" / "api" / "decision_card_inspection.md"
 PHASE_DOC = REPO_ROOT / "docs" / "phases" / "dec-p47-qualification-claim-boundary.md"
+PHASE_P49_DOC = REPO_ROOT / "docs" / "phases" / "dec-p49-qualification-engine-hard-gates-confidence.md"
 
 
 def test_governance_doc_defines_evidence_hierarchy_and_forbidden_claim_classes() -> None:
@@ -54,3 +55,15 @@ def test_dec_p47_phase_doc_links_governance_contract_and_runtime_enforcement() -
     assert "Required evidence order:" in content
     assert "src/cilly_trading/engine/decision_card_contract.py" in content
     assert "does not imply" in content
+
+
+def test_dec_p49_phase_doc_covers_bounded_qualification_engine_and_decision_output() -> None:
+    content = PHASE_P49_DOC.read_text(encoding="utf-8")
+
+    assert content.startswith("# DEC-P49 - Qualification Engine")
+    assert "hard-gate behavior is deterministic" in content
+    assert "confidence tiers are explicit and bounded" in content
+    assert "traffic-light output is deterministic and inspectable" in content
+    assert "src/cilly_trading/engine/qualification_engine.py" in content
+    assert "src/cilly_trading/engine/decision_card_contract.py" in content
+    assert "tests/cilly_trading/engine/test_qualification_engine.py" in content
