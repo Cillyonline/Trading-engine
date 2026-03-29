@@ -1,19 +1,23 @@
 # Phase 43 Portfolio Inspection Contract
 
-This document defines the bounded Phase 43 contract for `GET /portfolio/positions`.
+This document defines the bounded Phase 43 contract for portfolio/paper inspection surfaces:
+
+- `GET /portfolio/positions`
+- `GET /paper/account`
+- `GET /paper/reconciliation`
 
 ## Scope
 
-- The endpoint is a read-only inspection surface.
-- Position state is derived from canonical simulation artifacts persisted by the trading-core execution repository.
-- The endpoint does not execute orders, mutate portfolio state, or expose live broker state.
+- The covered endpoints are read-only inspection surfaces.
+- Covered state is derived from canonical simulation artifacts persisted by the trading-core execution repository.
+- Covered endpoints do not execute orders, mutate portfolio state, or expose live broker state.
 
 ## Source Of Truth
 
-- `src/cilly_trading/engine/portfolio/state.py`
-- `load_portfolio_state_from_simulation_repository(...)`
+- `src/api/services/paper_inspection_service.py`
+- `build_bounded_paper_simulation_state(...)`
 
-The source of truth is the canonical trade stream (`list_trades`) from the internal execution repository. Open exposure is derived from `quantity_opened - quantity_closed`.
+The source of truth is one bounded in-memory simulation snapshot built from canonical repository reads (`list_orders`, `list_execution_events`, `list_trades`) and reused for covered inspection derivations.
 
 ## Derivation Rules
 
@@ -23,6 +27,7 @@ The source of truth is the canonical trade stream (`list_trades`) from the inter
 - `average_price` is a weighted entry average over remaining quantity.
 - `unrealized_pnl` is the sum of unrealized PnL values (missing values treated as `0`).
 - Output ordering is deterministic: `symbol`, `strategy_id`, `size`, `average_price`, `unrealized_pnl`.
+- Paper account and reconciliation summaries are derived from the same bounded snapshot used for portfolio inspection output.
 
 ## Explicit Non-Claims
 
