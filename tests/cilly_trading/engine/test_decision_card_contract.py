@@ -74,13 +74,13 @@ def _valid_payload(*, qualification_state: str = "paper_approved", qualification
                 },
             ],
             "confidence_tier": "high",
-            "confidence_reason": "Recent sample depth and stability support high confidence",
+            "confidence_reason": "Aggregate score and component thresholds support high confidence with explicit evidence.",
             "aggregate_score": 79.0,
         },
         "qualification": {
             "state": qualification_state,
             "color": qualification_color,
-            "summary": "Opportunity qualifies for operator review and bounded execution",
+            "summary": "Opportunity is bounded to paper-trading review and execution scope.",
         },
         "rationale": {
             "summary": "Hard gates pass and bounded component scores support qualification",
@@ -90,7 +90,10 @@ def _valid_payload(*, qualification_state: str = "paper_approved", qualification
             "score_explanations": [
                 "Component scores are bounded and represent distinct evaluation axes",
             ],
-            "final_explanation": "Qualification is explicit and not derived from a single opaque score",
+            "final_explanation": (
+                "Qualification is explicit and not derived from a single opaque score, "
+                "and does not imply live-trading approval."
+            ),
         },
         "metadata": {
             "analysis_run_id": "run_20260324_0810",
@@ -171,11 +174,17 @@ def test_representative_qualification_payloads_validate(state: str, color: str) 
     if state == "reject":
         payload["hard_gates"]["gates"][0]["status"] = "fail"
         payload["hard_gates"]["gates"][0]["failure_reason"] = "Risk cap breach"
-        payload["qualification"]["summary"] = "Opportunity is rejected because a blocking gate failed"
+        payload["qualification"]["summary"] = (
+            "Opportunity is rejected for paper-trading because a blocking gate failed."
+        )
     if state == "watch":
         payload["score"]["confidence_tier"] = "low"
-        payload["score"]["confidence_reason"] = "Sample depth is limited for full qualification"
-        payload["qualification"]["summary"] = "Opportunity requires further evidence before qualification"
+        payload["score"]["confidence_reason"] = (
+            "Aggregate score or component threshold evidence is below medium confidence."
+        )
+        payload["qualification"]["summary"] = (
+            "Opportunity requires further evidence before paper-trading qualification."
+        )
 
     card = validate_decision_card(payload)
     assert card.qualification.state == state
@@ -189,3 +198,38 @@ def test_no_competing_decision_card_model_exists() -> None:
     assert [path.relative_to(root).as_posix() for path in model_files] == [
         "src/cilly_trading/engine/decision_card_contract.py"
     ]
+
+
+def test_negative_validation_rejects_confidence_reason_without_evidence_terms() -> None:
+    payload = _valid_payload()
+    payload["score"]["confidence_reason"] = "High confidence from broad stability."
+
+    with pytest.raises(ValidationError, match="confidence_reason must reference bounded evidence terms"):
+        validate_decision_card(payload)
+
+
+def test_negative_validation_rejects_unsupported_confidence_claim_phrase() -> None:
+    payload = _valid_payload()
+    payload["score"]["confidence_reason"] = "Aggregate evidence is strong and outcome is guaranteed."
+
+    with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
+        validate_decision_card(payload)
+
+
+def test_negative_validation_rejects_qualification_summary_outside_paper_scope() -> None:
+    payload = _valid_payload()
+    payload["qualification"]["summary"] = "Opportunity is production ready for paper-trading execution."
+
+    with pytest.raises(ValidationError, match="qualification.summary contains unsupported claim language"):
+        validate_decision_card(payload)
+
+
+def test_negative_validation_requires_final_explanation_live_trading_boundary() -> None:
+    payload = _valid_payload()
+    payload["rationale"]["final_explanation"] = "Qualification is explicit and deterministic."
+
+    with pytest.raises(
+        ValidationError,
+        match="must explicitly state that output does not imply live-trading approval",
+    ):
+        validate_decision_card(payload)

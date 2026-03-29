@@ -110,7 +110,7 @@ def _decision_card_payload(
         "qualification": {
             "state": qualification_state,
             "color": color_by_state[qualification_state],
-            "summary": "Qualification is deterministic and bounded for operator inspection.",
+            "summary": "Qualification is deterministic and bounded for paper-trading operator inspection.",
         },
         "rationale": {
             "summary": "Qualification is resolved from explicit hard gates and bounded score semantics.",
@@ -122,7 +122,10 @@ def _decision_card_payload(
                 "Component scores are integrated by deterministic category ordering.",
                 "Aggregate score uses fixed weights and bounded confidence tiers.",
             ],
-            "final_explanation": "Decision output is explainable and bounded to reject/watch/candidate/approved states.",
+            "final_explanation": (
+                "Decision output is explainable and bounded to reject/watch/candidate/approved states, "
+                "and does not imply live-trading approval."
+            ),
         },
         "metadata": {
             "analysis_run_id": "run-abc",
