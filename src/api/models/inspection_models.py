@@ -232,6 +232,57 @@ class PaperReconciliationReadResponse(BaseModel):
     mismatch_items: List[PaperReconciliationMismatchResponse]
 
 
+class PaperOperatorWorkflowBoundaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    description: str
+    in_scope: List[str]
+    out_of_scope: List[str]
+
+
+class PaperOperatorWorkflowStepResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step: int
+    action: str
+    endpoint: str
+    expected_result: str
+
+
+class PaperOperatorWorkflowSurfaceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canonical_inspection: List[str]
+    paper_inspection: List[str]
+    reconciliation: str
+
+
+class PaperOperatorWorkflowValidationCheckResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    ok: bool
+    expected: str
+    actual: str
+
+
+class PaperOperatorWorkflowValidationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    checks: List[PaperOperatorWorkflowValidationCheckResponse]
+
+
+class PaperOperatorWorkflowReadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    boundary: PaperOperatorWorkflowBoundaryResponse
+    steps: List[PaperOperatorWorkflowStepResponse]
+    surfaces: PaperOperatorWorkflowSurfaceResponse
+    validation: PaperOperatorWorkflowValidationResponse
+
+
 class ScreenerResultsQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

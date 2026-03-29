@@ -20,6 +20,7 @@ from .models import (
     ComplianceGuardStatusResponse,
     DecisionCardInspectionResponse,
     PaperAccountReadResponse,
+    PaperOperatorWorkflowReadResponse,
     PaperPositionsReadResponse,
     PaperReconciliationReadResponse,
     PaperTradesReadResponse,
