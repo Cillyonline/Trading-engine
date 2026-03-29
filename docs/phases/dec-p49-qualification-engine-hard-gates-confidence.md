@@ -43,6 +43,8 @@ Canonical runtime surfaces:
 
 - `src/cilly_trading/engine/qualification_engine.py`
 - `src/cilly_trading/engine/decision_card_contract.py`
+- `GET /decision-cards` in `src/api/routers/inspection_router.py` (read-only decision inspection surface)
+- `docs/api/decision_card_inspection.md` (bounded operator inspection wording contract)
 
 ## Validation
 
