@@ -1,4 +1,8 @@
-"""Read-only portfolio position state for control-plane inspection."""
+"""Read-only portfolio position state for control-plane inspection.
+
+The derived state is intentionally bounded to non-live simulation artifacts and
+must not be interpreted as a live portfolio risk model.
+"""
 
 from __future__ import annotations
 
@@ -58,7 +62,7 @@ def load_portfolio_state_from_simulation_repository(
     *,
     repository: PortfolioSimulationStateRepository,
 ) -> PortfolioState:
-    """Derive deterministic inspection state from canonical simulation artifacts."""
+    """Derive deterministic bounded inspection state from simulation artifacts."""
 
     trades = repository.list_trades(limit=1_000_000, offset=0)
     if not trades:
@@ -66,6 +70,12 @@ def load_portfolio_state_from_simulation_repository(
 
     aggregates: dict[tuple[str, str], _AggregatedPortfolioPosition] = {}
     for trade in trades:
+        if trade.status != "open":
+            continue
+        if trade.quantity_opened <= Decimal("0"):
+            continue
+        if trade.average_entry_price <= Decimal("0"):
+            continue
         remaining_quantity = trade.quantity_opened - trade.quantity_closed
         if remaining_quantity <= Decimal("0"):
             continue
@@ -175,6 +185,10 @@ def _parse_position(item: Any) -> PortfolioPosition | None:
         return None
 
     if not strategy_id or not symbol:
+        return None
+    if size < 0.0:
+        return None
+    if average_price < 0.0:
         return None
 
     return PortfolioPosition(
