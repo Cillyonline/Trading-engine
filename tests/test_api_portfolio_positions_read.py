@@ -15,6 +15,28 @@ class _FakeCanonicalExecutionRepo:
     def __init__(self, trades: list[Trade]) -> None:
         self._trades = trades
 
+    def list_orders(
+        self,
+        *,
+        strategy_id: str | None = None,
+        symbol: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[object]:
+        return []
+
+    def list_execution_events(
+        self,
+        *,
+        strategy_id: str | None = None,
+        symbol: str | None = None,
+        order_id: str | None = None,
+        trade_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[object]:
+        return []
+
     def list_trades(
         self,
         *,
