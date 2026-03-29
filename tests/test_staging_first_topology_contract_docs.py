@@ -65,7 +65,9 @@ def test_staging_topology_doc_defines_single_canonical_topology() -> None:
     assert "Canonical install/runbook authority:" in content
     assert "`docs/operations/runtime/staging-server-deployment.md`" in content
     assert "one `api` service process (`uvicorn api.main:app`)" in content
-    assert "one local SQLite persistence volume mounted at `/data`" in content
+    assert "explicit host bind mounts for DB, artifact, journal, logs, and runtime-state" in content
+    assert "bind-mounted host DB directory at `/data/db`" in content
+    assert "bind-mounted host journal directory at `/app/runs/phase6`" in content
 
 
 def test_staging_topology_doc_defines_runtime_environment_and_boundary_non_goals() -> None:
@@ -85,10 +87,7 @@ def test_staging_topology_doc_defines_runtime_environment_and_boundary_non_goals
     assert "- broker integrations" in content
     assert "- production high availability" in content
     assert "- any runtime mode that places live market orders" in content
-    assert (
-        "        [SQLite persistence at /data]\n```\n\n"
-        "## Runtime Contract and Service Boundary"
-    ) in content
+    assert " [SQLite persistence at /data/db/cilly_trading.db]\n```\n\n## Runtime Contract and Service Boundary" in content
     _assert_fence_closes_to_transition(
         content,
         block_marker="[Operator client or bounded automation]",

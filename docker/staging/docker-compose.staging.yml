@@ -3,16 +3,31 @@ services:
     build:
       context: ../..
       dockerfile: docker/staging/Dockerfile
+    user: "${CILLY_CONTAINER_UID:?set CILLY_CONTAINER_UID}:${CILLY_CONTAINER_GID:?set CILLY_CONTAINER_GID}"
     ports:
       - "18000:8000"
     working_dir: /data
     environment:
-      PYTHONPATH: /app/src
-      CILLY_DB_PATH: /data/cilly_trading.db
-      CILLY_LOG_LEVEL: INFO
-      CILLY_LOG_FORMAT: json
+      PYTHONPATH: "${PYTHONPATH:?set PYTHONPATH}"
+      CILLY_DB_PATH: "${CILLY_DB_PATH:?set CILLY_DB_PATH}"
+      CILLY_LOG_LEVEL: "${CILLY_LOG_LEVEL:?set CILLY_LOG_LEVEL}"
+      CILLY_LOG_FORMAT: "${CILLY_LOG_FORMAT:?set CILLY_LOG_FORMAT}"
     volumes:
-      - cilly_staging_data:/data
+      - type: bind
+        source: "${CILLY_STAGING_DB_DIR:?set CILLY_STAGING_DB_DIR}"
+        target: /data/db
+      - type: bind
+        source: "${CILLY_STAGING_ARTIFACT_DIR:?set CILLY_STAGING_ARTIFACT_DIR}"
+        target: /data/artifacts
+      - type: bind
+        source: "${CILLY_STAGING_JOURNAL_DIR:?set CILLY_STAGING_JOURNAL_DIR}"
+        target: /app/runs/phase6
+      - type: bind
+        source: "${CILLY_STAGING_LOG_DIR:?set CILLY_STAGING_LOG_DIR}"
+        target: /data/logs
+      - type: bind
+        source: "${CILLY_STAGING_RUNTIME_STATE_DIR:?set CILLY_STAGING_RUNTIME_STATE_DIR}"
+        target: /data/runtime-state
     restart: unless-stopped
     healthcheck:
       test:
@@ -26,6 +41,3 @@ services:
       timeout: 5s
       start_period: 10s
       retries: 3
-
-volumes:
-  cilly_staging_data:

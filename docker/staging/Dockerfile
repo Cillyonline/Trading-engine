@@ -12,10 +12,11 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
 RUN uv sync --frozen --no-dev
+RUN mkdir -p /data/db /data/artifacts /data/logs /data/runtime-state /app/runs/phase6
 
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONPATH="/app/src" \
-    CILLY_DB_PATH="/data/cilly_trading.db"
+    CILLY_DB_PATH="/data/db/cilly_trading.db"
 
 WORKDIR /data
 

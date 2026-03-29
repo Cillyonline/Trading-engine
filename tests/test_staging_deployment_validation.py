@@ -37,18 +37,31 @@ def test_staging_artifacts_define_canonical_runtime_contract() -> None:
     assert "FROM python:3.12.8-slim" in dockerfile_content
     assert "python -m pip install -U pip uv" in dockerfile_content
     assert "uv sync --frozen --no-dev" in dockerfile_content
-    assert 'CILLY_DB_PATH="/data/cilly_trading.db"' in dockerfile_content
+    assert 'CILLY_DB_PATH="/data/db/cilly_trading.db"' in dockerfile_content
+    assert "RUN mkdir -p /data/db /data/artifacts /data/logs /data/runtime-state /app/runs/phase6" in dockerfile_content
     assert "HEALTHCHECK" in dockerfile_content
     assert 'CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]' in dockerfile_content
 
     assert "dockerfile: docker/staging/Dockerfile" in compose_content
     assert '"18000:8000"' in compose_content
+    assert 'user: "${CILLY_CONTAINER_UID:?set CILLY_CONTAINER_UID}:${CILLY_CONTAINER_GID:?set CILLY_CONTAINER_GID}"' in compose_content
     assert "working_dir: /data" in compose_content
-    assert "CILLY_DB_PATH: /data/cilly_trading.db" in compose_content
-    assert "CILLY_LOG_FORMAT: json" in compose_content
+    assert 'PYTHONPATH: "${PYTHONPATH:?set PYTHONPATH}"' in compose_content
+    assert 'CILLY_DB_PATH: "${CILLY_DB_PATH:?set CILLY_DB_PATH}"' in compose_content
+    assert 'CILLY_LOG_LEVEL: "${CILLY_LOG_LEVEL:?set CILLY_LOG_LEVEL}"' in compose_content
+    assert 'CILLY_LOG_FORMAT: "${CILLY_LOG_FORMAT:?set CILLY_LOG_FORMAT}"' in compose_content
     assert "restart: unless-stopped" in compose_content
     assert "healthcheck:" in compose_content
-    assert "cilly_staging_data:/data" in compose_content
+    assert 'source: "${CILLY_STAGING_DB_DIR:?set CILLY_STAGING_DB_DIR}"' in compose_content
+    assert "target: /data/db" in compose_content
+    assert 'source: "${CILLY_STAGING_ARTIFACT_DIR:?set CILLY_STAGING_ARTIFACT_DIR}"' in compose_content
+    assert "target: /data/artifacts" in compose_content
+    assert 'source: "${CILLY_STAGING_JOURNAL_DIR:?set CILLY_STAGING_JOURNAL_DIR}"' in compose_content
+    assert "target: /app/runs/phase6" in compose_content
+    assert 'source: "${CILLY_STAGING_LOG_DIR:?set CILLY_STAGING_LOG_DIR}"' in compose_content
+    assert "target: /data/logs" in compose_content
+    assert 'source: "${CILLY_STAGING_RUNTIME_STATE_DIR:?set CILLY_STAGING_RUNTIME_STATE_DIR}"' in compose_content
+    assert "target: /data/runtime-state" in compose_content
 
 
 def test_run_staging_validation_includes_logging_and_persistence_checks() -> None:
