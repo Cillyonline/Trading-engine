@@ -14,6 +14,12 @@ No mutation endpoints are introduced by this surface.
 
 The endpoint exposes decision-card outcomes and their explanations so reviewers can inspect why a candidate was blocked, approved, or kept in ranked review flow.
 
+Claim boundary discipline for this surface:
+
+- confidence language is evidence-aligned only; confidence text must reference bounded aggregate/component/threshold evidence semantics
+- qualification and rationale language is bounded to paper-trading qualification scope
+- inspection outputs must not imply live-trading approval, broker readiness, production readiness, trader validation, or guaranteed outcomes
+
 ## Deterministic Ordering
 
 Default ordering is deterministic:
@@ -88,3 +94,5 @@ The inspection payload explicitly includes:
 - final qualification explanation (`final_explanation`)
 
 This keeps decision outputs explainable without introducing mutation or live-trading controls.
+
+The runtime contract validation for decision cards enforces this wording boundary and rejects unsupported confidence inflation language.
