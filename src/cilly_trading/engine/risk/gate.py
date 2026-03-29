@@ -1,9 +1,15 @@
-"""Risk gate implementations and execution guardrails."""
+"""Risk gate implementations and execution guardrails.
+
+The module intentionally enforces bounded, non-live risk semantics. These
+checks are deterministic guardrails for paper/backtest-style operation and do
+not represent live-trading risk readiness.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from math import isfinite
 from typing import Any, Mapping, Sequence
 
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
@@ -43,23 +49,34 @@ class RiskRejectedError(ValueError):
 
 @dataclass(frozen=True)
 class ThresholdRiskGate(RiskGate):
-    """Trivial concrete risk gate using a fixed notional threshold policy."""
+    """Bounded non-live risk gate using a fixed per-request notional threshold."""
 
     max_notional_usd: float
     rule_version: str = "threshold-v1"
 
     def evaluate(self, request: RiskEvaluationRequest) -> RiskDecision:
+        max_allowed = float(self.max_notional_usd)
+        if not isfinite(max_allowed) or max_allowed <= 0.0:
+            raise ValueError(
+                "ThresholdRiskGate requires max_notional_usd to be finite and > 0 for bounded non-live operation"
+            )
+
         score = float(request.notional_usd)
-        decision = "APPROVED" if score <= self.max_notional_usd else "REJECTED"
+        if not isfinite(score) or score < 0.0:
+            raise ValueError(
+                "RiskEvaluationRequest.notional_usd must be finite and >= 0 for bounded non-live operation"
+            )
+
+        decision = "APPROVED" if score <= max_allowed else "REJECTED"
         reason = (
-            "notional within threshold"
+            "bounded non-live notional within threshold"
             if decision == "APPROVED"
-            else "notional exceeds threshold"
+            else "bounded non-live notional exceeds threshold"
         )
         return RiskDecision(
             decision=decision,
             score=score,
-            max_allowed=float(self.max_notional_usd),
+            max_allowed=max_allowed,
             reason=reason,
             timestamp=datetime.now(tz=timezone.utc),
             rule_version=self.rule_version,
