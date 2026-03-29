@@ -111,10 +111,12 @@ def run_strategy_comparison(
         summary = artifact_payload.get("summary")
         summary_payload = summary if isinstance(summary, Mapping) else {}
 
+        comparison_group = _require_comparison_group(metadata_by_key, strategy_name)
+
         strategy_rows.append(
             {
                 "strategy_name": strategy_name,
-                "comparison_group": _comparison_group(metadata_by_key, strategy_name),
+                "comparison_group": comparison_group,
                 "signals": {
                     "candidate_count": candidate_count,
                     "executable_count": executable_count,
@@ -148,6 +150,25 @@ def run_strategy_comparison(
     payload: dict[str, Any] = {
         "artifact": "strategy_comparison",
         "artifact_version": "1",
+        "semantics": {
+            "signal_score": {
+                "comparison_scope": "strategy_local_only",
+                "cross_strategy_score_comparison_supported": False,
+                "summary": (
+                    "Signal score values are interpreted within each governed strategy surface and are "
+                    "not calibrated as cross-strategy confidence claims."
+                ),
+            },
+            "ranking": {
+                "rank_scope": "comparison_group",
+                "ranking_metric": "total_return",
+                "cross_group_ordering_supported": False,
+                "cross_group_delta_supported": False,
+                "summary": (
+                    "Ranking and benchmark deltas are evidence-backed only within each comparison_group."
+                ),
+            },
+        },
         "workflow": {
             "name": "bounded_comparable_strategy_evaluation",
             "benchmark_strategy": resolved_benchmark,
@@ -431,26 +452,43 @@ def _comparison_group(metadata_by_key: Mapping[str, Mapping[str, Any]], strategy
     return None
 
 
-def _build_ranking(strategy_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    sorted_rows = sorted(
-        strategy_rows,
-        key=lambda row: (
-            _numeric_metric(row, "total_return") is None,
-            -_numeric_metric(row, "total_return")
-            if _numeric_metric(row, "total_return") is not None
-            else 0.0,
-            str(row.get("strategy_name")),
-        ),
-    )
-    ranking: list[dict[str, Any]] = []
-    for index, row in enumerate(sorted_rows, start=1):
-        ranking.append(
-            {
-                "rank": index,
-                "strategy_name": row.get("strategy_name"),
-                "total_return": _numeric_metric(row, "total_return"),
-            }
+def _require_comparison_group(metadata_by_key: Mapping[str, Mapping[str, Any]], strategy_name: str) -> str:
+    comparison_group = _comparison_group(metadata_by_key, strategy_name)
+    if comparison_group is None:
+        raise StrategyEvaluationSelectionError(
+            f"Strategy is outside governed comparison surfaces: {strategy_name}"
         )
+    return comparison_group
+
+
+def _build_ranking(strategy_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    ranking: list[dict[str, Any]] = []
+    rows_by_group: dict[str, list[Mapping[str, Any]]] = {}
+    for row in strategy_rows:
+        group = str(row.get("comparison_group"))
+        rows_by_group.setdefault(group, []).append(row)
+
+    for comparison_group in sorted(rows_by_group.keys()):
+        group_rows = sorted(
+            rows_by_group[comparison_group],
+            key=lambda row: (
+                _numeric_metric(row, "total_return") is None,
+                -_numeric_metric(row, "total_return")
+                if _numeric_metric(row, "total_return") is not None
+                else 0.0,
+                str(row.get("strategy_name")),
+            ),
+        )
+        for index, row in enumerate(group_rows, start=1):
+            ranking.append(
+                {
+                    "rank": index,
+                    "strategy_name": row.get("strategy_name"),
+                    "comparison_group": comparison_group,
+                    "rank_scope": "comparison_group",
+                    "total_return": _numeric_metric(row, "total_return"),
+                }
+            )
     return ranking
 
 
@@ -459,23 +497,44 @@ def _build_deltas(
     benchmark_strategy: str,
 ) -> list[dict[str, Any]]:
     benchmark_metrics = None
+    benchmark_comparison_group: str | None = None
     for row in strategy_rows:
         if row.get("strategy_name") == benchmark_strategy:
             benchmark_metrics = row.get("metrics")
+            row_group = row.get("comparison_group")
+            if isinstance(row_group, str):
+                benchmark_comparison_group = row_group
             break
 
     benchmark_mapping = benchmark_metrics if isinstance(benchmark_metrics, Mapping) else {}
     deltas: list[dict[str, Any]] = []
     for row in strategy_rows:
+        strategy_comparison_group = row.get("comparison_group")
+        row_group = (
+            strategy_comparison_group
+            if isinstance(strategy_comparison_group, str)
+            else None
+        )
+        is_comparable_to_benchmark = (
+            benchmark_comparison_group is not None and row_group == benchmark_comparison_group
+        )
         metrics = row.get("metrics")
         metrics_map = metrics if isinstance(metrics, Mapping) else {}
         delta_row: dict[str, Any] = {
             "strategy_name": row.get("strategy_name"),
+            "comparison_group": row_group,
+            "benchmark_strategy": benchmark_strategy,
+            "benchmark_comparison_group": benchmark_comparison_group,
+            "comparable_to_benchmark": is_comparable_to_benchmark,
         }
         for key in _METRIC_KEYS:
             strategy_value = metrics_map.get(key)
             benchmark_value = benchmark_mapping.get(key)
-            delta_row[f"{key}_delta"] = _delta(strategy_value, benchmark_value)
+            delta_row[f"{key}_delta"] = (
+                _delta(strategy_value, benchmark_value)
+                if is_comparable_to_benchmark
+                else None
+            )
         deltas.append(delta_row)
     return deltas
 
@@ -508,4 +567,3 @@ def _delta(strategy_value: Any, benchmark_value: Any) -> float | None:
     if rounded == Decimal("0"):
         return 0.0
     return float(rounded)
-
