@@ -12,6 +12,7 @@ import api.main as api_main
 from cilly_trading.engine.runtime_controller import _reset_runtime_controller_for_tests
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
+from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 
 OWNER_HEADERS = {api_main.ROLE_HEADER_NAME: "owner"}
 OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
@@ -163,6 +164,49 @@ def test_runtime_is_shutdown_on_api_shutdown(monkeypatch) -> None:
         pass
 
     assert calls == ["shutdown"]
+
+
+def test_watchlist_persistence_survives_api_restart(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "restart-safe.db"
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(
+        api_main,
+        "watchlist_repo",
+        SqliteWatchlistRepository(db_path=db_path),
+    )
+
+    with TestClient(api_main.app) as client:
+        create_response = client.post(
+            "/watchlists",
+            headers=OPERATOR_HEADERS,
+            json={
+                "watchlist_id": "restart-safe-tech",
+                "name": "Restart Safe Tech",
+                "symbols": ["AAPL", "MSFT"],
+            },
+        )
+
+    assert create_response.status_code == 200
+
+    monkeypatch.setattr(
+        api_main,
+        "watchlist_repo",
+        SqliteWatchlistRepository(db_path=db_path),
+    )
+
+    with TestClient(api_main.app) as client:
+        read_response = client.get(
+            "/watchlists/restart-safe-tech",
+            headers=READ_ONLY_HEADERS,
+        )
+
+    assert read_response.status_code == 200
+    assert read_response.json() == {
+        "watchlist_id": "restart-safe-tech",
+        "name": "Restart Safe Tech",
+        "symbols": ["AAPL", "MSFT"],
+    }
 
 
 def test_engine_requests_are_blocked_when_runtime_not_running(tmp_path: Path, monkeypatch) -> None:
