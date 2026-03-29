@@ -392,8 +392,10 @@ def build_inspection_router(
         response_model=DecisionCardInspectionResponse,
         summary="Decision Card Inspection",
         description=(
-            "Read-only inspection surface for decision-card outputs with deterministic "
-            "ordering, filtering, and explanation fields."
+            "Read-only decision inspection surface aligned to the canonical decision contract "
+            "for deterministic qualification outcomes. Exposes bounded hard-gate, component-score, "
+            "and rationale visibility for operator review with deterministic ordering/filtering and "
+            "no write-capable mutation workflow."
         ),
     )
     def read_decision_cards_handler(
