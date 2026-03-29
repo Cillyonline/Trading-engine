@@ -10,10 +10,6 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from cilly_trading.engine.decision_card_contract import validate_decision_card
-from cilly_trading.engine.portfolio import (
-    PortfolioPosition as PortfolioInspectionPosition,
-    load_portfolio_state_from_simulation_repository,
-)
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
 
 from ..models import (
@@ -125,14 +121,23 @@ def build_trading_core_positions(
 
 
 def portfolio_position_response(
-    position: PortfolioInspectionPosition,
+    position: paper_inspection_service.PortfolioInspectionPositionState,
 ) -> PortfolioPositionResponse:
     return PortfolioPositionResponse(
         symbol=position.symbol,
-        size=position.size,
-        average_price=position.average_price,
-        unrealized_pnl=position.unrealized_pnl,
+        size=float(position.size),
+        average_price=float(position.average_price),
+        unrealized_pnl=float(position.unrealized_pnl),
         strategy_id=position.strategy_id,
+    )
+
+
+def load_bounded_paper_simulation_state(
+    *,
+    deps: InspectionServiceDependencies,
+) -> paper_inspection_service.BoundedPaperSimulationState:
+    return paper_inspection_service.build_bounded_paper_simulation_state(
+        canonical_execution_repo=deps.canonical_execution_repo,
     )
 
 
@@ -140,10 +145,8 @@ def read_portfolio_positions(
     *,
     deps: InspectionServiceDependencies,
 ) -> PortfolioPositionsResponse:
-    state = load_portfolio_state_from_simulation_repository(
-        repository=deps.canonical_execution_repo,
-    )
-    items = [portfolio_position_response(position) for position in state.positions]
+    state = load_bounded_paper_simulation_state(deps=deps)
+    items = [portfolio_position_response(position) for position in state.portfolio_positions]
     return PortfolioPositionsResponse(positions=items, total=len(items))
 
 
@@ -151,19 +154,9 @@ def read_paper_account(
     *,
     deps: InspectionServiceDependencies,
 ) -> PaperAccountReadResponse:
+    state = load_bounded_paper_simulation_state(deps=deps)
     return PaperAccountReadResponse(
-        account=build_paper_account_state(
-            paper_trades=deps.canonical_execution_repo.list_trades(
-                limit=1_000_000,
-                offset=0,
-            ),
-            paper_positions=build_trading_core_positions(
-                canonical_execution_repo=deps.canonical_execution_repo,
-                strategy_id=None,
-                symbol=None,
-                position_id=None,
-            ),
-        ),
+        account=PaperAccountStateResponse(**state.account),
     )
 
 
@@ -204,12 +197,14 @@ def read_paper_positions(
     params: PaperPositionsReadQuery,
     deps: InspectionServiceDependencies,
 ) -> PaperPositionsReadResponse:
-    all_items = build_trading_core_positions(
-        canonical_execution_repo=deps.canonical_execution_repo,
-        strategy_id=params.strategy_id,
-        symbol=params.symbol,
-        position_id=params.position_id,
-    )
+    state = load_bounded_paper_simulation_state(deps=deps)
+    all_items = list(state.positions)
+    if params.strategy_id is not None:
+        all_items = [item for item in all_items if item.strategy_id == params.strategy_id]
+    if params.symbol is not None:
+        all_items = [item for item in all_items if item.symbol == params.symbol]
+    if params.position_id is not None:
+        all_items = [item for item in all_items if item.position_id == params.position_id]
 
     page, total = paginate_items(all_items, limit=params.limit, offset=params.offset)
     return PaperPositionsReadResponse(
@@ -224,23 +219,16 @@ def read_paper_reconciliation(
     *,
     deps: InspectionServiceDependencies,
 ) -> PaperReconciliationReadResponse:
-    orders = deps.canonical_execution_repo.list_orders(limit=1_000_000, offset=0)
-    execution_events = deps.canonical_execution_repo.list_execution_events(limit=1_000_000, offset=0)
-    trades = deps.canonical_execution_repo.list_trades(limit=1_000_000, offset=0)
-    positions = build_trading_core_positions(
-        canonical_execution_repo=deps.canonical_execution_repo,
-        strategy_id=None,
-        symbol=None,
-        position_id=None,
-    )
-    account = build_paper_account_state(paper_trades=trades, paper_positions=positions)
-    mismatch_items = build_paper_reconciliation_mismatches(
-        orders=orders,
-        execution_events=execution_events,
-        trades=trades,
-        positions=positions,
-        account=account,
-    )
+    state = load_bounded_paper_simulation_state(deps=deps)
+    orders = list(state.orders)
+    execution_events = list(state.execution_events)
+    trades = list(state.trades)
+    positions = list(state.positions)
+    account = PaperAccountStateResponse(**state.account)
+    mismatch_items = [
+        PaperReconciliationMismatchResponse(**item)
+        for item in state.reconciliation_mismatches
+    ]
     return PaperReconciliationReadResponse(
         ok=not mismatch_items,
         summary=PaperReconciliationSummaryResponse(
