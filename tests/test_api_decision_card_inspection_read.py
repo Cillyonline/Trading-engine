@@ -7,6 +7,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from cilly_trading.engine.decision_card_contract import REQUIRED_COMPONENT_CATEGORIES
 from tests.utils.json_schema_validator import validate_json_schema
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
@@ -180,10 +181,21 @@ def test_decision_card_inspection_endpoint_is_exposed_and_schema_valid(
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["decision_card_id"] == "dc-001"
+    assert payload["items"][0]["hard_gates"]
+    assert payload["items"][0]["component_scores"]
+    assert {item["category"] for item in payload["items"][0]["component_scores"]} == set(
+        REQUIRED_COMPONENT_CATEGORIES
+    )
     assert payload["items"][0]["rationale_summary"]
     assert payload["items"][0]["gate_explanations"]
     assert payload["items"][0]["score_explanations"]
+    assert "does not imply live-trading approval" in payload["items"][0]["final_explanation"].casefold()
     assert "/decision-cards" in openapi["paths"]
+    get_spec = openapi["paths"]["/decision-cards"]["get"]
+    assert set(openapi["paths"]["/decision-cards"].keys()) == {"get"}
+    assert "Read-only decision inspection surface aligned to the canonical decision contract" in (
+        get_spec["description"]
+    )
 
     errors = validate_json_schema(payload, api_main.DecisionCardInspectionResponse.model_json_schema())
     assert errors == []
