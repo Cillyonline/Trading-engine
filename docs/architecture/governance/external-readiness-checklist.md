@@ -17,6 +17,9 @@ Instructions:
 | 6 | `docs/operations/api/usage_contract.md` includes a section titled "Error semantics". | |
 | 7 | `docs/operations/api/usage_contract.md` lists snapshot readiness/validation errors with status codes. | |
 | 8 | `docs/operations/api/external_api_happy_path.md` exists. | |
+| 9 | `docs/operations/runtime/staging-server-deployment.md` states localhost-only staging paper default. | |
+| 10 | Deployment, API usage, and paper acceptance docs consistently state that `X-Cilly-Role` headers are not a public authentication model. | |
+| 11 | Public exposure without an external trust boundary is explicitly disallowed in staging paper docs. | |
 
 ## Final decision rule
 
