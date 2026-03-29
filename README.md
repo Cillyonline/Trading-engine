@@ -19,6 +19,8 @@ Start from these documents:
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
+- Server-ready release governance contract:
+  `docs/releases/release_governance_contract.md`
 
 ## Verification Paths
 
