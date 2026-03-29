@@ -21,6 +21,10 @@ def test_paper_acceptance_gate_doc_defines_bounded_binary_sequence() -> None:
     assert "`repository-runs-locally`" in content
     assert "`server-ready (staging)`" in content
     assert "`paper-install-ready`" in content
+    assert "## Operator Access and Exposure Boundary" in content
+    assert "Localhost-only is the default staging paper access posture." in content
+    assert "not a public authentication model." in content
+    assert "Public exposure without an external trust boundary is not allowed." in content
     assert "## Bounded Acceptance Sequence (Canonical and Reproducible)" in content
     assert "### Step 1 - Staging deployment validation" in content
     assert "### Step 2 - Explicit health/readiness evidence capture" in content
@@ -53,6 +57,7 @@ def test_paper_acceptance_gate_doc_names_required_evidence_outputs_and_markers()
     assert "## Pass/Fail Criteria (Binary)" in content
     assert "ACCEPTED: PAPER_INSTALL_READY" in content
     assert "NOT ACCEPTED: REMAIN STAGING" in content
+    assert "Remote access is outside default staging scope" in content
 
 
 def test_operator_checklist_matches_acceptance_gate_wording_and_evidence_contract() -> None:

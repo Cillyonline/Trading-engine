@@ -82,6 +82,11 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert "`paper-install-ready`" in content
     assert "EVIDENCE_STAGING_VALIDATION_LOG" in content
     assert "## Test Gate" in content
+    assert "## Access and Trust Boundary (Staging Paper)" in content
+    assert "Default access posture for staging paper operation is localhost-only" in content
+    assert "public authentication model" in content
+    assert "Public or internet-exposed access without an external trust boundary is" in content
+    assert "explicitly disallowed." in content
 
 
 def test_staging_topology_doc_declares_single_canonical_first_deployment_path() -> None:
@@ -109,6 +114,8 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     assert "- `CILLY_STAGING_LOG_DIR`" in content
     assert "- `CILLY_STAGING_RUNTIME_STATE_DIR`" in content
     assert "Conditional provider secret requirements are explicit:" in content
+    assert "Remote access boundary:" in content
+    assert "Remote access is out of default staging scope" in content
     assert "Any local-run or local development installation guidance is non-canonical for" in content
     assert (
         "docker compose -f docker/staging/docker-compose.staging.yml up -d --build\n```\n\n"

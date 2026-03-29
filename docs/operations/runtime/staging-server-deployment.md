@@ -8,6 +8,26 @@ trading behavior.
 For a first-clean-server install in this repository, this runbook is the single
 authoritative contract.
 
+## Access and Trust Boundary (Staging Paper)
+Default access posture for staging paper operation is localhost-only:
+- Bind and validate API access through `127.0.0.1` only.
+- Treat `X-Cilly-Role` headers as bounded local operator-routing inputs, not as
+  a public authentication model.
+- Public or internet-exposed access without an external trust boundary is
+  explicitly disallowed.
+
+Remote access boundary:
+- Remote access is out of default staging scope and remains unsupported unless
+  an operator explicitly adds and owns an external trust boundary.
+- External trust boundary decisions are operator-owned and out of this runbook's
+  implementation scope.
+
+Minimum safe operator-access posture for staging paper operation:
+1. Keep API access localhost-only by default.
+2. Use role headers only for bounded non-public operator workflows.
+3. Do not expose the API publicly without an operator-managed external trust
+   boundary.
+
 ## Deployment Artifacts
 Deployment artifacts used by this runbook:
 - `docker/staging/Dockerfile`

@@ -15,6 +15,7 @@ In scope:
 - required evidence outputs for acceptance
 - explicit pass/fail criteria
 - wording alignment with deployment documentation
+- bounded operator trust model and exposure wording for staging paper operation
 
 Out of scope:
 - live-trading approval
@@ -31,6 +32,14 @@ Boundary rule:
 - Local run success alone must never be interpreted as server-ready.
 - Server-ready alone must never be interpreted as paper-install-ready.
 - Paper-install-ready requires all steps in the acceptance sequence below.
+
+## Operator Access and Exposure Boundary
+- Localhost-only is the default staging paper access posture.
+- `X-Cilly-Role` headers are bounded trust inputs for local/operator-controlled
+  staging use and are not a public authentication model.
+- Remote access is outside default staging scope and must be treated as an
+  operator-owned trust-boundary decision or unsupported.
+- Public exposure without an external trust boundary is not allowed.
 
 ## Bounded Acceptance Sequence (Canonical and Reproducible)
 Run steps in order from repository root.

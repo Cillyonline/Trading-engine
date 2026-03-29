@@ -5,6 +5,20 @@ This document defines the stable usage contract for the MVP v1 API. It documents
 ## Base URL
 
 - Local development: `http://localhost:8000`
+- Staging paper default: localhost-only (`http://127.0.0.1:18000` in the
+  staging runbook).
+
+## Access and Trust-Boundary Contract
+
+- Role headers such as `X-Cilly-Role` are not a public authentication model.
+- The role-header contract is bounded to trusted operator-controlled staging
+  contexts (localhost by default).
+- Remote access is not part of the default API usage contract and is either:
+  - an explicit operator-owned trust-boundary decision outside this repository
+    contract, or
+  - unsupported for this staging paper operation.
+- Public API exposure without an external trust boundary is explicitly
+  disallowed.
 
 ## Canonical Operator Analysis Contract
 
@@ -785,7 +799,8 @@ No request body.
 
 **Validation rules:**
 
-- Read access requires a valid authenticated role header and a role permitted to inspect watchlists.
+- Read access requires an accepted `X-Cilly-Role` value within the bounded
+  trusted operator context and a role permitted to inspect watchlists.
 
 ### Success response
 
