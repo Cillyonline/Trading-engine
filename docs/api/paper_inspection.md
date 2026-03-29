@@ -7,6 +7,7 @@ This document defines the read-only paper inspection surface for paper account s
 All endpoints require `X-Cilly-Role: read_only` (or a higher role).
 
 - `GET /paper/account`
+- `GET /paper/workflow`
 - `GET /paper/trades`
 - `GET /paper/positions`
 - `GET /paper/reconciliation`
@@ -63,14 +64,17 @@ Starting cash defaults to `100000` and can be overridden via `CILLY_PAPER_ACCOUN
 
 This is the minimum operator inspection path for paper trading from order intent to account state:
 
-1. Read order intent and final order state from `GET /trading-core/orders`.
-2. Read lifecycle transitions and fills from `GET /trading-core/execution-events` (`created` -> `submitted` -> fill states).
-3. Read resulting trade lifecycle from `GET /trading-core/trades`.
-4. Read derived position state from `GET /trading-core/positions`.
-5. Read paper-facing account state from `GET /paper/account`.
-6. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
+1. Read workflow contract and current validation status from `GET /paper/workflow`.
+2. Read order intent and final order state from `GET /trading-core/orders`.
+3. Read lifecycle transitions and fills from `GET /trading-core/execution-events` (`created` -> `submitted` -> fill states).
+4. Read resulting trade lifecycle from `GET /trading-core/trades`.
+5. Read derived position state from `GET /trading-core/positions`.
+6. Read paper-facing account state from `GET /paper/account`.
+7. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
 
 `GET /paper/reconciliation` fails closed for operational validation: any missing cross-reference or account equation mismatch is returned in `mismatch_items` with deterministic `code`, `entity_type`, and `entity_id` values.
+
+`GET /paper/workflow` is the bounded operator contract surface that makes workflow scope, boundary, required inspection/reconciliation surfaces, and validation checks explicit.
 
 ## Deterministic Ordering
 

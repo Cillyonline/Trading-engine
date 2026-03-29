@@ -14,6 +14,21 @@ Phase 44 is bounded to one operator verification workflow:
 4. Reconcile canonical and paper-facing state and require zero mismatches.
 5. Treat the result as bounded paper-runtime coherence evidence only.
 
+## Workflow Boundary
+This workflow is read-only, operator-facing, and validation-oriented.
+
+In scope:
+- deterministic paper lifecycle evidence
+- canonical inspection surfaces for order lifecycle state
+- paper inspection and reconciliation surfaces derived from canonical entities
+- mismatch-based validation for workflow coherence
+
+Out of scope:
+- live trading
+- broker integrations
+- broad dashboard expansion
+- production trading operations
+
 ## Required Runtime Surfaces
 
 ### Simulator and lifecycle evidence surfaces
@@ -29,10 +44,19 @@ Phase 44 is bounded to one operator verification workflow:
 - `GET /trading-core/positions`
 
 ### Paper inspection and reconciliation surfaces
+- `GET /paper/workflow`
 - `GET /paper/trades`
 - `GET /paper/positions`
 - `GET /paper/account`
 - `GET /paper/reconciliation`
+
+## Explicit Operator Steps
+1. Read workflow contract and current validation status from `GET /paper/workflow`.
+2. Inspect canonical order lifecycle state via `GET /trading-core/orders`.
+3. Inspect canonical execution lifecycle transitions via `GET /trading-core/execution-events`.
+4. Inspect canonical trade and position state via `GET /trading-core/trades` and `GET /trading-core/positions`.
+5. Inspect paper-facing trade, position, and account projections via `GET /paper/trades`, `GET /paper/positions`, and `GET /paper/account`.
+6. Reconcile the workflow state via `GET /paper/reconciliation` and require `ok: true` and `summary.mismatches: 0`.
 
 ## Minimum Operator Evidence
 The bounded Phase 44 workflow claim requires all of the following evidence:
