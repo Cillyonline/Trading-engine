@@ -37,6 +37,36 @@ QUALIFICATION_COLOR_BY_STATE: dict[QualificationState, QualificationColor] = {
     "paper_approved": "green",
 }
 
+EVIDENCE_CONFIDENCE_REQUIRED_TERMS: tuple[str, ...] = (
+    "aggregate",
+    "component",
+    "threshold",
+    "evidence",
+)
+
+CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
+    "live trading ready",
+    "live-trading ready",
+    "live trading approval",
+    "production ready",
+    "production-approved",
+    "broker execution ready",
+    "broker-ready",
+    "trader validated",
+    "trader-validated",
+    "guaranteed",
+    "guarantee",
+    "certain outcome",
+)
+
+
+def _contains_forbidden_claim_phrase(value: str) -> str | None:
+    normalized = value.casefold()
+    for phrase in CLAIM_BOUNDARY_FORBIDDEN_PHRASES:
+        if phrase in normalized:
+            return phrase
+    return None
+
 
 class HardGateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -129,6 +159,23 @@ class ScoreEvaluation(BaseModel):
             )
         return sorted(value, key=lambda component: component.category)
 
+    @field_validator("confidence_reason")
+    @classmethod
+    def _validate_confidence_reason_claim_boundary(cls, value: str) -> str:
+        reason = value.strip()
+        phrase = _contains_forbidden_claim_phrase(reason)
+        if phrase is not None:
+            raise ValueError(
+                f"confidence_reason contains unsupported claim language: {phrase}"
+            )
+        lowered = reason.casefold()
+        if not any(term in lowered for term in EVIDENCE_CONFIDENCE_REQUIRED_TERMS):
+            raise ValueError(
+                "confidence_reason must reference bounded evidence terms "
+                "(aggregate/component/threshold/evidence)"
+            )
+        return reason
+
 
 class Qualification(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -144,6 +191,13 @@ class Qualification(BaseModel):
             raise ValueError(
                 f"Qualification color must match state mapping: {self.state}->{expected_color}"
             )
+        phrase = _contains_forbidden_claim_phrase(self.summary)
+        if phrase is not None:
+            raise ValueError(
+                f"qualification.summary contains unsupported claim language: {phrase}"
+            )
+        if "paper" not in self.summary.casefold():
+            raise ValueError("qualification.summary must stay bounded to paper-trading scope")
         return self
 
 
@@ -162,6 +216,23 @@ class DecisionRationale(BaseModel):
         if not normalized:
             raise ValueError("Rationale explanation lists must include non-empty values")
         return normalized
+
+    @model_validator(mode="after")
+    def _validate_claim_boundary_language(self) -> "DecisionRationale":
+        phrase = _contains_forbidden_claim_phrase(self.summary)
+        if phrase is not None:
+            raise ValueError(f"rationale.summary contains unsupported claim language: {phrase}")
+        phrase = _contains_forbidden_claim_phrase(self.final_explanation)
+        if phrase is not None:
+            raise ValueError(
+                f"rationale.final_explanation contains unsupported claim language: {phrase}"
+            )
+        if "does not imply live-trading approval" not in self.final_explanation.casefold():
+            raise ValueError(
+                "rationale.final_explanation must explicitly state that output does not imply "
+                "live-trading approval"
+            )
+        return self
 
 
 class DecisionCard(BaseModel):
