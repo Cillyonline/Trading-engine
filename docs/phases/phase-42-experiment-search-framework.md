@@ -111,6 +111,16 @@ Within each segment comparison-artifact entry:
 - `relpath` points to `trials/<trial_id>/<segment>/strategy-comparison.json`
 - `sha256` is the SHA256 of the exact file bytes at that `relpath`
 
+### Strategy Comparison Semantics Boundary
+
+Trial segment artifacts inherit bounded comparison semantics from the strategy comparison harness:
+
+- Signal score interpretation remains strategy-local.
+- Ranking scope is `comparison_group`, not unrestricted cross-strategy confidence ordering.
+- Cross-group benchmark deltas are intentionally unsupported (`null`).
+
+This keeps experiment search outputs aligned with evidence-backed strategy boundaries.
+
 ## Comparison and Reporting Conventions
 
 The framework now emits explicit development/validation distinctions in report payloads:

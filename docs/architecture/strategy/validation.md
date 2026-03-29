@@ -67,3 +67,14 @@ Duplicate registration uses:
 - performance benchmarking
 - ranking logic
 - backtesting integration redesign
+
+## Bounded Score And Ranking Semantics (SIG-P47)
+
+The governed comparison workflow uses explicit semantic boundaries to avoid unsupported confidence claims:
+
+- Signal `score` is strategy-local evidence and is **not** calibrated as cross-strategy confidence.
+- Strategy comparison ranking is valid only within a shared `comparison_group`.
+- Cross-group ordering exists only as deterministic artifact serialization and is **not** a confidence order.
+- Benchmark deltas are only computed for strategies in the benchmark's `comparison_group`; cross-group deltas are `null`.
+
+These boundaries are mandatory for governed strategy surfaces and are enforced by strategy comparison validation/tests.

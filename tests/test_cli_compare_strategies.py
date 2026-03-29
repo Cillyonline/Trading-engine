@@ -83,5 +83,6 @@ def test_cli_compare_strategies_happy_path(tmp_path: Path) -> None:
 
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert payload["workflow"]["benchmark_strategy"] == "REFERENCE"
-    assert [row["strategy_name"] for row in payload["ranking"]] == ["TURTLE", "REFERENCE"]
-
+    assert payload["semantics"]["ranking"]["rank_scope"] == "comparison_group"
+    assert payload["semantics"]["ranking"]["cross_group_ordering_supported"] is False
+    assert [row["strategy_name"] for row in payload["ranking"]] == ["REFERENCE", "TURTLE"]
