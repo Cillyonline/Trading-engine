@@ -60,10 +60,14 @@ def test_dec_p47_phase_doc_links_governance_contract_and_runtime_enforcement() -
 def test_dec_p49_phase_doc_covers_bounded_qualification_engine_and_decision_output() -> None:
     content = PHASE_P49_DOC.read_text(encoding="utf-8")
 
-    assert content.startswith("# DEC-P49 - Qualification Engine")
+    assert content.startswith("# DEC-P49 - Decision-Layer Integration")
     assert "hard-gate behavior is deterministic" in content
     assert "confidence tiers are explicit and bounded" in content
     assert "traffic-light output is deterministic and inspectable" in content
+    assert "bounded backtest evidence integration" in content
+    assert "bounded portfolio-fit input integration" in content
+    assert "bounded sentiment overlay impact" in content
     assert "src/cilly_trading/engine/qualification_engine.py" in content
     assert "src/cilly_trading/engine/decision_card_contract.py" in content
     assert "tests/cilly_trading/engine/test_qualification_engine.py" in content
+    assert "tests/decision/test_decision_integration_layer.py" in content
