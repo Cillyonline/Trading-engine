@@ -58,6 +58,7 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert content.lstrip().startswith("# Staging Server Deployment and Runtime Validation")
     assert "docker/staging/Dockerfile" in content
     assert "docker/staging/docker-compose.staging.yml" in content
+    assert ".env.example" in content
     assert "python scripts/validate_staging_deployment.py" in content
     assert "STAGING_VALIDATE:SUCCESS" in content
     assert "/health/engine" in content
@@ -68,6 +69,7 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert "## Host Prerequisites and Package Contract" in content
     assert "## Required Directories and Persistence Paths" in content
     assert "## Required Environment Variables (Bounded First Deploy / Paper Mode)" in content
+    assert "## Ownership and Permission Expectations" in content
     assert "## Exact Startup Commands" in content
     assert "## Exact Smoke Commands" in content
     assert "## Logging and Observability Expectations" in content
@@ -98,9 +100,15 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     assert "`uv` (not required for first-clean-server startup/smoke/restart validation" in content
     assert "Required runtime environment variables for bounded first deployment:" in content
     assert "- `PYTHONPATH=/app/src`" in content
-    assert "- `CILLY_DB_PATH=/data/cilly_trading.db`" in content
+    assert "- `CILLY_DB_PATH=/data/db/cilly_trading.db`" in content
     assert "- `CILLY_LOG_LEVEL=INFO`" in content
     assert "- `CILLY_LOG_FORMAT=json`" in content
+    assert "- `CILLY_STAGING_DB_DIR`" in content
+    assert "- `CILLY_STAGING_ARTIFACT_DIR`" in content
+    assert "- `CILLY_STAGING_JOURNAL_DIR`" in content
+    assert "- `CILLY_STAGING_LOG_DIR`" in content
+    assert "- `CILLY_STAGING_RUNTIME_STATE_DIR`" in content
+    assert "Conditional provider secret requirements are explicit:" in content
     assert "Any local-run or local development installation guidance is non-canonical for" in content
     assert (
         "docker compose -f docker/staging/docker-compose.staging.yml up -d --build\n```\n\n"
@@ -146,7 +154,7 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml down -v",
+        block_marker="docker compose -f docker/staging/docker-compose.staging.yml down --remove-orphans",
         expected_transition="## Bounded Staging Validation",
     )
     _assert_fence_closes_to_transition(

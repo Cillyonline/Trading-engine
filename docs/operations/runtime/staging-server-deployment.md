@@ -12,6 +12,7 @@ authoritative contract.
 Deployment artifacts used by this runbook:
 - `docker/staging/Dockerfile`
 - `docker/staging/docker-compose.staging.yml`
+- `.env.example`
 - `scripts/validate_staging_deployment.py`
 
 Legacy `requirements.txt` installation is non-canonical for first deployment
@@ -39,26 +40,67 @@ Optional on host:
 Required repository paths:
 - `docker/staging/Dockerfile`
 - `docker/staging/docker-compose.staging.yml`
+- `.env.example`
 - `scripts/validate_staging_deployment.py`
 
-Required runtime persistence paths:
-- Docker named volume: `cilly_staging_data`
-- Container mount: `/data`
-- SQLite file path: `/data/cilly_trading.db`
+Required host bind-mounted directories (configure in `.env`):
+- `CILLY_STAGING_DB_DIR` -> container `/data/db`
+- `CILLY_STAGING_ARTIFACT_DIR` -> container `/data/artifacts`
+- `CILLY_STAGING_JOURNAL_DIR` -> container `/app/runs/phase6`
+- `CILLY_STAGING_LOG_DIR` -> container `/data/logs`
+- `CILLY_STAGING_RUNTIME_STATE_DIR` -> container `/data/runtime-state`
 
-No host bind-mount directory is required by the canonical first-clean-server
-path because persistence uses the named Docker volume above.
+Path definitions for bounded first deployment:
+- Database path (persistent): `/data/db/cilly_trading.db`
+- Artifact path (bind-mounted; writer behavior not guaranteed in this stage): `/data/artifacts`
+- Journal path (persistent): `/app/runs/phase6`
+- Runtime-state path (bind-mounted; in-memory runtime authority remains canonical): `/data/runtime-state`
+- Log path (bind-mounted path reserved for operator tooling): `/data/logs`
+
+Required persistent directories are explicit:
+- Database host directory (`CILLY_STAGING_DB_DIR`) MUST persist across container restart/redeploy.
+- Journal host directory (`CILLY_STAGING_JOURNAL_DIR`) MUST persist across container restart/redeploy.
 
 ## Required Environment Variables (Bounded First Deploy / Paper Mode)
 Required runtime environment variables for bounded first deployment:
 - `PYTHONPATH=/app/src`
-- `CILLY_DB_PATH=/data/cilly_trading.db`
+- `CILLY_DB_PATH=/data/db/cilly_trading.db`
 - `CILLY_LOG_LEVEL=INFO`
 - `CILLY_LOG_FORMAT=json`
+
+Required ownership/permission environment variables:
+- `CILLY_CONTAINER_UID`
+- `CILLY_CONTAINER_GID`
+
+Required host path environment variables:
+- `CILLY_STAGING_DB_DIR`
+- `CILLY_STAGING_ARTIFACT_DIR`
+- `CILLY_STAGING_JOURNAL_DIR`
+- `CILLY_STAGING_LOG_DIR`
+- `CILLY_STAGING_RUNTIME_STATE_DIR`
+
+Conditional provider secret requirements are explicit:
+- Canonical first paper deployment is snapshot-first and requires no provider
+  secret variables.
+- If a future provider integration is explicitly enabled, provider secrets are
+  mandatory for that provider and are outside this stage contract.
+
+## Ownership and Permission Expectations
+Ownership expectations are explicit:
+- Compose runs the API container as `${CILLY_CONTAINER_UID}:${CILLY_CONTAINER_GID}`.
+- Each required host bind-mounted directory MUST be writable by this UID/GID.
+- If host ownership differs, operators MUST pre-create directories and set
+  ownership/permissions before `docker compose up`.
+
+Unsupported in this stage:
+- Automatic host permission repair inside the container.
+- External secret manager integration.
 
 ## Exact Startup Commands
 Run exactly from repository root:
 ```bash
+cp .env.example .env
+mkdir -p /srv/cilly/staging/db /srv/cilly/staging/artifacts /srv/cilly/staging/journal /srv/cilly/staging/logs /srv/cilly/staging/runtime-state
 docker compose -f docker/staging/docker-compose.staging.yml config
 docker compose -f docker/staging/docker-compose.staging.yml up -d --build
 ```
@@ -67,6 +109,8 @@ Reproducibility constraints in this path:
 - Base image and dependency resolution are pinned through repository deployment
   artifacts.
 - Runtime process, health checks, and persistence bindings are compose-defined.
+- Required env and bind mounts are bounded and validated through compose variable
+  expansion.
 
 ## Exact Smoke Commands
 Use read-only role headers when validating control-plane health endpoints.
@@ -89,6 +133,9 @@ output and JSON log formatting for API events.
 docker compose -f docker/staging/docker-compose.staging.yml logs -f api
 ```
 
+File-based log persistence in `/data/logs` is explicitly non-authoritative in
+this stage; stdout/stderr compose logs remain authoritative.
+
 ## Exact Restart Validation Commands
 Restart safety is bounded to container restart with persisted state continuity.
 ```bash
@@ -103,11 +150,14 @@ Expected result:
   through the configured staging data path.
 
 ## Storage and Persistence Expectations
-Staging persistence is backed by the compose-managed `/data` volume; removing
-the volume resets bounded staging state.
+Persistence expectations across restart and redeploy are explicit:
+- Container restart (`docker compose restart api`) preserves DB and journal data.
+- Container redeploy (`docker compose up -d --build`) preserves DB and journal
+  data if bind-mounted host directories are unchanged.
+- Deleting bind-mounted host directory contents resets bounded staging state.
 
 ```bash
-docker compose -f docker/staging/docker-compose.staging.yml down -v
+docker compose -f docker/staging/docker-compose.staging.yml down --remove-orphans
 ```
 
 ## Bounded Staging Validation

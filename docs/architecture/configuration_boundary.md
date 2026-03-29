@@ -41,6 +41,30 @@ The canonical owners are:
 | Request transport parsing | API request models and query models in `src/api/main.py` | HTTP payload shape, basic request-entry validation needed to parse a request | Canonical ownership of runtime defaults, strategy defaults, or normalization semantics |
 | Documentation references for config behavior | This document | Ownership rules, boundary rules, precedence rules, and documentation-routing rules | Repeating detailed default tables or transport examples that belong elsewhere |
 
+## OPS-P46 Bounded Server Environment and Filesystem Contract
+
+For issue `#833`, this document also defines ownership of the bounded
+first-paper server environment contract.
+
+Canonical ownership for the deployment contract:
+
+| Responsibility | Canonical owner | Contract scope |
+| --- | --- | --- |
+| First-clean-server environment variable contract | `docs/operations/runtime/staging-server-deployment.md` and `.env.example` | Required env keys, host bind-mount variables, runtime env defaults, UID/GID contract |
+| Conditional provider secret requirements | `docs/operations/runtime/staging-server-deployment.md` | Snapshot-first default (no provider secrets required), explicit out-of-scope condition for future provider-secreted modes |
+| Bounded filesystem path contract | `docker/staging/docker-compose.staging.yml` and `docs/operations/runtime/staging-server-deployment.md` | DB/artifact/journal/log/runtime-state path mapping and persistence class per path |
+| Ownership and permissions expectations | `docker/staging/docker-compose.staging.yml` and `docs/operations/runtime/staging-server-deployment.md` | Container runtime UID/GID and host writable-directory precondition |
+
+Server deployment boundary rules for first paper deployment:
+- One bounded server environment contract exists and is authoritative in the
+  staging runbook plus `.env.example`.
+- Compose, docs, and env guidance must define the same path values.
+- Persistence expectations must explicitly distinguish restart/redeploy
+  continuity from host-directory deletion reset behavior.
+- Runtime-state and file-log paths may be bind-mounted while runtime authority
+  remains in-process and stdout/stderr logs remain authoritative unless a later
+  issue changes that contract.
+
 ## Single Source of Truth Rules
 
 The single source of truth is determined by decision type:

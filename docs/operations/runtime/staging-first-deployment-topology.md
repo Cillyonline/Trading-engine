@@ -8,14 +8,15 @@ environment boundary for bounded non-live server operation.
 Exactly one canonical staging-first topology is valid in this stage:
 - one staging host
 - one `api` service process (`uvicorn api.main:app`)
-- one local SQLite persistence volume mounted at `/data`
+- explicit host bind mounts for DB, artifact, journal, logs, and runtime-state
 - no broker process
 - no live trading process
 
 Primary deployment profile:
 - `docker/staging/docker-compose.staging.yml`
 - host port `18000` mapped to container port `8000`
-- named volume `cilly_staging_data` mounted at `/data`
+- bind-mounted host DB directory at `/data/db`
+- bind-mounted host journal directory at `/app/runs/phase6`
 
 No alternative equal-status topology is defined for this stage.
 
@@ -39,14 +40,14 @@ Canonical install/runbook authority:
  [Engine runtime + control-plane lifecycle]
                  |
                  v
-        [SQLite persistence at /data]
+ [SQLite persistence at /data/db/cilly_trading.db]
 ```
 
 ## Runtime Contract and Service Boundary
 Required runtime services in this topology:
 - HTTP API service (`api.main:app`)
 - in-process engine runtime and control plane
-- SQLite persistence file on the mounted staging volume
+- SQLite persistence file on the mounted staging host directories
 
 Operating assumptions:
 - single runtime authority instance per staging host
@@ -82,9 +83,9 @@ Authoritative ownership of configuration semantics remains:
 
 ## Persistence, Logging, and Health Expectations
 Persistence expectations at topology level:
-- canonical persistence is SQLite at `/data/cilly_trading.db`
-- durability boundary is the mounted staging volume (`cilly_staging_data`)
-- volume removal resets staging state
+- canonical persistence is SQLite at `/data/db/cilly_trading.db`
+- durability boundary is host bind mounts configured through `.env`
+- deleting bind-mounted host directory contents resets staging state
 
 Logging expectations at topology level:
 - runtime logs emitted to stdout/stderr
