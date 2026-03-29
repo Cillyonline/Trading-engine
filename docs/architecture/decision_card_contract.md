@@ -112,11 +112,12 @@ State-to-color mapping is fixed:
 Deterministic action-state resolution:
 
 1. Any blocking hard-gate failure resolves to `reject` / `red`.
-2. If no blocking failure and confidence is `low` (or aggregate score is below the medium threshold), resolve to `watch` / `yellow`.
-3. If confidence is `high` and aggregate score is above the high threshold, resolve to `paper_approved` / `green`.
+2. If no blocking failure and confidence is `low` (or aggregate score is below the medium threshold `60.0`), resolve to `watch` / `yellow`.
+3. If confidence is `high` and aggregate score is at/above the high threshold `80.0`, resolve to `paper_approved` / `green`.
 4. Otherwise resolve to `paper_candidate` / `yellow`.
 
 This output is bounded to paper-trading readiness only and does not imply live-trading approval.
+State assignment is validated by the canonical contract and cannot be overridden by arbitrary payload values.
 
 Qualification summary language is claim-bounded:
 

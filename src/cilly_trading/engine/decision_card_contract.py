@@ -9,6 +9,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DECISION_CARD_CONTRACT_VERSION = "2.0.0"
+QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
+QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
 
 DecisionComponentCategory = Literal[
     "signal_quality",
@@ -285,11 +287,30 @@ class DecisionCard(BaseModel):
 
     @model_validator(mode="after")
     def _validate_qualification_semantics(self) -> "DecisionCard":
-        if self.hard_gates.has_blocking_failure and self.qualification.state != "reject":
-            raise ValueError("Blocking hard-gate failures require reject qualification state")
+        expected_state = self._expected_qualification_state()
+        if self.qualification.state != expected_state:
+            raise ValueError(
+                "Qualification state must match deterministic resolution "
+                f"(expected={expected_state}, actual={self.qualification.state})"
+            )
         if self.hard_gates.has_blocking_failure and self.qualification.color != "red":
             raise ValueError("Blocking hard-gate failures require red qualification color")
         return self
+
+    def _expected_qualification_state(self) -> QualificationState:
+        if self.hard_gates.has_blocking_failure:
+            return "reject"
+        if (
+            self.score.confidence_tier == "low"
+            or self.score.aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+        ):
+            return "watch"
+        if (
+            self.score.confidence_tier == "high"
+            and self.score.aggregate_score >= QUALIFICATION_HIGH_AGGREGATE_THRESHOLD
+        ):
+            return "paper_approved"
+        return "paper_candidate"
 
     def to_canonical_payload(self) -> dict[str, Any]:
         return self.model_dump(mode="python")
@@ -316,6 +337,8 @@ def serialize_decision_card(card: DecisionCard) -> str:
 
 __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
+    "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
+    "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
     "REQUIRED_COMPONENT_CATEGORIES",
     "QUALIFICATION_COLOR_BY_STATE",
     "ComponentScore",
