@@ -18,6 +18,7 @@ Claim boundary discipline for this surface:
 
 - confidence language is evidence-aligned only; confidence text must reference bounded aggregate/component/threshold evidence semantics
 - qualification and rationale language is bounded to paper-trading qualification scope
+- qualification state is contract-bounded (`reject` | `watch` | `paper_candidate` | `paper_approved`) and deterministic from hard-gate + score semantics
 - inspection outputs must not imply live-trading approval, broker readiness, production readiness, trader validation, or guaranteed outcomes
 
 ## Deterministic Ordering

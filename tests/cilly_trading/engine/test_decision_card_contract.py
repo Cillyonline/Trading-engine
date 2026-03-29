@@ -14,7 +14,7 @@ from cilly_trading.engine.decision_card_contract import (
 )
 
 
-def _valid_payload(*, qualification_state: str = "paper_approved", qualification_color: str = "green") -> dict[str, Any]:
+def _valid_payload(*, qualification_state: str = "paper_candidate", qualification_color: str = "yellow") -> dict[str, Any]:
     return {
         "contract_version": DECISION_CARD_CONTRACT_VERSION,
         "decision_card_id": "dc_20260324_AAPL_RSI2",
@@ -153,10 +153,7 @@ def test_negative_validation_rejects_non_rejected_state_on_blocking_failure() ->
     payload["hard_gates"]["gates"][0]["status"] = "fail"
     payload["hard_gates"]["gates"][0]["failure_reason"] = "Exposure cap would be exceeded"
 
-    with pytest.raises(
-        ValidationError,
-        match="Blocking hard-gate failures require reject qualification state",
-    ):
+    with pytest.raises(ValidationError, match="Qualification state must match deterministic resolution"):
         validate_decision_card(payload)
 
 
@@ -185,6 +182,45 @@ def test_representative_qualification_payloads_validate(state: str, color: str) 
         payload["qualification"]["summary"] = (
             "Opportunity requires further evidence before paper-trading qualification."
         )
+    if state == "paper_approved":
+        payload["score"]["component_scores"] = [
+            {
+                "category": "execution_readiness",
+                "score": 82.0,
+                "rationale": "Execution assumptions remain deterministic and bounded",
+                "evidence": ["slippage_bps=9", "commission_per_order=1.00"],
+            },
+            {
+                "category": "portfolio_fit",
+                "score": 84.0,
+                "rationale": "Portfolio concentration constraints remain satisfied",
+                "evidence": ["sector_weight_pct=0.18", "sector_limit_pct=0.25"],
+            },
+            {
+                "category": "signal_quality",
+                "score": 88.0,
+                "rationale": "Signal quality remains consistent across recent windows",
+                "evidence": ["signal_hit_rate=0.64", "window_days=90"],
+            },
+            {
+                "category": "backtest_quality",
+                "score": 84.0,
+                "rationale": "Backtest quality supports bounded forward expectation",
+                "evidence": ["sharpe=1.48", "profit_factor=1.68"],
+            },
+            {
+                "category": "risk_alignment",
+                "score": 90.0,
+                "rationale": "Risk controls align with per-trade and portfolio policy",
+                "evidence": ["risk_per_trade_pct=0.005", "max_risk_pct=0.01"],
+            },
+        ]
+        payload["score"]["aggregate_score"] = 86.2
+        payload["score"]["confidence_tier"] = "high"
+        payload["score"]["confidence_reason"] = (
+            "Aggregate score and component thresholds satisfy high confidence with explicit evidence."
+        )
+        payload["qualification"]["summary"] = "Opportunity is approved for bounded paper-trading only."
 
     card = validate_decision_card(payload)
     assert card.qualification.state == state
@@ -233,3 +269,21 @@ def test_negative_validation_requires_final_explanation_live_trading_boundary() 
         match="must explicitly state that output does not imply live-trading approval",
     ):
         validate_decision_card(payload)
+
+
+def test_negative_validation_rejects_reject_without_blocking_failure() -> None:
+    payload = _valid_payload(qualification_state="reject", qualification_color="red")
+
+    with pytest.raises(ValidationError, match="Qualification state must match deterministic resolution"):
+        validate_decision_card(payload)
+
+
+def test_non_blocking_gate_failure_does_not_force_reject() -> None:
+    payload = _valid_payload(qualification_state="paper_candidate", qualification_color="yellow")
+    payload["hard_gates"]["gates"][0]["status"] = "fail"
+    payload["hard_gates"]["gates"][0]["blocking"] = False
+    payload["hard_gates"]["gates"][0]["failure_reason"] = "Observed drift requires monitoring"
+
+    card = validate_decision_card(payload)
+    assert card.hard_gates.has_blocking_failure is False
+    assert card.qualification.state == "paper_candidate"

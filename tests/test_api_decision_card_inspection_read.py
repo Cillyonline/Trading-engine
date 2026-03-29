@@ -59,6 +59,21 @@ def _decision_card_payload(
             "evidence": ["max_dd=0.15", "threshold=0.12"],
             "failure_reason": "Max drawdown breached policy threshold",
         }
+    confidence_tier = "high"
+    confidence_reason = "Aggregate and minimum component scores satisfy high thresholds."
+    aggregate_score = 84.15
+    if qualification_state == "watch":
+        confidence_tier = "low"
+        confidence_reason = (
+            "Aggregate score or component threshold evidence is below medium-confidence thresholds."
+        )
+        aggregate_score = 55.0
+    elif qualification_state == "paper_candidate":
+        confidence_tier = "medium"
+        confidence_reason = (
+            "Aggregate score and component threshold evidence satisfy medium-confidence thresholds."
+        )
+        aggregate_score = 72.0
 
     return {
         "contract_version": "2.0.0",
@@ -103,9 +118,9 @@ def _decision_card_payload(
                     "evidence": ["slippage_bps=9", "commission=1.00"],
                 },
             ],
-            "confidence_tier": "high",
-            "confidence_reason": "Aggregate and minimum component scores satisfy high thresholds.",
-            "aggregate_score": 84.15,
+            "confidence_tier": confidence_tier,
+            "confidence_reason": confidence_reason,
+            "aggregate_score": aggregate_score,
         },
         "qualification": {
             "state": qualification_state,
