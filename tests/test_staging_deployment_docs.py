@@ -64,13 +64,17 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert "/health/data" in content
     assert "/health/guards" in content
     assert "docker compose -f docker/staging/docker-compose.staging.yml restart api" in content
-    assert "## Canonical First-Deployment Install Path" in content
-    assert "## Reproducible Build and Deploy Path" in content
-    assert "## Health and Readiness Checks" in content
+    assert "## Canonical First-Clean-Server Install Contract" in content
+    assert "## Host Prerequisites and Package Contract" in content
+    assert "## Required Directories and Persistence Paths" in content
+    assert "## Required Environment Variables (Bounded First Deploy / Paper Mode)" in content
+    assert "## Exact Startup Commands" in content
+    assert "## Exact Smoke Commands" in content
     assert "## Logging and Observability Expectations" in content
-    assert "## Restart-Safe Runtime Behavior" in content
+    assert "## Exact Restart Validation Commands" in content
     assert "## Storage and Persistence Expectations" in content
     assert "## Bounded Staging Validation" in content
+    assert "## Conflicting Guidance Handling" in content
     assert "## Acceptance-Gate Alignment" in content
     assert "`server-ready (staging)`" in content
     assert "`paper-install-ready`" in content
@@ -83,9 +87,21 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
         REPO_ROOT / "docs" / "operations" / "runtime" / "staging-server-deployment.md"
     ).read_text(encoding="utf-8")
 
-    assert "The canonical first-deployment install path in this repository is:" in content
+    assert "Docker/Compose is the canonical and only first-clean-server install path" in content
+    assert "The canonical first-clean-server startup command is:" in content
     assert "docker compose -f docker/staging/docker-compose.staging.yml up -d --build" in content
     assert "Legacy `requirements.txt` installation is non-canonical" in content
+    assert "Required on host:" in content
+    assert "Docker Engine" in content
+    assert "Docker Compose v2 plugin" in content
+    assert "Optional on host:" in content
+    assert "`uv` (not required for first-clean-server startup/smoke/restart validation" in content
+    assert "Required runtime environment variables for bounded first deployment:" in content
+    assert "- `PYTHONPATH=/app/src`" in content
+    assert "- `CILLY_DB_PATH=/data/cilly_trading.db`" in content
+    assert "- `CILLY_LOG_LEVEL=INFO`" in content
+    assert "- `CILLY_LOG_FORMAT=json`" in content
+    assert "Any local-run or local development installation guidance is non-canonical for" in content
     assert (
         "docker compose -f docker/staging/docker-compose.staging.yml up -d --build\n```\n\n"
         "Reproducibility constraints in this path:"
@@ -106,7 +122,7 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     _assert_fence_closes_to_transition(
         content,
         block_marker="docker compose -f docker/staging/docker-compose.staging.yml config",
-        expected_transition="## Health and Readiness Checks",
+        expected_transition="## Exact Smoke Commands",
     )
     _assert_fence_closes_to_transition(
         content,
@@ -116,7 +132,7 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     _assert_fence_closes_to_transition(
         content,
         block_marker="docker compose -f docker/staging/docker-compose.staging.yml logs -f api",
-        expected_transition="## Restart-Safe Runtime Behavior",
+        expected_transition="## Exact Restart Validation Commands",
     )
     _assert_fence_closes_to_transition(
         content,
@@ -135,11 +151,11 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="python scripts/validate_staging_deployment.py",
+        block_marker="```bash\npython scripts/validate_staging_deployment.py",
         expected_transition="Validation stages:",
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="python scripts/validate_staging_deployment.py",
+        block_marker="```bash\npython scripts/validate_staging_deployment.py",
         expected_transition="## Test Gate",
     )

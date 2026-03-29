@@ -5,6 +5,10 @@ This guide provides the single authoritative setup path for local development.
 Use it to prepare the environment, install the repository, and then hand off to
 the canonical local-run or testing documents.
 
+This guide is not the canonical first-clean-server install contract.
+For first-clean-server install/startup, use:
+- `docs/operations/runtime/staging-server-deployment.md`
+
 ## B. Prerequisites
 - Python 3.12+
 - `pip`
@@ -38,6 +42,10 @@ python -m pip install -e ".[test]"
 
 The install step is canonical because it comes from the repository-controlled
 `pyproject.toml`. It replaces older requirements-file-based instructions.
+
+Canonical scope note:
+- Canonical for local development setup only.
+- Non-canonical for first-clean-server install/startup.
 
 ## E. Next Steps
 
