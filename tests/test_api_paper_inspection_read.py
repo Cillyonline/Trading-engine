@@ -254,23 +254,39 @@ def test_paper_endpoints_are_exposed_and_schema_valid(tmp_path: Path, monkeypatc
     _seed_core_data(repo)
 
     with _test_client(monkeypatch, repo) as client:
+        workflow = client.get("/paper/workflow", headers=READ_ONLY_HEADERS)
         trades = client.get("/paper/trades", headers=READ_ONLY_HEADERS)
         positions = client.get("/paper/positions", headers=READ_ONLY_HEADERS)
         account = client.get("/paper/account", headers=READ_ONLY_HEADERS)
         reconciliation = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
         openapi = client.get("/openapi.json").json()
 
+    assert workflow.status_code == 200
     assert trades.status_code == 200
     assert positions.status_code == 200
     assert account.status_code == 200
     assert reconciliation.status_code == 200
+    assert "/paper/workflow" in openapi["paths"]
     assert "/paper/trades" in openapi["paths"]
     assert "/paper/positions" in openapi["paths"]
     assert "/paper/account" in openapi["paths"]
     assert "/paper/reconciliation" in openapi["paths"]
-    for path in ("/paper/trades", "/paper/positions", "/paper/account", "/paper/reconciliation"):
+    for path in (
+        "/paper/workflow",
+        "/paper/trades",
+        "/paper/positions",
+        "/paper/account",
+        "/paper/reconciliation",
+    ):
         assert set(openapi["paths"][path].keys()) == {"get"}
 
+    assert (
+        validate_json_schema(
+            workflow.json(),
+            api_main.PaperOperatorWorkflowReadResponse.model_json_schema(),
+        )
+        == []
+    )
     assert validate_json_schema(trades.json(), api_main.PaperTradesReadResponse.model_json_schema()) == []
     assert validate_json_schema(positions.json(), api_main.PaperPositionsReadResponse.model_json_schema()) == []
     assert validate_json_schema(account.json(), api_main.PaperAccountReadResponse.model_json_schema()) == []
@@ -389,6 +405,111 @@ def test_paper_reconciliation_matches_deterministic_lifecycle_outputs(
     }
 
 
+def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_lifecycle_data(repo)
+    monkeypatch.setenv("CILLY_PAPER_ACCOUNT_STARTING_CASH", "100000")
+
+    with _test_client(monkeypatch, repo) as client:
+        response = client.get("/paper/workflow", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["boundary"]["workflow_id"] == "phase44_bounded_paper_operator"
+    assert "read-only" in payload["boundary"]["description"]
+    assert payload["boundary"]["in_scope"] == [
+        "deterministic simulator lifecycle evidence",
+        "canonical inspection of orders, execution events, trades, and positions",
+        "paper inspection of account, trades, and positions",
+        "reconciliation validation with mismatch accounting",
+    ]
+    assert payload["boundary"]["out_of_scope"] == [
+        "live trading",
+        "broker integrations",
+        "broad dashboard expansion",
+        "production trading operations",
+    ]
+
+    assert payload["steps"] == [
+        {
+            "step": 1,
+            "action": "Inspect canonical order lifecycle entities.",
+            "endpoint": "GET /trading-core/orders",
+            "expected_result": "Deterministic order set is readable (items=1).",
+        },
+        {
+            "step": 2,
+            "action": "Inspect canonical execution lifecycle events.",
+            "endpoint": "GET /trading-core/execution-events",
+            "expected_result": "Deterministic execution-event set is readable (items=4).",
+        },
+        {
+            "step": 3,
+            "action": "Inspect canonical trade and position state.",
+            "endpoint": "GET /trading-core/trades + GET /trading-core/positions",
+            "expected_result": "Canonical trade/position sets are readable (trades=1, positions=1).",
+        },
+        {
+            "step": 4,
+            "action": "Inspect paper-facing views derived from canonical entities.",
+            "endpoint": "GET /paper/trades + GET /paper/positions + GET /paper/account",
+            "expected_result": "Paper views are readable (trades=1, positions=1).",
+        },
+        {
+            "step": 5,
+            "action": "Run reconciliation and require zero mismatches.",
+            "endpoint": "GET /paper/reconciliation",
+            "expected_result": "Reconciliation ok=true mismatches=0.",
+        },
+    ]
+    assert payload["surfaces"] == {
+        "canonical_inspection": [
+            "/trading-core/orders",
+            "/trading-core/execution-events",
+            "/trading-core/trades",
+            "/trading-core/positions",
+        ],
+        "paper_inspection": [
+            "/paper/trades",
+            "/paper/positions",
+            "/paper/account",
+        ],
+        "reconciliation": "/paper/reconciliation",
+    }
+    assert payload["validation"] == {
+        "ok": True,
+        "checks": [
+            {
+                "code": "reconciliation_ok",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+            {
+                "code": "reconciliation_mismatches_zero",
+                "ok": True,
+                "expected": "0",
+                "actual": "0",
+            },
+            {
+                "code": "paper_trades_match_canonical_trades",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+            {
+                "code": "paper_positions_match_canonical_positions",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+        ],
+    }
+
+
 def test_paper_reconciliation_detects_missing_execution_event_reference(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -429,3 +550,58 @@ def test_paper_reconciliation_detects_missing_execution_event_reference(
             "entity_id": "trade-2",
         },
     ]
+
+
+def test_paper_workflow_validation_fails_closed_on_reconciliation_mismatches(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_core_data(repo)
+    repo.save_trade(
+        _trade(
+            "trade-2",
+            position_id="pos-2",
+            status="open",
+            opened_at="2025-01-01T09:02:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="2.25",
+            order_id="ord-2",
+            event_id="evt-missing",
+        )
+    )
+
+    with _test_client(monkeypatch, repo) as client:
+        response = client.get("/paper/workflow", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["validation"] == {
+        "ok": False,
+        "checks": [
+            {
+                "code": "reconciliation_ok",
+                "ok": False,
+                "expected": "true",
+                "actual": "false",
+            },
+            {
+                "code": "reconciliation_mismatches_zero",
+                "ok": False,
+                "expected": "0",
+                "actual": "2",
+            },
+            {
+                "code": "paper_trades_match_canonical_trades",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+            {
+                "code": "paper_positions_match_canonical_positions",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+        ],
+    }

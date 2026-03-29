@@ -22,6 +22,9 @@ def test_phase44_workflow_doc_defines_bounded_operator_flow_and_surfaces() -> No
     assert "GET /paper/positions" in content
     assert "GET /paper/account" in content
     assert "GET /paper/reconciliation" in content
+    assert "GET /paper/workflow" in content
+    assert "## Explicit Operator Steps" in content
+    assert "## Workflow Boundary" in content
     assert "## Minimum Operator Evidence" in content
     assert "tests/test_api_paper_inspection_read.py" in content
     assert "python -m pytest" in content
