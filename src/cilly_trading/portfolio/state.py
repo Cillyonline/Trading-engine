@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -49,16 +50,21 @@ def calculate_drawdown(*, peak_equity: float, current_equity: float) -> float:
     """Calculate drawdown ratio from peak and current equity.
 
     Returns:
-        float: Zero for non-positive peaks, otherwise
-        ``max(0.0, (peak_equity - current_equity) / peak_equity)``.
+        float: Zero for non-positive/non-finite peaks. For valid peaks, a bounded
+        ratio in ``[0.0, 1.0]``. Non-finite current equity is treated
+        conservatively as full drawdown.
     """
 
-    if peak_equity <= 0.0:
+    if not isfinite(peak_equity) or peak_equity <= 0.0:
         return 0.0
+    if not isfinite(current_equity):
+        return 1.0
 
     raw_drawdown = (peak_equity - current_equity) / peak_equity
     if raw_drawdown <= 0.0:
         return 0.0
+    if raw_drawdown >= 1.0:
+        return 1.0
 
     return raw_drawdown
 

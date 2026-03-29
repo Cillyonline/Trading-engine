@@ -147,3 +147,40 @@ def test_portfolio_state_derivation_returns_empty_state_when_no_open_exposure() 
 
     state = load_portfolio_state_from_simulation_repository(repository=repo)
     assert state.positions == tuple()
+
+
+def test_portfolio_state_derivation_ignores_non_open_trade_inputs() -> None:
+    repo = _FakeSimulationRepository(
+        [
+            _trade(
+                trade_id="t-open-valid",
+                position_id="p-valid",
+                strategy_id="alpha",
+                symbol="AAPL",
+                quantity_opened="2",
+                quantity_closed="1",
+                average_entry_price="200",
+                unrealized_pnl="4",
+                status="open",
+            ),
+            _trade(
+                trade_id="t-closed",
+                position_id="p-closed",
+                strategy_id="alpha",
+                symbol="AAPL",
+                quantity_opened="1",
+                quantity_closed="1",
+                average_entry_price="200",
+                unrealized_pnl="0",
+                status="closed",
+            ),
+        ]
+    )
+
+    state = load_portfolio_state_from_simulation_repository(repository=repo)
+    assert len(state.positions) == 1
+    assert state.positions[0].strategy_id == "alpha"
+    assert state.positions[0].symbol == "AAPL"
+    assert state.positions[0].size == 1.0
+    assert state.positions[0].average_price == 200.0
+    assert state.positions[0].unrealized_pnl == 4.0

@@ -1,4 +1,9 @@
-"""Central pipeline orchestrator enforcing risk-before-execution."""
+"""Central pipeline orchestrator enforcing risk-before-execution.
+
+This path is bounded to deterministic non-live operation. Pipeline approval is
+strictly a local runtime guard and must not be interpreted as live-trading
+approval.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +24,8 @@ from cilly_trading.engine.order_execution_model import (
 from cilly_trading.engine.risk import resolve_runtime_guard_type
 from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 from cilly_trading.engine.strategy_lifecycle.service import StrategyLifecycleStore
+
+_ALLOWED_RISK_DECISIONS: frozenset[str] = frozenset({"APPROVED", "REJECTED"})
 
 
 @dataclass(frozen=True)
@@ -47,6 +54,7 @@ def run_pipeline(
 
     state = lifecycle_store.get_state(risk_request.strategy_id)
     risk_decision = risk_gate.evaluate(risk_request)
+    normalized_risk_decision = _normalize_risk_decision_value(risk_decision.decision)
     normalized_position = _extract_position(
         position,
         strategy_id=risk_request.strategy_id,
@@ -65,14 +73,14 @@ def run_pipeline(
                 "request_id": risk_request.request_id,
                 "strategy_id": risk_request.strategy_id,
                 "symbol": risk_request.symbol,
-                "order_count": len(orders),
+            "order_count": len(orders),
             "snapshot_key": _extract_snapshot_key(snapshot),
             "lifecycle_state": state.value,
-            "risk_decision": risk_decision.decision,
+            "risk_decision": normalized_risk_decision,
         },
     )
 
-    if state != StrategyLifecycleState.PRODUCTION or risk_decision.decision != "APPROVED":
+    if state != StrategyLifecycleState.PRODUCTION or normalized_risk_decision != "APPROVED":
         guard_source = (
             "lifecycle"
             if state != StrategyLifecycleState.PRODUCTION
@@ -90,7 +98,7 @@ def run_pipeline(
                 "symbol": risk_request.symbol,
                 "guard_source": guard_source,
                 "lifecycle_state": state.value,
-                "risk_decision": risk_decision.decision,
+                "risk_decision": normalized_risk_decision,
             },
         )
         return PipelineResult(
@@ -124,6 +132,13 @@ def run_pipeline(
         position=updated_position,
         risk_decision=risk_decision,
     )
+
+
+def _normalize_risk_decision_value(value: object) -> str:
+    decision = str(value)
+    if decision in _ALLOWED_RISK_DECISIONS:
+        return decision
+    return "REJECTED"
 
 
 def _extract_orders(
