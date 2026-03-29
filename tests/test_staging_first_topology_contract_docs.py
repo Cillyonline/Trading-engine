@@ -61,6 +61,9 @@ def test_staging_topology_doc_defines_single_canonical_topology() -> None:
     assert "No alternative equal-status topology is defined for this stage." in content
     assert "`docker/staging/docker-compose.staging.yml`" in content
     assert "## Canonical First-Deployment Install Path" in content
+    assert "Docker/Compose is the canonical and only first-clean-server install path in" in content
+    assert "Canonical install/runbook authority:" in content
+    assert "`docs/operations/runtime/staging-server-deployment.md`" in content
     assert "one `api` service process (`uvicorn api.main:app`)" in content
     assert "one local SQLite persistence volume mounted at `/data`" in content
 
@@ -127,3 +130,17 @@ def test_docs_index_links_staging_first_topology_contract() -> None:
     content = (REPO_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
 
     assert "operations/runtime/staging-first-deployment-topology.md" in content
+    assert "Canonical first-clean-server install contract:" in content
+    assert "Docker/Compose (`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`) is the only canonical first-clean-server startup path." in content
+    assert "Local development setup guides are non-canonical for first-clean-server installation." in content
+
+
+def test_getting_started_marks_local_setup_non_canonical_for_first_clean_server() -> None:
+    content = (
+        REPO_ROOT / "docs" / "getting-started" / "getting-started.md"
+    ).read_text(encoding="utf-8")
+
+    assert "This guide is not the canonical first-clean-server install contract." in content
+    assert "docs/operations/runtime/staging-server-deployment.md" in content
+    assert "Canonical for local development setup only." in content
+    assert "Non-canonical for first-clean-server install/startup." in content

@@ -3,6 +3,11 @@
 ## Start Here
 The Cilly Trading Engine is a deterministic execution and analysis engine for teams that need reproducible workflows, stable interfaces, and controlled change management. This index is intended for new consumers who need a fixed, step-by-step path to start using documented capabilities.
 
+Canonical first-clean-server install contract:
+- `docs/operations/runtime/staging-server-deployment.md`
+- Docker/Compose (`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`) is the only canonical first-clean-server startup path.
+- Local development setup guides are non-canonical for first-clean-server installation.
+
 Use this order:
 1. Quickstart
 2. Run deterministic smoke test

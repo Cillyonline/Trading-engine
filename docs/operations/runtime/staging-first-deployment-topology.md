@@ -20,8 +20,12 @@ Primary deployment profile:
 No alternative equal-status topology is defined for this stage.
 
 ## Canonical First-Deployment Install Path
-The canonical first-deployment install path in this stage is:
+Docker/Compose is the canonical and only first-clean-server install path in
+this stage. The canonical first-deployment install path is:
 - `docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+
+Canonical install/runbook authority:
+- `docs/operations/runtime/staging-server-deployment.md`
 
 ## Runtime Topology
 

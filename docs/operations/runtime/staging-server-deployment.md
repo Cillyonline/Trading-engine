@@ -5,8 +5,8 @@ This runbook defines the bounded staging deployment contract for non-live server
 operation. It does not define production HA, broker integrations, or live
 trading behavior.
 
-The canonical first-deployment install path in this repository is:
-`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+For a first-clean-server install in this repository, this runbook is the single
+authoritative contract.
 
 ## Deployment Artifacts
 Deployment artifacts used by this runbook:
@@ -17,14 +17,47 @@ Deployment artifacts used by this runbook:
 Legacy `requirements.txt` installation is non-canonical for first deployment
 in this repository contract.
 
-## Canonical First-Deployment Install Path
-The canonical first-deployment install path in this repository is:
+## Canonical First-Clean-Server Install Contract
+Docker/Compose is the canonical and only first-clean-server install path in this
+repository.
+
+The canonical first-clean-server startup command is:
 `docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
 
-## Reproducible Build and Deploy Path
-The canonical install path remains:
-`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+## Host Prerequisites and Package Contract
+Required on host:
+- Docker Engine (with `docker` CLI available)
+- Docker Compose v2 plugin (`docker compose`)
+- `curl` (for smoke and health validation commands)
+- Python 3.12+ (required to run `python scripts/validate_staging_deployment.py`)
 
+Optional on host:
+- `uv` (not required for first-clean-server startup/smoke/restart validation,
+  only used for optional repository-managed test execution wrappers)
+
+## Required Directories and Persistence Paths
+Required repository paths:
+- `docker/staging/Dockerfile`
+- `docker/staging/docker-compose.staging.yml`
+- `scripts/validate_staging_deployment.py`
+
+Required runtime persistence paths:
+- Docker named volume: `cilly_staging_data`
+- Container mount: `/data`
+- SQLite file path: `/data/cilly_trading.db`
+
+No host bind-mount directory is required by the canonical first-clean-server
+path because persistence uses the named Docker volume above.
+
+## Required Environment Variables (Bounded First Deploy / Paper Mode)
+Required runtime environment variables for bounded first deployment:
+- `PYTHONPATH=/app/src`
+- `CILLY_DB_PATH=/data/cilly_trading.db`
+- `CILLY_LOG_LEVEL=INFO`
+- `CILLY_LOG_FORMAT=json`
+
+## Exact Startup Commands
+Run exactly from repository root:
 ```bash
 docker compose -f docker/staging/docker-compose.staging.yml config
 docker compose -f docker/staging/docker-compose.staging.yml up -d --build
@@ -35,9 +68,8 @@ Reproducibility constraints in this path:
   artifacts.
 - Runtime process, health checks, and persistence bindings are compose-defined.
 
-## Health and Readiness Checks
+## Exact Smoke Commands
 Use read-only role headers when validating control-plane health endpoints.
-
 ```bash
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/engine
@@ -57,12 +89,13 @@ output and JSON log formatting for API events.
 docker compose -f docker/staging/docker-compose.staging.yml logs -f api
 ```
 
-## Restart-Safe Runtime Behavior
+## Exact Restart Validation Commands
 Restart safety is bounded to container restart with persisted state continuity.
-
 ```bash
 docker compose -f docker/staging/docker-compose.staging.yml restart api
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/engine
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/data
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/guards
 ```
 
 Expected result:
@@ -90,6 +123,11 @@ Validation stages:
   persistence checks.
 
 Expected success marker: `STAGING_VALIDATE:SUCCESS`.
+
+## Conflicting Guidance Handling
+Any local-run or local development installation guidance is non-canonical for
+first-clean-server install. For first-clean-server install and startup, use this
+runbook only.
 
 ## Acceptance-Gate Alignment
 This deployment runbook defines the `server-ready (staging)` boundary only.
