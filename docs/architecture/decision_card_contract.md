@@ -73,6 +73,11 @@ Additional score fields:
 - `confidence_tier` (`low` | `medium` | `high`)
 - `confidence_reason`
 
+Confidence language is claim-bounded:
+
+- `confidence_reason` must reference bounded evidence semantics (aggregate score, component scores, thresholds, or explicit evidence)
+- `confidence_reason` must not claim live-trading readiness, production readiness, broker readiness, trader validation, or guaranteed outcomes
+
 Hard-gate outcomes and score outcomes remain separate objects by contract.
 
 ### Subsystem Input Integration
@@ -113,6 +118,11 @@ Deterministic action-state resolution:
 
 This output is bounded to paper-trading readiness only and does not imply live-trading approval.
 
+Qualification summary language is claim-bounded:
+
+- qualification summary text must remain explicitly paper-trading scoped
+- qualification summary text must not claim production/live-trading/broker readiness
+
 ## Sentiment Overlay Boundaries
 
 Sentiment is modeled as a bounded overlay to aggregate score, not as an independent qualification source.
@@ -132,6 +142,11 @@ Sentiment is modeled as a bounded overlay to aggregate score, not as an independ
 - `gate_explanations[]`
 - `score_explanations[]`
 - `final_explanation`
+
+Claim boundary requirements:
+
+- `rationale.summary` must not contain unsupported readiness or guaranteed-outcome claims
+- `rationale.final_explanation` must explicitly state that the decision output does not imply live-trading approval
 
 This prevents collapsing gates, evidence, and qualification into an opaque number.
 

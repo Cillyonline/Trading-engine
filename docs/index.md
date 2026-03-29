@@ -51,6 +51,7 @@ Use this order:
 - [Release boundary](architecture/versioning/release_boundary.md)
 - [Version declaration](architecture/versioning/declaration.md)
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
+- [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
@@ -100,6 +101,9 @@ Phase 44 reference links remain navigational and do not override the authoritati
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
 - [Paper inspection and reconciliation API](api/paper_inspection.md)
 - [Paper deployment acceptance gate](operations/runtime/paper-deployment-acceptance-gate.md)
+
+### DEC-P47 Reference Materials
+- [DEC-P47 qualification claim boundary](phases/dec-p47-qualification-claim-boundary.md)
 
 ### Phase 37 Reference Materials
 Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.

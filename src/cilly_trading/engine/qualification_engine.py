@@ -314,13 +314,13 @@ def resolve_qualification_state(
         return (
             "reject",
             "red",
-            "Blocking hard gate failed; opportunity is rejected.",
+            "Blocking hard gate failed; opportunity is rejected for paper-trading qualification.",
         )
     if confidence_tier == "low" or aggregate_score < CONFIDENCE_THRESHOLDS["medium_aggregate"]:
         return (
             "watch",
             "yellow",
-            "Opportunity remains on watch pending stronger confidence or score.",
+            "Opportunity remains on watch for paper-trading pending stronger confidence or score.",
         )
     if confidence_tier == "high" and aggregate_score >= CONFIDENCE_THRESHOLDS["high_aggregate"]:
         return (
