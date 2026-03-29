@@ -429,3 +429,54 @@ def test_paper_reconciliation_detects_missing_execution_event_reference(
             "entity_id": "trade-2",
         },
     ]
+
+
+def test_portfolio_positions_align_with_paper_position_exposure(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_core_data(repo)
+
+    with _test_client(monkeypatch, repo) as client:
+        portfolio_positions = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS).json()["positions"]
+        paper_positions = client.get("/paper/positions", headers=READ_ONLY_HEADERS).json()["items"]
+
+    aggregated: dict[tuple[str, str], dict[str, Decimal]] = {}
+    for position in paper_positions:
+        if position["status"] != "open":
+            continue
+        key = (position["strategy_id"], position["symbol"])
+        net_quantity = Decimal(position["net_quantity"])
+        average_entry_price = Decimal(position["average_entry_price"])
+
+        if key not in aggregated:
+            aggregated[key] = {
+                "size": Decimal("0"),
+                "weighted_notional": Decimal("0"),
+            }
+
+        aggregated[key]["size"] += net_quantity
+        aggregated[key]["weighted_notional"] += net_quantity * average_entry_price
+
+    expected = []
+    for (strategy_id, symbol), values in sorted(aggregated.items(), key=lambda item: (item[0][1], item[0][0])):
+        size = values["size"]
+        expected.append(
+            {
+                "strategy_id": strategy_id,
+                "symbol": symbol,
+                "size": float(size),
+                "average_price": float(values["weighted_notional"] / size),
+            }
+        )
+
+    observed = [
+        {
+            "strategy_id": item["strategy_id"],
+            "symbol": item["symbol"],
+            "size": item["size"],
+            "average_price": item["average_price"],
+        }
+        for item in portfolio_positions
+    ]
+    assert observed == expected
