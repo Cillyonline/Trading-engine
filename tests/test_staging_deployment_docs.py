@@ -71,6 +71,10 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert "## Restart-Safe Runtime Behavior" in content
     assert "## Storage and Persistence Expectations" in content
     assert "## Bounded Staging Validation" in content
+    assert "## Acceptance-Gate Alignment" in content
+    assert "`server-ready (staging)`" in content
+    assert "`paper-install-ready`" in content
+    assert "EVIDENCE_STAGING_VALIDATION_LOG" in content
     assert "## Test Gate" in content
 
 
