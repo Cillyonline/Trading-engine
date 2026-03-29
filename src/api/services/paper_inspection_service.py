@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Sequence
 
 from fastapi import HTTPException
 
@@ -27,6 +28,35 @@ def resolve_paper_starting_cash() -> Decimal:
 
 def sum_decimals(values: list[Decimal]) -> Decimal:
     return sum(values, Decimal("0"))
+
+
+@dataclass(frozen=True)
+class PortfolioInspectionPositionState:
+    strategy_id: str
+    symbol: str
+    size: Decimal
+    average_price: Decimal
+    unrealized_pnl: Decimal
+
+
+@dataclass(frozen=True)
+class _AggregatedPortfolioPosition:
+    strategy_id: str
+    symbol: str
+    size: Decimal
+    weighted_notional: Decimal
+    unrealized_pnl: Decimal
+
+
+@dataclass(frozen=True)
+class BoundedPaperSimulationState:
+    orders: tuple[Order, ...]
+    execution_events: tuple[ExecutionEvent, ...]
+    trades: tuple[Trade, ...]
+    positions: tuple[Position, ...]
+    account: dict[str, object]
+    portfolio_positions: tuple[PortfolioInspectionPositionState, ...]
+    reconciliation_mismatches: tuple[dict[str, Optional[str]], ...]
 
 
 def build_paper_account_state(
@@ -66,6 +96,50 @@ def build_paper_account_state(
         "closed_trades": closed_trades,
         "as_of": as_of,
     }
+
+
+def _ensure_unique_ids(
+    *,
+    items: Sequence[object],
+    entity_name: str,
+    id_attr: str,
+) -> None:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for item in items:
+        value = getattr(item, id_attr, None)
+        if not isinstance(value, str):
+            continue
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+
+    if duplicates:
+        detail = f"bounded_simulation_state_duplicate_{entity_name}_id"
+        raise HTTPException(status_code=500, detail=detail)
+
+
+def validate_bounded_paper_simulation_state(
+    *,
+    orders: Sequence[Order],
+    execution_events: Sequence[ExecutionEvent],
+    trades: Sequence[Trade],
+    positions: Sequence[Position],
+    portfolio_positions: Sequence[PortfolioInspectionPositionState],
+) -> None:
+    _ensure_unique_ids(items=orders, entity_name="order", id_attr="order_id")
+    _ensure_unique_ids(items=execution_events, entity_name="execution_event", id_attr="event_id")
+    _ensure_unique_ids(items=trades, entity_name="trade", id_attr="trade_id")
+    _ensure_unique_ids(items=positions, entity_name="position", id_attr="position_id")
+
+    for item in portfolio_positions:
+        if item.size < Decimal("0"):
+            raise HTTPException(status_code=500, detail="bounded_simulation_state_negative_portfolio_size")
+        if item.average_price < Decimal("0"):
+            raise HTTPException(
+                status_code=500,
+                detail="bounded_simulation_state_negative_portfolio_average_price",
+            )
 
 
 def build_paper_reconciliation_mismatches(
@@ -316,37 +390,186 @@ def weighted_average(*, values: list[tuple[Decimal, Decimal]]) -> Optional[Decim
     return weighted_sum / total_weight
 
 
+def build_portfolio_positions_from_trades(
+    *,
+    trades: Sequence[Trade],
+) -> list[PortfolioInspectionPositionState]:
+    aggregates: dict[tuple[str, str], _AggregatedPortfolioPosition] = {}
+    for trade in trades:
+        if trade.status != "open":
+            continue
+        if trade.quantity_opened <= Decimal("0"):
+            continue
+        if trade.average_entry_price <= Decimal("0"):
+            continue
+        remaining_quantity = trade.quantity_opened - trade.quantity_closed
+        if remaining_quantity <= Decimal("0"):
+            continue
+
+        key = (trade.strategy_id, trade.symbol)
+        existing = aggregates.get(key)
+        remaining_notional = remaining_quantity * trade.average_entry_price
+        trade_unrealized_pnl = trade.unrealized_pnl or Decimal("0")
+
+        if existing is None:
+            aggregates[key] = _AggregatedPortfolioPosition(
+                strategy_id=trade.strategy_id,
+                symbol=trade.symbol,
+                size=remaining_quantity,
+                weighted_notional=remaining_notional,
+                unrealized_pnl=trade_unrealized_pnl,
+            )
+            continue
+
+        aggregates[key] = _AggregatedPortfolioPosition(
+            strategy_id=existing.strategy_id,
+            symbol=existing.symbol,
+            size=existing.size + remaining_quantity,
+            weighted_notional=existing.weighted_notional + remaining_notional,
+            unrealized_pnl=existing.unrealized_pnl + trade_unrealized_pnl,
+        )
+
+    positions: list[PortfolioInspectionPositionState] = []
+    for aggregate in aggregates.values():
+        if aggregate.size <= Decimal("0"):
+            continue
+        average_price = aggregate.weighted_notional / aggregate.size
+        positions.append(
+            PortfolioInspectionPositionState(
+                strategy_id=aggregate.strategy_id,
+                symbol=aggregate.symbol,
+                size=aggregate.size,
+                average_price=average_price,
+                unrealized_pnl=aggregate.unrealized_pnl,
+            )
+        )
+
+    return sorted(
+        positions,
+        key=lambda item: (
+            item.symbol,
+            item.strategy_id,
+            item.size,
+            item.average_price,
+            item.unrealized_pnl,
+        ),
+    )
+
+
+def _filter_trades(
+    *,
+    trades: Sequence[Trade],
+    strategy_id: Optional[str],
+    symbol: Optional[str],
+    position_id: Optional[str],
+) -> list[Trade]:
+    filtered = list(trades)
+    if strategy_id is not None:
+        filtered = [item for item in filtered if item.strategy_id == strategy_id]
+    if symbol is not None:
+        filtered = [item for item in filtered if item.symbol == symbol]
+    if position_id is not None:
+        filtered = [item for item in filtered if item.position_id == position_id]
+    return filtered
+
+
+def _filter_orders(
+    *,
+    orders: Sequence[Order],
+    strategy_id: Optional[str],
+    symbol: Optional[str],
+    target_position_ids: set[str],
+) -> list[Order]:
+    filtered = list(orders)
+    if strategy_id is not None:
+        filtered = [item for item in filtered if item.strategy_id == strategy_id]
+    if symbol is not None:
+        filtered = [item for item in filtered if item.symbol == symbol]
+    if not target_position_ids:
+        return []
+    return [
+        item for item in filtered if item.position_id is not None and item.position_id in target_position_ids
+    ]
+
+
+def _filter_execution_events(
+    *,
+    events: Sequence[ExecutionEvent],
+    strategy_id: Optional[str],
+    symbol: Optional[str],
+    target_position_ids: set[str],
+) -> list[ExecutionEvent]:
+    filtered = list(events)
+    if strategy_id is not None:
+        filtered = [item for item in filtered if item.strategy_id == strategy_id]
+    if symbol is not None:
+        filtered = [item for item in filtered if item.symbol == symbol]
+    if not target_position_ids:
+        return []
+    return [
+        item for item in filtered if item.position_id is not None and item.position_id in target_position_ids
+    ]
+
+
 def build_trading_core_positions(
     *,
     canonical_execution_repo: Any,
     strategy_id: Optional[str] = None,
     symbol: Optional[str] = None,
     position_id: Optional[str] = None,
+    trades: Optional[list[Trade]] = None,
+    orders: Optional[list[Order]] = None,
+    events: Optional[list[ExecutionEvent]] = None,
 ) -> list[Position]:
-    trades = canonical_execution_repo.list_trades(
-        strategy_id=strategy_id,
-        symbol=symbol,
-        position_id=position_id,
-        limit=1_000_000,
-        offset=0,
-    )
+    if trades is None:
+        trades = canonical_execution_repo.list_trades(
+            strategy_id=strategy_id,
+            symbol=symbol,
+            position_id=position_id,
+            limit=1_000_000,
+            offset=0,
+        )
+    else:
+        trades = _filter_trades(
+            trades=trades,
+            strategy_id=strategy_id,
+            symbol=symbol,
+            position_id=position_id,
+        )
     if not trades:
         return []
 
-    orders = canonical_execution_repo.list_orders(
-        strategy_id=strategy_id,
-        symbol=symbol,
-        limit=1_000_000,
-        offset=0,
-    )
-    events = canonical_execution_repo.list_execution_events(
-        strategy_id=strategy_id,
-        symbol=symbol,
-        limit=1_000_000,
-        offset=0,
-    )
-
     target_position_ids = {trade.position_id for trade in trades}
+    if orders is None:
+        orders = canonical_execution_repo.list_orders(
+            strategy_id=strategy_id,
+            symbol=symbol,
+            limit=1_000_000,
+            offset=0,
+        )
+    else:
+        orders = _filter_orders(
+            orders=orders,
+            strategy_id=strategy_id,
+            symbol=symbol,
+            target_position_ids=target_position_ids,
+        )
+
+    if events is None:
+        events = canonical_execution_repo.list_execution_events(
+            strategy_id=strategy_id,
+            symbol=symbol,
+            limit=1_000_000,
+            offset=0,
+        )
+    else:
+        events = _filter_execution_events(
+            events=events,
+            strategy_id=strategy_id,
+            symbol=symbol,
+            target_position_ids=target_position_ids,
+        )
+
     orders_by_position: dict[str, list[Order]] = {}
     events_by_position: dict[str, list[ExecutionEvent]] = {}
     trades_by_position: dict[str, list[Trade]] = {}
@@ -354,11 +577,11 @@ def build_trading_core_positions(
     for trade in trades:
         trades_by_position.setdefault(trade.position_id, []).append(trade)
     for order in orders:
-        if order.position_id is None or order.position_id not in target_position_ids:
+        if order.position_id is None:
             continue
         orders_by_position.setdefault(order.position_id, []).append(order)
     for event in events:
-        if event.position_id is None or event.position_id not in target_position_ids:
+        if event.position_id is None:
             continue
         events_by_position.setdefault(event.position_id, []).append(event)
 
@@ -450,4 +673,49 @@ def build_trading_core_positions(
             item.opened_at,
             item.position_id,
         ),
+    )
+
+
+def build_bounded_paper_simulation_state(
+    *,
+    canonical_execution_repo: Any,
+) -> BoundedPaperSimulationState:
+    orders = canonical_execution_repo.list_orders(limit=1_000_000, offset=0)
+    execution_events = canonical_execution_repo.list_execution_events(limit=1_000_000, offset=0)
+    trades = canonical_execution_repo.list_trades(limit=1_000_000, offset=0)
+    positions = build_trading_core_positions(
+        canonical_execution_repo=canonical_execution_repo,
+        trades=list(trades),
+        orders=list(orders),
+        events=list(execution_events),
+    )
+    account = build_paper_account_state(
+        paper_trades=list(trades),
+        paper_positions=positions,
+    )
+    portfolio_positions = build_portfolio_positions_from_trades(trades=trades)
+    mismatches = build_paper_reconciliation_mismatches(
+        orders=list(orders),
+        execution_events=list(execution_events),
+        trades=list(trades),
+        positions=positions,
+        account=account,
+    )
+
+    validate_bounded_paper_simulation_state(
+        orders=orders,
+        execution_events=execution_events,
+        trades=trades,
+        positions=positions,
+        portfolio_positions=portfolio_positions,
+    )
+
+    return BoundedPaperSimulationState(
+        orders=tuple(orders),
+        execution_events=tuple(execution_events),
+        trades=tuple(trades),
+        positions=tuple(positions),
+        account=account,
+        portfolio_positions=tuple(portfolio_positions),
+        reconciliation_mismatches=tuple(mismatches),
     )
