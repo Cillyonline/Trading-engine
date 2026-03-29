@@ -142,3 +142,40 @@ No production operator CLI/runtime entrypoint is documented for paper-trading si
 
 Reference:
 - [paper_trading.md](paper-trading.md)
+
+**Datum:** 2026-03-29
+**Thema:** Bounded Staging Prep – Bestandsaufnahme
+
+**Ziel:**
+Server-Basis für ersten bounded Staging-Deploy prüfen.
+
+**Was wurde geprüft oder geändert:**
+- OS-Version: Debian GNU/Linux 13.4 (trixie)
+- Kernel: 6.12.74+deb13+1-amd64
+- Docker-Version: noch nicht installiert
+- Compose-Version: noch nicht installiert
+- git: noch nicht installiert
+- curl: 8.14.1 vorhanden
+- vCPU: 4
+- RAM: 7.8 GiB
+- freier Speicher auf /: 240 GiB
+- Zeitzone: Europe/Berlin
+- SSH-Dienst: active, enabled
+- Listening Ports: nur 22/tcp auf IPv4 und IPv6
+- Gast-Firewall: keine Regeln sichtbar
+
+**Ergebnis:**
+- Mindestressourcen erfüllt: ja
+- Externer SSH-Zugang funktioniert: ja
+- Public Exposure für App-Dienste: noch nicht durchgeführt
+
+**Risiken / Auffälligkeiten:**
+- Root-Login per Passwort aktuell aktiv
+- Keine Gast-Firewall-Regeln sichtbar
+- Kein Swap konfiguriert
+- Provider-Firewall im SCP weiterhin separat zu prüfen
+
+**Folgeschritt:**
+- git installieren
+- Docker Engine + Compose Plugin über offizielles Docker-Repo installieren
+- keine App-Ports veröffentlichen
