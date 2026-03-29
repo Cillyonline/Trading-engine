@@ -20,6 +20,7 @@ from ..models import (
     JournalArtifactContentResponse,
     JournalArtifactListResponse,
     PaperAccountReadResponse,
+    PaperOperatorWorkflowReadResponse,
     PaperPositionsReadQuery,
     PaperPositionsReadResponse,
     PaperReconciliationReadResponse,
@@ -263,6 +264,20 @@ def build_inspection_router(
         _: str = Depends(deps.require_role("read_only")),
     ) -> PaperAccountReadResponse:
         return inspection_service.read_paper_account(deps=_service_dependencies(deps))
+
+    @router.get(
+        "/paper/workflow",
+        response_model=PaperOperatorWorkflowReadResponse,
+        summary="Paper Operator Workflow",
+        description=(
+            "Read-only bounded Phase 44 paper-trading operator workflow contract composed from "
+            "canonical inspection and reconciliation surfaces."
+        ),
+    )
+    def read_paper_operator_workflow_handler(
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> PaperOperatorWorkflowReadResponse:
+        return inspection_service.read_paper_operator_workflow(deps=_service_dependencies(deps))
 
     @router.get(
         "/paper/trades",

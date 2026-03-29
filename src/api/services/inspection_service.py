@@ -32,6 +32,12 @@ from ..models import (
     JournalArtifactListResponse,
     PaperAccountReadResponse,
     PaperAccountStateResponse,
+    PaperOperatorWorkflowBoundaryResponse,
+    PaperOperatorWorkflowReadResponse,
+    PaperOperatorWorkflowStepResponse,
+    PaperOperatorWorkflowSurfaceResponse,
+    PaperOperatorWorkflowValidationCheckResponse,
+    PaperOperatorWorkflowValidationResponse,
     PaperPositionsReadQuery,
     PaperPositionsReadResponse,
     PaperReconciliationMismatchResponse,
@@ -249,6 +255,139 @@ def read_paper_reconciliation(
         ),
         account=account,
         mismatch_items=mismatch_items,
+    )
+
+
+def read_paper_operator_workflow(
+    *,
+    deps: InspectionServiceDependencies,
+) -> PaperOperatorWorkflowReadResponse:
+    core_orders_items = deps.canonical_execution_repo.list_orders(limit=1_000_000, offset=0)
+    core_events_items = deps.canonical_execution_repo.list_execution_events(limit=1_000_000, offset=0)
+    core_trades_items = deps.canonical_execution_repo.list_trades(limit=1_000_000, offset=0)
+    core_positions_items = build_trading_core_positions(
+        canonical_execution_repo=deps.canonical_execution_repo,
+        strategy_id=None,
+        symbol=None,
+        position_id=None,
+    )
+    paper_trades_items = deps.canonical_execution_repo.list_trades(limit=1_000_000, offset=0)
+    paper_positions_items = build_trading_core_positions(
+        canonical_execution_repo=deps.canonical_execution_repo,
+        strategy_id=None,
+        symbol=None,
+        position_id=None,
+    )
+    reconciliation = read_paper_reconciliation(deps=deps)
+
+    checks = [
+        PaperOperatorWorkflowValidationCheckResponse(
+            code="reconciliation_ok",
+            ok=reconciliation.ok,
+            expected="true",
+            actual=str(reconciliation.ok).lower(),
+        ),
+        PaperOperatorWorkflowValidationCheckResponse(
+            code="reconciliation_mismatches_zero",
+            ok=reconciliation.summary.mismatches == 0,
+            expected="0",
+            actual=str(reconciliation.summary.mismatches),
+        ),
+        PaperOperatorWorkflowValidationCheckResponse(
+            code="paper_trades_match_canonical_trades",
+            ok=paper_trades_items == core_trades_items,
+            expected="true",
+            actual=str(paper_trades_items == core_trades_items).lower(),
+        ),
+        PaperOperatorWorkflowValidationCheckResponse(
+            code="paper_positions_match_canonical_positions",
+            ok=paper_positions_items == core_positions_items,
+            expected="true",
+            actual=str(paper_positions_items == core_positions_items).lower(),
+        ),
+    ]
+
+    return PaperOperatorWorkflowReadResponse(
+        boundary=PaperOperatorWorkflowBoundaryResponse(
+            workflow_id="phase44_bounded_paper_operator",
+            description=(
+                "One read-only operator workflow that validates paper-trading coherence across canonical "
+                "inspection and reconciliation surfaces."
+            ),
+            in_scope=[
+                "deterministic simulator lifecycle evidence",
+                "canonical inspection of orders, execution events, trades, and positions",
+                "paper inspection of account, trades, and positions",
+                "reconciliation validation with mismatch accounting",
+            ],
+            out_of_scope=[
+                "live trading",
+                "broker integrations",
+                "broad dashboard expansion",
+                "production trading operations",
+            ],
+        ),
+        steps=[
+            PaperOperatorWorkflowStepResponse(
+                step=1,
+                action="Inspect canonical order lifecycle entities.",
+                endpoint="GET /trading-core/orders",
+                expected_result=f"Deterministic order set is readable (items={len(core_orders_items)}).",
+            ),
+            PaperOperatorWorkflowStepResponse(
+                step=2,
+                action="Inspect canonical execution lifecycle events.",
+                endpoint="GET /trading-core/execution-events",
+                expected_result=(
+                    f"Deterministic execution-event set is readable (items={len(core_events_items)})."
+                ),
+            ),
+            PaperOperatorWorkflowStepResponse(
+                step=3,
+                action="Inspect canonical trade and position state.",
+                endpoint="GET /trading-core/trades + GET /trading-core/positions",
+                expected_result=(
+                    f"Canonical trade/position sets are readable (trades={len(core_trades_items)}, "
+                    f"positions={len(core_positions_items)})."
+                ),
+            ),
+            PaperOperatorWorkflowStepResponse(
+                step=4,
+                action="Inspect paper-facing views derived from canonical entities.",
+                endpoint="GET /paper/trades + GET /paper/positions + GET /paper/account",
+                expected_result=(
+                    f"Paper views are readable (trades={len(paper_trades_items)}, "
+                    f"positions={len(paper_positions_items)})."
+                ),
+            ),
+            PaperOperatorWorkflowStepResponse(
+                step=5,
+                action="Run reconciliation and require zero mismatches.",
+                endpoint="GET /paper/reconciliation",
+                expected_result=(
+                    f"Reconciliation ok={str(reconciliation.ok).lower()} mismatches="
+                    f"{reconciliation.summary.mismatches}."
+                ),
+            ),
+        ],
+        surfaces=PaperOperatorWorkflowSurfaceResponse(
+            canonical_inspection=[
+                "/trading-core/orders",
+                "/trading-core/execution-events",
+                "/trading-core/trades",
+                "/trading-core/positions",
+            ],
+            paper_inspection=[
+                "/paper/trades",
+                "/paper/positions",
+                "/paper/account",
+            ],
+            reconciliation="/paper/reconciliation",
+        ),
+        validation=PaperOperatorWorkflowValidationResponse(
+            ok=all(check.ok for check in checks),
+            checks=checks,
+        ),
     )
 
 
