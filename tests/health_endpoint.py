@@ -46,8 +46,11 @@ def test_health_endpoint_reports_runtime_health_from_simulated_snapshot(monkeypa
     assert response.status_code == 200
     assert response.json() == {
         "status": "healthy",
+        "ready": True,
         "mode": "running",
-        "reason": "runtime_running_fresh",
+        "reason": "bounded_runtime_ready",
+        "runtime_status": "healthy",
+        "runtime_reason": "runtime_running_fresh",
         "checked_at": fixed_now.isoformat(),
     }
 
@@ -96,8 +99,11 @@ def test_health_endpoint_is_read_only_without_runtime_transitions_or_writes(monk
         response = client.get("/health", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "degraded"
-    assert response.json()["reason"] == "runtime_not_started"
+    assert response.json()["status"] == "healthy"
+    assert response.json()["ready"] is True
+    assert response.json()["reason"] == "bounded_runtime_ready"
+    assert response.json()["runtime_status"] == "degraded"
+    assert response.json()["runtime_reason"] == "runtime_not_started"
     assert probe.transition_calls == 0
     assert probe.write_calls == 0
 
@@ -131,8 +137,11 @@ def test_health_endpoint_reports_unavailable_boundary(monkeypatch) -> None:
         response = client.get("/health", headers=READ_ONLY_HEADERS)
 
     assert response.status_code == 200
-    assert response.json()["status"] == "unavailable"
-    assert response.json()["reason"] == "runtime_running_timeout"
+    assert response.json()["status"] == "healthy"
+    assert response.json()["ready"] is True
+    assert response.json()["reason"] == "bounded_runtime_ready"
+    assert response.json()["runtime_status"] == "unavailable"
+    assert response.json()["runtime_reason"] == "runtime_running_timeout"
 
 
 def test_ui_endpoint_serves_html(monkeypatch) -> None:

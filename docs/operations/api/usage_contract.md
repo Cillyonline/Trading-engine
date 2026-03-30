@@ -311,7 +311,8 @@ All analysis entrypoints require `ingestion_run_id`. The API enforces:
 
 ### Purpose
 
-Purpose: Health check for API availability.
+Purpose: Aggregate bounded runtime-readiness check for staging and local
+operator use.
 
 ### Request
 
@@ -329,13 +330,28 @@ Success response:
 - **Body:**
   ```json
   {
-    "status": "ok"
+    "status": "healthy",
+    "ready": true,
+    "mode": "running",
+    "reason": "bounded_runtime_ready",
+    "runtime_status": "healthy",
+    "runtime_reason": "runtime_running_fresh",
+    "checked_at": "2026-01-01T12:00:30+00:00"
   }
   ```
 
 **Empty/no-result behavior:** Not applicable.
 
 **Validation rules:** None.
+
+**Bounded readiness interpretation:**
+
+- `ready: true` is the canonical bounded readiness signal for `/health` and
+  `/health/engine`.
+- `status` is aligned to that bounded readiness contract, so it does not report
+  a contradictory staging-not-ready result while `ready: true` remains true.
+- `runtime_status` and `runtime_reason` are diagnostic freshness fields. They
+  describe runtime freshness without overriding the bounded readiness decision.
 
 ### Errors
 
@@ -348,14 +364,90 @@ Success response:
 Example request:
 
 ```bash
-curl -s http://localhost:8000/health
+curl -s -H 'X-Cilly-Role: read_only' http://localhost:8000/health
 ```
 
 Example response:
 
 ```json
 {
-  "status": "ok"
+  "status": "healthy",
+  "ready": true,
+  "mode": "running",
+  "reason": "bounded_runtime_ready",
+  "runtime_status": "healthy",
+  "runtime_reason": "runtime_running_fresh",
+  "checked_at": "2026-01-01T12:00:30+00:00"
+}
+```
+
+---
+
+## GET /health/engine
+
+### Purpose
+
+Read the engine-specific bounded readiness state.
+
+### Request
+
+Request parameters:
+
+| Name | Type | Required | Default | Notes |
+| --- | --- | --- | --- | --- |
+| N/A | N/A | N/A | N/A | No request parameters. |
+
+### Success response
+
+Success response:
+
+- **Status:** `200 OK`
+- **Body:**
+  ```json
+  {
+    "subsystem": "engine",
+    "status": "healthy",
+    "ready": true,
+    "mode": "running",
+    "reason": "bounded_runtime_ready",
+    "runtime_status": "healthy",
+    "runtime_reason": "runtime_running_fresh",
+    "checked_at": "2026-01-01T12:00:30+00:00"
+  }
+  ```
+
+**Bounded readiness interpretation:**
+
+- `ready: true` is the canonical bounded readiness signal.
+- `runtime_status` and `runtime_reason` remain diagnostic-only fields for
+  runtime freshness.
+
+### Errors
+
+| Status | Error body shape | Error detail | Trigger |
+| --- | --- | --- | --- |
+| 401 | `{"detail":"unauthorized"}` | `unauthorized` | `X-Cilly-Role` header is missing or invalid. |
+
+### Example
+
+Example request:
+
+```bash
+curl -s -H 'X-Cilly-Role: read_only' http://localhost:8000/health/engine
+```
+
+Example response:
+
+```json
+{
+  "subsystem": "engine",
+  "status": "healthy",
+  "ready": true,
+  "mode": "running",
+  "reason": "bounded_runtime_ready",
+  "runtime_status": "healthy",
+  "runtime_reason": "runtime_running_fresh",
+  "checked_at": "2026-01-01T12:00:30+00:00"
 }
 ```
 

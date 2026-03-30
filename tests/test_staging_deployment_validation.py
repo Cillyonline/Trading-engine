@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.validate_staging_deployment as staging_validation
 from scripts.validate_staging_deployment import (
     EXIT_CODE_LOGGING_CHECK_FAILED,
     HealthSnapshot,
@@ -99,6 +100,7 @@ def test_run_staging_validation_includes_logging_and_persistence_checks() -> Non
 
     summary = run_staging_validation(
         compose_file=compose_file,
+        env_file=Path(".env"),
         base_url="http://127.0.0.1:18000",
         timeout_seconds=5,
         keep_running=False,
@@ -111,10 +113,10 @@ def test_run_staging_validation_includes_logging_and_persistence_checks() -> Non
     )
 
     assert commands == [
-        ["docker", "compose", "-f", str(compose_file), "config"],
-        ["docker", "compose", "-f", str(compose_file), "up", "-d", "--build"],
-        ["docker", "compose", "-f", str(compose_file), "restart", "api"],
-        ["docker", "compose", "-f", str(compose_file), "down", "--remove-orphans"],
+        ["docker", "compose", "--env-file", ".env", "-f", str(compose_file), "config"],
+        ["docker", "compose", "--env-file", ".env", "-f", str(compose_file), "up", "-d", "--build"],
+        ["docker", "compose", "--env-file", ".env", "-f", str(compose_file), "restart", "api"],
+        ["docker", "compose", "--env-file", ".env", "-f", str(compose_file), "down", "--remove-orphans"],
     ]
     assert log_checks == [1, 2]
     assert deleted_probes == ["ops-p46-probe"]
@@ -138,6 +140,7 @@ def test_run_staging_validation_raises_logging_exit_code_when_log_validation_fai
     with pytest.raises(StagingValidationError) as exc_info:
         run_staging_validation(
             compose_file=Path("docker/staging/docker-compose.staging.yml"),
+            env_file=Path(".env"),
             base_url="http://127.0.0.1:18000",
             timeout_seconds=5,
             keep_running=True,
@@ -149,3 +152,27 @@ def test_run_staging_validation_raises_logging_exit_code_when_log_validation_fai
         )
 
     assert exc_info.value.exit_code == EXIT_CODE_LOGGING_CHECK_FAILED
+
+
+def test_wait_for_readiness_retries_after_transient_connection_reset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"count": 0}
+
+    def _check_readiness(_base_url: str) -> HealthSnapshot:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ConnectionResetError(104, "Connection reset by peer")
+        return _healthy_snapshot()
+
+    monkeypatch.setattr(staging_validation, "_check_readiness", _check_readiness)
+    monkeypatch.setattr(staging_validation.time, "sleep", lambda _seconds: None)
+
+    snapshot = staging_validation._wait_for_readiness(
+        base_url="http://127.0.0.1:18000",
+        timeout_seconds=1,
+        poll_interval_seconds=0.0,
+    )
+
+    assert attempts["count"] == 2
+    assert snapshot == _healthy_snapshot()

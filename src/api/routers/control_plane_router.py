@@ -57,7 +57,7 @@ def build_control_plane_router(
     @router.get("/health")
     def health_handler(
         _: str = Depends(deps.require_role("read_only")),
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         deps.assert_phase_13_read_only_endpoint("/health")
         return health_payload(deps=_health_dependencies(deps))
 

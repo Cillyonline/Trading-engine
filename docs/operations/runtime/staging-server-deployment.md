@@ -43,7 +43,7 @@ Docker/Compose is the canonical and only first-clean-server install path in this
 repository.
 
 The canonical first-clean-server startup command is:
-`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`
+`docker compose --env-file .env -f docker/staging/docker-compose.staging.yml up -d --build`
 
 ## Host Prerequisites and Package Contract
 Required on host:
@@ -121,8 +121,8 @@ Run exactly from repository root:
 ```bash
 cp .env.example .env
 mkdir -p /srv/cilly/staging/db /srv/cilly/staging/artifacts /srv/cilly/staging/journal /srv/cilly/staging/logs /srv/cilly/staging/runtime-state
-docker compose -f docker/staging/docker-compose.staging.yml config
-docker compose -f docker/staging/docker-compose.staging.yml up -d --build
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml config
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml up -d --build
 ```
 
 Reproducibility constraints in this path:
@@ -142,6 +142,11 @@ curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/guards
 ```
 
 Readiness expectations:
+- `/health` and `/health/engine` use `ready: true` as the canonical bounded
+  staging readiness signal.
+- If `/health` or `/health/engine` also include `runtime_status` or
+  `runtime_reason`, those fields are freshness diagnostics and do not override a
+  bounded-ready interpretation while `ready: true` remains true.
 - `/health/engine`, `/health/data`, and `/health/guards` report ready status
   for bounded staging operation.
 
@@ -150,7 +155,7 @@ Operational logs are bounded to deployment use through compose-managed runtime
 output and JSON log formatting for API events.
 
 ```bash
-docker compose -f docker/staging/docker-compose.staging.yml logs -f api
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml logs -f api
 ```
 
 File-based log persistence in `/data/logs` is explicitly non-authoritative in
@@ -159,7 +164,7 @@ this stage; stdout/stderr compose logs remain authoritative.
 ## Exact Restart Validation Commands
 Restart safety is bounded to container restart with persisted state continuity.
 ```bash
-docker compose -f docker/staging/docker-compose.staging.yml restart api
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml restart api
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/engine
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/data
 curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/guards
@@ -177,7 +182,7 @@ Persistence expectations across restart and redeploy are explicit:
 - Deleting bind-mounted host directory contents resets bounded staging state.
 
 ```bash
-docker compose -f docker/staging/docker-compose.staging.yml down --remove-orphans
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml down --remove-orphans
 ```
 
 ## Bounded Staging Validation
@@ -187,6 +192,9 @@ restart-safe persistence behavior in the bounded staging path.
 ```bash
 python scripts/validate_staging_deployment.py
 ```
+
+The validation script uses `.env` by default for all compose calls and accepts
+`--env-file` only to override that bounded contract path explicitly.
 
 Validation stages:
 - Compose config, startup, health checks, logging checks, restart checks, and

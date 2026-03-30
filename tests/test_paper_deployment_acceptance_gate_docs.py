@@ -48,6 +48,9 @@ def test_paper_acceptance_gate_doc_names_required_evidence_outputs_and_markers()
     assert "STAGING_VALIDATE:RESTART_OK" in content
     assert "STAGING_VALIDATE:POST_RESTART_HEALTH_OK" in content
     assert "STAGING_VALIDATE:SUCCESS" in content
+    assert "bounded `.env` staging" in content
+    assert "manual shell-only env export workarounds are not part of" in content
+    assert "`runtime_status` or `runtime_reason` fields are diagnostic freshness" in content
     assert "EVIDENCE_STAGING_VALIDATION_LOG" in content
     assert "EVIDENCE_STAGING_HEALTH_SNAPSHOTS" in content
     assert "EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT" in content

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import subprocess
 import time
@@ -53,10 +54,19 @@ def _run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
 def _run_compose(
     *,
     compose_file: Path,
+    env_file: Path,
     args: list[str],
     run_command: Callable[[list[str]], subprocess.CompletedProcess[str]],
 ) -> subprocess.CompletedProcess[str]:
-    command = ["docker", "compose", "-f", str(compose_file), *args]
+    command = [
+        "docker",
+        "compose",
+        "--env-file",
+        str(env_file),
+        "-f",
+        str(compose_file),
+        *args,
+    ]
     return run_command(command)
 
 
@@ -128,7 +138,16 @@ def _wait_for_readiness(
     while time.monotonic() < deadline:
         try:
             return _check_readiness(base_url)
-        except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            urllib.error.URLError,
+            TimeoutError,
+            ValueError,
+            json.JSONDecodeError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+            ConnectionRefusedError,
+            http.client.RemoteDisconnected,
+        ) as exc:
             last_error = str(exc)
             time.sleep(poll_interval_seconds)
 
@@ -154,11 +173,13 @@ def _extract_json_record(line: str) -> dict[str, Any] | None:
 def _validate_compose_logs(
     *,
     compose_file: Path,
+    env_file: Path,
     run_command: Callable[[list[str]], subprocess.CompletedProcess[str]],
     minimum_startup_entries: int,
 ) -> dict[str, Any]:
     logs_result = _run_compose(
         compose_file=compose_file,
+        env_file=env_file,
         args=["logs", "--no-color", "api"],
         run_command=run_command,
     )
@@ -249,6 +270,7 @@ def _delete_persistence_probe(
 def run_staging_validation(
     *,
     compose_file: Path,
+    env_file: Path,
     base_url: str,
     timeout_seconds: int,
     keep_running: bool,
@@ -266,6 +288,7 @@ def run_staging_validation(
 
     config_result = _run_compose(
         compose_file=compose_file,
+        env_file=env_file,
         args=["config"],
         run_command=run_command,
     )
@@ -279,6 +302,7 @@ def run_staging_validation(
     try:
         up_result = _run_compose(
             compose_file=compose_file,
+            env_file=env_file,
             args=["up", "-d", "--build"],
             run_command=run_command,
         )
@@ -308,6 +332,7 @@ def run_staging_validation(
         summary["logging"] = {
             "pre_restart": validate_compose_logs(
                 compose_file=compose_file,
+                env_file=env_file,
                 run_command=run_command,
                 minimum_startup_entries=1,
             )
@@ -320,6 +345,7 @@ def run_staging_validation(
 
         restart_result = _run_compose(
             compose_file=compose_file,
+            env_file=env_file,
             args=["restart", "api"],
             run_command=run_command,
         )
@@ -347,6 +373,7 @@ def run_staging_validation(
         phase = "post_restart_logs"
         summary["logging"]["post_restart"] = validate_compose_logs(
             compose_file=compose_file,
+            env_file=env_file,
             run_command=run_command,
             minimum_startup_entries=2,
         )
@@ -400,6 +427,7 @@ def run_staging_validation(
         if up_succeeded and not keep_running:
             down_result = _run_compose(
                 compose_file=compose_file,
+                env_file=env_file,
                 args=["down", "--remove-orphans"],
                 run_command=run_command,
             )
@@ -423,6 +451,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--compose-file",
         default="docker/staging/docker-compose.staging.yml",
         help="Path to the staging docker compose file.",
+    )
+    parser.add_argument(
+        "--env-file",
+        default=".env",
+        help="Path to the env file required by the staging docker compose contract.",
     )
     parser.add_argument(
         "--base-url",
@@ -449,6 +482,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         summary = run_staging_validation(
             compose_file=Path(args.compose_file),
+            env_file=Path(args.env_file),
             base_url=args.base_url.rstrip("/"),
             timeout_seconds=args.timeout_seconds,
             keep_running=args.keep_running,
