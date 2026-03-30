@@ -138,15 +138,47 @@ def _seed(repo: SqliteCanonicalExecutionRepository) -> None:
     )
     repo.save_execution_events(
         [
-            _event("evt-1", "ord-1", occurred_at="2025-01-01T09:01:00Z", sequence=1, position_id="pos-1", trade_id="trade-1"),
-            _event("evt-2", "ord-2", occurred_at="2025-01-01T09:03:00Z", sequence=2, position_id="pos-2", trade_id="trade-2"),
+            _event(
+                "evt-1", "ord-1",
+                occurred_at="2025-01-01T09:01:00Z",
+                sequence=1,
+                position_id="pos-1",
+                trade_id="trade-1",
+            ),
+            _event(
+                "evt-2", "ord-2",
+                occurred_at="2025-01-01T09:03:00Z",
+                sequence=2,
+                position_id="pos-2",
+                trade_id="trade-2",
+            ),
         ]
     )
     repo.save_trade(
-        _trade("trade-1", position_id="pos-1", status="closed", opened_at="2025-01-01T09:00:00Z", closed_at="2025-01-01T09:10:00Z", realized_pnl="1.5", unrealized_pnl=None, order_id="ord-1", event_id="evt-1")
+        _trade(
+            "trade-1",
+            position_id="pos-1",
+            status="closed",
+            opened_at="2025-01-01T09:00:00Z",
+            closed_at="2025-01-01T09:10:00Z",
+            realized_pnl="1.5",
+            unrealized_pnl=None,
+            order_id="ord-1",
+            event_id="evt-1",
+        )
     )
     repo.save_trade(
-        _trade("trade-2", position_id="pos-2", status="open", opened_at="2025-01-01T09:02:00Z", closed_at=None, realized_pnl=None, unrealized_pnl="2.25", order_id="ord-2", event_id="evt-2")
+        _trade(
+            "trade-2",
+            position_id="pos-2",
+            status="open",
+            opened_at="2025-01-01T09:02:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="2.25",
+            order_id="ord-2",
+            event_id="evt-2",
+        )
     )
 
 
@@ -315,7 +347,7 @@ def test_reconciliation_detects_equation_mismatch_after_manual_corruption(
     _seed(repo)
     monkeypatch.setenv("CILLY_PAPER_ACCOUNT_STARTING_CASH", "100000")
 
-    # Overwrite trade-2 with a reference to a non-existent execution event
+    # Overwrite trade-2 with an intentionally invalid execution-event reference
     repo.save_trade(
         _trade(
             "trade-2",
@@ -326,7 +358,7 @@ def test_reconciliation_detects_equation_mismatch_after_manual_corruption(
             realized_pnl=None,
             unrealized_pnl="2.25",
             order_id="ord-2",
-            event_id="evt-does-not-exist",
+            event_id="evt-invalid-reference",
         )
     )
 
