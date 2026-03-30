@@ -85,3 +85,16 @@ The bounded Phase 44 workflow claim requires all of the following evidence:
 - Full paper-trading UI redesign
 - Mutation-heavy order-entry workflow
 - Unrelated portfolio or strategy refactors
+
+## Restart and Reload Behavior
+
+All paper portfolio and account state is persisted in the canonical SQLite execution repository. On process restart or reload:
+
+1. The repository re-opens the existing database file (`core_orders`, `core_execution_events`, `core_trades`).
+2. All derived views (account, positions, portfolio, reconciliation) are recomputed deterministically from persisted entities.
+3. No in-memory state is required — the full inspection surface is reconstructable from the database alone.
+4. The operator can verify state integrity after restart by running `GET /paper/reconciliation` and requiring `ok: true` with `summary.mismatches: 0`.
+
+## Singular State Authority
+
+The sole source of truth for paper execution state is `SqliteCanonicalExecutionRepository`. No alternative state source, in-memory cache, or legacy table is authoritative. The formal contract is defined in `src/cilly_trading/portfolio/paper_state_authority.py`.
