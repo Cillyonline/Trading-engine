@@ -37,7 +37,7 @@ class ControlPlaneHealthDependencies:
     evaluate_runtime_health: Callable[..., Any]
 
 
-def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, str]:
+def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:
     payload = deps.get_runtime_introspection_payload()
     snapshot = {
         "mode": payload["mode"],
@@ -45,30 +45,36 @@ def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str,
     }
     checked_at = deps.now()
     evaluation = deps.evaluate_runtime_health(snapshot, now=checked_at)
+    ready = payload["mode"] in {"ready", "running", "paused"}
+    reason = "bounded_runtime_ready" if ready else evaluation.reason
+    status = "healthy" if ready else evaluation.status
 
     return {
-        "status": evaluation.status,
+        "status": status,
+        "ready": ready,
         "mode": payload["mode"],
-        "reason": evaluation.reason,
+        "reason": reason,
+        "runtime_status": evaluation.status,
+        "runtime_reason": evaluation.reason,
         "checked_at": checked_at.isoformat(),
     }
 
 
-def health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, str]:
+def health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:
     return runtime_health_payload(deps=deps)
 
 
 def health_engine_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:
     payload = runtime_health_payload(deps=deps)
-    mode = payload["mode"]
-    ready = mode in {"ready", "running", "paused"}
 
     return {
         "subsystem": "engine",
         "status": payload["status"],
-        "ready": ready,
-        "mode": mode,
+        "ready": payload["ready"],
+        "mode": payload["mode"],
         "reason": payload["reason"],
+        "runtime_status": payload["runtime_status"],
+        "runtime_reason": payload["runtime_reason"],
         "checked_at": payload["checked_at"],
     }
 

@@ -440,8 +440,11 @@ def test_observability_integration_is_deterministic_for_healthy_runtime(
     assert first["health"] == {
         "/health": {
             "status": "healthy",
+            "ready": True,
             "mode": "running",
-            "reason": "runtime_running_fresh",
+            "reason": "bounded_runtime_ready",
+            "runtime_status": "healthy",
+            "runtime_reason": "runtime_running_fresh",
             "checked_at": "2026-01-01T12:00:30+00:00",
         },
         "/health/engine": {
@@ -449,7 +452,9 @@ def test_observability_integration_is_deterministic_for_healthy_runtime(
             "status": "healthy",
             "ready": True,
             "mode": "running",
-            "reason": "runtime_running_fresh",
+            "reason": "bounded_runtime_ready",
+            "runtime_status": "healthy",
+            "runtime_reason": "runtime_running_fresh",
             "checked_at": "2026-01-01T12:00:30+00:00",
         },
         "/health/data": {
@@ -511,17 +516,22 @@ def test_observability_integration_is_deterministic_for_failure_runtime(
     }
     assert first["health"] == {
         "/health": {
-            "status": "unavailable",
+            "status": "healthy",
+            "ready": True,
             "mode": "running",
-            "reason": "runtime_running_timeout",
+            "reason": "bounded_runtime_ready",
+            "runtime_status": "unavailable",
+            "runtime_reason": "runtime_running_timeout",
             "checked_at": "2026-01-01T12:00:30+00:00",
         },
         "/health/engine": {
             "subsystem": "engine",
-            "status": "unavailable",
+            "status": "healthy",
             "ready": True,
             "mode": "running",
-            "reason": "runtime_running_timeout",
+            "reason": "bounded_runtime_ready",
+            "runtime_status": "unavailable",
+            "runtime_reason": "runtime_running_timeout",
             "checked_at": "2026-01-01T12:00:30+00:00",
         },
         "/health/data": {

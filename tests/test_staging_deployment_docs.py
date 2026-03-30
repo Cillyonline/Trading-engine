@@ -64,7 +64,7 @@ def test_staging_topology_doc_references_canonical_staging_artifacts() -> None:
     assert "/health/engine" in content
     assert "/health/data" in content
     assert "/health/guards" in content
-    assert "docker compose -f docker/staging/docker-compose.staging.yml restart api" in content
+    assert "--env-file .env -f docker/staging/docker-compose.staging.yml restart api" in content
     assert "## Canonical First-Clean-Server Install Contract" in content
     assert "## Host Prerequisites and Package Contract" in content
     assert "## Required Directories and Persistence Paths" in content
@@ -96,7 +96,7 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
 
     assert "Docker/Compose is the canonical and only first-clean-server install path" in content
     assert "The canonical first-clean-server startup command is:" in content
-    assert "docker compose -f docker/staging/docker-compose.staging.yml up -d --build" in content
+    assert "docker compose --env-file .env -f docker/staging/docker-compose.staging.yml up -d --build" in content
     assert "Legacy `requirements.txt` installation is non-canonical" in content
     assert "Required on host:" in content
     assert "Docker Engine" in content
@@ -118,25 +118,28 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     assert "Remote access is out of default staging scope" in content
     assert "Any local-run or local development installation guidance is non-canonical for" in content
     assert (
-        "docker compose -f docker/staging/docker-compose.staging.yml up -d --build\n```\n\n"
+        "docker compose --env-file .env -f docker/staging/docker-compose.staging.yml up -d --build\n```\n\n"
         "Reproducibility constraints in this path:"
     ) in content
     assert (
         "curl -sS -H \"X-Cilly-Role: read_only\" http://127.0.0.1:18000/health/guards\n```\n\n"
         "Readiness expectations:"
     ) in content
+    assert "`ready: true` as the canonical bounded" in content
+    assert "`runtime_status` or" in content
     assert (
         "python scripts/validate_staging_deployment.py\n```\n\n"
-        "Validation stages:"
+        "The validation script uses `.env` by default"
     ) in content
+    assert "uses `.env` by default for all compose calls" in content
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml config",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml config",
         expected_transition="Reproducibility constraints in this path:",
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml config",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml config",
         expected_transition="## Exact Smoke Commands",
     )
     _assert_fence_closes_to_transition(
@@ -146,22 +149,22 @@ def test_staging_topology_doc_declares_single_canonical_first_deployment_path() 
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml logs -f api",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml logs -f api",
         expected_transition="## Exact Restart Validation Commands",
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml restart api",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml restart api",
         expected_transition="Expected result:",
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml restart api",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml restart api",
         expected_transition="## Storage and Persistence Expectations",
     )
     _assert_fence_closes_to_transition(
         content,
-        block_marker="docker compose -f docker/staging/docker-compose.staging.yml down --remove-orphans",
+        block_marker="docker compose --env-file .env -f docker/staging/docker-compose.staging.yml down --remove-orphans",
         expected_transition="## Bounded Staging Validation",
     )
     _assert_fence_closes_to_transition(

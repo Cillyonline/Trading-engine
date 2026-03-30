@@ -38,7 +38,9 @@ def test_health_engine_reports_runtime_readiness(monkeypatch) -> None:
         "status": "healthy",
         "ready": True,
         "mode": "running",
-        "reason": "runtime_running_fresh",
+        "reason": "bounded_runtime_ready",
+        "runtime_status": "healthy",
+        "runtime_reason": "runtime_running_fresh",
         "checked_at": fixed_now.isoformat(),
     }
 

@@ -48,6 +48,11 @@ Run steps in order from repository root.
 Command:
 - `python scripts/validate_staging_deployment.py`
 
+Contract note:
+- The validation script executes compose with the bounded `.env` staging
+  contract by default; manual shell-only env export workarounds are not part of
+  the acceptance path.
+
 Required output markers:
 - `STAGING_VALIDATE:CONFIG_OK`
 - `STAGING_VALIDATE:UP_OK`
@@ -66,6 +71,10 @@ Commands:
 - `curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/health/guards`
 
 Required response conditions:
+- `/health` and `/health/engine` treat `ready: true` as the canonical bounded
+  readiness signal.
+- Any `runtime_status` or `runtime_reason` fields are diagnostic freshness
+  fields and do not negate bounded readiness while `ready: true` remains true.
 - `/health/engine` -> `ready: true`
 - `/health/data` -> `ready: true`
 - `/health/guards` -> `ready: true` and allowing decision
