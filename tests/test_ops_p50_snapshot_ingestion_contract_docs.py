@@ -15,6 +15,7 @@ def test_ops_p50_authoritative_snapshot_ingestion_contract_is_bounded_and_explic
 
     assert content.startswith("# Canonical Real-Market Snapshot Ingestion Contract")
     assert "single authoritative server-side contract" in content
+    assert "One bounded scheduling path for ingestion is documented and supported" in content
     assert "It governs server-side snapshot creation only." in content
     assert "It does not define a public API." in content
     assert "It does not expand into live trading, broker execution, charting, or UI scope." in content
@@ -52,6 +53,31 @@ def test_ops_p50_contract_distinguishes_valid_missing_invalid_and_immutability_b
     assert "The ingestion boundary is append-only at create time and immutable after" in content
     assert "corrections, reloads, or provider changes require a new `ingestion_run_id`" in content
     assert "`ohlcv_snapshots` rows must not be updated or deleted in place" in content
+
+
+def test_ops_p50_contract_defines_single_server_schedule_evidence_names_and_restart_behavior() -> None:
+    contract = _read("docs/operations/runtime/snapshot_ingestion_contract.md")
+    runbook = _read("docs/ingestion_snapshot_job.md")
+    runbook_flat = " ".join(runbook.split())
+
+    assert "single-server cron entry" in contract
+    assert "daily at `06:05`" in contract
+    assert "`ingestion-run-<ingestion_run_id>.json`" in contract
+    assert "`snapshot-ingestion-failed-YYYYMMDDTHHMMSSZ.json`" in contract
+    assert "`snapshot-ingestion.lock`" in contract
+    assert "`snapshot_ingestion_already_running`" in contract
+    assert "remove the stale lock before the next retry" in contract
+
+    assert "The only supported repeatable scheduling path in this repository is one" in runbook
+    assert "single-server cron entry" in runbook
+    assert "daily at `06:05` UTC" in runbook
+    assert "This runbook remains bounded to server-side operation only." in runbook
+    assert "cloud orchestration" in runbook_flat
+    assert "distributed scheduling" in runbook_flat
+    assert "public alerting products" in runbook_flat
+    assert "one success evidence file named `ingestion-run-<ingestion_run_id>.json`" in runbook
+    assert "one failure evidence file named `snapshot-ingestion-failed-YYYYMMDDTHHMMSSZ.json`" in runbook
+    assert "it exits non-zero with `snapshot_ingestion_already_running`" in runbook
 
 
 def test_ops_p50_usage_and_analyst_docs_reference_same_contract_boundary() -> None:
