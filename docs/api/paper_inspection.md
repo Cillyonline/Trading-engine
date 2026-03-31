@@ -2,6 +2,22 @@
 
 This document defines the read-only paper inspection surface for paper account state, paper trades, and derived paper positions.
 
+## Singular State Authority
+
+The sole source of truth for all paper portfolio and account state is the **canonical execution repository** (`SqliteCanonicalExecutionRepository`), persisted across the following tables:
+
+- `core_orders` — canonical order entities
+- `core_execution_events` — canonical execution lifecycle events
+- `core_trades` — canonical trade entities
+
+All derived views (account balance, positions, portfolio aggregation, reconciliation) are computed deterministically from these canonical entities on every read request. No alternative or competing state authority is permitted.
+
+The formal contract is defined in `src/cilly_trading/portfolio/paper_state_authority.py`.
+
+## Restart-Safe Persistence
+
+Because the canonical repository is backed by SQLite, all paper execution state survives process restarts and reloads without loss. On restart the repository re-opens the existing database file and the deterministic derivation functions reproduce identical views from the persisted entities. No in-memory state is required to reconstruct paper inspection views.
+
 ## Read-Only Endpoints
 
 All endpoints require `X-Cilly-Role: read_only` (or a higher role).
@@ -16,14 +32,14 @@ No mutation endpoints are introduced by this surface.
 
 ## Authoritative State Ownership
 
-Paper inspection state is authoritative only when derived from Trading Core entities:
+Paper inspection state is authoritative only when derived from the singular canonical execution repository:
 
 - Orders: canonical `Order` entities (`core_orders`)
 - Execution lifecycle facts: canonical `ExecutionEvent` entities (`core_execution_events`)
 - Trades: canonical `Trade` entities (`core_trades`)
 - Positions: derived canonical `Position` entities assembled from canonical trades/orders/execution events
 
-No `/paper/*` runtime endpoint uses legacy `trades` table payloads as the source of truth.
+No `/paper/*` runtime endpoint uses legacy `trades` table payloads or any alternative state source as the source of truth. The only permitted environment-variable input is `CILLY_PAPER_ACCOUNT_STARTING_CASH`, which provides the initial cash constant and does not override any execution-derived value.
 
 ## Paper Account State
 
@@ -72,7 +88,15 @@ This is the minimum operator inspection path for paper trading from order intent
 6. Read paper-facing account state from `GET /paper/account`.
 7. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
 
-`GET /paper/reconciliation` fails closed for operational validation: any missing cross-reference or account equation mismatch is returned in `mismatch_items` with deterministic `code`, `entity_type`, and `entity_id` values.
+`GET /paper/reconciliation` fails closed for operational validation: any missing cross-reference or account equation mismatch is returned in `mismatch_items` with deterministic `code`, `entity_type`, and `entity_id` values. The reconciliation validates:
+
+- Every `ExecutionEvent.order_id` references a known canonical `Order`.
+- Every `Trade.position_id` references a known canonical `Position`.
+- Every `Trade.opening_order_ids` / `closing_order_ids` reference known canonical `Order` entities.
+- Every `Trade.execution_event_ids` reference known canonical `ExecutionEvent` entities.
+- Every `Position.trade_ids`, `Position.order_ids`, `Position.execution_event_ids` reference known canonical entities.
+- Account equations (`cash`, `equity`, `total_pnl`, `realized_pnl`, `unrealized_pnl`) match the sums derived from canonical trades.
+- Account counts (`open_trades`, `closed_trades`, `open_positions`) match the canonical entity statuses.
 
 `GET /paper/workflow` is the bounded operator contract surface that makes workflow scope, boundary, required inspection/reconciliation surfaces, and validation checks explicit.
 

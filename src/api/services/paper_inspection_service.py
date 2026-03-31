@@ -1,3 +1,9 @@
+"""Paper inspection service — all state derived from canonical execution repository.
+
+State authority: SqliteCanonicalExecutionRepository is the sole source of truth.
+See ``cilly_trading.portfolio.paper_state_authority`` for the full contract.
+"""
+
 from __future__ import annotations
 
 import os
@@ -50,6 +56,13 @@ class _AggregatedPortfolioPosition:
 
 @dataclass(frozen=True)
 class BoundedPaperSimulationState:
+    """Immutable snapshot of paper state derived from the canonical execution repository.
+
+    Every field is computed deterministically from ``core_orders``,
+    ``core_execution_events``, and ``core_trades``.  No alternative state
+    source is used.  See ``cilly_trading.portfolio.paper_state_authority``.
+    """
+
     orders: tuple[Order, ...]
     execution_events: tuple[ExecutionEvent, ...]
     trades: tuple[Trade, ...]
