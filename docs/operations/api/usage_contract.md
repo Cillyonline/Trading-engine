@@ -153,27 +153,32 @@ All analysis entrypoints are **snapshot-only**:
 - **Deterministic failure on missing/partial snapshots.** If the snapshot does not exist, is not ready for the requested symbols/timeframe, or contains invalid data, the request fails with a deterministic error (see Error semantics below).
 - **Deterministic identities.** Manual analysis runs return a deterministic `analysis_run_id` derived from the canonical request payload, and signals carry deterministic identities based on their stable fields. The API does not re-derive or mutate these identities on read.
 
-### Snapshot ingestion workflow (MVP v1.1, as implemented)
+### Snapshot ingestion workflow
 
-This repository **does not implement** snapshot ingestion. The only implemented behavior is how the API and engine read and validate snapshots already present in the SQLite database. Snapshot creation and population are therefore **out-of-band for MVP** (for example, a separate process must insert rows into the tables described below).
+The authoritative server-side snapshot creation contract lives in
+`docs/operations/runtime/snapshot_ingestion_contract.md`.
 
-#### Tables and immutability
+The API remains read-side only:
 
-The database schema defines two snapshot-related tables:
+- analysis endpoints do not define or expose a public ingestion API
+- snapshot creation remains bounded to server-side creation of
+  `ingestion_runs` and `ohlcv_snapshots` for analysis use
+- the read side distinguishes `missing` snapshots (`ingestion_run_not_found`,
+  `ingestion_run_not_ready`) from `invalid` snapshots (`snapshot_data_invalid`)
 
-- `ingestion_runs` contains metadata for a snapshot run (`ingestion_run_id`, `created_at`, `source`, `symbols_json`, `timeframe`, `fingerprint_hash`). The API treats this table as the existence check for a snapshot run.
-- `ohlcv_snapshots` contains OHLCV rows keyed by `(ingestion_run_id, symbol, timeframe, ts)` and references `ingestion_runs(ingestion_run_id)` via a foreign key. Update and delete triggers abort with `snapshot_immutable`, making snapshot rows immutable once inserted.
+Snapshot-only API endpoints call `_require_ingestion_run` and
+`_require_snapshot_ready`, which delegate to
+`analysis_run_repo.ingestion_run_exists` and
+`analysis_run_repo.ingestion_run_is_ready`. Readiness is defined as:
 
-No code path in this repository inserts into `ingestion_runs` or `ohlcv_snapshots`; they must already exist for the API to operate.
+- the `ingestion_runs` row exists for the requested `ingestion_run_id`, **and**
+- for every required symbol in the request, **at least one row** exists in
+  `ohlcv_snapshots` with the same `ingestion_run_id`, `symbol`, and
+  `timeframe` (the default timeframe is `D1`)
 
-#### How `ingestion_runs` and `ohlcv_snapshots` are used
-
-Snapshot-only API endpoints call `_require_ingestion_run` and `_require_snapshot_ready`, which delegate to `analysis_run_repo.ingestion_run_exists` and `analysis_run_repo.ingestion_run_is_ready`. Readiness is defined as:
-
-- The `ingestion_runs` row exists for the requested `ingestion_run_id`, **and**
-- For every required symbol in the request, **at least one row** exists in `ohlcv_snapshots` with the same `ingestion_run_id`, `symbol`, and `timeframe` (the default timeframe is `D1`).
-
-No validation is performed on the number of rows, date coverage, or completeness beyond the presence of at least one row per symbol/timeframe. The engine then loads snapshot data via `load_ohlcv_snapshot`, which raises `SnapshotDataError` if no rows exist for a symbol/timeframe or if the OHLCV data fails validation; the API converts this to `422 snapshot_data_invalid`.
+After readiness succeeds, the engine loads snapshot data via
+`load_ohlcv_snapshot`. If rows later fail snapshot validation during load, the
+API returns `422 snapshot_data_invalid`.
 
 ### Deterministic vs non-deterministic execution paths
 
