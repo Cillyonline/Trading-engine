@@ -31,6 +31,23 @@ The contract does not cover:
 - live trading
 - broad market-data refactors
 
+## Supported Scheduling Path
+
+One bounded scheduling path for ingestion is documented and supported in this
+repository:
+
+- one single-server cron entry that invokes `scripts/run_snapshot_ingestion.py`
+- one canonical `D1` cadence definition for server operation: daily at `06:05`
+  UTC
+- one lock file guarding one active scheduled run at a time on that server
+
+Out of scope for this contract:
+
+- cloud orchestration
+- distributed schedulers
+- leader election or cross-host lease coordination
+- public alerting or public ingestion triggers
+
 ## Valid, Missing, and Invalid Snapshot States
 
 ### Valid snapshot
@@ -161,5 +178,37 @@ was created and why it is trusted for analysis. At minimum, capture or emit:
 - failure code when validation rejects the snapshot
 - `fingerprint_hash` when available
 
+When the canonical server runbook path uses `scripts/run_snapshot_ingestion.py`,
+the evidence output names are explicit:
+
+- success evidence file: `ingestion-run-<ingestion_run_id>.json`
+- failure evidence file: `snapshot-ingestion-failed-YYYYMMDDTHHMMSSZ.json`
+- active-run lock file: `snapshot-ingestion.lock`
+
+The success and failure evidence payloads must include:
+
+- `attempted_at`
+- `status`
+- `requested` schedule inputs
+- explicit evidence file path
+
 This evidence is operational. It does not create a new public contract or widen
 the repository scope beyond server-side snapshot creation for analysis use.
+
+## Restart and Duplicate-Run Handling
+
+Restart behavior and duplicate-run handling are explicit for the canonical
+single-server scheduling path:
+
+- the scheduled wrapper acquires `snapshot-ingestion.lock` before provider fetch
+  or repository writes begin
+- if another scheduled trigger fires while the lock exists, that later trigger
+  fails closed with `snapshot_ingestion_already_running` and writes a failure
+  evidence file
+- overlapping scheduled runs are not allowed; duplicate-run handling is
+  skip-and-log, not parallel execution
+- if the server or process restarts mid-run, the remaining lock file is treated
+  as an operator-review marker; verify no ingestion process is active, then
+  remove the stale lock before the next retry
+- a restarted or retried ingestion execution writes a new `ingestion_run_id`
+  rather than mutating or reusing partial persisted rows
