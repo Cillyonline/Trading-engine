@@ -43,6 +43,7 @@ def test_ops_p51_usage_contract_distinguishes_empty_results_symbol_failures_and_
 
 def test_ops_p51_docs_and_existing_endpoint_tests_align_to_same_operator_contract() -> None:
     usage = _read("docs/operations/api/usage_contract.md")
+    snapshot_runtime = _read("docs/operations/runtime/snapshot_runtime.md")
     manual_analysis_tests = _read("tests/test_api_manual_analysis_trigger.py")
     snapshot_first_tests = _read("tests/test_api_snapshot_first_enforcement.py")
     watchlist_tests = _read("tests/test_api_watchlists.py")
@@ -59,3 +60,7 @@ def test_ops_p51_docs_and_existing_endpoint_tests_align_to_same_operator_contrac
     assert 'assert response.json()["ranked_results"] == []' in watchlist_tests
     assert "def test_watchlist_execute_isolates_partial_symbol_failures" in watchlist_tests
     assert '"code": "snapshot_data_invalid"' in watchlist_tests
+    assert "The repository now includes one bounded in-process scheduled analysis runner" in snapshot_runtime
+    assert "`created_at DESC`" in snapshot_runtime
+    assert "`ingestion_run_id ASC`" in snapshot_runtime
+    assert "Only one scheduled execution loop may be active per server process." in snapshot_runtime
