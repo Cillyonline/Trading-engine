@@ -419,16 +419,19 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
     payload = response.json()
 
     assert payload["boundary"]["workflow_id"] == "phase44_bounded_paper_operator"
-    assert "read-only" in payload["boundary"]["description"]
+    assert payload["boundary"]["description"] == (
+        "One read-only portfolio-to-paper handoff contract that validates bounded "
+        "paper-readiness inputs across canonical inspection and reconciliation surfaces."
+    )
     assert payload["boundary"]["in_scope"] == [
-        "deterministic simulator lifecycle evidence",
-        "canonical inspection of orders, execution events, trades, and positions",
-        "paper inspection of account, trades, and positions",
+        "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
+        "paper-facing account, trade, and position views derived from canonical portfolio evidence",
         "reconciliation validation with mismatch accounting",
+        "bounded paper-readiness review with no unsupported upstream claim expansion",
     ]
     assert payload["boundary"]["out_of_scope"] == [
-        "live trading",
-        "broker integrations",
+        "live-trading readiness or approval",
+        "broker execution readiness or approval",
         "broad dashboard expansion",
         "production trading operations",
     ]
@@ -436,33 +439,33 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
     assert payload["steps"] == [
         {
             "step": 1,
-            "action": "Inspect canonical order lifecycle entities.",
+            "action": "Inspect canonical order lifecycle entities that anchor the portfolio handoff.",
             "endpoint": "GET /trading-core/orders",
-            "expected_result": "Deterministic order set is readable (items=1).",
+            "expected_result": "Canonical order evidence is readable (items=1).",
         },
         {
             "step": 2,
-            "action": "Inspect canonical execution lifecycle events.",
+            "action": "Inspect canonical execution lifecycle events that support the portfolio handoff.",
             "endpoint": "GET /trading-core/execution-events",
-            "expected_result": "Deterministic execution-event set is readable (items=4).",
+            "expected_result": "Canonical execution-event evidence is readable (items=4).",
         },
         {
             "step": 3,
-            "action": "Inspect canonical trade and position state.",
+            "action": "Inspect canonical trade and position state that defines portfolio readiness.",
             "endpoint": "GET /trading-core/trades + GET /trading-core/positions",
-            "expected_result": "Canonical trade/position sets are readable (trades=1, positions=1).",
+            "expected_result": "Canonical portfolio evidence is readable (trades=1, positions=1).",
         },
         {
             "step": 4,
-            "action": "Inspect paper-facing views derived from canonical entities.",
+            "action": "Inspect paper-facing views derived from the canonical portfolio handoff.",
             "endpoint": "GET /paper/trades + GET /paper/positions + GET /paper/account",
-            "expected_result": "Paper views are readable (trades=1, positions=1).",
+            "expected_result": "Paper-readiness views are readable (trades=1, positions=1).",
         },
         {
             "step": 5,
-            "action": "Run reconciliation and require zero mismatches.",
+            "action": "Run reconciliation and require zero mismatches before paper-readiness review.",
             "endpoint": "GET /paper/reconciliation",
-            "expected_result": "Reconciliation ok=true mismatches=0.",
+            "expected_result": "Paper-readiness reconciliation ok=true mismatches=0.",
         },
     ]
     assert payload["surfaces"] == {
@@ -483,25 +486,25 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
         "ok": True,
         "checks": [
             {
-                "code": "reconciliation_ok",
+                "code": "portfolio_to_paper_reconciliation_ok",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
             },
             {
-                "code": "reconciliation_mismatches_zero",
+                "code": "portfolio_to_paper_reconciliation_mismatches_zero",
                 "ok": True,
                 "expected": "0",
                 "actual": "0",
             },
             {
-                "code": "paper_trades_match_canonical_trades",
+                "code": "portfolio_to_paper_trades_match_canonical_trades",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
             },
             {
-                "code": "paper_positions_match_canonical_positions",
+                "code": "portfolio_to_paper_positions_match_canonical_positions",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
@@ -580,25 +583,25 @@ def test_paper_workflow_validation_fails_closed_on_reconciliation_mismatches(
         "ok": False,
         "checks": [
             {
-                "code": "reconciliation_ok",
+                "code": "portfolio_to_paper_reconciliation_ok",
                 "ok": False,
                 "expected": "true",
                 "actual": "false",
             },
             {
-                "code": "reconciliation_mismatches_zero",
+                "code": "portfolio_to_paper_reconciliation_mismatches_zero",
                 "ok": False,
                 "expected": "0",
                 "actual": "2",
             },
             {
-                "code": "paper_trades_match_canonical_trades",
+                "code": "portfolio_to_paper_trades_match_canonical_trades",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
             },
             {
-                "code": "paper_positions_match_canonical_positions",
+                "code": "portfolio_to_paper_positions_match_canonical_positions",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
