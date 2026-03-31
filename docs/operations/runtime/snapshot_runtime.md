@@ -26,6 +26,35 @@ The runner does not provide:
 - distributed scheduling, leader election, or cross-host coordination
 - general-purpose job orchestration
 
+## Scheduled Evidence Artifacts
+
+Every completed scheduled analysis or watchlist execution reuses the repository's
+canonical `analysis_runs` persistence and emits one bounded review artifact
+bundle at persistence time for the resulting `analysis_run_id`.
+
+Storage is deterministic:
+
+- default root: `runs/analysis_run_evidence`
+- environment override: `CILLY_ANALYSIS_EVIDENCE_DIR`
+- review bucket: `<YYYY-Www>/<analysis_run_id>/`
+
+Each persisted run directory contains exactly:
+
+- `analysis-run-evidence.json`
+- `analysis-run-evidence.sha256`
+- `operator-review.json`
+- `operator-review.sha256`
+
+The evidence artifact captures the exact persisted request/response pair plus
+snapshot metadata from `ingestion_runs` when available. The operator review
+artifact is smaller and bounded to comparison keys, outcome classification, and
+review counts for later weekly review.
+
+This artifact set is operational evidence only. It does not create a reporting
+platform, decision dashboard, or public review surface.
+Later read paths may reconstruct deterministic metadata for those artifacts, but
+they do not emit, refresh, or rewrite the files.
+
 ## Deterministic Snapshot Selection
 
 The in-repository runner does not use an implicit "latest snapshot" shortcut.
@@ -75,6 +104,7 @@ The repository provides:
 - deterministic scheduled analysis execution on the server
 - deterministic snapshot selection rules
 - reuse of existing attributable persistence for analysis and watchlist runs
+- deterministic weekly review buckets and bounded operator review artifacts
 
 The repository does not provide:
 
