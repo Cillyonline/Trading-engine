@@ -80,22 +80,30 @@ def bind_main_runtime_service_exports(
     *,
     module_globals: MutableMapping[str, Any],
     runtime_service: CompositionRuntimeService,
+    scheduled_analysis_runner: Any | None = None,
 ) -> None:
-    module_globals.update(
-        {
-            "_runtime_service": runtime_service,
-            "_assert_phase_13_read_only_endpoint": runtime_service.assert_phase_13_read_only_endpoint,
-            "_require_role": runtime_service.require_role,
-            "_health_now": runtime_service.health_now,
-            "_resolve_analysis_db_path": runtime_service.resolve_analysis_db_path,
-            "_require_ingestion_run": runtime_service.require_ingestion_run,
-            "_require_snapshot_ready": runtime_service.require_snapshot_ready,
-            "_require_engine_runtime_running": runtime_service.require_engine_runtime_running,
-            "_run_snapshot_analysis": runtime_service.run_snapshot_analysis,
-            "_analysis_service_dependencies": runtime_service.analysis_service_dependencies,
-            "basic_screener": runtime_service.basic_screener,
-            "read_compliance_guard_status": runtime_service.read_compliance_guard_status,
-            "runtime_introspection": runtime_service.runtime_introspection,
-            "system_state": runtime_service.system_state,
-        }
-    )
+    exports: dict[str, Any] = {
+        "_runtime_service": runtime_service,
+        "_assert_phase_13_read_only_endpoint": runtime_service.assert_phase_13_read_only_endpoint,
+        "_require_role": runtime_service.require_role,
+        "_health_now": runtime_service.health_now,
+        "_resolve_analysis_db_path": runtime_service.resolve_analysis_db_path,
+        "_require_ingestion_run": runtime_service.require_ingestion_run,
+        "_require_snapshot_ready": runtime_service.require_snapshot_ready,
+        "_require_engine_runtime_running": runtime_service.require_engine_runtime_running,
+        "_run_snapshot_analysis": runtime_service.run_snapshot_analysis,
+        "_analysis_service_dependencies": runtime_service.analysis_service_dependencies,
+        "basic_screener": runtime_service.basic_screener,
+        "read_compliance_guard_status": runtime_service.read_compliance_guard_status,
+        "runtime_introspection": runtime_service.runtime_introspection,
+        "system_state": runtime_service.system_state,
+    }
+    if scheduled_analysis_runner is not None:
+        exports.update(
+            {
+                "scheduled_analysis_runner": scheduled_analysis_runner,
+                "start_scheduled_analysis_runner": scheduled_analysis_runner.start,
+                "shutdown_scheduled_analysis_runner": scheduled_analysis_runner.stop,
+            }
+        )
+    module_globals.update(exports)
