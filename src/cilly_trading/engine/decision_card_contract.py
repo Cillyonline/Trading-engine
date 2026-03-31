@@ -12,6 +12,17 @@ DECISION_CARD_CONTRACT_VERSION = "2.0.0"
 QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
 QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
 
+CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY = (
+    "Decision-card scores are bounded to within-strategy evaluation for a single opportunity. "
+    "Cross-strategy score comparison is not supported; aggregate scores and component scores "
+    "from strategies in different comparison groups are not directly comparable."
+)
+
+CONFIDENCE_TIER_PRECISION_DISCLAIMER = (
+    "Confidence tier is an ordinal classification (low/medium/high) derived from bounded thresholds. "
+    "It does not imply precise probability, forecast accuracy, or score equality across strategies."
+)
+
 DecisionComponentCategory = Literal[
     "signal_quality",
     "backtest_quality",
@@ -337,6 +348,8 @@ def serialize_decision_card(card: DecisionCard) -> str:
 
 __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
+    "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
+    "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
     "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
     "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
     "REQUIRED_COMPONENT_CATEGORIES",
