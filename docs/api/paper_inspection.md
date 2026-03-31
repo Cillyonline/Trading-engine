@@ -162,6 +162,16 @@ This is the minimum operator inspection path for paper trading from order intent
 }
 ```
 
+## Long-Run Evaluation and Review Workflow
+
+The full bounded long-run paper operator review workflow — including evaluation cadence guidance, review artifact checklist (R1–R7), strategy-change comparison boundary, and restart and recovery verification steps — is defined in:
+
+```
+docs/operations/runtime/phase-44-paper-operator-workflow.md
+```
+
+This workflow is read-only and review-oriented. It does not introduce mutation endpoints or live-trading behavior.
+
 ## Deterministic Evidence
 
 - Integration coverage validates this path with deterministic lifecycle events in:
