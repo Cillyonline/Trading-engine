@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import logging
+from typing import Any, Callable
 
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.engine.health.evaluator import evaluate_runtime_health
 
 from ..services.composition_runtime_service import CompositionRuntimeService
+from ..services.scheduled_analysis_runner import ScheduledAnalysisRunner
 from .main_compat import MainModuleCompatibilitySurface
 from .router_wiring import ApiRouterWiring
 from .runtime_lifecycle import RuntimeLifecycleDependencies
+from .runtime_settings import ApiRuntimeSettings
 
 
 def create_runtime_service(
@@ -54,8 +57,31 @@ def build_runtime_lifecycle_dependencies(
         logger=logger,
         start_runtime=lambda: compat.get("start_engine_runtime")(),
         shutdown_runtime=lambda: compat.get("shutdown_engine_runtime")(),
+        start_scheduled_analysis_runner=lambda: compat.get("start_scheduled_analysis_runner")(),
+        shutdown_scheduled_analysis_runner=lambda: compat.get(
+            "shutdown_scheduled_analysis_runner"
+        )(),
         set_runtime_guard_active=lambda is_active: compat.set("ENGINE_RUNTIME_GUARD_ACTIVE", is_active),
         lifecycle_transition_error=compat.get("LifecycleTransitionError"),
+    )
+
+
+def create_scheduled_analysis_runner(
+    *,
+    logger: logging.Logger,
+    runtime_service: CompositionRuntimeService,
+    get_runtime_controller: Callable[[], Any],
+    settings: ApiRuntimeSettings,
+) -> ScheduledAnalysisRunner:
+    return ScheduledAnalysisRunner(
+        enabled=settings.scheduled_analysis_enabled,
+        poll_interval_seconds=settings.scheduled_analysis_poll_interval_seconds,
+        snapshot_scan_limit=settings.scheduled_analysis_snapshot_scan_limit,
+        raw_tasks_json=settings.scheduled_analysis_tasks_json,
+        build_analysis_service_dependencies=runtime_service.analysis_service_dependencies,
+        get_runtime_controller=get_runtime_controller,
+        resolve_analysis_db_path=runtime_service.resolve_analysis_db_path,
+        logger=logger,
     )
 
 

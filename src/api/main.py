@@ -11,6 +11,7 @@ from .composition import (
     build_api_router_wiring,
     build_api_runtime_settings,
     build_runtime_lifecycle_dependencies,
+    create_scheduled_analysis_runner,
     create_api_repositories,
     create_runtime_service,
     include_api_routers,
@@ -49,7 +50,17 @@ _main_compat = bind_main_runtime_exports(
     repositories=repositories,
 )
 _runtime_service = create_runtime_service(logger=logger, compat=_main_compat)
-bind_main_runtime_service_exports(module_globals=globals(), runtime_service=_runtime_service)
+_scheduled_analysis_runner = create_scheduled_analysis_runner(
+    logger=logger,
+    runtime_service=_runtime_service,
+    get_runtime_controller=_main_compat.get("get_runtime_controller"),
+    settings=settings,
+)
+bind_main_runtime_service_exports(
+    module_globals=globals(),
+    runtime_service=_runtime_service,
+    scheduled_analysis_runner=_scheduled_analysis_runner,
+)
 
 app = FastAPI(
     title="Cilly Trading Engine API",

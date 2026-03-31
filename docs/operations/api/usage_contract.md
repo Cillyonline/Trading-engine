@@ -139,9 +139,11 @@ Canonical success response example:
 This section is the single authoritative server-side contract for scheduled analysis in this repository.
 
 - Scheduled analysis is **snapshot-only**. The scheduler must bind every run to one explicit `ingestion_run_id`.
+- The in-repository scheduled runner selects the newest valid snapshot deterministically by scanning persisted `ingestion_runs` newest-first (`created_at DESC`, then `ingestion_run_id ASC`) and binding the scheduled request to the first run that satisfies the workflow-specific validity rules.
 - Scheduled analysis must reuse the existing authoritative runtime endpoints: `POST /analysis/run` for single-symbol analysis and `POST /watchlists/{watchlist_id}/execute` for persisted watchlist execution.
 - The scheduler must not invent an alternate payload, an implicit "latest snapshot" mode, or a live-data fallback.
 - `ingestion_run_id` is the exact snapshot anchor for the scheduled run. `analysis_run_id` is the deterministic identity of the exact request executed against that snapshot.
+- Only one scheduled execution loop may be active in one server process at a time. Overlapping scheduled runs are skipped rather than executed in parallel.
 
 ### Authoritative scheduled workflow units
 
@@ -149,6 +151,11 @@ This section is the single authoritative server-side contract for scheduled anal
 | --- | --- | --- | --- |
 | Single-symbol scheduled analysis | The canonical `POST /analysis/run` request body in this document | The `POST /analysis/run` success and error contract in this document | `analysis_run_id` is computed from the canonical request payload, and the returned `signals` are attributable to the echoed `ingestion_run_id`. |
 | Persisted watchlist scheduled execution | The `POST /watchlists/{watchlist_id}/execute` path and request body in this document | The `POST /watchlists/{watchlist_id}/execute` success and error contract in this document | `analysis_run_id` is computed from the watchlist execution request payload, and both `ranked_results` and `failures` are attributable to the echoed `ingestion_run_id` plus the exact `watchlist_id`. |
+
+Workflow-specific snapshot validity is bounded and explicit:
+
+- For `POST /analysis/run`, the scheduler selects the newest run whose snapshot is ready and valid for the exact scheduled symbol and timeframe.
+- For `POST /watchlists/{watchlist_id}/execute`, the scheduler selects the newest run with at least one valid snapshot-backed watchlist member symbol. Remaining member-symbol failures stay explicit in the persisted `failures` payload for that same `ingestion_run_id`.
 
 ### Scheduled outcome classification
 

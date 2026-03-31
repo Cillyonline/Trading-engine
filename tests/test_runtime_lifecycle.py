@@ -166,6 +166,27 @@ def test_runtime_is_shutdown_on_api_shutdown(monkeypatch) -> None:
     assert calls == ["shutdown"]
 
 
+def test_scheduled_runner_is_started_on_api_startup_and_stopped_on_shutdown(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(
+        api_main,
+        "start_scheduled_analysis_runner",
+        lambda: calls.append("start_scheduler") or "running",
+    )
+    monkeypatch.setattr(
+        api_main,
+        "shutdown_scheduled_analysis_runner",
+        lambda: calls.append("stop_scheduler") or "stopped",
+    )
+
+    with TestClient(api_main.app):
+        assert calls == ["start_scheduler"]
+
+    assert calls == ["start_scheduler", "stop_scheduler"]
+
+
 def test_watchlist_persistence_survives_api_restart(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "restart-safe.db"
 

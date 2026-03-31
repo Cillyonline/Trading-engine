@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,35 @@ class ApiRuntimeSettings:
     role_header_name: str
     role_precedence: dict[str, int]
     default_strategy_configs: dict[str, dict[str, Any]]
+    scheduled_analysis_enabled: bool
+    scheduled_analysis_poll_interval_seconds: int
+    scheduled_analysis_snapshot_scan_limit: int
+    scheduled_analysis_tasks_json: str
+
+
+def _read_bool_env(name: str, *, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _read_int_env(name: str, *, default: int, minimum: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return max(parsed, minimum)
 
 
 def build_default_strategy_configs() -> dict[str, dict[str, Any]]:
@@ -49,4 +79,22 @@ def build_api_runtime_settings() -> ApiRuntimeSettings:
             "owner": 3,
         },
         default_strategy_configs=build_default_strategy_configs(),
+        scheduled_analysis_enabled=_read_bool_env(
+            "CILLY_SCHEDULED_ANALYSIS_ENABLED",
+            default=False,
+        ),
+        scheduled_analysis_poll_interval_seconds=_read_int_env(
+            "CILLY_SCHEDULED_ANALYSIS_POLL_INTERVAL_SECONDS",
+            default=300,
+            minimum=1,
+        ),
+        scheduled_analysis_snapshot_scan_limit=_read_int_env(
+            "CILLY_SCHEDULED_ANALYSIS_SNAPSHOT_SCAN_LIMIT",
+            default=50,
+            minimum=1,
+        ),
+        scheduled_analysis_tasks_json=os.getenv(
+            "CILLY_SCHEDULED_ANALYSIS_TASKS_JSON",
+            "",
+        ).strip(),
     )
