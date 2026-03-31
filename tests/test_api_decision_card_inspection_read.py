@@ -76,6 +76,12 @@ def _decision_card_payload(
         )
         aggregate_score = 72.0
 
+    qualification_summary = "Opportunity requires further evidence before paper-trading qualification."
+    if qualification_state == "reject":
+        qualification_summary = "Opportunity is rejected for paper-trading because a blocking gate failed."
+    elif qualification_state == "paper_approved":
+        qualification_summary = "Opportunity is approved for bounded paper-trading only."
+
     return {
         "contract_version": "2.0.0",
         "decision_card_id": decision_card_id,
@@ -126,10 +132,10 @@ def _decision_card_payload(
         "qualification": {
             "state": qualification_state,
             "color": color_by_state[qualification_state],
-            "summary": "Qualification is deterministic and bounded for paper-trading operator inspection.",
+            "summary": qualification_summary,
         },
         "rationale": {
-            "summary": "Qualification is resolved from explicit hard gates and bounded score semantics.",
+            "summary": "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules.",
             "gate_explanations": [
                 "Gate drawdown_safety was evaluated with explicit threshold evidence.",
                 "Gate portfolio_exposure_cap was evaluated with explicit exposure evidence.",
@@ -138,10 +144,7 @@ def _decision_card_payload(
                 "Component scores are integrated by deterministic category ordering.",
                 "Aggregate score uses fixed weights and bounded confidence tiers.",
             ],
-            "final_explanation": (
-                "Decision output is explainable and bounded to reject/watch/candidate/approved states, "
-                "and does not imply live-trading approval."
-            ),
+            "final_explanation": "Action state is deterministic and does not imply live-trading approval.",
         },
         "metadata": {
             "analysis_run_id": "run-abc",
@@ -186,10 +189,16 @@ def test_decision_card_inspection_endpoint_is_exposed_and_schema_valid(
     assert {item["category"] for item in payload["items"][0]["component_scores"]} == set(
         REQUIRED_COMPONENT_CATEGORIES
     )
-    assert payload["items"][0]["rationale_summary"]
+    assert payload["items"][0]["qualification_summary"] == "Opportunity is approved for bounded paper-trading only."
+    assert (
+        payload["items"][0]["rationale_summary"]
+        == "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules."
+    )
     assert payload["items"][0]["gate_explanations"]
     assert payload["items"][0]["score_explanations"]
-    assert "does not imply live-trading approval" in payload["items"][0]["final_explanation"].casefold()
+    assert payload["items"][0]["final_explanation"] == (
+        "Action state is deterministic and does not imply live-trading approval."
+    )
     assert "/decision-cards" in openapi["paths"]
     get_spec = openapi["paths"]["/decision-cards"]["get"]
     assert set(openapi["paths"]["/decision-cards"].keys()) == {"get"}
