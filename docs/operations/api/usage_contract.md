@@ -180,7 +180,49 @@ For scheduled analysis, the minimum attributable run evidence is the exact reque
 - workflow scope fields (`symbol` and `strategy` for `/analysis/run`; `watchlist_id` and `watchlist_name` for watchlist execution)
 - outcome classification: empty success, populated success, isolated symbol failure, or request-level snapshot failure
 
-The repository's implemented persistence path stores request and result payloads keyed by `analysis_run_id` for both `POST /analysis/run` and `POST /watchlists/{watchlist_id}/execute`. That persisted pair is the canonical server-side evidence for the exact `ingestion_run_id`-bound execution.
+The repository's implemented persistence path stores request and result payloads keyed by `analysis_run_id` for both `POST /analysis/run` and `POST /watchlists/{watchlist_id}/execute`. That persisted pair remains the canonical server-side evidence for the exact `ingestion_run_id`-bound execution.
+
+The repository now also emits one deterministic bounded artifact bundle at canonical persistence time for each completed persisted run under:
+
+- default root: `runs/analysis_run_evidence`
+- overridable root: `CILLY_ANALYSIS_EVIDENCE_DIR`
+- storage bucket: `runs/analysis_run_evidence/<YYYY-Www>/<analysis_run_id>/`
+
+The bounded artifact set is:
+
+- `analysis-run-evidence.json`
+- `analysis-run-evidence.sha256`
+- `operator-review.json`
+- `operator-review.sha256`
+
+`analysis-run-evidence.json` must include:
+
+- exact persisted request payload
+- exact persisted response payload
+- `analysis_run_id`
+- `ingestion_run_id`
+- snapshot metadata when available from `ingestion_runs` (`created_at`, `timeframe`, `source`, `symbols`, `fingerprint_hash`)
+- workflow kind and authoritative endpoint
+- workflow scope fields
+- outcome classification
+- comparison-ready hashes for the request and response payloads
+- one deterministic `comparison_key` derived from the execution inputs excluding the bound `ingestion_run_id`
+- one `review_week` bucket label in `YYYY-Www` form
+
+`operator-review.json` is intentionally bounded to later comparison and weekly review. It must include:
+
+- `analysis_run_id`
+- `ingestion_run_id`
+- `workflow_kind`
+- scope fields
+- outcome classification
+- bounded output counts (`signals`, or `ranked_results` plus `failures`)
+- `comparison_key`
+- `review_week`
+- references to the exact evidence artifact filenames in the same run directory
+
+Weekly review is supported by scanning one ISO-week bucket at a time rather than by introducing a reporting platform or public dashboard.
+Later repository reads may derive the same deterministic evidence metadata, but they must not create, refresh, or rewrite the artifact files.
 
 ## Phase 37 Watchlist Workflow
 

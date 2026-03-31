@@ -12,6 +12,10 @@ from typing import Any, Dict, Optional
 
 from cilly_trading.db import DEFAULT_DB_PATH, init_db
 from cilly_trading.engine.core import AnalysisRun
+from cilly_trading.repositories.analysis_run_evidence import (
+    build_analysis_run_evidence_metadata,
+    write_analysis_run_evidence_artifacts,
+)
 
 
 class SqliteAnalysisRunRepository:
@@ -41,6 +45,87 @@ class SqliteAnalysisRunRepository:
             "result": json.loads(row["result_payload"]),
             "created_at": row["created_at"],
         }
+
+    def _load_ingestion_run_metadata(
+        self,
+        *,
+        ingestion_run_id: str,
+    ) -> Dict[str, Any] | None:
+        conn = self._get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT
+                    ingestion_run_id,
+                    created_at,
+                    source,
+                    symbols_json,
+                    timeframe,
+                    fingerprint_hash
+                FROM ingestion_runs
+                WHERE ingestion_run_id = ?
+                LIMIT 1;
+                """,
+                (ingestion_run_id,),
+            )
+            row = cur.fetchone()
+        finally:
+            conn.close()
+
+        if row is None:
+            return None
+
+        symbols: list[str] = []
+        try:
+            parsed_symbols = json.loads(row["symbols_json"])
+            if isinstance(parsed_symbols, list):
+                symbols = [str(item) for item in parsed_symbols]
+        except (TypeError, ValueError, json.JSONDecodeError):
+            symbols = []
+
+        return {
+            "ingestion_run_id": row["ingestion_run_id"],
+            "created_at": row["created_at"],
+            "source": row["source"],
+            "symbols": symbols,
+            "timeframe": row["timeframe"],
+            "fingerprint_hash": row["fingerprint_hash"],
+        }
+
+    def _build_evidence_metadata(self, run_data: Dict[str, Any]) -> Dict[str, Any]:
+        return build_analysis_run_evidence_metadata(
+            analysis_run_id=run_data["analysis_run_id"],
+            ingestion_run_id=run_data["ingestion_run_id"],
+            request_payload=run_data["request"],
+            result_payload=run_data["result"],
+            persisted_created_at=run_data["created_at"],
+            ingestion_metadata=self._load_ingestion_run_metadata(
+                ingestion_run_id=run_data["ingestion_run_id"]
+            ),
+        )
+    def _attach_evidence(
+        self,
+        run_data: Dict[str, Any],
+        *,
+        write_artifacts: bool,
+    ) -> Dict[str, Any]:
+        if write_artifacts:
+            evidence = write_analysis_run_evidence_artifacts(
+                analysis_run_id=run_data["analysis_run_id"],
+                ingestion_run_id=run_data["ingestion_run_id"],
+                request_payload=run_data["request"],
+                result_payload=run_data["result"],
+                persisted_created_at=run_data["created_at"],
+                ingestion_metadata=self._load_ingestion_run_metadata(
+                    ingestion_run_id=run_data["ingestion_run_id"]
+                ),
+            )
+        else:
+            evidence = self._build_evidence_metadata(run_data)
+        enriched = dict(run_data)
+        enriched["evidence"] = evidence
+        return enriched
 
     def ingestion_run_exists(self, ingestion_run_id: str) -> bool:
         conn = self._get_connection()
@@ -135,7 +220,7 @@ class SqliteAnalysisRunRepository:
         if row is None:
             return None
 
-        return self._deserialize_run_row(row)
+        return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=False)
 
     def save_run(
         self,
@@ -195,7 +280,7 @@ class SqliteAnalysisRunRepository:
             row = cur.fetchone()
             if row is None:
                 raise RuntimeError("persisted analysis run could not be reloaded")
-            return self._deserialize_run_row(row)
+            return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=True)
         except sqlite3.IntegrityError:
             conn.rollback()
             cur = conn.cursor()
@@ -216,7 +301,7 @@ class SqliteAnalysisRunRepository:
             if row is None:
                 raise
             if row["request_payload"] == serialized_request:
-                return self._deserialize_run_row(row)
+                return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=False)
             raise ValueError("analysis_run_id already exists with different persisted payload")
         finally:
             conn.close()
