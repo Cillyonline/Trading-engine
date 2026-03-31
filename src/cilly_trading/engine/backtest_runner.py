@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
 
 from cilly_trading.engine.backtest_execution_contract import (
     BacktestRunContract,
+    build_backtest_realism_boundary,
     build_cost_slippage_metrics_baseline,
     serialize_fills,
     serialize_orders,
@@ -276,6 +277,9 @@ class BacktestRunner:
                 strategy_params=config.strategy_params,
                 engine_name=config.engine_name,
                 engine_version=config.engine_version,
+            ),
+            "realism_boundary": build_backtest_realism_boundary(
+                execution_assumptions=config.run_contract.execution_assumptions,
             ),
             "invocation_log": invocation_log,
             "processed_snapshots": processed_snapshots,

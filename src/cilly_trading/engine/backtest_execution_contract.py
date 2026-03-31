@@ -21,6 +21,7 @@ from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 
 SUPPORTED_RUN_CONTRACT_VERSION = "1.0.0"
 BASELINE_VERSION = "1.0.0"
+REALISM_BOUNDARY_VERSION = "1.0.0"
 DEFAULT_ACTION_TO_SIDE: dict[str, Literal["BUY", "SELL"]] = {"BUY": "BUY", "SELL": "SELL"}
 MAX_SLIPPAGE_BPS = 250
 MAX_COMMISSION_PER_ORDER = Decimal("25")
@@ -167,6 +168,68 @@ class BacktestExecutionFlowResult:
     orders: List[Order]
     fills: List[ExecutionEvent]
     positions: List[Position]
+
+
+def build_backtest_realism_boundary(
+    *,
+    execution_assumptions: BacktestExecutionAssumptions,
+) -> dict[str, Any]:
+    """Build explicit modeled vs unmodeled realism disclosures for reporting."""
+
+    return {
+        "boundary_version": REALISM_BOUNDARY_VERSION,
+        "modeled_assumptions": {
+            "fees": {
+                "commission_model": "fixed_per_filled_order",
+                "commission_per_order": str(execution_assumptions.commission_per_order),
+            },
+            "slippage": {
+                "slippage_bps": execution_assumptions.slippage_bps,
+                "slippage_model": "fixed_basis_points_by_side",
+            },
+            "fills": {
+                "fill_model": execution_assumptions.fill_model,
+                "fill_timing": execution_assumptions.fill_timing,
+                "partial_fills_allowed": execution_assumptions.partial_fills_allowed,
+                "price_source": execution_assumptions.price_source,
+            },
+        },
+        "unmodeled_assumptions": {
+            "market_hours": (
+                "Not modeled. Snapshot timestamps are replayed as provided; exchange sessions, "
+                "holidays, halts, auctions, and after-hours restrictions are excluded."
+            ),
+            "broker_behavior": (
+                "Not modeled. Routing, venue selection, rejects, cancels, and broker-specific "
+                "policies are excluded."
+            ),
+            "liquidity_and_microstructure": (
+                "Not modeled. Order-book depth, queue position, fill probability, latency, and "
+                "market impact are excluded."
+            ),
+        },
+        "evidence_boundary": {
+            "supported_interpretation": [
+                "Deterministic replay of supplied snapshots under the declared fill, slippage, and fee assumptions.",
+                "Cost-aware metrics bounded to fixed commission and fixed basis-point slippage.",
+            ],
+            "unsupported_claims": [
+                "broker execution realism",
+                "market-hours compliance realism",
+                "liquidity or market microstructure realism",
+                "live-trading readiness or approval",
+                "future profitability or out-of-sample robustness",
+            ],
+            "qualification_constraint": (
+                "Backtest evidence is bounded and must not be used alone for qualification, "
+                "trader approval, or live-trading decisions."
+            ),
+            "decision_use_constraint": (
+                "Qualification and decision documents must treat this artifact as bounded "
+                "backtest evidence only."
+            ),
+        },
+    }
 
 
 def resolve_snapshot_key(snapshot: Mapping[str, Any]) -> str:
