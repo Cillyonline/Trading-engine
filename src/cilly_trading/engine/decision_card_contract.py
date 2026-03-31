@@ -19,8 +19,15 @@ CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY = (
 )
 
 CONFIDENCE_TIER_PRECISION_DISCLAIMER = (
-    "Confidence tier is an ordinal classification (low/medium/high) derived from bounded thresholds. "
+    "Confidence tier is an ordinal classification (low/medium/high) derived from bounded thresholds "
+    "and is limited by upstream evidence quality. "
     "It does not imply precise probability, forecast accuracy, or score equality across strategies."
+)
+
+UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND = (
+    "Confidence is bounded by the quality of upstream evidence "
+    "(signal, backtest, portfolio-fit, risk) provided to the qualification engine; "
+    "limited or low-quality upstream evidence limits confidence regardless of thresholds."
 )
 
 DecisionComponentCategory = Literal[
@@ -70,6 +77,10 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
     "guaranteed",
     "guarantee",
     "certain outcome",
+    "high certainty",
+    "confirmed opportunity",
+    "validated outcome",
+    "strong certainty",
 )
 
 
@@ -350,6 +361,7 @@ __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
     "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
     "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
+    "UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND",
     "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
     "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
     "REQUIRED_COMPONENT_CATEGORIES",

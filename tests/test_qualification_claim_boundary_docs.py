@@ -46,6 +46,8 @@ def test_decision_card_inspection_doc_matches_claim_boundary_runtime_wording() -
     assert "confidence language is evidence-aligned only" in content
     assert "must not imply live-trading approval" in content
     assert "rejects unsupported confidence inflation language" in content
+    assert "confidence is explicitly bounded by upstream evidence quality" in content
+    assert "limited upstream evidence limits the achievable confidence tier" in content
 
 
 def test_dec_p47_phase_doc_links_governance_contract_and_runtime_enforcement() -> None:
@@ -71,3 +73,5 @@ def test_dec_p49_phase_doc_covers_bounded_qualification_engine_and_decision_outp
     assert "src/cilly_trading/engine/decision_card_contract.py" in content
     assert "tests/cilly_trading/engine/test_qualification_engine.py" in content
     assert "tests/decision/test_decision_integration_layer.py" in content
+    assert "confidence is explicitly bounded by upstream evidence quality" in content
+    assert "limited upstream evidence limits confidence regardless of thresholds" in content
