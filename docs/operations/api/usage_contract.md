@@ -134,6 +134,47 @@ Canonical success response example:
 - For this operator contract, valid payload decisions come from the canonical request table above and the error table in the `POST /analysis/run` section below.
 - A successful response with `signals: []` is still a valid completed run.
 
+## Canonical Scheduled Analysis and Watchlist Execution Contract
+
+This section is the single authoritative server-side contract for scheduled analysis in this repository.
+
+- Scheduled analysis is **snapshot-only**. The scheduler must bind every run to one explicit `ingestion_run_id`.
+- Scheduled analysis must reuse the existing authoritative runtime endpoints: `POST /analysis/run` for single-symbol analysis and `POST /watchlists/{watchlist_id}/execute` for persisted watchlist execution.
+- The scheduler must not invent an alternate payload, an implicit "latest snapshot" mode, or a live-data fallback.
+- `ingestion_run_id` is the exact snapshot anchor for the scheduled run. `analysis_run_id` is the deterministic identity of the exact request executed against that snapshot.
+
+### Authoritative scheduled workflow units
+
+| Scheduled unit | Authoritative request contract | Authoritative response contract | Snapshot attribution |
+| --- | --- | --- | --- |
+| Single-symbol scheduled analysis | The canonical `POST /analysis/run` request body in this document | The `POST /analysis/run` success and error contract in this document | `analysis_run_id` is computed from the canonical request payload, and the returned `signals` are attributable to the echoed `ingestion_run_id`. |
+| Persisted watchlist scheduled execution | The `POST /watchlists/{watchlist_id}/execute` path and request body in this document | The `POST /watchlists/{watchlist_id}/execute` success and error contract in this document | `analysis_run_id` is computed from the watchlist execution request payload, and both `ranked_results` and `failures` are attributable to the echoed `ingestion_run_id` plus the exact `watchlist_id`. |
+
+### Scheduled outcome classification
+
+The scheduler and operators must distinguish the following outcomes:
+
+| Outcome | HTTP result | Meaning |
+| --- | --- | --- |
+| Empty analysis result | `200 OK` from `POST /analysis/run` with `signals: []` | The scheduled analysis completed successfully for the bound snapshot, but produced no signals. |
+| Empty watchlist result | `200 OK` from `POST /watchlists/{watchlist_id}/execute` with `ranked_results: []` and `failures: []` | The scheduled watchlist execution completed successfully for the bound snapshot, but produced no ranked setups. |
+| Isolated symbol failure | `200 OK` from `POST /watchlists/{watchlist_id}/execute` with one or more `failures` items | The scheduled watchlist execution completed for the bound snapshot, but one or more member symbols failed inside that run. Successful `ranked_results` remain valid for the same `ingestion_run_id`. |
+| Invalid or unusable snapshot binding | `422` with `invalid_ingestion_run_id`, `ingestion_run_not_found`, `ingestion_run_not_ready`, or `snapshot_data_invalid` | The scheduled run did not produce authoritative analysis output because the snapshot binding itself was invalid, missing, not ready, or failed validation at request scope. |
+
+### Run evidence expectations
+
+For scheduled analysis, the minimum attributable run evidence is the exact request/response pair bound to the snapshot:
+
+- `ingestion_run_id`
+- `analysis_run_id`
+- authoritative endpoint (`POST /analysis/run` or `POST /watchlists/{watchlist_id}/execute`)
+- exact request payload used to compute `analysis_run_id`
+- exact response payload returned for that request
+- workflow scope fields (`symbol` and `strategy` for `/analysis/run`; `watchlist_id` and `watchlist_name` for watchlist execution)
+- outcome classification: empty success, populated success, isolated symbol failure, or request-level snapshot failure
+
+The repository's implemented persistence path stores request and result payloads keyed by `analysis_run_id` for both `POST /analysis/run` and `POST /watchlists/{watchlist_id}/execute`. That persisted pair is the canonical server-side evidence for the exact `ingestion_run_id`-bound execution.
+
 ## Phase 37 Watchlist Workflow
 
 The repository now includes a bounded Phase 37 watchlist workflow on top of the existing snapshot-only analysis surface.
@@ -297,9 +338,13 @@ Exact status codes are documented per endpoint in the Errors section.
 
 ### Empty results vs failures (how to interpret responses)
 
-- **Empty result (success):** A `200 OK` response with an empty `signals` array means the request succeeded but no signals were generated for that snapshot.  
+- **Empty analysis result (success):** A `200 OK` response from `/analysis/run` with an empty `signals` array means the request succeeded but no signals were generated for that snapshot.  
   **What to do:** Treat the response as a successful run; if you expected signals, verify snapshot coverage and strategy configuration.
-- **Failure:** A non-2xx response with an error body indicates the request could not be processed.  
+- **Empty watchlist result (success):** A `200 OK` response from `/watchlists/{watchlist_id}/execute` with `ranked_results: []` and `failures: []` means the watchlist execution succeeded for that snapshot but no ranked setups qualified.  
+  **What to do:** Treat the response as a successful watchlist run; if you expected results, verify snapshot coverage, watchlist membership, and `min_score`.
+- **Symbol failure inside watchlist execution:** A `200 OK` response from `/watchlists/{watchlist_id}/execute` with one or more `failures` items means the overall request succeeded, but one or more symbols failed inside the bound watchlist run.  
+  **What to do:** Treat `ranked_results` as valid for the echoed `ingestion_run_id`, and triage the listed symbol failures separately.
+- **Request-level failure:** A non-2xx response with an error body indicates the request could not be processed.  
   **What to do:** Follow the guidance in the error detail above (fix the request or snapshot, then retry).
 
 ### Ingestion run validation
@@ -1354,7 +1399,11 @@ curl -s -X POST http://localhost:8000/screener/basic \
 
 ### Outputs to store/log
 
-- `analysis_run_id` (computed deterministic run identity for `/analysis/run`)
+- `analysis_run_id` (computed deterministic run identity for `/analysis/run` or `POST /watchlists/{watchlist_id}/execute`)
 - `ingestion_run_id`
+- Authoritative endpoint used (`POST /analysis/run` or `POST /watchlists/{watchlist_id}/execute`)
 - Canonical request payload reference (exact payload used to compute the run ID)
+- Exact response payload returned for that run
+- Workflow scope reference (`symbol`/`strategy` or `watchlist_id`/`watchlist_name`)
+- Outcome classification (empty success, populated success, isolated symbol failure, or request-level snapshot failure)
 - Timestamps used by the snapshot (as provided by the snapshot data)
