@@ -152,3 +152,12 @@ def test_stale_sentiment_overlay_is_explicitly_neutral_and_bounded() -> None:
     assert card.metadata["sentiment_overlay_status"] == "stale"
     assert card.metadata["sentiment_overlay_points"] == 0.0
     assert card.metadata["base_aggregate_score"] == card.score.aggregate_score
+
+
+def test_confidence_boundary_is_explicitly_upstream_evidence_limited() -> None:
+    card = evaluate_qualification(_engine_input())
+
+    confidence_reason = card.score.confidence_reason.casefold()
+    assert "upstream evidence quality" in confidence_reason
+    assert any(term in confidence_reason for term in ("aggregate", "component", "threshold", "evidence"))
+    assert "does not imply live-trading approval" in card.rationale.final_explanation.casefold()

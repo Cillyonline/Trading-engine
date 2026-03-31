@@ -287,3 +287,13 @@ def test_non_blocking_gate_failure_does_not_force_reject() -> None:
     card = validate_decision_card(payload)
     assert card.hard_gates.has_blocking_failure is False
     assert card.qualification.state == "paper_candidate"
+
+
+def test_confidence_inflation_phrases_are_rejected() -> None:
+    for phrase in ("high certainty", "confirmed opportunity", "validated outcome", "strong certainty"):
+        payload = _valid_payload()
+        payload["score"]["confidence_reason"] = (
+            f"Aggregate component threshold evidence supports outcome with {phrase}."
+        )
+        with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
+            validate_decision_card(payload)

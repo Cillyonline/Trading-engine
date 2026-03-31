@@ -34,6 +34,7 @@ The DEC-P49 implementation in this repository is bounded as follows:
 
 - hard-gate behavior is deterministic and blocking failures resolve to `reject`/`red`
 - confidence tiers are explicit and bounded (`low`, `medium`, `high`) from fixed thresholds
+- confidence is explicitly bounded by upstream evidence quality (signal, backtest, portfolio-fit, risk); limited upstream evidence limits confidence regardless of thresholds
 - traffic-light output is deterministic and inspectable through qualification state/color
 - backtest evidence and portfolio-fit inputs can only modify their covered component categories
 - sentiment is strictly a bounded overlay and cannot become a primary scoring category
