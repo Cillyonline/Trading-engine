@@ -43,11 +43,20 @@ Use these exact evidence identifiers in the checklist references:
 | --- | --- | --- | --- |
 | D1 | Full repository test suite passed with `python -m pytest` | `EVIDENCE_FULL_PYTEST_OUTPUT` | |
 
-## E) Checklist Completion Evidence
+## E) Long-Run Paper Review Evidence
 
 | # | Item | Evidence reference | Answer (YES/NO) |
 | --- | --- | --- | --- |
-| E1 | This checklist is fully completed and every required section is `YES` | `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST` | |
+| E1 | Long-run review workflow executed: `GET /paper/workflow` returned `validation.ok: true` | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E2 | All R1–R7 review artifacts captured in sequence per Phase 44 workflow doc | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E3 | Strategy-change comparison baseline captured (required if any strategy change applied during this session; `N/A` if no strategy change) | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E4 | Post-restart recovery verification completed: `GET /paper/reconciliation` returned `ok: true`, `mismatches: 0` after most recent restart | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+
+## F) Checklist Completion Evidence
+
+| # | Item | Evidence reference | Answer (YES/NO) |
+| --- | --- | --- | --- |
+| F1 | This checklist is fully completed and every required section is `YES` (or `N/A` where explicitly permitted) | `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST` | |
 
 ## Final Operator Decision
 Decision rule:

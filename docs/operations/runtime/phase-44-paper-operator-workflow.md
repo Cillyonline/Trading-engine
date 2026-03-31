@@ -86,7 +86,65 @@ The bounded Phase 44 workflow claim requires all of the following evidence:
 - Mutation-heavy order-entry workflow
 - Unrelated portfolio or strategy refactors
 
-## Restart and Reload Behavior
+## Long-Run Evaluation Cadence
+
+Run the full bounded operator workflow review after each of the following events:
+
+1. **End of each paper trading session** — confirm reconciliation is clean before stopping.
+2. **After process restart** — run `GET /paper/reconciliation` immediately on restart to verify state integrity before resuming evaluation.
+3. **Before any strategy change** — capture a pre-change baseline (reconciliation result, account state, trade and position counts).
+4. **After any strategy change** — run the full operator workflow review and compare against the pre-change baseline.
+5. **Periodic scheduled review** — at minimum once per trading week, execute the full six-step operator inspection path.
+
+Never defer reconciliation past the next session boundary. A deferred reconciliation makes strategy-change comparison unreliable.
+
+## Strategy-Change Comparison Boundary
+
+When evaluating a strategy change during a paper trading run, use the following read-only comparison protocol.
+
+### Pre-Change Baseline Capture
+
+Before applying any strategy change, capture and record:
+
+1. `GET /paper/reconciliation` — full reconciliation state; `ok: true` and `mismatches: 0` required.
+2. `GET /paper/account` — account snapshot (`equity`, `realized_pnl`, `unrealized_pnl`, `total_pnl`, `as_of`).
+3. `GET /paper/trades` — full trade list (total count and status breakdown).
+4. `GET /paper/positions` — full position list (open and closed counts).
+
+The pre-change baseline is invalid if reconciliation is not clean (`ok: false` or `mismatches > 0`). Resolve all mismatches before proceeding.
+
+### Post-Change Comparison
+
+After applying a strategy change and before resuming evaluation:
+
+1. Run the full six-step operator inspection path.
+2. Confirm `GET /paper/reconciliation` returns `ok: true` and `mismatches: 0`.
+3. Compare account state (`GET /paper/account`) against the pre-change baseline — any delta must be explainable by the lifecycle events that occurred between the two snapshots.
+4. The comparison boundary is the reconciliation snapshot: if `ok: true` before and `ok: true` after with `mismatches: 0`, the strategy change did not corrupt canonical state.
+
+### Prohibited Comparison Shortcuts
+
+- Do not compare raw trade payloads across strategy versions. Use canonical entity counts and reconciliation state only.
+- Do not use account equity alone as the comparison boundary. `mismatches: 0` is the primary validity signal.
+- Do not skip the pre-change baseline capture. A missing baseline makes post-change comparison unverifiable.
+
+## Review Artifact Checklist
+
+Each bounded long-run paper operator review must produce the following artifacts, captured in the order listed:
+
+| # | Artifact | Source endpoint | Required state |
+| --- | --- | --- | --- |
+| R1 | Reconciliation result | `GET /paper/reconciliation` | `ok: true`, `summary.mismatches: 0` |
+| R2 | Account snapshot | `GET /paper/account` | Non-null `as_of`, valid equity equation |
+| R3 | Canonical order count | `GET /trading-core/orders` | Readable, `total >= 0` |
+| R4 | Canonical execution-event count | `GET /trading-core/execution-events` | Readable, `total >= 0` |
+| R5 | Canonical trade count | `GET /trading-core/trades` | `total` matches `GET /paper/trades` `total` |
+| R6 | Canonical position count | `GET /trading-core/positions` | `total` matches `GET /paper/positions` `total` |
+| R7 | Workflow contract state | `GET /paper/workflow` | `validation.ok: true` |
+
+All R1–R7 artifacts must be captured in the sequence listed above. R1 must be captured and confirmed clean before R2–R7 are treated as valid review evidence.
+
+## Restart and Recovery Review
 
 All paper portfolio and account state is persisted in the canonical SQLite execution repository. On process restart or reload:
 
@@ -94,6 +152,15 @@ All paper portfolio and account state is persisted in the canonical SQLite execu
 2. All derived views (account, positions, portfolio, reconciliation) are recomputed deterministically from persisted entities.
 3. No in-memory state is required — the full inspection surface is reconstructable from the database alone.
 4. The operator can verify state integrity after restart by running `GET /paper/reconciliation` and requiring `ok: true` with `summary.mismatches: 0`.
+
+### Recovery Verification Steps
+
+After any restart, before resuming long-run evaluation:
+
+1. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
+2. Compare account state (`GET /paper/account`) with the pre-restart baseline if one was captured.
+3. Confirm canonical entity counts (`GET /trading-core/orders`, `GET /trading-core/execution-events`, `GET /trading-core/trades`, `GET /trading-core/positions`) are consistent with the expected pre-restart counts.
+4. If any mismatch is detected, do not resume evaluation until the source of the mismatch is identified and resolved.
 
 ## Singular State Authority
 
