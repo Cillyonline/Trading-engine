@@ -10,6 +10,7 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestExecutionAssumptions,
     BacktestRunContract,
     BacktestSignalTranslationConfig,
+    build_backtest_realism_boundary,
     build_cost_slippage_metrics_baseline,
     serialize_fills,
     serialize_orders,
@@ -193,6 +194,35 @@ def test_cost_slippage_baseline_is_reproducible() -> None:
     )
 
     assert first == second
+
+
+def test_backtest_realism_boundary_reports_modeled_and_unmodeled_assumptions() -> None:
+    boundary = build_backtest_realism_boundary(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+
+    assert boundary["boundary_version"] == "1.0.0"
+    assert boundary["modeled_assumptions"]["fees"] == {
+        "commission_model": "fixed_per_filled_order",
+        "commission_per_order": "1.00",
+    }
+    assert boundary["modeled_assumptions"]["slippage"] == {
+        "slippage_bps": 10,
+        "slippage_model": "fixed_basis_points_by_side",
+    }
+    assert boundary["modeled_assumptions"]["fills"] == {
+        "fill_model": "deterministic_market",
+        "fill_timing": "next_snapshot",
+        "partial_fills_allowed": False,
+        "price_source": "open_then_price",
+    }
+    assert "Not modeled." in boundary["unmodeled_assumptions"]["market_hours"]
+    assert "market-hours compliance realism" in boundary["evidence_boundary"]["unsupported_claims"]
+    assert "bounded backtest evidence only" in boundary["evidence_boundary"]["decision_use_constraint"]
 
 
 def test_negative_configuration_invalid_signal_mapping_fails() -> None:

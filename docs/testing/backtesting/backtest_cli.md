@@ -51,6 +51,8 @@ For reproducible review, the following fields are mandatory:
 - `run.deterministic`: explicit deterministic execution flag (`true` on covered path).
 - `snapshot_linkage`: bounded dataset window and count used for the run.
 - `run_config.execution_assumptions`: explicit execution assumptions used for fill timing, slippage, commission, and price source.
+- `realism_boundary.modeled_assumptions`: explicit list of modeled realism assumptions included in this run.
+- `realism_boundary.unmodeled_assumptions`: explicit list of assumptions not modeled and excluded from this run.
 - `run_config.reproducibility_metadata`: run identity context (`run_id`, strategy identity, params, engine identity).
 - `metrics_baseline.assumptions`: assumption echo used for cost-aware metric interpretation.
 
@@ -64,6 +66,9 @@ The produced artifact includes explicit downstream handoff metadata at `phase_ha
 
 - `phase_handoff.required_evidence.phase_43_portfolio_simulation`: required evidence fields for Phase 43.
 - `phase_handoff.required_evidence.phase_44_paper_trading_readiness`: additional evidence fields for Phase 44.
+- `phase_handoff.artifact_lineage`: provenance chain from backtest output to downstream consumers.
+- `phase_handoff.canonical_handoffs.backtest_to_portfolio`: canonical handoff record from backtest to portfolio simulation.
+- `phase_handoff.canonical_handoffs.portfolio_to_paper`: canonical handoff record from portfolio simulation to paper trading.
 - `phase_handoff.authoritative_outputs.trader_interpretation`: authoritative outputs for trader-facing interpretation.
 - `phase_handoff.acceptance_gates.technically_valid_backtest_artifact`: structural validity gate only.
 - `phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready`: Phase 43 readiness evidence gate.
@@ -73,6 +78,31 @@ Review interpretation rule:
 
 - A technically valid artifact is not automatically Phase 43/44 readiness evidence.
 - Phase 43/44 usage MUST follow the explicit handoff gate outcomes.
+
+## Realism Boundary
+
+The backtest model makes explicit which assumptions are modeled and which are not.
+
+Modeled assumptions:
+- Fixed deterministic fill price (open, then price fallback).
+- Fixed slippage in basis points (BUY: upward, SELL: downward).
+- Fixed commission per filled order.
+- No partial fills.
+- next_snapshot fill timing (no lookahead).
+
+Unmodeled assumptions:
+- Market hours are not modeled.
+- Exchange session rules are not modeled.
+- Order book depth and market impact are not modeled.
+- Broker-specific execution behavior is not modeled.
+
+Unsupported claims that MUST remain excluded:
+- live-trading readiness or approval
+- broker fill quality beyond the fixed deterministic model
+- out-of-sample performance guarantees
+- production profitability projections
+
+Qualification and decision docs must treat backtest output as bounded evidence only.
 
 ## Trader Interpretation Boundary
 

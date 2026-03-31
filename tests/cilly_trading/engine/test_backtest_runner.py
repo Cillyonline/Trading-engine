@@ -244,9 +244,27 @@ def test_backtest_runner_artifact_contains_explicit_run_contract(tmp_path: Path)
     assert run_config["execution_assumptions"]["commission_per_order"] == "7"
     assert run_config["reproducibility_metadata"]["run_id"] == "contract-run"
     assert run_config["reproducibility_metadata"]["strategy_name"] == "REFERENCE"
+    realism_boundary = payload["realism_boundary"]
+    assert realism_boundary["modeled_assumptions"]["fees"]["commission_per_order"] == "7"
+    assert realism_boundary["modeled_assumptions"]["slippage"]["slippage_bps"] == 7
+    assert realism_boundary["modeled_assumptions"]["fills"]["fill_timing"] == "next_snapshot"
+    assert "Not modeled." in realism_boundary["unmodeled_assumptions"]["market_hours"]
+    assert "live-trading readiness or approval" in realism_boundary["evidence_boundary"]["unsupported_claims"]
     handoff = payload["phase_handoff"]
+    artifact_lineage = handoff["artifact_lineage"]
+    backtest_to_portfolio = handoff["canonical_handoffs"]["backtest_to_portfolio"]
+    portfolio_to_paper = handoff["canonical_handoffs"]["portfolio_to_paper"]
     assert handoff["source_phase"] == "42b"
     assert handoff["target_phases"] == ["43", "44"]
+    assert "realism_boundary" in handoff["authoritative_outputs"]["trader_interpretation"]
+    assert artifact_lineage["complete"] is True
+    assert "run_config.execution_assumptions" in artifact_lineage["required_fields"]
+    assert backtest_to_portfolio["handoff_id"] == "phase_42b_backtest_to_phase_43_portfolio"
+    assert backtest_to_portfolio["artifact_lineage_complete"] is True
+    assert "realism_boundary.modeled_assumptions" in backtest_to_portfolio["required_inputs"]
+    assert portfolio_to_paper["handoff_id"] == "phase_43_portfolio_to_phase_44_paper"
+    assert portfolio_to_paper["artifact_lineage_complete"] is True
+    assert "orders" in portfolio_to_paper["required_inputs"]
     assert handoff["acceptance_gates"]["phase_43_portfolio_simulation_ready"]["passed"] is True
     assert (
         handoff["acceptance_gates"]["phase_44_paper_trading_readiness_evidence_ready"]["passed"]
