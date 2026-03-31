@@ -270,25 +270,25 @@ def read_paper_operator_workflow(
 
     checks = [
         PaperOperatorWorkflowValidationCheckResponse(
-            code="reconciliation_ok",
+            code="portfolio_to_paper_reconciliation_ok",
             ok=reconciliation.ok,
             expected="true",
             actual=str(reconciliation.ok).lower(),
         ),
         PaperOperatorWorkflowValidationCheckResponse(
-            code="reconciliation_mismatches_zero",
+            code="portfolio_to_paper_reconciliation_mismatches_zero",
             ok=reconciliation.summary.mismatches == 0,
             expected="0",
             actual=str(reconciliation.summary.mismatches),
         ),
         PaperOperatorWorkflowValidationCheckResponse(
-            code="paper_trades_match_canonical_trades",
+            code="portfolio_to_paper_trades_match_canonical_trades",
             ok=paper_trades_items == core_trades_items,
             expected="true",
             actual=str(paper_trades_items == core_trades_items).lower(),
         ),
         PaperOperatorWorkflowValidationCheckResponse(
-            code="paper_positions_match_canonical_positions",
+            code="portfolio_to_paper_positions_match_canonical_positions",
             ok=paper_positions_items == core_positions_items,
             expected="true",
             actual=str(paper_positions_items == core_positions_items).lower(),
@@ -299,18 +299,18 @@ def read_paper_operator_workflow(
         boundary=PaperOperatorWorkflowBoundaryResponse(
             workflow_id="phase44_bounded_paper_operator",
             description=(
-                "One read-only operator workflow that validates paper-trading coherence across canonical "
-                "inspection and reconciliation surfaces."
+                "One read-only portfolio-to-paper handoff contract that validates bounded "
+                "paper-readiness inputs across canonical inspection and reconciliation surfaces."
             ),
             in_scope=[
-                "deterministic simulator lifecycle evidence",
-                "canonical inspection of orders, execution events, trades, and positions",
-                "paper inspection of account, trades, and positions",
+                "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
+                "paper-facing account, trade, and position views derived from canonical portfolio evidence",
                 "reconciliation validation with mismatch accounting",
+                "bounded paper-readiness review with no unsupported upstream claim expansion",
             ],
             out_of_scope=[
-                "live trading",
-                "broker integrations",
+                "live-trading readiness or approval",
+                "broker execution readiness or approval",
                 "broad dashboard expansion",
                 "production trading operations",
             ],
@@ -318,42 +318,42 @@ def read_paper_operator_workflow(
         steps=[
             PaperOperatorWorkflowStepResponse(
                 step=1,
-                action="Inspect canonical order lifecycle entities.",
+                action="Inspect canonical order lifecycle entities that anchor the portfolio handoff.",
                 endpoint="GET /trading-core/orders",
-                expected_result=f"Deterministic order set is readable (items={len(core_orders_items)}).",
+                expected_result=f"Canonical order evidence is readable (items={len(core_orders_items)}).",
             ),
             PaperOperatorWorkflowStepResponse(
                 step=2,
-                action="Inspect canonical execution lifecycle events.",
+                action="Inspect canonical execution lifecycle events that support the portfolio handoff.",
                 endpoint="GET /trading-core/execution-events",
                 expected_result=(
-                    f"Deterministic execution-event set is readable (items={len(core_events_items)})."
+                    f"Canonical execution-event evidence is readable (items={len(core_events_items)})."
                 ),
             ),
             PaperOperatorWorkflowStepResponse(
                 step=3,
-                action="Inspect canonical trade and position state.",
+                action="Inspect canonical trade and position state that defines portfolio readiness.",
                 endpoint="GET /trading-core/trades + GET /trading-core/positions",
                 expected_result=(
-                    f"Canonical trade/position sets are readable (trades={len(core_trades_items)}, "
+                    f"Canonical portfolio evidence is readable (trades={len(core_trades_items)}, "
                     f"positions={len(core_positions_items)})."
                 ),
             ),
             PaperOperatorWorkflowStepResponse(
                 step=4,
-                action="Inspect paper-facing views derived from canonical entities.",
+                action="Inspect paper-facing views derived from the canonical portfolio handoff.",
                 endpoint="GET /paper/trades + GET /paper/positions + GET /paper/account",
                 expected_result=(
-                    f"Paper views are readable (trades={len(paper_trades_items)}, "
+                    f"Paper-readiness views are readable (trades={len(paper_trades_items)}, "
                     f"positions={len(paper_positions_items)})."
                 ),
             ),
             PaperOperatorWorkflowStepResponse(
                 step=5,
-                action="Run reconciliation and require zero mismatches.",
+                action="Run reconciliation and require zero mismatches before paper-readiness review.",
                 endpoint="GET /paper/reconciliation",
                 expected_result=(
-                    f"Reconciliation ok={str(reconciliation.ok).lower()} mismatches="
+                    f"Paper-readiness reconciliation ok={str(reconciliation.ok).lower()} mismatches="
                     f"{reconciliation.summary.mismatches}."
                 ),
             ),
