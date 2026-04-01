@@ -20,6 +20,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import sys
 from datetime import datetime, timezone
@@ -34,11 +35,23 @@ if str(SRC) not in sys.path:
 from cilly_trading.repositories.execution_core_sqlite import (  # noqa: E402
     SqliteCanonicalExecutionRepository,
 )
-from api.services.paper_inspection_service import (  # noqa: E402
-    build_paper_account_state,
-    build_paper_reconciliation_mismatches,
-    build_trading_core_positions,
-)
+
+
+def _load_paper_inspection_service_module():
+    module_path = ROOT / "src" / "api" / "services" / "paper_inspection_service.py"
+    spec = importlib.util.spec_from_file_location("paper_inspection_service_script", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to load paper_inspection_service module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_paper_inspection_module = _load_paper_inspection_service_module()
+build_paper_account_state = _paper_inspection_module.build_paper_account_state
+build_paper_reconciliation_mismatches = _paper_inspection_module.build_paper_reconciliation_mismatches
+build_trading_core_positions = _paper_inspection_module.build_trading_core_positions
 
 DEFAULT_EVIDENCE_DIR = ROOT / "runs" / "reconciliation"
 DEFAULT_DB_PATH = ROOT / "cilly_trading.db"
@@ -94,9 +107,10 @@ def run_reconciliation(
     *,
     db_path: str,
     evidence_dir: str,
+    ran_at: datetime | None = None,
 ) -> int:
     """Execute reconciliation and write evidence.  Returns exit code."""
-    ran_at = _utc_now()
+    ran_at = ran_at or _utc_now()
     evidence_path = Path(evidence_dir)
     stamp = ran_at.strftime("%Y%m%dT%H%M%SZ")
 
