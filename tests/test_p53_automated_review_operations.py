@@ -457,10 +457,23 @@ def _read_single_json(evidence_dir: Path, pattern: str) -> dict[str, object]:
     return json.loads(files[0].read_text(encoding="utf-8"))
 
 
-def _canonicalize_payload_for_compare(payload: dict[str, object]) -> dict[str, object]:
-    canonical = dict(payload)
-    canonical["evidence_file"] = "<normalized>"
-    return canonical
+def _read_single_file(evidence_dir: Path, pattern: str) -> Path:
+    files = sorted(evidence_dir.glob(pattern))
+    assert len(files) == 1, f"expected exactly one file for {pattern}, got {len(files)}"
+    return files[0]
+
+
+def _deterministic_bytes(payload: dict[str, object], *, exclude: tuple[str, ...] = ()) -> bytes:
+    """Serialize a payload to canonical JSON bytes, excluding named keys.
+
+    This enables exact byte comparison of evidence file content for
+    identical inputs after stripping any path-variant fields that are
+    intentionally absent from (or normalised out of) the file payload.
+    """
+    normalised = {k: v for k, v in payload.items() if k not in exclude}
+    return (
+        json.dumps(normalised, sort_keys=True, default=str, ensure_ascii=True) + "\n"
+    ).encode("utf-8")
 
 
 def test_reconciliation_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
@@ -483,10 +496,16 @@ def test_reconciliation_evidence_is_byte_deterministic_for_identical_inputs(tmp_
         ran_at=fixed_time,
     ) == 0
 
-    payload_a = _read_single_json(evidence_a, "reconciliation-pass-*.json")
-    payload_b = _read_single_json(evidence_b, "reconciliation-pass-*.json")
+    file_a = _read_single_file(evidence_a, "reconciliation-pass-*.json")
+    file_b = _read_single_file(evidence_b, "reconciliation-pass-*.json")
+    payload_a = json.loads(file_a.read_bytes())
+    payload_b = json.loads(file_b.read_bytes())
 
-    assert _canonicalize_payload_for_compare(payload_a) == _canonicalize_payload_for_compare(payload_b)
+    # evidence_file is the only path-variant field written to the file; strip it
+    # then compare as canonical bytes to prove byte-level determinism.
+    assert _deterministic_bytes(payload_a, exclude=("evidence_file",)) == _deterministic_bytes(
+        payload_b, exclude=("evidence_file",)
+    )
 
 
 def test_weekly_review_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
@@ -509,10 +528,46 @@ def test_weekly_review_evidence_is_byte_deterministic_for_identical_inputs(tmp_p
         ran_at=fixed_time,
     ) == 0
 
-    payload_a = _read_single_json(evidence_a, "weekly-review-pass-*.json")
-    payload_b = _read_single_json(evidence_b, "weekly-review-pass-*.json")
+    file_a = _read_single_file(evidence_a, "weekly-review-pass-*.json")
+    file_b = _read_single_file(evidence_b, "weekly-review-pass-*.json")
+    payload_a = json.loads(file_a.read_bytes())
+    payload_b = json.loads(file_b.read_bytes())
 
-    assert _canonicalize_payload_for_compare(payload_a) == _canonicalize_payload_for_compare(payload_b)
+    assert _deterministic_bytes(payload_a, exclude=("evidence_file",)) == _deterministic_bytes(
+        payload_b, exclude=("evidence_file",)
+    )
+
+
+def test_restart_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
+    """capture_restart_evidence omits evidence_file from file payload so content
+    is byte-for-byte identical for identical inputs without any normalization."""
+    repo = _repo(tmp_path)
+    _seed_core_data(repo)
+    db_path = tmp_path / "p53-deterministic.db"
+    fixed_time = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+
+    evidence_a = tmp_path / "restart-bytes-a"
+    evidence_b = tmp_path / "restart-bytes-b"
+
+    assert capture_restart_evidence(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_a),
+        baseline_path=None,
+        phase="pre-restart",
+        ran_at=fixed_time,
+    ) == 0
+    assert capture_restart_evidence(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_b),
+        baseline_path=None,
+        phase="pre-restart",
+        ran_at=fixed_time,
+    ) == 0
+
+    file_a = _read_single_file(evidence_a, "pre-restart-pass-*.json")
+    file_b = _read_single_file(evidence_b, "pre-restart-pass-*.json")
+    # No normalization — the file payload omits evidence_file so bytes must be equal.
+    assert file_a.read_bytes() == file_b.read_bytes()
 
 
 def test_restart_baseline_comparison_fails_on_controlled_mismatch(tmp_path: Path) -> None:
@@ -552,10 +607,67 @@ def test_restart_baseline_comparison_fails_on_controlled_mismatch(tmp_path: Path
     post_payload = _read_single_json(evidence_dir, "post-restart-fail-*.json")
     comparison = post_payload.get("baseline_comparison")
     assert isinstance(comparison, dict)
-    assert comparison["entity_counts_match"] is False
+    assert comparison["baseline_match"] is False
     deltas = comparison["deltas"]
     assert isinstance(deltas, list)
     assert any(delta.get("field") == "orders" for delta in deltas)
+
+
+def test_restart_baseline_comparison_fails_when_reconciliation_state_differs_with_equal_counts(
+    tmp_path: Path,
+) -> None:
+    """Baseline comparison must fail when ok differs even if entity counts are unchanged.
+
+    This exercises the reconciliation-state comparison path added to
+    _compare_baseline so that a 'clean' restart with differing reconciliation
+    state is still caught deterministically.
+    """
+    repo = _repo(tmp_path)
+    _seed_core_data(repo)
+    db_path = tmp_path / "p53-deterministic.db"
+    fixed_time = datetime(2026, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+    evidence_dir = tmp_path / "restart-ok-mismatch"
+
+    assert capture_restart_evidence(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_dir),
+        baseline_path=None,
+        phase="pre-restart",
+        ran_at=fixed_time,
+    ) == 0
+    baseline_payload = _read_single_json(evidence_dir, "pre-restart-pass-*.json")
+
+    # Flip ok without touching any entity counts so counts match but state differs.
+    ok_mismatch_baseline = dict(baseline_payload)
+    ok_mismatch_baseline["ok"] = not bool(ok_mismatch_baseline.get("ok", True))
+    ok_mismatch_path = tmp_path / "ok-mismatch-baseline.json"
+    ok_mismatch_path.write_text(
+        json.dumps(ok_mismatch_baseline, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    assert capture_restart_evidence(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_dir),
+        baseline_path=str(ok_mismatch_path),
+        phase="post-restart",
+        ran_at=fixed_time,
+    ) == 1
+
+    post_payload = _read_single_json(evidence_dir, "post-restart-fail-*.json")
+    comparison = post_payload.get("baseline_comparison")
+    assert isinstance(comparison, dict)
+    assert comparison["baseline_match"] is False
+    deltas = comparison["deltas"]
+    assert isinstance(deltas, list)
+    recon_delta = [d for d in deltas if d.get("field") == "reconciliation_ok"]
+    assert len(recon_delta) == 1, "expected exactly one reconciliation_ok delta"
+    # Entity-count fields should not appear in deltas (counts are equal).
+    count_fields = {d.get("field") for d in deltas}
+    for count_field in ("orders", "execution_events", "trades", "positions"):
+        assert count_field not in count_fields, (
+            f"{count_field} must not appear in deltas when counts are unchanged"
+        )
 
 
 def test_reconciliation_uses_real_repository_state_and_detects_missing_order_reference(tmp_path: Path) -> None:

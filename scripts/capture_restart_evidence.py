@@ -133,7 +133,12 @@ def _compare_baseline(
     current: dict[str, Any],
     baseline: dict[str, Any],
 ) -> list[dict[str, str]]:
-    """Compare current entity counts against a baseline.  Returns deltas."""
+    """Compare current entity counts and reconciliation state against a baseline.
+
+    Checks both the canonical entity counts from ``summary`` and the top-level
+    ``ok`` flag so that a post-restart baseline comparison fails whenever either
+    counts or reconciliation state differ.  Returns a list of delta descriptors.
+    """
     deltas: list[dict[str, str]] = []
     current_summary = current.get("summary", {})
     baseline_summary = baseline.get("summary", {})
@@ -146,6 +151,15 @@ def _compare_baseline(
                 "baseline": str(base_val),
                 "current": str(cur_val),
             })
+    # Also enforce reconciliation-state parity: ok must match across restart.
+    cur_ok = current.get("ok")
+    base_ok = baseline.get("ok")
+    if cur_ok != base_ok:
+        deltas.append({
+            "field": "reconciliation_ok",
+            "baseline": str(base_ok),
+            "current": str(cur_ok),
+        })
     return deltas
 
 
@@ -194,8 +208,9 @@ def capture_restart_evidence(
             "status": "error",
         }
         error_file = evidence_path / f"{phase}-error-{stamp}.json"
-        error_payload["evidence_file"] = str(error_file)
+        # File payload omits evidence_file so content is path-independent.
         _write_json_file(error_file, error_payload)
+        error_payload["evidence_file"] = str(error_file)
         _write_json_stream(sys.stderr, error_payload)
         print(f"RESTART_EVIDENCE:ERROR:{type(exc).__name__}")
         return EXIT_RUNTIME_ERROR
@@ -231,19 +246,21 @@ def capture_restart_evidence(
             baseline_comparison = {
                 "baseline_file": baseline_path,
                 "deltas": deltas,
-                "entity_counts_match": len(deltas) == 0,
+                "baseline_match": len(deltas) == 0,
             }
             result_payload["baseline_comparison"] = baseline_comparison
 
     all_ok = reconciliation_ok
-    if baseline_comparison and not baseline_comparison["entity_counts_match"]:
+    if baseline_comparison and not baseline_comparison["baseline_match"]:
         all_ok = False
 
     result_payload["status"] = "pass" if all_ok else "fail"
 
     evidence_file = evidence_path / f"{phase}-{'pass' if all_ok else 'fail'}-{stamp}.json"
-    result_payload["evidence_file"] = str(evidence_file)
+    # Write file payload without evidence_file so emitted content is path-independent
+    # and byte-for-byte identical for identical inputs.
     _write_json_file(evidence_file, result_payload)
+    result_payload["evidence_file"] = str(evidence_file)
     _write_json_stream(sys.stdout, result_payload)
 
     if all_ok:
