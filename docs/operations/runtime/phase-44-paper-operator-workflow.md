@@ -165,3 +165,15 @@ After any restart, before resuming long-run evaluation:
 ## Singular State Authority
 
 The sole source of truth for paper execution state is `SqliteCanonicalExecutionRepository`. No alternative state source, in-memory cache, or legacy table is authoritative. The formal contract is defined in `src/cilly_trading/portfolio/paper_state_authority.py`.
+
+## P53 Automated Review Operations
+
+The manual operator steps defined above are automated by the following scripts introduced in P53:
+
+- **Post-run reconciliation**: `python scripts/run_post_run_reconciliation.py` — runs after each execution cycle to validate reconciliation automatically.
+- **Weekly review artifacts (R1–R7)**: `python scripts/generate_weekly_review.py` — produces deterministic weekly review evidence bundles.
+- **Restart/recovery evidence**: `python scripts/capture_restart_evidence.py` — captures pre-restart baselines and post-restart verification evidence.
+
+All automation scripts use the same canonical state authority and derivation functions as the paper inspection API. Evidence files are written to `runs/` subdirectories (excluded from version control).
+
+The full automation contract is defined in `docs/operations/runtime/p53-automated-review-operations.md`.

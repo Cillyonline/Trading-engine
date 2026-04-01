@@ -107,6 +107,9 @@ Phase 44 reference links remain navigational and do not override the authoritati
 - [Paper inspection and reconciliation API](api/paper_inspection.md)
 - [Paper deployment acceptance gate](operations/runtime/paper-deployment-acceptance-gate.md)
 
+### P53 Reference Materials
+- [P53 automated review operations](operations/runtime/p53-automated-review-operations.md)
+
 ### DEC-P47 Reference Materials
 - [DEC-P47 qualification claim boundary](phases/dec-p47-qualification-claim-boundary.md)
 
