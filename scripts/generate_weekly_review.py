@@ -145,8 +145,9 @@ def generate_weekly_review(
             "status": "error",
         }
         error_file = evidence_path / f"weekly-review-error-{stamp}.json"
-        error_payload["evidence_file"] = str(error_file)
+        # File payload omits evidence_file so content is path-independent.
         _write_json_file(error_file, error_payload)
+        error_payload["evidence_file"] = str(error_file)
         _write_json_stream(sys.stderr, error_payload)
         print(f"WEEKLY_REVIEW:ERROR:{type(exc).__name__}")
         return EXIT_RUNTIME_ERROR
@@ -245,8 +246,10 @@ def generate_weekly_review(
 
     tag = "pass" if all_valid else "fail"
     evidence_file = evidence_path / f"weekly-review-{tag}-{stamp}.json"
-    review_payload["evidence_file"] = str(evidence_file)
+    # Write file payload without evidence_file so emitted content is path-independent
+    # and byte-for-byte identical for identical inputs.
     _write_json_file(evidence_file, review_payload)
+    review_payload["evidence_file"] = str(evidence_file)
     _write_json_stream(sys.stdout, review_payload)
 
     if all_valid:

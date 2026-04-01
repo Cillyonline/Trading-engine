@@ -463,20 +463,9 @@ def _read_single_file(evidence_dir: Path, pattern: str) -> Path:
     return files[0]
 
 
-def _deterministic_bytes(payload: dict[str, object], *, exclude: tuple[str, ...] = ()) -> bytes:
-    """Serialize a payload to canonical JSON bytes, excluding named keys.
-
-    This enables exact byte comparison of evidence file content for
-    identical inputs after stripping any path-variant fields that are
-    intentionally absent from (or normalised out of) the file payload.
-    """
-    normalised = {k: v for k, v in payload.items() if k not in exclude}
-    return (
-        json.dumps(normalised, sort_keys=True, default=str, ensure_ascii=True) + "\n"
-    ).encode("utf-8")
-
-
 def test_reconciliation_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
+    """run_reconciliation omits evidence_file from file payload so content
+    is byte-for-byte identical for identical inputs without any normalization."""
     repo = _repo(tmp_path)
     _seed_core_data(repo)
     db_path = tmp_path / "p53-deterministic.db"
@@ -498,17 +487,13 @@ def test_reconciliation_evidence_is_byte_deterministic_for_identical_inputs(tmp_
 
     file_a = _read_single_file(evidence_a, "reconciliation-pass-*.json")
     file_b = _read_single_file(evidence_b, "reconciliation-pass-*.json")
-    payload_a = json.loads(file_a.read_bytes())
-    payload_b = json.loads(file_b.read_bytes())
-
-    # evidence_file is the only path-variant field written to the file; strip it
-    # then compare as canonical bytes to prove byte-level determinism.
-    assert _deterministic_bytes(payload_a, exclude=("evidence_file",)) == _deterministic_bytes(
-        payload_b, exclude=("evidence_file",)
-    )
+    # No normalization — the file payload omits evidence_file so bytes must be equal.
+    assert file_a.read_bytes() == file_b.read_bytes()
 
 
 def test_weekly_review_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
+    """generate_weekly_review omits evidence_file from file payload so content
+    is byte-for-byte identical for identical inputs without any normalization."""
     repo = _repo(tmp_path)
     _seed_core_data(repo)
     db_path = tmp_path / "p53-deterministic.db"
@@ -530,12 +515,8 @@ def test_weekly_review_evidence_is_byte_deterministic_for_identical_inputs(tmp_p
 
     file_a = _read_single_file(evidence_a, "weekly-review-pass-*.json")
     file_b = _read_single_file(evidence_b, "weekly-review-pass-*.json")
-    payload_a = json.loads(file_a.read_bytes())
-    payload_b = json.loads(file_b.read_bytes())
-
-    assert _deterministic_bytes(payload_a, exclude=("evidence_file",)) == _deterministic_bytes(
-        payload_b, exclude=("evidence_file",)
-    )
+    # No normalization — the file payload omits evidence_file so bytes must be equal.
+    assert file_a.read_bytes() == file_b.read_bytes()
 
 
 def test_restart_evidence_is_byte_deterministic_for_identical_inputs(tmp_path: Path) -> None:
