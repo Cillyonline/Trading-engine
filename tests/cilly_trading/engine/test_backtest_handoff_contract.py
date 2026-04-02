@@ -118,13 +118,28 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
     assert gates["technically_valid_backtest_artifact"]["passed"] is True
     assert gates["phase_43_portfolio_simulation_ready"]["passed"] is True
     assert gates["phase_44_paper_trading_readiness_evidence_ready"]["passed"] is True
+    assert handoff["artifact_lineage"] == {
+        "complete": True,
+        "required_fields": [
+            "run.run_id",
+            "snapshot_linkage.mode",
+            "snapshot_linkage.start",
+            "snapshot_linkage.end",
+            "snapshot_linkage.count",
+            "strategy.name",
+            "strategy.params",
+            "run_config.contract_version",
+            "run_config.execution_assumptions",
+            "run_config.reproducibility_metadata",
+        ],
+        "missing_fields": [],
+    }
     assert (
         handoff["assumption_alignment"][
             "run_config_execution_assumptions_match_metrics_baseline_assumptions"
         ]
         is True
     )
-codex/ops-p51-write-only-evidence
     assert backtest_to_portfolio == {
         "handoff_id": "phase_42b_backtest_to_phase_43_portfolio",
         "producer_phase": "42b",
@@ -225,7 +240,6 @@ codex/ops-p51-write-only-evidence
         ],
         "gate_status": gates["phase_44_paper_trading_readiness_evidence_ready"],
     }
-main
 
 
 def test_phase_handoff_contract_marks_phase_43_gate_failed_when_required_fields_missing() -> None:
@@ -244,9 +258,7 @@ def test_phase_handoff_contract_marks_phase_43_gate_failed_when_required_fields_
     assert "portfolio_simulation_requires_explicit_backtest_evidence" in phase_43_gate["reasons"]
     assert phase_44_gate["passed"] is False
     assert "phase_43_gate_not_passed" in phase_44_gate["reasons"]
-codex/ops-p51-write-only-evidence
     assert "paper_readiness_requires_portfolio_ready_evidence" in phase_44_gate["reasons"]
-main
     assert artifact_lineage["complete"] is False
     assert artifact_lineage["missing_fields"] == [
         "run_config.contract_version",
