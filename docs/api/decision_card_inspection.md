@@ -17,6 +17,7 @@ The endpoint exposes decision-card outcomes and their explanations so reviewers 
 Claim boundary discipline for this surface:
 
 - confidence language is evidence-aligned only; confidence text must reference bounded aggregate/component/threshold evidence semantics
+- confidence is explicitly bounded by upstream evidence quality (signal, backtest, portfolio-fit, risk); limited upstream evidence limits the achievable confidence tier
 - qualification and rationale language is bounded to paper-trading qualification scope
 - qualification state is contract-bounded (`reject` | `watch` | `paper_candidate` | `paper_approved`) and deterministic from hard-gate + score semantics
 - inspection outputs must not imply live-trading approval, broker readiness, production readiness, trader validation, or guaranteed outcomes

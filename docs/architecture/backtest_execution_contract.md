@@ -86,6 +86,10 @@ The canonical handoff from backtest evidence is explicit in `backtest-result.jso
 - `phase_handoff.authoritative_outputs.trader_interpretation` defines which outputs are authoritative for trader-facing interpretation.
 - `phase_handoff.artifact_lineage` defines whether required lineage fields are complete before downstream use.
 - `phase_handoff.assumption_alignment.run_config_execution_assumptions_match_metrics_baseline_assumptions` MUST be true before readiness evidence is considered valid.
+- `phase_handoff.artifact_lineage`: provenance chain from backtest output to downstream consumers.
+- `phase_handoff.canonical_handoffs.backtest_to_portfolio`: canonical handoff record from backtest to portfolio simulation.
+- `phase_handoff.canonical_handoffs.portfolio_to_paper`: canonical handoff record from portfolio simulation to paper trading.
+- `realism_boundary`: explicit disclosure of modeled and unmodeled assumptions in the run artifact.
 
 Acceptance gates are explicit and non-inferential:
 
@@ -104,4 +108,8 @@ Boundary clarification:
 
 - Passing the handoff gates does not implement portfolio simulation or paper-trading workflows.
 - Passing the handoff gates does not imply live trading or broker readiness.
+codex/ops-p51-write-only-evidence
 - Qualification and decision docs must treat this output as bounded backtest evidence only.
+=======
+- Artifact consumers MUST treat the output as bounded backtest evidence only.
+main

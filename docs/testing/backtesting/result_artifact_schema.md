@@ -77,10 +77,21 @@ Top-level object keys and minimal semantics:
     - `technically_valid_backtest_artifact` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_43_portfolio_simulation_ready` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_44_paper_trading_readiness_evidence_ready` (required): object with `passed`, `missing_fields`, `reasons`
+codex/ops-p51-write-only-evidence
 - `realism_boundary` (required): object
   - modeled assumptions: explicit fill, fee, slippage, and price-source assumptions
   - unmodeled assumptions: explicit realism gaps such as market hours, broker behavior, and liquidity/microstructure
   - `evidence_boundary.unsupported_claims`: Unsupported realism claims that remain out of scope
+
+  - `artifact_lineage` (required): object documenting provenance chain from backtest output to downstream consumers.
+  - `canonical_handoffs` (required): object containing canonical handoff records.
+    - `backtest_to_portfolio`: canonical handoff record from backtest to portfolio simulation.
+    - `portfolio_to_paper`: canonical handoff record from portfolio simulation to paper trading.
+- `realism_boundary` (required): object documenting modeled and unmodeled assumptions.
+  - `modeled_assumptions` (required): explicit list of realism assumptions included in this run (e.g., fixed slippage, fixed commission, deterministic fill timing).
+  - `unmodeled_assumptions` (required): explicit list of assumptions excluded from this run (e.g., market hours, exchange session rules, order book depth).
+  - Unsupported realism claims (e.g., live-trading readiness, broker fill quality guarantees) MUST remain excluded from artifact assertions.
+main
 
 ## Hash reproducibility
 

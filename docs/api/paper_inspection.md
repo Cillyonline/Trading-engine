@@ -162,6 +162,26 @@ This is the minimum operator inspection path for paper trading from order intent
 }
 ```
 
+## Long-Run Evaluation and Review Workflow
+
+The full bounded long-run paper operator review workflow — including evaluation cadence guidance, review artifact checklist (R1–R7), strategy-change comparison boundary, and restart and recovery verification steps — is defined in:
+
+```
+docs/operations/runtime/phase-44-paper-operator-workflow.md
+```
+
+This workflow is read-only and review-oriented. It does not introduce mutation endpoints or live-trading behavior.
+
+## Automated Reconciliation and Review
+
+Post-run reconciliation, weekly review artifact generation, and restart/recovery evidence capture are automated by the P53 scripts:
+
+- `python scripts/run_post_run_reconciliation.py` — automated post-run reconciliation with evidence output.
+- `python scripts/generate_weekly_review.py` — deterministic R1–R7 weekly review bundle generation.
+- `python scripts/capture_restart_evidence.py` — restart/recovery evidence with optional baseline comparison.
+
+All automation uses the same canonical state authority and derivation functions as the endpoints documented above. The full automation contract is in `docs/operations/runtime/p53-automated-review-operations.md`.
+
 ## Deterministic Evidence
 
 - Integration coverage validates this path with deterministic lifecycle events in:

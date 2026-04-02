@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 from cilly_trading.engine.decision_card_contract import (
     DECISION_CARD_CONTRACT_VERSION,
+    CONFIDENCE_TIER_PRECISION_DISCLAIMER,
+    UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND,
     REQUIRED_COMPONENT_CATEGORIES,
     ComponentScore,
     DecisionCard,
@@ -338,14 +340,20 @@ def resolve_qualification_state(
 def _confidence_reason(*, confidence_tier: DecisionConfidenceTier, aggregate_score: float) -> str:
     if confidence_tier == "high":
         return (
-            f"Aggregate score {aggregate_score:.4f} and all components satisfy high-confidence thresholds."
+            f"Aggregate score {aggregate_score:.4f} and all components satisfy high-confidence thresholds "
+            f"bounded by upstream evidence quality; "
+            f"{CONFIDENCE_TIER_PRECISION_DISCLAIMER}"
         )
     if confidence_tier == "medium":
         return (
-            f"Aggregate score {aggregate_score:.4f} satisfies medium-confidence thresholds with bounded component support."
+            f"Aggregate score {aggregate_score:.4f} satisfies medium-confidence thresholds with bounded component support "
+            f"limited by upstream evidence quality; "
+            f"{CONFIDENCE_TIER_PRECISION_DISCLAIMER}"
         )
     return (
-        f"Aggregate score {aggregate_score:.4f} or component minimum is below medium-confidence thresholds."
+        f"Aggregate score {aggregate_score:.4f} or component minimum is below medium-confidence thresholds; "
+        f"confidence is limited by upstream evidence quality; "
+        f"{CONFIDENCE_TIER_PRECISION_DISCLAIMER}"
     )
 
 
@@ -413,6 +421,7 @@ def _build_metadata(
 __all__ = [
     "COMPONENT_WEIGHTS",
     "CONFIDENCE_THRESHOLDS",
+    "UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND",
     "BacktestEvidenceInput",
     "DecisionActionState",
     "PortfolioFitInput",

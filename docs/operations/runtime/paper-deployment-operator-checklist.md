@@ -43,11 +43,33 @@ Use these exact evidence identifiers in the checklist references:
 | --- | --- | --- | --- |
 | D1 | Full repository test suite passed with `python -m pytest` | `EVIDENCE_FULL_PYTEST_OUTPUT` | |
 
-## E) Checklist Completion Evidence
+## E) Long-Run Paper Review Evidence
 
 | # | Item | Evidence reference | Answer (YES/NO) |
 | --- | --- | --- | --- |
-| E1 | This checklist is fully completed and every required section is `YES` | `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST` | |
+| E1 | Long-run review workflow executed: `GET /paper/workflow` returned `validation.ok: true` | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E2 | All R1–R7 review artifacts captured in sequence per Phase 44 workflow doc | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E3 | Strategy-change comparison baseline captured (required if any strategy change applied during this session; `N/A` if no strategy change) | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+| E4 | Post-restart recovery verification completed: `GET /paper/reconciliation` returned `ok: true`, `mismatches: 0` after most recent restart | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | |
+
+### Automated Review Evidence Commands
+
+The following scripts automate evidence capture for Section E items:
+
+- **Post-run reconciliation**: `python scripts/run_post_run_reconciliation.py` (supports E1, E4)
+- **Weekly review artifacts (R1–R7)**: `python scripts/generate_weekly_review.py` (supports E2)
+- **Pre-restart baseline**: `python scripts/capture_restart_evidence.py --phase pre-restart` (supports E3)
+- **Post-restart verification**: `python scripts/capture_restart_evidence.py --phase post-restart` (supports E4)
+
+Evidence output directories: `runs/reconciliation/`, `runs/weekly-review/`, `runs/restart-evidence/`
+
+See `docs/operations/runtime/p53-automated-review-operations.md` for the full automation contract.
+
+## F) Checklist Completion Evidence
+
+| # | Item | Evidence reference | Answer (YES/NO) |
+| --- | --- | --- | --- |
+| F1 | This checklist is fully completed and every required section is `YES` (or `N/A` where explicitly permitted) | `EVIDENCE_COMPLETED_OPERATOR_CHECKLIST` | |
 
 ## Final Operator Decision
 Decision rule:

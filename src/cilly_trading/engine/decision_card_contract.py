@@ -12,6 +12,24 @@ DECISION_CARD_CONTRACT_VERSION = "2.0.0"
 QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
 QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
 
+CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY = (
+    "Decision-card scores are bounded to within-strategy evaluation for a single opportunity. "
+    "Cross-strategy score comparison is not supported; aggregate scores and component scores "
+    "from strategies in different comparison groups are not directly comparable."
+)
+
+CONFIDENCE_TIER_PRECISION_DISCLAIMER = (
+    "Confidence tier is an ordinal classification (low/medium/high) derived from bounded thresholds "
+    "and is limited by upstream evidence quality. "
+    "It does not imply precise probability, forecast accuracy, or score equality across strategies."
+)
+
+UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND = (
+    "Confidence is bounded by the quality of upstream evidence "
+    "(signal, backtest, portfolio-fit, risk) provided to the qualification engine; "
+    "limited or low-quality upstream evidence limits confidence regardless of thresholds."
+)
+
 DecisionComponentCategory = Literal[
     "signal_quality",
     "backtest_quality",
@@ -59,6 +77,10 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
     "guaranteed",
     "guarantee",
     "certain outcome",
+    "high certainty",
+    "confirmed opportunity",
+    "validated outcome",
+    "strong certainty",
 )
 
 
@@ -337,6 +359,9 @@ def serialize_decision_card(card: DecisionCard) -> str:
 
 __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
+    "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
+    "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
+    "UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND",
     "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
     "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
     "REQUIRED_COMPONENT_CATEGORIES",

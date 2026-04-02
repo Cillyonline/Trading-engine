@@ -80,6 +80,7 @@ Snapshot lookup is field-address based (`open`, then `price`) and does not rely 
 
 ## 8) Unmodeled realism boundary
 
+codex/ops-p51-write-only-evidence
 The deterministic execution model is intentionally narrower than real execution.
 
 - Market hours and exchange session rules are not modeled.
@@ -87,3 +88,12 @@ The deterministic execution model is intentionally narrower than real execution.
 - Liquidity, queue position, and market impact are not modeled.
 
 This execution model does not support live-trading readiness claims.
+=======
+The deterministic execution model intentionally excludes the following:
+
+- Market hours and exchange session rules are not modeled.
+- Order book depth and market impact are not modeled.
+- Broker-specific execution behavior and fill quality are not modeled.
+- Exchange-level order rejection or throttling is not modeled.
+
+This model does not support live-trading readiness claims. Backtest output is bounded evidence only and MUST NOT be used to infer production trading performance or broker fill quality.

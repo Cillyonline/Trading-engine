@@ -301,3 +301,29 @@ def test_sentiment_overlay_does_not_override_blocking_gate_rejection() -> None:
     )
     assert card.qualification.state == "reject"
     assert card.qualification.color == "red"
+
+
+def test_confidence_reason_references_upstream_evidence_quality() -> None:
+    card = evaluate_qualification(_engine_input())
+
+    confidence_reason = card.score.confidence_reason.casefold()
+    assert "upstream evidence quality" in confidence_reason
+    assert card.score.confidence_tier == "high"
+    assert "aggregate" in confidence_reason
+    assert "threshold" in confidence_reason
+
+
+def test_low_confidence_reason_references_upstream_evidence_quality() -> None:
+    watch_components = _base_component_scores()
+    watch_components[4] = ComponentScore(
+        category="execution_readiness",
+        score=42.0,
+        rationale="Execution assumptions require further evidence before paper approval",
+        evidence=["slippage_bps=18", "commission=1.00"],
+    )
+    card = evaluate_qualification(_engine_input(component_scores=watch_components))
+
+    assert card.score.confidence_tier == "low"
+    confidence_reason = card.score.confidence_reason.casefold()
+    assert "upstream evidence quality" in confidence_reason
+    assert "limited" in confidence_reason

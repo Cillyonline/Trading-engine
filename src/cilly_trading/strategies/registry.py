@@ -7,6 +7,13 @@ registered explicitly via :func:`register_strategy` and resolved via
 Deterministic ordering rule:
     Registered strategies are returned sorted by stable strategy key.
 
+Cross-strategy score comparability:
+    Strategy scores are bounded to within-strategy evaluation for a single
+    opportunity. Direct score comparison across strategies from different
+    comparison groups is not supported. The ``comparison_group`` metadata field
+    identifies which strategies share a comparison group; only strategies in
+    the same comparison group may be meaningfully compared by score.
+
 Out of scope by design:
     - dynamic plugin loading
     - reflection/module auto-discovery
@@ -21,6 +28,14 @@ from typing import Any
 
 from cilly_trading.engine.core import BaseStrategy
 from cilly_trading.strategies.validation import validate_before_registration, validate_strategy_key
+
+
+CROSS_STRATEGY_SCORE_NON_COMPARABILITY_NOTE = (
+    "Strategy scores are bounded to within-strategy evaluation for a single opportunity. "
+    "Direct score comparison across strategies from different comparison groups is not supported. "
+    "The comparison_group metadata field identifies which strategies share a comparison group; "
+    "only strategies within the same comparison group may be meaningfully compared by score."
+)
 
 
 class StrategyNotRegisteredError(KeyError):
