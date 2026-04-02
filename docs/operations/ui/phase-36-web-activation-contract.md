@@ -67,32 +67,14 @@ Claims that belong to later phases include:
 ## Acceptance Evidence
 | Evidence area | Repository basis |
 | --- | --- |
-<<<<<<< HEAD
 | Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` |
-| Browser workflow | `src/ui/index.html` includes `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and `POST /analysis/run` |
-| Route reachability tests | `tests/health_endpoint.py`, `src/api/test_operator_workbench_surface.py`, and `tests/test_ui_runtime_browser_flow.py` |
+| Browser workflow | `src/ui/index.html` includes `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and `POST /analysis/run` on the shared `/ui` shell |
+| Route reachability tests | `tests/health_endpoint.py`, `src/api/test_operator_workbench_surface.py`, and `tests/test_ui_runtime_browser_flow.py` verify the `/ui` surface and bounded Phase 36 browser workflow |
 | Manual analysis behavior | `tests/test_api_manual_analysis_trigger.py` |
 | Phase ownership guard | `docs/architecture/ui-runtime-phase-ownership-boundary.md` |
-=======
-| Runtime entrypoint | `src/api/main.py` mounts `/ui` with `StaticFiles(..., html=True)` and includes the bounded API routers behind the documented workflow routes |
-| Browser workflow | `src/ui/index.html` loads `/system/state`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`, and submits `POST /analysis/run` |
-| Route reachability tests | `tests/health_endpoint.py`, `src/api/test_operator_workbench_surface.py`, and `tests/test_ui_runtime_browser_flow.py` verify the `/ui` surface and its browser workflow |
-| Manual analysis behavior | `tests/test_api_manual_analysis_trigger.py` verifies the deterministic `POST /analysis/run` flow |
-| Scope guard | The implemented `/ui` page and the listed tests do not verify watchlist CRUD, trading-desk expansion, alerts, paper-trading product workflow, or live-trading workflow |
-
-## Review Checklist
-Reviewers should verify:
-
-1. `src/api/main.py` still mounts `/ui` as the runtime-served browser surface and includes the bounded API routers used by this workflow.
-2. `src/ui/index.html` still implements the bounded Phase 36 workflow described here.
-3. `/owner` is not presented anywhere as a runtime-equivalent route.
-4. The docs remain silent on unimplemented watchlist, trading-desk, alerts, paper-trading product, and live-trading claims.
-5. Roadmap wording and runtime-facing wording both describe Phase 36 as bounded browser activation rather than later-phase feature completion.
->>>>>>> origin/main
 
 ## Outcome
 For Phase 36, the canonical runtime contract is:
 - enter through `/ui`
 - run the bounded manual-analysis operator workflow
 - treat shared-shell adjacency as non-authoritative for later-phase completion
-

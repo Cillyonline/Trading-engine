@@ -59,17 +59,28 @@ Top-level object keys and minimal semantics:
   - `contract_version` (required): string
   - `source_phase` (required): string literal `"42b"`
   - `target_phases` (required): array containing `"43"` and `"44"`
+  - `artifact_lineage` (required): object
+    - `complete` (required): boolean
+    - `required_fields` (required): array of field-path strings
+    - `missing_fields` (required): array of field-path strings
   - `required_evidence` (required): object
     - `phase_43_portfolio_simulation` (required): array of field-path strings
     - `phase_44_paper_trading_readiness` (required): array of field-path strings
   - `authoritative_outputs` (required): object
     - `trader_interpretation` (required): array of field-path strings
+  - `canonical_handoffs` (required): object
+    - `backtest_to_portfolio` (required): bounded Phase 43 handoff metadata
+    - `portfolio_to_paper` (required): bounded Phase 44 handoff metadata
   - `assumption_alignment` (required): object
     - `run_config_execution_assumptions_match_metrics_baseline_assumptions` (required): boolean
   - `acceptance_gates` (required): object
     - `technically_valid_backtest_artifact` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_43_portfolio_simulation_ready` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_44_paper_trading_readiness_evidence_ready` (required): object with `passed`, `missing_fields`, `reasons`
+- `realism_boundary` (required): object
+  - modeled assumptions: explicit fill, fee, slippage, and price-source assumptions
+  - unmodeled assumptions: explicit realism gaps such as market hours, broker behavior, and liquidity/microstructure
+  - `evidence_boundary.unsupported_claims`: Unsupported realism claims that remain out of scope
 
 ## Hash reproducibility
 

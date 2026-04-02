@@ -77,3 +77,13 @@ Orders are processed in a total deterministic order using:
 3. `id` (ascending)
 
 Snapshot lookup is field-address based (`open`, then `price`) and does not rely on dictionary iteration order.
+
+## 8) Unmodeled realism boundary
+
+The deterministic execution model is intentionally narrower than real execution.
+
+- Market hours and exchange session rules are not modeled.
+- Broker routing, rejects, cancels, and venue-specific behavior are not modeled.
+- Liquidity, queue position, and market impact are not modeled.
+
+This execution model does not support live-trading readiness claims.

@@ -1,3 +1,5 @@
+# Legacy local-only compose path.
+# Non-canonical for bounded staging server deployment; use docker/staging/docker-compose.staging.yml instead.
 services:
   api:
     build: .

@@ -73,6 +73,7 @@ For identical snapshots and identical run contract:
 - `backtest-result.json` bytes and hash remain identical
 
 The run artifact now surfaces both the explicit `run_config` contract and realized `orders` / `fills` / `positions`.
+It also surfaces `realism_boundary` so trader review and downstream phase handoffs stay bounded to declared assumptions only.
 
 ## Canonical Handoff (Phase 42b -> Phase 43 -> Phase 44)
 
@@ -83,6 +84,7 @@ The canonical handoff from backtest evidence is explicit in `backtest-result.jso
 - `phase_handoff.required_evidence.phase_43_portfolio_simulation` defines the required fields for Phase 43 consumers.
 - `phase_handoff.required_evidence.phase_44_paper_trading_readiness` defines the additional required fields for Phase 44 evidence consumers.
 - `phase_handoff.authoritative_outputs.trader_interpretation` defines which outputs are authoritative for trader-facing interpretation.
+- `phase_handoff.artifact_lineage` defines whether required lineage fields are complete before downstream use.
 - `phase_handoff.assumption_alignment.run_config_execution_assumptions_match_metrics_baseline_assumptions` MUST be true before readiness evidence is considered valid.
 
 Acceptance gates are explicit and non-inferential:
@@ -93,8 +95,13 @@ Acceptance gates are explicit and non-inferential:
   indicates evidence is complete and aligned for Phase 43 portfolio simulation usage.
 - `phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready`
   indicates evidence handoff completeness for Phase 44 readiness review.
+- `phase_handoff.canonical_handoffs.backtest_to_portfolio`
+  defines the explicit bounded handoff into Phase 43.
+- `phase_handoff.canonical_handoffs.portfolio_to_paper`
+  defines the explicit bounded handoff into Phase 44.
 
 Boundary clarification:
 
 - Passing the handoff gates does not implement portfolio simulation or paper-trading workflows.
 - Passing the handoff gates does not imply live trading or broker readiness.
+- Qualification and decision docs must treat this output as bounded backtest evidence only.

@@ -98,10 +98,7 @@ def _base_payload() -> dict[str, Any]:
 def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> None:
     handoff = build_phase_handoff_contract(_base_payload())
     gates = handoff["acceptance_gates"]
-<<<<<<< HEAD
     artifact_lineage = handoff["artifact_lineage"]
-=======
->>>>>>> origin/main
     backtest_to_portfolio = handoff["canonical_handoffs"]["backtest_to_portfolio"]
     portfolio_to_paper = handoff["canonical_handoffs"]["portfolio_to_paper"]
 
@@ -162,6 +159,12 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
             "run_config.contract_version",
             "run_config.execution_assumptions",
             "run_config.reproducibility_metadata",
+            "realism_boundary.modeled_assumptions",
+            "realism_boundary.unmodeled_assumptions",
+            "realism_boundary.evidence_boundary.supported_interpretation",
+            "realism_boundary.evidence_boundary.unsupported_claims",
+            "realism_boundary.evidence_boundary.qualification_constraint",
+            "realism_boundary.evidence_boundary.decision_use_constraint",
             "summary.start_equity",
             "summary.end_equity",
             "equity_curve",
@@ -204,6 +207,12 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
             "run_config.contract_version",
             "run_config.execution_assumptions",
             "run_config.reproducibility_metadata",
+            "realism_boundary.modeled_assumptions",
+            "realism_boundary.unmodeled_assumptions",
+            "realism_boundary.evidence_boundary.supported_interpretation",
+            "realism_boundary.evidence_boundary.unsupported_claims",
+            "realism_boundary.evidence_boundary.qualification_constraint",
+            "realism_boundary.evidence_boundary.decision_use_constraint",
             "summary.start_equity",
             "summary.end_equity",
             "equity_curve",
@@ -249,11 +258,19 @@ def test_phase_handoff_contract_marks_phase_43_gate_failed_when_required_fields_
     assert "portfolio_simulation_requires_explicit_backtest_evidence" in phase_43_gate["reasons"]
     assert phase_44_gate["passed"] is False
     assert "phase_43_gate_not_passed" in phase_44_gate["reasons"]
-<<<<<<< HEAD
+    assert "paper_readiness_requires_portfolio_ready_evidence" in phase_44_gate["reasons"]
     assert artifact_lineage["complete"] is False
-    assert "run_config.contract_version" in artifact_lineage["missing_fields"]
+    assert artifact_lineage["missing_fields"] == [
+        "run_config.contract_version",
+        "run_config.execution_assumptions",
+        "run_config.reproducibility_metadata",
+    ]
     assert backtest_to_portfolio["artifact_lineage_complete"] is False
-    assert "run_config.contract_version" in backtest_to_portfolio["artifact_lineage_missing_fields"]
+    assert backtest_to_portfolio["artifact_lineage_missing_fields"] == [
+        "run_config.contract_version",
+        "run_config.execution_assumptions",
+        "run_config.reproducibility_metadata",
+    ]
 
 
 def test_phase_handoff_contract_marks_realism_boundary_missing_as_not_ready() -> None:
@@ -270,20 +287,6 @@ def test_phase_handoff_contract_marks_realism_boundary_missing_as_not_ready() ->
     assert phase_43_gate["passed"] is False
     assert "realism_boundary.modeled_assumptions" in phase_43_gate["missing_fields"]
     assert "realism_boundary.modeled_assumptions" in backtest_to_portfolio["required_inputs"]
-=======
-    assert "paper_readiness_requires_portfolio_ready_evidence" in phase_44_gate["reasons"]
-    assert handoff["artifact_lineage"]["complete"] is False
-    assert handoff["artifact_lineage"]["missing_fields"] == [
-        "run_config.contract_version",
-        "run_config.execution_assumptions",
-        "run_config.reproducibility_metadata",
-    ]
-    assert handoff["canonical_handoffs"]["backtest_to_portfolio"]["artifact_lineage_missing_fields"] == [
-        "run_config.contract_version",
-        "run_config.execution_assumptions",
-        "run_config.reproducibility_metadata",
-    ]
->>>>>>> origin/main
 
 
 def test_phase_handoff_contract_marks_assumption_mismatch_as_not_ready() -> None:

@@ -48,7 +48,7 @@ for configuration precedence or validation ownership.
 ## Secondary / utility entrypoints (not canonical)
 
 - `PYTHONPATH=src python -m api.main` (starts same FastAPI app via module `__main__` block)
-- `docker compose up --build` (containerized local run)
+- `docker compose up --build` (legacy local container path only; non-canonical for bounded staging server deployment)
 - `PYTHONPATH=src python -m cilly_trading.engine.deterministic_run --fixtures-dir fixtures/deterministic-analysis --output tests/output/deterministic-analysis.json` (deterministic offline utility run)
 
 There is no installed top-level project CLI command (for example `cilly-trading ...`).
@@ -75,19 +75,24 @@ uvicorn api.main:app --reload
 ### Bash (macOS/Linux)
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl -H "X-Cilly-Role: read_only" http://127.0.0.1:8000/health
 ```
 
 ### PowerShell (Windows)
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
+Invoke-RestMethod http://127.0.0.1:8000/health -Headers @{ "X-Cilly-Role" = "read_only" }
 ```
 
 Expected output:
 
 ```json
-{"status":"ok"}
+{
+  "status": "healthy",
+  "ready": true,
+  "mode": "running",
+  "reason": "bounded_runtime_ready"
+}
 ```
 
 3) **Create a demo snapshot and capture `ingestion_run_id` (terminal B)**
@@ -119,6 +124,7 @@ Expected behavior:
 curl -X POST "http://127.0.0.1:8000/strategy/analyze" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
+  -H "X-Cilly-Role: operator" \
   -d "{
     \"ingestion_run_id\": \"$SNAPSHOT_ID\",
     \"symbol\": \"AAPL\",
@@ -143,6 +149,7 @@ Invoke-RestMethod `
   -Method Post `
   -Uri "http://127.0.0.1:8000/strategy/analyze" `
   -ContentType "application/json" `
+  -Headers @{ "X-Cilly-Role" = "operator" } `
   -Body $body
 ```
 
@@ -164,6 +171,7 @@ Expected output shape:
 
 ```bash
 curl -X GET "http://127.0.0.1:8000/signals?strategy=RSI2&ingestion_run_id=$SNAPSHOT_ID&limit=10" \
+  -H "X-Cilly-Role: read_only" \
   -H "Accept: application/json"
 ```
 
@@ -173,7 +181,7 @@ curl -X GET "http://127.0.0.1:8000/signals?strategy=RSI2&ingestion_run_id=$SNAPS
 Invoke-RestMethod `
   -Method Get `
   -Uri "http://127.0.0.1:8000/signals?strategy=RSI2&ingestion_run_id=$SNAPSHOT_ID&limit=10" `
-  -Headers @{ Accept = "application/json" }
+  -Headers @{ Accept = "application/json"; "X-Cilly-Role" = "read_only" }
 ```
 
 Expected output shape:
@@ -197,14 +205,14 @@ Optional verification:
 ### Bash (macOS/Linux)
 
 ```bash
-curl --fail http://127.0.0.1:8000/health
+curl --fail -H "X-Cilly-Role: read_only" http://127.0.0.1:8000/health
 ```
 
 ### PowerShell (Windows)
 
 ```powershell
 try {
-  Invoke-WebRequest http://127.0.0.1:8000/health -ErrorAction Stop | Out-Null
+  Invoke-WebRequest http://127.0.0.1:8000/health -Headers @{ "X-Cilly-Role" = "read_only" } -ErrorAction Stop | Out-Null
   throw "API still running"
 } catch {
   if ($_.Exception.Message -eq "API still running") { throw }
@@ -275,3 +283,7 @@ Remove-Item Env:PYTHONPATH -ErrorAction SilentlyContinue
 For repository tests, use `docs/testing/index.md`. For the canonical configuration
 contract used by follow-up runtime-boundary work, see
 `docs/architecture/configuration_boundary.md`.
+
+Local run note:
+- `X-Cilly-Role` headers are required even for local runtime calls.
+- These headers are bounded local operator-routing inputs, not a public authentication model.
