@@ -17,7 +17,7 @@ $env:PYTHONPATH="src"
 python -m cilly_trading
 ```
 
-When run without flags, the CLI prints argparse help output and exits with code `0`.
+When run without a subcommand, argparse prints usage plus an error message and exits with code `2`.
 
 ## 2. Version Command
 
@@ -43,9 +43,8 @@ Do not treat documentation examples as a hard-coded version string.
 
 ## 3. Help Behavior
 
-When no arguments are provided, argparse prints help text.
-The help text includes the `--version` flag description.
-The exit code remains `0`.
+When no arguments are provided, argparse prints usage plus an error message because a subcommand is required.
+Use `--help` if you want help text with exit code `0`.
 
 This document intentionally describes help behavior without copying full help output to avoid documentation drift.
 

@@ -1,3 +1,5 @@
+# Legacy local-only container path.
+# Non-canonical for bounded staging server deployment; use docker/staging/Dockerfile instead.
 FROM python:3.10-slim
 
 WORKDIR /app

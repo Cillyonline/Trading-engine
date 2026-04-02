@@ -59,17 +59,30 @@ Top-level object keys and minimal semantics:
   - `contract_version` (required): string
   - `source_phase` (required): string literal `"42b"`
   - `target_phases` (required): array containing `"43"` and `"44"`
+  - `artifact_lineage` (required): object
+    - `complete` (required): boolean
+    - `required_fields` (required): array of field-path strings
+    - `missing_fields` (required): array of field-path strings
   - `required_evidence` (required): object
     - `phase_43_portfolio_simulation` (required): array of field-path strings
     - `phase_44_paper_trading_readiness` (required): array of field-path strings
   - `authoritative_outputs` (required): object
     - `trader_interpretation` (required): array of field-path strings
+  - `canonical_handoffs` (required): object
+    - `backtest_to_portfolio` (required): bounded Phase 43 handoff metadata
+    - `portfolio_to_paper` (required): bounded Phase 44 handoff metadata
   - `assumption_alignment` (required): object
     - `run_config_execution_assumptions_match_metrics_baseline_assumptions` (required): boolean
   - `acceptance_gates` (required): object
     - `technically_valid_backtest_artifact` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_43_portfolio_simulation_ready` (required): object with `passed`, `missing_fields`, `reasons`
     - `phase_44_paper_trading_readiness_evidence_ready` (required): object with `passed`, `missing_fields`, `reasons`
+codex/ops-p51-write-only-evidence
+- `realism_boundary` (required): object
+  - modeled assumptions: explicit fill, fee, slippage, and price-source assumptions
+  - unmodeled assumptions: explicit realism gaps such as market hours, broker behavior, and liquidity/microstructure
+  - `evidence_boundary.unsupported_claims`: Unsupported realism claims that remain out of scope
+
   - `artifact_lineage` (required): object documenting provenance chain from backtest output to downstream consumers.
   - `canonical_handoffs` (required): object containing canonical handoff records.
     - `backtest_to_portfolio`: canonical handoff record from backtest to portfolio simulation.
@@ -78,6 +91,7 @@ Top-level object keys and minimal semantics:
   - `modeled_assumptions` (required): explicit list of realism assumptions included in this run (e.g., fixed slippage, fixed commission, deterministic fill timing).
   - `unmodeled_assumptions` (required): explicit list of assumptions excluded from this run (e.g., market hours, exchange session rules, order book depth).
   - Unsupported realism claims (e.g., live-trading readiness, broker fill quality guarantees) MUST remain excluded from artifact assertions.
+main
 
 ## Hash reproducibility
 

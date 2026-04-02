@@ -161,7 +161,9 @@ def test_parse_scheduled_tasks_derives_stable_ids_and_validates_shape() -> None:
 
 def test_scheduled_runner_selects_newest_valid_snapshot_for_analysis_and_persists_result(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setenv("CILLY_ANALYSIS_EVIDENCE_DIR", str(tmp_path / "evidence"))
     analysis_repo = SqliteAnalysisRunRepository(db_path=tmp_path / "analysis.db")
     signal_repo = SqliteSignalRepository(db_path=tmp_path / "signals.db")
     watchlist_repo = SqliteWatchlistRepository(db_path=tmp_path / "watchlists.db")
@@ -256,11 +258,16 @@ def test_scheduled_runner_selects_newest_valid_snapshot_for_analysis_and_persist
     assert persisted is not None
     assert persisted["ingestion_run_id"] == older_run_id
     assert persisted["result"]["symbol"] == "AAPL"
+    assert persisted["evidence"]["review_week"] == "2026-W14"
+    assert Path(persisted["evidence"]["evidence_file"]).exists()
+    assert Path(persisted["evidence"]["operator_review_file"]).exists()
 
 
 def test_scheduled_runner_executes_watchlist_against_newest_partially_valid_snapshot_and_persists_failures(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setenv("CILLY_ANALYSIS_EVIDENCE_DIR", str(tmp_path / "evidence"))
     analysis_repo = SqliteAnalysisRunRepository(db_path=tmp_path / "analysis.db")
     signal_repo = SqliteSignalRepository(db_path=tmp_path / "signals.db")
     watchlist_repo = SqliteWatchlistRepository(db_path=tmp_path / "watchlists.db")
@@ -373,6 +380,11 @@ def test_scheduled_runner_executes_watchlist_against_newest_partially_valid_snap
             "detail": "snapshot data unavailable or invalid for symbol",
         }
     ]
+    evidence_payload = json.loads(
+        Path(persisted["evidence"]["evidence_file"]).read_text(encoding="utf-8")
+    )
+    assert evidence_payload["workflow"]["kind"] == "watchlist_execution"
+    assert evidence_payload["workflow"]["outcome_classification"] == "isolated_symbol_failure"
 
 
 def test_scheduled_runner_skips_when_another_execution_is_active(tmp_path: Path) -> None:

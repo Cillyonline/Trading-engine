@@ -64,3 +64,14 @@ def test_ops_p51_docs_and_existing_endpoint_tests_align_to_same_operator_contrac
     assert "`created_at DESC`" in snapshot_runtime
     assert "`ingestion_run_id ASC`" in snapshot_runtime
     assert "Only one scheduled execution loop may be active per server process." in snapshot_runtime
+    assert "`runs/analysis_run_evidence/<YYYY-Www>/<analysis_run_id>/`" in usage
+    assert "`analysis-run-evidence.json`" in usage
+    assert "`operator-review.json`" in usage
+    assert "`comparison_key`" in usage
+    assert "`review_week`" in usage
+    assert "Weekly review is supported by scanning one ISO-week bucket at a time" in usage
+    assert "## Scheduled Evidence Artifacts" in snapshot_runtime
+    assert "`CILLY_ANALYSIS_EVIDENCE_DIR`" in snapshot_runtime
+    assert "`analysis-run-evidence.sha256`" in snapshot_runtime
+    assert "`operator-review.sha256`" in snapshot_runtime
+    assert "deterministic weekly review buckets and bounded operator review artifacts" in snapshot_runtime
