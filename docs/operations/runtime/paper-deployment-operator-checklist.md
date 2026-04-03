@@ -5,6 +5,14 @@
 2. Provide concrete evidence references (command output, artifact path, run id).
 3. If any item is `NO` or blank, the deployment is not paper-install-ready.
 
+## Current Session Status Note (2026-04-03)
+For the latest bounded staging and read-only paper inspection progress captured
+on 2026-04-03, see:
+- `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
+
+This note is informational only and does not replace a fully completed
+checklist.
+
 ## Required Evidence Output Names
 Use these exact evidence identifiers in the checklist references:
 - `EVIDENCE_STAGING_VALIDATION_LOG`
