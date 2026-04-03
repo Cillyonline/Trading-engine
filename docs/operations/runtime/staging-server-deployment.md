@@ -218,6 +218,12 @@ Status interpretation:
 Required evidence output name used by the acceptance gate:
 - `EVIDENCE_STAGING_VALIDATION_LOG` (captures this runbook's validation output).
 
+## Session Progress Note (2026-04-03)
+For the bounded server session progress verified on 2026-04-03, including
+localhost binding correction, staging validation markers, and open follow-up
+evidence steps, see:
+- `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
+
 ## Test Gate
 Repository gate for this issue:
 

@@ -177,3 +177,13 @@ The manual operator steps defined above are automated by the following scripts i
 All automation scripts use the same canonical state authority and derivation functions as the paper inspection API. Evidence files are written to `runs/` subdirectories (excluded from version control).
 
 The full automation contract is defined in `docs/operations/runtime/p53-automated-review-operations.md`.
+
+## Session Progress Note (2026-04-03)
+
+For the bounded runtime status verified on 2026-04-03, including:
+- validated read-only inspection of `/paper/*` and `/trading-core/*` surfaces in
+  empty-state form, and
+- pending P53 evidence automation steps required before any
+  `paper-install-ready` claim,
+
+see `docs/operations/runtime/staging-paper-progress-2026-04-03.md`.
