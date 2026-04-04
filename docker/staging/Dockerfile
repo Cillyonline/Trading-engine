@@ -10,6 +10,7 @@ RUN python -m pip install -U pip uv
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+COPY scripts ./scripts
 
 RUN uv sync --frozen --no-dev
 RUN mkdir -p /data/db /data/artifacts /data/logs /data/runtime-state /app/runs/phase6

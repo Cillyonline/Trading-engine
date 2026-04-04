@@ -38,6 +38,7 @@ def test_staging_artifacts_define_canonical_runtime_contract() -> None:
     assert "FROM python:3.12.8-slim" in dockerfile_content
     assert "python -m pip install -U pip uv" in dockerfile_content
     assert "uv sync --frozen --no-dev" in dockerfile_content
+    assert "COPY scripts ./scripts" in dockerfile_content
     assert 'CILLY_DB_PATH="/data/db/cilly_trading.db"' in dockerfile_content
     assert "RUN mkdir -p /data/db /data/artifacts /data/logs /data/runtime-state /app/runs/phase6" in dockerfile_content
     assert "HEALTHCHECK" in dockerfile_content

@@ -44,6 +44,22 @@ def test_p53_automation_doc_exists_and_defines_scope() -> None:
     assert "restart" in content.lower()
 
 
+def test_p53_automation_doc_defines_authoritative_bounded_staging_execution_path() -> None:
+    content = (
+        REPO_ROOT / "docs" / "operations" / "runtime" / "p53-automated-review-operations.md"
+    ).read_text(encoding="utf-8")
+
+    assert "### Authoritative Bounded Staging Execution Path" in content
+    assert "docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api" in content
+    assert "/app/scripts/run_post_run_reconciliation.py" in content
+    assert "/app/scripts/generate_weekly_review.py" in content
+    assert "/app/scripts/capture_restart_evidence.py" in content
+    assert "/data/db/cilly_trading.db" in content
+    assert "/data/artifacts/reconciliation" in content
+    assert "/data/artifacts/weekly-review" in content
+    assert "/data/artifacts/restart-evidence" in content
+
+
 def test_p53_automation_doc_defines_post_run_reconciliation_script() -> None:
     content = (
         REPO_ROOT / "docs" / "operations" / "runtime" / "p53-automated-review-operations.md"

@@ -28,10 +28,10 @@ Already validated:
 - persisted staging DB file at `/srv/cilly/staging/db/cilly_trading.db`
 
 Still open before final `paper-install-ready` acceptance:
-- `python3 scripts/run_post_run_reconciliation.py`
-- `python3 scripts/generate_weekly_review.py`
-- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
-- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
 
 Until these four commands are executed and linked with concrete evidence
 references, this checklist remains `NOT ACCEPTED: REMAIN STAGING`.
@@ -87,12 +87,12 @@ Use these exact evidence identifiers in the checklist references:
 
 The following scripts automate evidence capture for Section E items:
 
-- **Post-run reconciliation**: `python3 scripts/run_post_run_reconciliation.py` (supports E1, E4)
-- **Weekly review artifacts (R1–R7)**: `python3 scripts/generate_weekly_review.py` (supports E2)
-- **Pre-restart baseline**: `python3 scripts/capture_restart_evidence.py --phase pre-restart` (supports E3)
-- **Post-restart verification**: `python3 scripts/capture_restart_evidence.py --phase post-restart` (supports E4)
+- **Post-run reconciliation**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation` (supports E1, E4)
+- **Weekly review artifacts (R1-R7)**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` (supports E2)
+- **Pre-restart baseline**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` (supports E3)
+- **Post-restart verification**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` (supports E4)
 
-Evidence output directories: `runs/reconciliation/`, `runs/weekly-review/`, `runs/restart-evidence/`
+Evidence output directories in bounded staging: `/data/artifacts/reconciliation`, `/data/artifacts/weekly-review`, `/data/artifacts/restart-evidence`
 
 See `docs/operations/runtime/p53-automated-review-operations.md` for the full automation contract.
 
@@ -112,4 +112,3 @@ Final decision (`ACCEPTED: PAPER_INSTALL_READY` or `NOT ACCEPTED: REMAIN STAGING
 Operator name:
 
 Date (UTC):
-
