@@ -178,6 +178,26 @@ All automation scripts use the same canonical state authority and derivation fun
 
 The full automation contract is defined in `docs/operations/runtime/p53-automated-review-operations.md`.
 
+## OPS-P55 Freeze Status (2026-04-03)
+The runtime/operator documentation freeze separates status into validated
+bounded read-only workflow checks vs pending final evidence automation.
+
+Validated in bounded read-only scope:
+- `GET /paper/workflow` returned `validation.ok: true`
+- `GET /paper/reconciliation` returned `ok: true`, `summary.mismatches: 0`
+- `/paper/*` and `/trading-core/*` inspection surfaces were consistent in empty
+  initial state
+- bounded staging deployment and localhost-only access posture were validated
+
+Still open before any `paper-install-ready` claim:
+- `python3 scripts/run_post_run_reconciliation.py`
+- `python3 scripts/generate_weekly_review.py`
+- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
+- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+
+This freeze note adds documentation clarity only and does not change runtime or
+API behavior.
+
 ## Session Progress Note (2026-04-03)
 
 For the bounded runtime status verified on 2026-04-03, including:

@@ -218,6 +218,33 @@ Status interpretation:
 Required evidence output name used by the acceptance gate:
 - `EVIDENCE_STAGING_VALIDATION_LOG` (captures this runbook's validation output).
 
+## OPS-P55 Frozen Validation Status (2026-04-03)
+This runtime documentation freeze records bounded staging and read-only paper
+inspection status as verified on 2026-04-03.
+
+Validated in scope:
+- bounded staging deployment validated
+- localhost-only exposure validated (`127.0.0.1:18000:8000`)
+- `.env` and required host staging directories validated
+- `python3 scripts/validate_staging_deployment.py` validated
+- `/health/engine`, `/health/data`, `/health/guards` validated with ready state
+- database file validated at `/srv/cilly/staging/db/cilly_trading.db`
+
+Validated as read-only paper inspection (not paper-install-ready):
+- `/paper/workflow` validated with `validation.ok: true`
+- `/paper/reconciliation` validated with `ok: true`, `mismatches: 0`
+- trading-core and `/paper/*` inspection surfaces validated as consistent in
+  empty initial state
+
+Still open before any `paper-install-ready` claim:
+- `python3 scripts/run_post_run_reconciliation.py`
+- `python3 scripts/generate_weekly_review.py`
+- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
+- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+
+This freeze note is documentation-only and introduces no runtime/API behavior
+change.
+
 ## Session Progress Note (2026-04-03)
 For the bounded server session progress verified on 2026-04-03, including
 localhost binding correction, staging validation markers, and open follow-up
