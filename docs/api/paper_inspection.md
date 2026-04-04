@@ -176,9 +176,9 @@ This workflow is read-only and review-oriented. It does not introduce mutation e
 
 Post-run reconciliation, weekly review artifact generation, and restart/recovery evidence capture are automated by the P53 scripts:
 
-- `python scripts/run_post_run_reconciliation.py` — automated post-run reconciliation with evidence output.
-- `python scripts/generate_weekly_review.py` — deterministic R1–R7 weekly review bundle generation.
-- `python scripts/capture_restart_evidence.py` — restart/recovery evidence with optional baseline comparison.
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation` - automated post-run reconciliation with evidence output.
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` - deterministic R1-R7 weekly review bundle generation.
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` and `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` - restart/recovery evidence with baseline comparison.
 
 All automation uses the same canonical state authority and derivation functions as the endpoints documented above. The full automation contract is in `docs/operations/runtime/p53-automated-review-operations.md`.
 

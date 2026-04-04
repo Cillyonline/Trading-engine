@@ -22,17 +22,34 @@ Out of scope:
 
 ## Automated Scripts
 
+### Authoritative Bounded Staging Execution Path
+
+For bounded staging server operation, the authoritative execution path is to run
+the scripts inside the staging runtime container:
+
+`docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api ...`
+
+Use runtime paths:
+- DB path: `/data/db/cilly_trading.db`
+- Evidence output base: `/data/artifacts`
+
+This avoids host Python dependency drift and uses the packaged runtime
+dependencies and packaged script files at `/app/scripts`.
+
 ### Post-Run Reconciliation
 
 ```bash
-python scripts/run_post_run_reconciliation.py
-python scripts/run_post_run_reconciliation.py --db-path /path/to/cilly_trading.db
-python scripts/run_post_run_reconciliation.py --evidence-dir runs/reconciliation
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_post_run_reconciliation.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/reconciliation
 ```
 
 Runs after each execution cycle. Loads canonical entities from the SQLite execution repository, derives positions and account state, validates cross-entity and account-equation consistency, and writes a timestamped evidence JSON file.
 
-Evidence output directory: `runs/reconciliation/`
+Evidence output directory (bounded staging runtime): `/data/artifacts/reconciliation`
+
+Local repository default output (non-staging usage): `runs/reconciliation/`
 
 Evidence markers:
 - `RECONCILIATION:PASS` — zero mismatches, reconciliation clean
@@ -47,14 +64,17 @@ Exit codes:
 ### Weekly Review Artifact Generation
 
 ```bash
-python scripts/generate_weekly_review.py
-python scripts/generate_weekly_review.py --db-path /path/to/cilly_trading.db
-python scripts/generate_weekly_review.py --evidence-dir runs/weekly-review
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/generate_weekly_review.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/weekly-review
 ```
 
 Produces a deterministic weekly review evidence bundle containing the R1–R7 artifacts defined in the Phase 44 operator workflow. Each artifact is captured by reading canonical state and applying the same derivation logic used by the paper inspection API.
 
-Evidence output directory: `runs/weekly-review/`
+Evidence output directory (bounded staging runtime): `/data/artifacts/weekly-review`
+
+Local repository default output (non-staging usage): `runs/weekly-review/`
 
 Evidence markers:
 - `WEEKLY_REVIEW:PASS` — all R1–R7 artifacts valid
@@ -70,18 +90,26 @@ Exit codes:
 
 ```bash
 # Pre-restart baseline
-python scripts/capture_restart_evidence.py --phase pre-restart
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/capture_restart_evidence.py \
+  --phase pre-restart \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/restart-evidence
 
 # Post-restart verification
-python scripts/capture_restart_evidence.py --phase post-restart
-
-# Post-restart with baseline comparison
-python scripts/capture_restart_evidence.py --phase post-restart --baseline runs/restart-evidence/pre-restart-pass-*.json
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/capture_restart_evidence.py \
+  --phase post-restart \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/restart-evidence \
+  --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json
 ```
 
 Captures a deterministic evidence snapshot before or after a process restart. When a baseline file is provided, compares entity counts and reconciliation state to verify restart integrity.
 
-Evidence output directory: `runs/restart-evidence/`
+Evidence output directory (bounded staging runtime): `/data/artifacts/restart-evidence`
+
+Local repository default output (non-staging usage): `runs/restart-evidence/`
 
 Evidence markers:
 - `RESTART_EVIDENCE:PRE_RESTART:PASS` — pre-restart baseline captured clean

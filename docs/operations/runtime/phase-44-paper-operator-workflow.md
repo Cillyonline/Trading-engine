@@ -170,9 +170,9 @@ The sole source of truth for paper execution state is `SqliteCanonicalExecutionR
 
 The manual operator steps defined above are automated by the following scripts introduced in P53:
 
-- **Post-run reconciliation**: `python scripts/run_post_run_reconciliation.py` — runs after each execution cycle to validate reconciliation automatically.
-- **Weekly review artifacts (R1–R7)**: `python scripts/generate_weekly_review.py` — produces deterministic weekly review evidence bundles.
-- **Restart/recovery evidence**: `python scripts/capture_restart_evidence.py` — captures pre-restart baselines and post-restart verification evidence.
+- **Post-run reconciliation**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation` - runs after each execution cycle to validate reconciliation automatically.
+- **Weekly review artifacts (R1-R7)**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` - produces deterministic weekly review evidence bundles.
+- **Restart/recovery evidence**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` and `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` - captures pre-restart baselines and post-restart verification evidence.
 
 All automation scripts use the same canonical state authority and derivation functions as the paper inspection API. Evidence files are written to `runs/` subdirectories (excluded from version control).
 
@@ -190,10 +190,10 @@ Validated in bounded read-only scope:
 - bounded staging deployment and localhost-only access posture were validated
 
 Still open before any `paper-install-ready` claim:
-- `python3 scripts/run_post_run_reconciliation.py`
-- `python3 scripts/generate_weekly_review.py`
-- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
-- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
 
 This freeze note adds documentation clarity only and does not change runtime or
 API behavior.

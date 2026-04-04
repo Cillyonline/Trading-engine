@@ -202,6 +202,20 @@ Validation stages:
 
 Expected success marker: `STAGING_VALIDATE:SUCCESS`.
 
+## P53 Operator Evidence Commands (Bounded Staging Runtime)
+Run these from repository root on the staging host:
+
+```bash
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json
+```
+
+The `exec api` path is authoritative for bounded staging server evidence
+capture because runtime dependencies and script files are part of the container
+image.
+
 ## Conflicting Guidance Handling
 Any local-run or local development installation guidance is non-canonical for
 first-clean-server install. For first-clean-server install and startup, use this
@@ -237,10 +251,10 @@ Validated as read-only paper inspection (not paper-install-ready):
   empty initial state
 
 Still open before any `paper-install-ready` claim:
-- `python3 scripts/run_post_run_reconciliation.py`
-- `python3 scripts/generate_weekly_review.py`
-- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
-- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
 
 This freeze note is documentation-only and introduces no runtime/API behavior
 change.

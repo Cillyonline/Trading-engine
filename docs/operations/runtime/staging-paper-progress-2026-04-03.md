@@ -23,10 +23,10 @@ Status is frozen as documented evidence from the 2026-04-03 server session.
   initial state
 
 ### C) Final paper-install-ready evidence (open)
-- `python3 scripts/run_post_run_reconciliation.py`
-- `python3 scripts/generate_weekly_review.py`
-- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
-- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
 
 This freeze note is documentation-only and does not change runtime/API logic.
 
@@ -102,12 +102,11 @@ This freeze note is documentation-only and does not change runtime/API logic.
 - final paper-install-ready evidence capture still pending
 
 ## Not Completed Yet
-The following P53 evidence automation scripts were not fully executed in this
-session:
-- `python scripts/run_post_run_reconciliation.py`
-- `python scripts/generate_weekly_review.py`
-- `python scripts/capture_restart_evidence.py --phase pre-restart`
-- `python scripts/capture_restart_evidence.py --phase post-restart`
+The following bounded staging P53 evidence automation commands were not fully executed in this session:
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
 
 Therefore, the formal full paper-install-ready checklist remains incomplete as
 of 2026-04-03.
