@@ -6,6 +6,30 @@ Capture the bounded, evidence-based status verified on 2026-04-03.
 This note documents observed staging and paper inspection status only. It does
 not claim live trading, broker readiness, or production readiness.
 
+## OPS-P55 Frozen Boundary Snapshot
+Status is frozen as documented evidence from the 2026-04-03 server session.
+
+### A) Bounded staging deployment (validated)
+- localhost-only exposure validated: `127.0.0.1:18000:8000`
+- `.env` and required host directories validated
+- `python3 scripts/validate_staging_deployment.py` validated
+- `/health/engine`, `/health/data`, `/health/guards` validated as ready
+- staging DB file validated at `/srv/cilly/staging/db/cilly_trading.db`
+
+### B) Read-only paper inspection (validated)
+- `/paper/workflow` validated with `validation.ok: true`
+- `/paper/reconciliation` validated with `ok: true`, `mismatches: 0`
+- `/paper/*` and `/trading-core/*` surfaces validated as consistent in empty
+  initial state
+
+### C) Final paper-install-ready evidence (open)
+- `python3 scripts/run_post_run_reconciliation.py`
+- `python3 scripts/generate_weekly_review.py`
+- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
+- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+
+This freeze note is documentation-only and does not change runtime/API logic.
+
 ## Verified Today
 
 ### 1) Server Foundation

@@ -13,6 +13,29 @@ on 2026-04-03, see:
 This note is informational only and does not replace a fully completed
 checklist.
 
+## OPS-P55 Freeze Snapshot (2026-04-03)
+The current runtime/operator documentation freeze separates the boundary status
+as follows:
+
+Already validated:
+- bounded staging deployment
+- localhost-only binding (`127.0.0.1:18000:8000`)
+- health readiness (`/health/engine`, `/health/data`, `/health/guards`)
+- read-only paper inspection validation (`/paper/workflow` with
+  `validation.ok: true`, `/paper/reconciliation` with `ok: true`,
+  `mismatches: 0`)
+- consistent empty-state inspection across `/trading-core/*` and `/paper/*`
+- persisted staging DB file at `/srv/cilly/staging/db/cilly_trading.db`
+
+Still open before final `paper-install-ready` acceptance:
+- `python3 scripts/run_post_run_reconciliation.py`
+- `python3 scripts/generate_weekly_review.py`
+- `python3 scripts/capture_restart_evidence.py --phase pre-restart`
+- `python3 scripts/capture_restart_evidence.py --phase post-restart`
+
+Until these four commands are executed and linked with concrete evidence
+references, this checklist remains `NOT ACCEPTED: REMAIN STAGING`.
+
 ## Required Evidence Output Names
 Use these exact evidence identifiers in the checklist references:
 - `EVIDENCE_STAGING_VALIDATION_LOG`
@@ -64,10 +87,10 @@ Use these exact evidence identifiers in the checklist references:
 
 The following scripts automate evidence capture for Section E items:
 
-- **Post-run reconciliation**: `python scripts/run_post_run_reconciliation.py` (supports E1, E4)
-- **Weekly review artifacts (R1–R7)**: `python scripts/generate_weekly_review.py` (supports E2)
-- **Pre-restart baseline**: `python scripts/capture_restart_evidence.py --phase pre-restart` (supports E3)
-- **Post-restart verification**: `python scripts/capture_restart_evidence.py --phase post-restart` (supports E4)
+- **Post-run reconciliation**: `python3 scripts/run_post_run_reconciliation.py` (supports E1, E4)
+- **Weekly review artifacts (R1–R7)**: `python3 scripts/generate_weekly_review.py` (supports E2)
+- **Pre-restart baseline**: `python3 scripts/capture_restart_evidence.py --phase pre-restart` (supports E3)
+- **Post-restart verification**: `python3 scripts/capture_restart_evidence.py --phase post-restart` (supports E4)
 
 Evidence output directories: `runs/reconciliation/`, `runs/weekly-review/`, `runs/restart-evidence/`
 
@@ -89,3 +112,4 @@ Final decision (`ACCEPTED: PAPER_INSTALL_READY` or `NOT ACCEPTED: REMAIN STAGING
 Operator name:
 
 Date (UTC):
+
