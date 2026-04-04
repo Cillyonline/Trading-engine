@@ -50,6 +50,7 @@ def get_runtime_introspection_payload() -> RuntimeIntrospectionPayload:
 
     runtime_controller = get_runtime_controller()
     started_at_iso = _RUNTIME_INTROSPECTION_STARTED_AT.isoformat()
+    updated_at_iso = _runtime_updated_at().isoformat()
 
     return {
         "schema_version": _RUNTIME_INTROSPECTION_SCHEMA_VERSION,
@@ -57,7 +58,7 @@ def get_runtime_introspection_payload() -> RuntimeIntrospectionPayload:
         "mode": runtime_controller.state,
         "timestamps": {
             "started_at": started_at_iso,
-            "updated_at": started_at_iso,
+            "updated_at": updated_at_iso,
         },
         "ownership": {
             "owner_tag": _RUNTIME_OWNERSHIP_TAG,
@@ -72,6 +73,10 @@ def get_runtime_introspection_payload() -> RuntimeIntrospectionPayload:
             for metadata in _RUNTIME_OBSERVABILITY_REGISTRY.list_extensions_metadata()
         ],
     }
+
+
+def _runtime_updated_at() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def get_runtime_observability_registry() -> RuntimeObservabilityRegistry:

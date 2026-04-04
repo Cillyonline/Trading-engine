@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+import cilly_trading.engine.runtime_introspection as runtime_introspection
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
 
@@ -142,6 +143,35 @@ def test_health_endpoint_reports_unavailable_boundary(monkeypatch) -> None:
     assert response.json()["reason"] == "bounded_runtime_ready"
     assert response.json()["runtime_status"] == "unavailable"
     assert response.json()["runtime_reason"] == "runtime_running_timeout"
+
+
+def test_health_endpoints_keep_running_runtime_fresh_during_idle_longrun(monkeypatch) -> None:
+    class _RuntimeStateStub:
+        state = "running"
+
+    fixed_now = datetime(2026, 1, 1, 14, 0, 0, tzinfo=timezone.utc)
+    started_at = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "_health_now", lambda: fixed_now)
+    monkeypatch.setattr(runtime_introspection, "get_runtime_controller", lambda: _RuntimeStateStub())
+    monkeypatch.setattr(runtime_introspection, "_RUNTIME_INTROSPECTION_STARTED_AT", started_at)
+    monkeypatch.setattr(
+        runtime_introspection,
+        "_runtime_updated_at",
+        lambda: fixed_now - timedelta(seconds=2),
+    )
+
+    with TestClient(api_main.app) as client:
+        health = client.get("/health", headers=READ_ONLY_HEADERS)
+        engine = client.get("/health/engine", headers=READ_ONLY_HEADERS)
+
+    assert health.status_code == 200
+    assert health.json()["runtime_status"] == "healthy"
+    assert health.json()["runtime_reason"] == "runtime_running_fresh"
+    assert engine.status_code == 200
+    assert engine.json()["runtime_status"] == "healthy"
+    assert engine.json()["runtime_reason"] == "runtime_running_fresh"
 
 
 def test_ui_endpoint_serves_html(monkeypatch) -> None:

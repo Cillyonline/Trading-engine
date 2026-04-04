@@ -37,6 +37,11 @@ def test_runtime_introspection_snapshot_with_extensions(monkeypatch) -> None:
         "_RUNTIME_INTROSPECTION_STARTED_AT",
         datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
     )
+    monkeypatch.setattr(
+        runtime_introspection,
+        "_runtime_updated_at",
+        lambda: datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc),
+    )
 
     with TestClient(api_main.app) as client:
         payload = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json()
