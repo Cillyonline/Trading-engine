@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 import api.main as api_main
 from cilly_trading.engine.observability_extensions import RuntimeObservabilityRegistry
@@ -23,6 +25,7 @@ def _build_registry_for_tests() -> RuntimeObservabilityRegistry:
 
 def test_runtime_introspection_contract_is_explicit_and_stable(monkeypatch) -> None:
     runtime = _RuntimeStateStub("running")
+    fixed_updated_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
 
     def _start() -> str:
         return "running"
@@ -34,6 +37,7 @@ def test_runtime_introspection_contract_is_explicit_and_stable(monkeypatch) -> N
     monkeypatch.setattr(api_main, "get_runtime_controller", _runtime)
     monkeypatch.setattr(runtime_introspection, "get_runtime_controller", _runtime)
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+    monkeypatch.setattr(runtime_introspection, "_runtime_updated_at", lambda: fixed_updated_at)
 
     with TestClient(api_main.app) as client:
         first = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
@@ -50,7 +54,10 @@ def test_runtime_introspection_contract_is_explicit_and_stable(monkeypatch) -> N
         "schema_version": "v1",
         "runtime_id": first_payload["runtime_id"],
         "mode": "running",
-        "timestamps": first_payload["timestamps"],
+        "timestamps": {
+            "started_at": first_payload["timestamps"]["started_at"],
+            "updated_at": "2026-01-01T12:00:05+00:00",
+        },
         "ownership": {"owner_tag": "engine"},
         "extensions": [
             {
@@ -78,6 +85,7 @@ def test_runtime_introspection_contract_is_explicit_and_stable(monkeypatch) -> N
 
 def test_runtime_introspection_triggers_no_persistence_writes(monkeypatch) -> None:
     runtime = _RuntimeStateStub("running")
+    fixed_updated_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
 
     def _start() -> str:
         return "running"
@@ -97,6 +105,7 @@ def test_runtime_introspection_triggers_no_persistence_writes(monkeypatch) -> No
     monkeypatch.setattr(api_main.analysis_run_repo, "save_run", _unexpected_save_run)
     monkeypatch.setattr(api_main.signal_repo, "save_signals", _unexpected_save_signals)
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+    monkeypatch.setattr(runtime_introspection, "_runtime_updated_at", lambda: fixed_updated_at)
 
     with TestClient(api_main.app) as client:
         response = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS)
@@ -106,11 +115,13 @@ def test_runtime_introspection_triggers_no_persistence_writes(monkeypatch) -> No
 
 def test_runtime_introspection_rejects_missing_and_invalid_roles(monkeypatch) -> None:
     runtime = _RuntimeStateStub("running")
+    fixed_updated_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
 
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "get_runtime_controller", lambda: runtime)
     monkeypatch.setattr(runtime_introspection, "get_runtime_controller", lambda: runtime)
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+    monkeypatch.setattr(runtime_introspection, "_runtime_updated_at", lambda: fixed_updated_at)
 
     with TestClient(api_main.app) as client:
         missing = client.get("/runtime/introspection")
@@ -163,13 +174,39 @@ def test_system_state_uses_internal_helper_not_runtime_route_handler(monkeypatch
 
 def test_runtime_introspection_is_deterministic_across_repeated_calls(monkeypatch) -> None:
     runtime = _RuntimeStateStub("running")
+    fixed_updated_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=timezone.utc)
 
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "get_runtime_controller", lambda: runtime)
     monkeypatch.setattr(runtime_introspection, "get_runtime_controller", lambda: runtime)
     monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+    monkeypatch.setattr(runtime_introspection, "_runtime_updated_at", lambda: fixed_updated_at)
 
     with TestClient(api_main.app) as client:
         payloads = [client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json() for _ in range(5)]
 
     assert payloads[0] == payloads[1] == payloads[2] == payloads[3] == payloads[4]
+
+
+def test_runtime_introspection_advances_updated_at_across_calls(monkeypatch) -> None:
+    runtime = _RuntimeStateStub("running")
+    updated_values = iter(
+        [
+            datetime(2026, 1, 1, 12, 0, 1, tzinfo=timezone.utc),
+            datetime(2026, 1, 1, 12, 0, 2, tzinfo=timezone.utc),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "get_runtime_controller", lambda: runtime)
+    monkeypatch.setattr(runtime_introspection, "get_runtime_controller", lambda: runtime)
+    monkeypatch.setattr(runtime_introspection, "_RUNTIME_OBSERVABILITY_REGISTRY", _build_registry_for_tests())
+    monkeypatch.setattr(runtime_introspection, "_runtime_updated_at", lambda: next(updated_values))
+
+    with TestClient(api_main.app) as client:
+        first = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json()
+        second = client.get("/runtime/introspection", headers=READ_ONLY_HEADERS).json()
+
+    assert first["timestamps"]["started_at"] == second["timestamps"]["started_at"]
+    assert first["timestamps"]["updated_at"] == "2026-01-01T12:00:01+00:00"
+    assert second["timestamps"]["updated_at"] == "2026-01-01T12:00:02+00:00"
