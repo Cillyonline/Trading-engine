@@ -54,7 +54,7 @@ def _make_signal(
     symbol: str = "AAPL",
     strategy: str = "rsi2",
     direction: str = "long",
-    score: float = 0.75,
+    score: float = 75.0,
     timestamp: str = "2024-01-15T10:00:00Z",
     stage: str = "setup",
     signal_id: str | None = None,
@@ -79,7 +79,7 @@ def _make_signal(
 
 def test_policy_constants_match_documented_defaults() -> None:
     """AC5: policy constants match the values declared in the policy doc."""
-    assert MIN_SCORE_THRESHOLD == 0.6
+    assert MIN_SCORE_THRESHOLD == 60.0
     assert MAX_POSITION_PCT == Decimal("0.10")
     assert MAX_TOTAL_EXPOSURE_PCT == Decimal("0.80")
     assert MAX_CONCURRENT_POSITIONS == 10
@@ -109,7 +109,7 @@ def test_missing_symbol_returns_reject(worker: BoundedPaperExecutionWorker) -> N
     signal: Signal = {
         "strategy": "rsi2",
         "direction": "long",  # type: ignore[typeddict-item]
-        "score": 0.8,
+        "score": 80.0,
         "timestamp": "2024-01-15T10:00:00Z",
         "stage": "setup",  # type: ignore[typeddict-item]
     }
@@ -123,7 +123,7 @@ def test_missing_strategy_returns_reject(worker: BoundedPaperExecutionWorker) ->
     signal: Signal = {
         "symbol": "AAPL",
         "direction": "long",  # type: ignore[typeddict-item]
-        "score": 0.8,
+        "score": 80.0,
         "timestamp": "2024-01-15T10:00:00Z",
         "stage": "setup",  # type: ignore[typeddict-item]
     }
@@ -132,7 +132,7 @@ def test_missing_strategy_returns_reject(worker: BoundedPaperExecutionWorker) ->
 
 
 def test_score_out_of_range_returns_reject(worker: BoundedPaperExecutionWorker) -> None:
-    result = worker.process_signal(_make_signal(score=1.5))
+    result = worker.process_signal(_make_signal(score=150.0))
     assert result.outcome == "reject:invalid_signal_fields"
     assert "out of range" in (result.reason or "")
 
@@ -150,7 +150,7 @@ def test_unparseable_timestamp_returns_reject(worker: BoundedPaperExecutionWorke
 
 
 def test_score_below_threshold_is_skipped(worker: BoundedPaperExecutionWorker) -> None:
-    result = worker.process_signal(_make_signal(score=0.59))
+    result = worker.process_signal(_make_signal(score=59.0))
     assert result.outcome == "skip:score_below_threshold"
     assert result.order_id is None
 
@@ -158,13 +158,23 @@ def test_score_below_threshold_is_skipped(worker: BoundedPaperExecutionWorker) -
 def test_score_exactly_at_threshold_is_eligible(
     worker: BoundedPaperExecutionWorker,
 ) -> None:
-    result = worker.process_signal(_make_signal(score=0.6))
+    result = worker.process_signal(_make_signal(score=60.0))
     assert result.outcome == "eligible"
 
 
 def test_score_above_threshold_is_eligible(worker: BoundedPaperExecutionWorker) -> None:
-    result = worker.process_signal(_make_signal(score=0.8))
+    result = worker.process_signal(_make_signal(score=80.0))
     assert result.outcome == "eligible"
+
+
+def test_midrange_score_is_not_rejected_as_invalid_field(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Score values in 0..100 must not be rejected by field validation."""
+    result = worker.process_signal(_make_signal(score=46.676762456528515))
+    assert result.outcome == "skip:score_below_threshold"
+    assert result.reason is not None
+    assert "min_score_threshold" in result.reason
 
 
 # ---------------------------------------------------------------------------
@@ -665,9 +675,9 @@ def test_batch_skips_ineligible_and_processes_eligible(
 ) -> None:
     """AC1+AC2: mixed batch — eligible and ineligible signals handled independently."""
     signals = [
-        _make_signal(signal_id="sig-mix-001", symbol="OK1", score=0.8),
-        _make_signal(signal_id="sig-mix-002", symbol="LOW", score=0.3),  # below threshold
-        _make_signal(signal_id="sig-mix-003", symbol="OK2", score=0.9),
+        _make_signal(signal_id="sig-mix-001", symbol="OK1", score=80.0),
+        _make_signal(signal_id="sig-mix-002", symbol="LOW", score=30.0),  # below threshold
+        _make_signal(signal_id="sig-mix-003", symbol="OK2", score=90.0),
     ]
     results = worker.process_batch(signals)
 
