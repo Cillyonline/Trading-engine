@@ -110,6 +110,9 @@ Phase 44 reference links remain navigational and do not override the authoritati
 ### P53 Reference Materials
 - [P53 automated review operations](operations/runtime/p53-automated-review-operations.md)
 
+### OPS-P61 Reference Materials
+- [OPS-P61 Practice and Analysis Article standards](phases/ops-p61-practice-analysis-article-standards.md)
+
 ### DEC-P47 Reference Materials
 - [DEC-P47 qualification claim boundary](phases/dec-p47-qualification-claim-boundary.md)
 
