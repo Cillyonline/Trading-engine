@@ -247,3 +247,28 @@ For the bounded runtime status finalized on 2026-04-05, including:
   reconciliation, weekly-review, and restart-evidence artifacts,
 
 see `docs/operations/runtime/staging-paper-progress-2026-04-03.md`.
+
+## OPS-P60 Signal-to-Paper Operator Path (2026-04-05)
+
+P60 defines and validates the authoritative bounded operator path from eligible
+analysis signals to canonical paper execution state.  The full operator path
+documentation — including inputs, policy gates, operator script usage, and gap
+analysis — is in:
+
+```
+docs/operations/runtime/p60-signal-to-paper-operator-path.md
+```
+
+The bounded operator script for executing the signal-to-paper path is:
+
+```
+scripts/run_paper_execution_cycle.py
+```
+
+This script reads signals from `SqliteSignalRepository`, processes them through
+`BoundedPaperExecutionWorker` (OPS-P52 policy), and writes execution evidence.
+The operator can then verify non-empty paper execution state via the existing
+Phase 44 inspection and reconciliation surfaces.
+
+Non-live boundary: this path does not place live orders, call broker APIs, or
+risk real capital.  It does not imply live-trading readiness.
