@@ -5,36 +5,41 @@
 2. Provide concrete evidence references (command output, artifact path, run id).
 3. If any item is `NO` or blank, the deployment is not paper-install-ready.
 
-## Current Session Status Note (2026-04-03)
-For the latest bounded staging and read-only paper inspection progress captured
-on 2026-04-03, see:
+## Current Session Status Note (2026-04-04)
+For the finalized bounded staging and paper evidence closure captured for
+OPS-P57, see:
 - `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
 
 This note is informational only and does not replace a fully completed
 checklist.
 
-## OPS-P55 Freeze Snapshot (2026-04-03)
-The current runtime/operator documentation freeze separates the boundary status
-as follows:
+## OPS-P57 Final Verification Snapshot (2026-04-04)
+The runtime/operator status for bounded staging paper evidence is:
 
-Already validated:
+Validated and completed:
 - bounded staging deployment
 - localhost-only binding (`127.0.0.1:18000:8000`)
-- health readiness (`/health/engine`, `/health/data`, `/health/guards`)
+- successful staging validation output including `STAGING_VALIDATE:SUCCESS`
+- health readiness (`/health/engine`, `/health/data`, `/health/guards`) with
+  healthy engine runtime (`runtime_running_fresh`)
 - read-only paper inspection validation (`/paper/workflow` with
   `validation.ok: true`, `/paper/reconciliation` with `ok: true`,
   `mismatches: 0`)
 - consistent empty-state inspection across `/trading-core/*` and `/paper/*`
 - persisted staging DB file at `/srv/cilly/staging/db/cilly_trading.db`
+- P53 automation via authoritative bounded staging container path completed:
+  - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
+  - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
+  - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
+  - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
+- automation outcomes verified: post-run reconciliation `PASS`, weekly review
+  `PASS`, pre-restart evidence `PASS`, post-restart evidence `PASS`,
+  `baseline_match: true`
+- evidence artifacts persisted under `/srv/cilly/staging/artifacts/...`
 
-Still open before final `paper-install-ready` acceptance:
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
-
-Until these four commands are executed and linked with concrete evidence
-references, this checklist remains `NOT ACCEPTED: REMAIN STAGING`.
+Bounded acceptance status for this issue scope:
+- `ACCEPTED (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
+- no live-trading, broker, or production-readiness claim
 
 ## Required Evidence Output Names
 Use these exact evidence identifiers in the checklist references:
@@ -93,6 +98,7 @@ The following scripts automate evidence capture for Section E items:
 - **Post-restart verification**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` (supports E4)
 
 Evidence output directories in bounded staging: `/data/artifacts/reconciliation`, `/data/artifacts/weekly-review`, `/data/artifacts/restart-evidence`
+Bound host persistence path: `/srv/cilly/staging/artifacts/...`
 
 See `docs/operations/runtime/p53-automated-review-operations.md` for the full automation contract.
 
@@ -107,7 +113,10 @@ Decision rule:
 - Any `NO` or blank -> `NOT ACCEPTED: REMAIN STAGING`
 - All `YES` -> `ACCEPTED: PAPER_INSTALL_READY`
 
-Final decision (`ACCEPTED: PAPER_INSTALL_READY` or `NOT ACCEPTED: REMAIN STAGING`):
+OPS-P57 bounded evidence status:
+`ACCEPTED (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
+
+Final decision (`ACCEPTED: PAPER_INSTALL_READY` or `NOT ACCEPTED: REMAIN STAGING`) if this checklist is executed as a full gate run:
 
 Operator name:
 

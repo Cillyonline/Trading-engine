@@ -216,6 +216,10 @@ The `exec api` path is authoritative for bounded staging server evidence
 capture because runtime dependencies and script files are part of the container
 image.
 
+In bounded staging, `/data/artifacts/...` is bind-mounted to
+`/srv/cilly/staging/artifacts/...` on the host for persistent evidence
+retention.
+
 ## Conflicting Guidance Handling
 Any local-run or local development installation guidance is non-canonical for
 first-clean-server install. For first-clean-server install and startup, use this
@@ -232,37 +236,48 @@ Status interpretation:
 Required evidence output name used by the acceptance gate:
 - `EVIDENCE_STAGING_VALIDATION_LOG` (captures this runbook's validation output).
 
-## OPS-P55 Frozen Validation Status (2026-04-03)
-This runtime documentation freeze records bounded staging and read-only paper
-inspection status as verified on 2026-04-03.
+## OPS-P57 Final Validation Status (2026-04-04)
+This runtime documentation status records bounded staging and paper evidence
+closure as finally verified on 2026-04-04.
 
 Validated in scope:
 - bounded staging deployment validated
 - localhost-only exposure validated (`127.0.0.1:18000:8000`)
 - `.env` and required host staging directories validated
-- `python3 scripts/validate_staging_deployment.py` validated
-- `/health/engine`, `/health/data`, `/health/guards` validated with ready state
+- `python3 scripts/validate_staging_deployment.py` validated with all success
+  markers including `STAGING_VALIDATE:SUCCESS`
+- `/health/engine`, `/health/data`, `/health/guards` validated with ready
+  state, including healthy engine runtime (`runtime_running_fresh`) and
+  allowing guard decision
 - database file validated at `/srv/cilly/staging/db/cilly_trading.db`
 
-Validated as read-only paper inspection (not paper-install-ready):
+Validated as read-only paper inspection:
 - `/paper/workflow` validated with `validation.ok: true`
 - `/paper/reconciliation` validated with `ok: true`, `mismatches: 0`
 - trading-core and `/paper/*` inspection surfaces validated as consistent in
   empty initial state
 
-Still open before any `paper-install-ready` claim:
+Validated as completed bounded evidence automation:
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
+- results verified: post-run reconciliation `PASS`, weekly review `PASS`,
+  pre-restart evidence `PASS`, post-restart evidence `PASS`,
+  `baseline_match: true`
+- artifacts persisted under `/srv/cilly/staging/artifacts/...`
 
-This freeze note is documentation-only and introduces no runtime/API behavior
+Bounded acceptance status:
+- `ACCEPTED (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
+- no live-trading, broker-integration, or production-readiness claim
+
+This status note is documentation-only and introduces no runtime/API behavior
 change.
 
-## Session Progress Note (2026-04-03)
-For the bounded server session progress verified on 2026-04-03, including
-localhost binding correction, staging validation markers, and open follow-up
-evidence steps, see:
+## Session Progress Note (2026-04-04)
+For the finalized bounded server evidence status including localhost binding,
+staging validation markers, completed P53 automation results, and acceptance
+recording, see:
 - `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
 
 ## Test Gate
