@@ -174,13 +174,16 @@ The manual operator steps defined above are automated by the following scripts i
 - **Weekly review artifacts (R1-R7)**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` - produces deterministic weekly review evidence bundles.
 - **Restart/recovery evidence**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` and `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` - captures pre-restart baselines and post-restart verification evidence.
 
-All automation scripts use the same canonical state authority and derivation functions as the paper inspection API. Evidence files are written to `runs/` subdirectories (excluded from version control).
+All automation scripts use the same canonical state authority and derivation
+functions as the paper inspection API. In bounded staging, evidence files are
+written under `/data/artifacts/...` in the container and persisted on the host
+under `/srv/cilly/staging/artifacts/...`.
 
 The full automation contract is defined in `docs/operations/runtime/p53-automated-review-operations.md`.
 
-## OPS-P55 Freeze Status (2026-04-03)
-The runtime/operator documentation freeze separates status into validated
-bounded read-only workflow checks vs pending final evidence automation.
+## OPS-P57 Final Verified Status (2026-04-04)
+The runtime/operator documentation status now records a completed bounded
+workflow evidence path.
 
 Validated in bounded read-only scope:
 - `GET /paper/workflow` returned `validation.ok: true`
@@ -189,21 +192,29 @@ Validated in bounded read-only scope:
   initial state
 - bounded staging deployment and localhost-only access posture were validated
 
-Still open before any `paper-install-ready` claim:
+Completed bounded evidence automation:
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
+- verified outcomes: post-run reconciliation `PASS`, weekly review `PASS`,
+  pre-restart evidence `PASS`, post-restart evidence `PASS`,
+  `baseline_match: true`
+- evidence persisted under `/srv/cilly/staging/artifacts/...`
 
-This freeze note adds documentation clarity only and does not change runtime or
+Bounded acceptance status:
+- `ACCEPTED (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
+- no live-trading, broker, or production-readiness claim
+
+This status note adds documentation clarity only and does not change runtime or
 API behavior.
 
-## Session Progress Note (2026-04-03)
+## Session Progress Note (2026-04-04)
 
-For the bounded runtime status verified on 2026-04-03, including:
+For the bounded runtime status finalized on 2026-04-04, including:
 - validated read-only inspection of `/paper/*` and `/trading-core/*` surfaces in
   empty-state form, and
-- pending P53 evidence automation steps required before any
-  `paper-install-ready` claim,
+- completed P53 evidence automation with persisted artifacts and acceptance
+  recording,
 
 see `docs/operations/runtime/staging-paper-progress-2026-04-03.md`.

@@ -1,13 +1,15 @@
 # Staging and Paper Progress Note (2026-04-03)
 
 ## Purpose
-Capture the bounded, evidence-based status verified on 2026-04-03.
+Capture the bounded, evidence-based status first frozen on 2026-04-03 and
+finalized after full OPS-P57 verification on 2026-04-04.
 
 This note documents observed staging and paper inspection status only. It does
 not claim live trading, broker readiness, or production readiness.
 
-## OPS-P55 Frozen Boundary Snapshot
-Status is frozen as documented evidence from the 2026-04-03 server session.
+## OPS-P57 Final Verified Boundary Snapshot (2026-04-04)
+Status is now documented as finalized evidence from the bounded staging server
+session.
 
 ### A) Bounded staging deployment (validated)
 - localhost-only exposure validated: `127.0.0.1:18000:8000`
@@ -22,13 +24,19 @@ Status is frozen as documented evidence from the 2026-04-03 server session.
 - `/paper/*` and `/trading-core/*` surfaces validated as consistent in empty
   initial state
 
-### C) Final paper-install-ready evidence (open)
+### C) Final bounded evidence capture (completed)
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
+- post-run reconciliation result: `PASS`
+- weekly review result: `PASS`
+- pre-restart evidence capture result: `PASS`
+- post-restart evidence capture result: `PASS`
+- restart baseline comparison: `baseline_match: true`
+- evidence artifacts persisted under `/srv/cilly/staging/artifacts/...`
 
-This freeze note is documentation-only and does not change runtime/API logic.
+This status note is documentation-only and does not change runtime/API logic.
 
 ## Verified Today
 
@@ -51,7 +59,8 @@ This freeze note is documentation-only and does not change runtime/API logic.
 ### 3) Bounded Staging Runtime
 - Bounded staging container started successfully.
 - `docker compose ps` reported healthy status.
-- `GET /health/engine` verified with `read_only` role.
+- `GET /health/engine` verified with `read_only` role, healthy runtime, and
+  `runtime_running_fresh`.
 - `GET /health/data` verified with `ready=true`.
 - `GET /health/guards` verified with `ready=true`, `decision=allowing`,
   `blocking=false`.
@@ -99,19 +108,12 @@ This freeze note is documentation-only and does not change runtime/API logic.
 ## Current Boundary Status
 - bounded staging deployment validated
 - bounded paper inspection surfaces validated in empty-state/read-only form
-- final paper-install-ready evidence capture still pending
+- bounded P53 evidence automation path completed
+- bounded staging/paper acceptance status: `ACCEPTED
+  (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
 
-## Not Completed Yet
-The following bounded staging P53 evidence automation commands were not fully executed in this session:
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence`
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json`
-
-Therefore, the formal full paper-install-ready checklist remains incomplete as
-of 2026-04-03.
-
-## Next Operator Step (Next Session)
-Execute the pending P53 evidence capture commands above, then complete
-`docs/operations/runtime/paper-deployment-operator-checklist.md` with concrete
-evidence references before any paper-install-ready claim.
+## Boundary and Claim Clarity
+- This document confirms bounded staging/paper acceptance only.
+- This document does not claim live trading readiness.
+- This document does not claim broker integration readiness.
+- This document does not claim production readiness.
