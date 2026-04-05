@@ -170,6 +170,34 @@ The automation evidence outputs map to the operator checklist sections:
 | E3 — Strategy-change baseline | `scripts/capture_restart_evidence.py --phase pre-restart` |
 | E4 — Post-restart verification | `scripts/capture_restart_evidence.py --phase post-restart` |
 
+## OPS-P59 Verified Bounded Evidence-Cycle Status (2026-04-05)
+
+Verified on the bounded staging server:
+- authoritative container command path executed successfully:
+  `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api ...`
+- post-run reconciliation completed with `RECONCILIATION:PASS`
+- weekly review completed with `WEEKLY_REVIEW:PASS` and `all_valid: true`
+- pre-restart evidence completed with `RESTART_EVIDENCE:PRE_RESTART:PASS`
+- post-restart evidence completed with `RESTART_EVIDENCE:POST_RESTART:PASS`
+- restart baseline comparison completed with `baseline_match: true`
+
+Verified persisted evidence locations:
+- `/srv/cilly/staging/artifacts/reconciliation/...`
+- `/srv/cilly/staging/artifacts/weekly-review/...`
+- `/srv/cilly/staging/artifacts/restart-evidence/...`
+
+Observed artifact file patterns:
+- `reconciliation-pass-*.json`
+- `weekly-review-pass-*.json`
+- `pre-restart-pass-*.json`
+- `post-restart-pass-*.json`
+
+Boundary clarity:
+- this status confirms bounded staging/paper evidence operations only
+- no live-trading claim
+- no broker-readiness claim
+- no production-readiness claim
+
 ## Singular State Authority
 
 All automation scripts derive state exclusively from `SqliteCanonicalExecutionRepository`. No alternative state source, in-memory cache, or legacy table is used. The formal contract is defined in `src/cilly_trading/portfolio/paper_state_authority.py`.

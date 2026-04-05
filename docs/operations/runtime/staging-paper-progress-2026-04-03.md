@@ -2,7 +2,8 @@
 
 ## Purpose
 Capture the bounded, evidence-based status first frozen on 2026-04-03 and
-finalized after full OPS-P57 verification on 2026-04-04.
+finalized after OPS-P57 verification on 2026-04-04 and OPS-P59 evidence-cycle
+closure on 2026-04-05.
 
 This note documents observed staging and paper inspection status only. It does
 not claim live trading, broker readiness, or production readiness.
@@ -35,6 +36,49 @@ session.
 - post-restart evidence capture result: `PASS`
 - restart baseline comparison: `baseline_match: true`
 - evidence artifacts persisted under `/srv/cilly/staging/artifacts/...`
+
+This status note is documentation-only and does not change runtime/API logic.
+
+## OPS-P59 First Non-Empty Bounded Evidence Cycle (2026-04-05)
+Status is now documented as verified completion of the first non-empty bounded
+paper/evidence cycle on staging.
+
+### A) Bounded staging deployment and runtime (validated)
+- bounded staging `main` deployment verified on server
+- localhost-only exposure verified as active
+- staging container health verified
+- `/health/engine` verified healthy
+- runtime freshness verified (`runtime_status: healthy`,
+  `runtime_reason: runtime_running_fresh`)
+- `python3 scripts/validate_staging_deployment.py` rerun verified with
+  `STAGING_VALIDATE:SUCCESS`
+
+### B) Bounded read-only paper inspection (validated)
+- `/paper/workflow` verified with `validation.ok: true`
+- `/paper/reconciliation` verified with `ok: true`, `mismatches: 0`
+- `/paper/*` and `/trading-core/*` inspection surfaces verified as consistent
+  in bounded read-only inspection
+
+### C) First non-empty bounded evidence cycle (completed)
+- post-run reconciliation command completed with `RECONCILIATION:PASS`
+- weekly review command completed with `WEEKLY_REVIEW:PASS`
+- weekly review evidence verified with `all_valid: true`
+- pre-restart evidence command completed with
+  `RESTART_EVIDENCE:PRE_RESTART:PASS`
+- post-restart evidence command completed with
+  `RESTART_EVIDENCE:POST_RESTART:PASS`
+- restart baseline comparison verified with `baseline_match: true`
+
+### D) Persisted evidence artifacts (verified)
+- evidence directories verified under:
+  - `/srv/cilly/staging/artifacts/reconciliation/...`
+  - `/srv/cilly/staging/artifacts/weekly-review/...`
+  - `/srv/cilly/staging/artifacts/restart-evidence/...`
+- observed artifact file patterns:
+  - `reconciliation-pass-*.json`
+  - `weekly-review-pass-*.json`
+  - `pre-restart-pass-*.json`
+  - `post-restart-pass-*.json`
 
 This status note is documentation-only and does not change runtime/API logic.
 
@@ -107,8 +151,10 @@ This status note is documentation-only and does not change runtime/API logic.
 
 ## Current Boundary Status
 - bounded staging deployment validated
-- bounded paper inspection surfaces validated in empty-state/read-only form
-- bounded P53 evidence automation path completed
+- bounded paper inspection surfaces validated in read-only form
+- first non-empty bounded paper evidence cycle completed
+- bounded restart evidence cycle completed with `baseline_match: true`
+- bounded P53 evidence automation path completed with persisted artifacts
 - bounded staging/paper acceptance status: `ACCEPTED
   (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
 
