@@ -37,20 +37,20 @@ invocable via a single operator script.
 
 The authoritative operator path is:
 
-1. **Read eligible signals** — from `SqliteSignalRepository` via `list_signals`.
-2. **Instantiate worker** — `BoundedPaperExecutionWorker` with
+1. **Read eligible signals** - from `SqliteSignalRepository` via `list_signals`.
+2. **Instantiate worker** - `BoundedPaperExecutionWorker` with
    `SqliteCanonicalExecutionRepository`.
-3. **Process signals** — `worker.process_signal(signal)` or
+3. **Process signals** - `worker.process_signal(signal)` or
    `worker.process_batch(signals)` applies the 5-step OPS-P52 policy:
    - Eligibility check (required signal fields)
-   - Score threshold check (`>= 0.6`)
+   - Score threshold check (`>= 60.0`, score range `0..100`)
    - Duplicate-entry check (`(symbol, strategy, direction)`)
    - Cooldown check (`24h` per `(symbol, strategy)`)
    - Exposure and position-limit checks
-4. **Persist canonical entities** — eligible signals produce deterministic
+4. **Persist canonical entities** - eligible signals produce deterministic
    `Order`, `ExecutionEvent`, and `Trade` entities persisted to
    `SqliteCanonicalExecutionRepository`.
-5. **Verify via inspection** — operator confirms non-empty paper execution state
+5. **Verify via inspection** - operator confirms non-empty paper execution state
    via `/paper/trades`, `/paper/positions`, `/paper/account`, and validates
    consistency via `/paper/reconciliation`.
 
@@ -81,6 +81,8 @@ docker compose --env-file .env \
   --evidence-dir /data/artifacts/paper-execution
 ```
 
+## Inputs
+
 ### Inputs
 
 | Input | Source | Description |
@@ -90,18 +92,22 @@ docker compose --env-file .env \
 | Signals | `SqliteSignalRepository.list_signals()` | All persisted signals from the database |
 | Execution state | `SqliteCanonicalExecutionRepository` | Canonical orders, events, trades |
 
+## Policy Gates
+
 ### Policy Gates
 
 Every signal passes through the ordered 5-step OPS-P52 policy evaluation before
 any paper entity is created.  The policy gates are:
 
-1. `reject:invalid_signal_fields` — missing or invalid required fields
-2. `skip:score_below_threshold` — signal score below `0.6`
-3. `skip:duplicate_entry` — open position for `(symbol, strategy, direction)`
-4. `skip:cooldown_active` — within `24h` cooldown for `(symbol, strategy)`
-5. `reject:position_size_exceeds_limit` — per-position cap exceeded
-6. `reject:total_exposure_exceeds_limit` — global exposure cap exceeded
-7. `reject:concurrent_position_limit_exceeded` — max concurrent positions exceeded
+1. `reject:invalid_signal_fields` - missing or invalid required fields
+2. `skip:score_below_threshold` - signal score below `60.0` (score range `0..100`)
+3. `skip:duplicate_entry` - open position for `(symbol, strategy, direction)`
+4. `skip:cooldown_active` - within `24h` cooldown for `(symbol, strategy)`
+5. `reject:position_size_exceeds_limit` - per-position cap exceeded
+6. `reject:total_exposure_exceeds_limit` - global exposure cap exceeded
+7. `reject:concurrent_position_limit_exceeded` - max concurrent positions exceeded
+
+## Outputs
 
 ### Outputs
 
@@ -113,7 +119,7 @@ any paper entity is created.  The policy gates are:
 | Exit code 1 | No signals were eligible (all skipped/rejected) |
 | Exit code 2 | Runtime error |
 
-### Evidence File Structure
+## Evidence File Structure
 
 ```json
 {
@@ -134,7 +140,7 @@ any paper entity is created.  The policy gates are:
     {
       "signal_id": "...",
       "outcome": "skip:score_below_threshold",
-      "reason": "score=0.4 < min_score_threshold=0.6"
+      "reason": "score=40.0 < min_score_threshold=60.0"
     }
   ],
   "status": "pass"
@@ -146,10 +152,10 @@ any paper entity is created.  The policy gates are:
 After running the execution cycle, the operator verifies non-empty paper
 execution state using the existing Phase 44 inspection workflow:
 
-1. `GET /paper/trades` — confirm non-empty trade list
-2. `GET /paper/positions` — confirm non-empty position list
-3. `GET /paper/account` — confirm account reflects execution state
-4. `GET /paper/reconciliation` — require `ok: true`, `mismatches: 0`
+1. `GET /paper/trades` - confirm non-empty trade list
+2. `GET /paper/positions` - confirm non-empty position list
+3. `GET /paper/account` - confirm account reflects execution state
+4. `GET /paper/reconciliation` - require `ok: true`, `mismatches: 0`
 
 Alternatively, run the existing P53 post-run reconciliation script:
 
@@ -167,6 +173,8 @@ python scripts/run_post_run_reconciliation.py --db-path /path/to/cilly_trading.d
 - **Documentation**: The end-to-end operator path from signals to paper
   execution state was not clearly documented as a single bounded workflow.
   This is now documented in this file.
+
+## Remaining Boundaries
 
 ### Remaining Boundaries
 
@@ -194,3 +202,97 @@ This operator path operates exclusively within the bounded paper simulation:
 - Worker: `src/cilly_trading/engine/paper_execution_worker.py`
 - State authority: `src/cilly_trading/portfolio/paper_state_authority.py`
 - P53 automation: `docs/operations/runtime/p53-automated-review-operations.md`
+
+## OPS-P62 First Non-Empty Bounded Paper Execution Cycle (2026-04-05)
+
+This section records the first operationally verified non-empty bounded paper
+execution cycle in staging, plus immediate repeat-run duplicate-entry safety.
+
+### Environment and Runtime
+
+- host: Debian 13 VPS
+- repo path: `/root/Trading-engine`
+- compose file: `docker/staging/docker-compose.staging.yml`
+- env file: `/root/Trading-engine/.env`
+- staging bind: `127.0.0.1:18000 -> 8000`
+- runtime status: healthy
+- ingestion run id: `02f4d83e-5842-4216-8ba7-51a12be9ea3b`
+
+Execution command:
+
+```bash
+docker compose --env-file /root/Trading-engine/.env \
+  -f docker/staging/docker-compose.staging.yml \
+  exec api python /app/scripts/run_paper_execution_cycle.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/paper-execution
+```
+
+### First Run: Non-Empty Canonical Paper State Created
+
+Observed execution summary:
+- `eligible: 3`
+- `signals_read: 12`
+- `skipped: 9`
+- `status: pass`
+
+Observed eligible symbols:
+- `GS`
+- `WMT`
+- `COST`
+
+Observed paper inspection state after execution:
+- `GET /paper/trades` -> `total: 3`
+- `GET /paper/positions` -> `total: 3`
+
+Observed reconciliation after execution:
+- `ok: true`
+- `orders: 3`
+- `execution_events: 9`
+- `trades: 3`
+- `positions: 3`
+- `mismatches: 0`
+
+### Immediate Repeat Run: Bounded and Duplicate-Entry Safe
+
+The same bounded execution command was run again immediately against the same
+database state.
+
+Observed second-run behavior:
+- `eligible: 0`
+- previously opened `WMT`, `GS`, `COST` were handled as `skip:duplicate_entry`
+- lower-scored signals remained `skip:score_below_threshold`
+
+Observed paper inspection state after second run:
+- `GET /paper/trades` remained `total: 3`
+- `GET /paper/positions` remained `total: 3`
+
+Observed reconciliation after second run:
+- `ok: true`
+- `mismatches: 0`
+- canonical counts unchanged:
+  - `orders: 3`
+  - `execution_events: 9`
+  - `trades: 3`
+  - `positions: 3`
+
+### Verified Bounded Conclusions
+
+Under bounded staging conditions, this confirms:
+- a non-empty execution-eligible signal set can be produced
+- bounded paper execution can create canonical non-empty paper state
+- `/paper/trades` and `/paper/positions` reflect canonical created state
+- reconciliation remains consistent (`ok: true`, `mismatches: 0`) in non-empty
+  state
+- immediate repeat execution remains bounded and duplicate-entry safe
+- no duplicate paper trades are created on immediate re-run
+
+### Claim Boundary
+
+This OPS-P62 record is bounded staging evidence only. It does not claim:
+- live-trading readiness
+- broker integration readiness
+- production readiness
+- strategy calibration completeness
+- portfolio or risk optimization completeness
+
