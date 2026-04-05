@@ -49,8 +49,8 @@ from cilly_trading.repositories import CanonicalExecutionRepository
 # Policy constants (bounded paper simulation parameters — static defaults)
 # ---------------------------------------------------------------------------
 
-#: Minimum signal score required for paper entry (inclusive).
-MIN_SCORE_THRESHOLD: float = 0.6
+#: Minimum signal score required for paper entry (inclusive) on a 0..100 scale.
+MIN_SCORE_THRESHOLD: float = 60.0
 
 #: Maximum fraction of account equity for a single paper position.
 MAX_POSITION_PCT: Decimal = Decimal("0.10")
@@ -190,8 +190,8 @@ def _validate_signal_fields(signal: Signal) -> Optional[str]:
     except (TypeError, ValueError):
         return "score must be numeric"
 
-    if not (0.0 <= score <= 1.0):
-        return f"score={score} out of range [0.0, 1.0]"
+    if not (0.0 <= score <= 100.0):
+        return f"score={score} out of range [0.0, 100.0]"
 
     try:
         _parse_timestamp(signal["timestamp"])  # type: ignore[arg-type]
