@@ -274,10 +274,45 @@ Bounded acceptance status:
 This status note is documentation-only and introduces no runtime/API behavior
 change.
 
-## Session Progress Note (2026-04-04)
+## OPS-P59 First Non-Empty Evidence-Cycle Status (2026-04-05)
+This runtime documentation status records verified completion of the first
+non-empty bounded paper/evidence cycle in staging.
+
+Validated in scope:
+- bounded staging deployment remained healthy with localhost-only exposure
+- `/health/engine` remained healthy with `runtime_status: healthy` and
+  `runtime_reason: runtime_running_fresh`
+- `/paper/workflow` remained valid with `validation.ok: true`
+- `/paper/reconciliation` remained valid with `ok: true`, `mismatches: 0`
+- paper/trading-core inspection surfaces remained consistent in bounded
+  read-only inspection
+- staging validation rerun succeeded via
+  `python3 scripts/validate_staging_deployment.py` with
+  `STAGING_VALIDATE:SUCCESS`
+
+Completed bounded evidence cycle and restart evidence:
+- `run_post_run_reconciliation.py` result: `RECONCILIATION:PASS`
+- `generate_weekly_review.py` result: `WEEKLY_REVIEW:PASS`, `all_valid: true`
+- `capture_restart_evidence.py --phase pre-restart` result:
+  `RESTART_EVIDENCE:PRE_RESTART:PASS`
+- `capture_restart_evidence.py --phase post-restart` result:
+  `RESTART_EVIDENCE:POST_RESTART:PASS`
+- restart baseline comparison result: `baseline_match: true`
+- persisted artifacts verified under `/srv/cilly/staging/artifacts/...`
+  (`reconciliation-pass-*.json`, `weekly-review-pass-*.json`,
+  `pre-restart-pass-*.json`, `post-restart-pass-*.json`)
+
+Bounded acceptance status:
+- `ACCEPTED (BOUNDED_STAGING_PAPER_EVIDENCE_COMPLETE)`
+- no live-trading, broker-integration, or production-readiness claim
+
+This status note is documentation-only and introduces no runtime/API behavior
+change.
+
+## Session Progress Note (2026-04-05)
 For the finalized bounded server evidence status including localhost binding,
-staging validation markers, completed P53 automation results, and acceptance
-recording, see:
+staging validation markers, first non-empty bounded evidence-cycle completion,
+restart evidence completion, and acceptance recording, see:
 - `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
 
 ## Test Gate
