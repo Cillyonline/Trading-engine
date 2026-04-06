@@ -18,6 +18,7 @@ scripts/*
 !scripts/generate_weekly_review.py
 !scripts/capture_restart_evidence.py
 !scripts/run_paper_execution_cycle.py
+!scripts/run_daily_bounded_paper_runtime.py
 
 # Local runtime artifacts (never commit)
 # runs/ stores local execution/test artifacts and must never be committed.
