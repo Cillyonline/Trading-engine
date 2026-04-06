@@ -1,0 +1,283 @@
+# OPS-P63: Daily Bounded Paper Runtime Workflow
+
+## Purpose
+
+Define one deterministic, repeatable daily operator workflow for bounded paper execution in bounded staging.
+
+The workflow documents and validates the ordered runtime path from ingestion through reconciliation and evidence capture.
+
+## Scope Boundary
+
+In scope:
+
+- bounded staging only
+- daily operator runtime workflow definition
+- ordered steps from ingestion to evidence capture
+- explicit verification points and read-only inspection checks
+
+Out of scope:
+
+- live trading
+- broker integration
+- production-readiness claims
+- strategy optimization
+- score or threshold calibration
+- UI or dashboard expansion
+
+## Required Daily Workflow Order
+
+1. Snapshot ingestion
+2. Analysis and signal generation
+3. Bounded paper execution cycle
+4. Reconciliation
+5. Evidence capture and run record
+
+## Step 1 - Snapshot Ingestion
+
+This step is runnable independently.
+
+### Operator Invocation Paths
+
+Local:
+
+```bash
+python scripts/run_snapshot_ingestion.py \
+  --symbols AAPL,MSFT,NVDA,GS,WMT,COST \
+  --timeframe D1 \
+  --limit 90 \
+  --provider yfinance \
+  --db-path cilly_trading.db \
+  --evidence-dir runs/snapshot_ingestion
+```
+
+Bounded staging:
+
+```bash
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_snapshot_ingestion.py \
+  --symbols AAPL,MSFT,NVDA,GS,WMT,COST \
+  --timeframe D1 \
+  --limit 90 \
+  --provider yfinance \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/snapshot_ingestion
+```
+
+### Verification Point
+
+- command emits success evidence file `ingestion-run-<ingestion_run_id>.json`
+- ingestion output includes `result.ingestion_run_id` used by Step 2
+
+## Step 2 - Analysis and Signal Generation
+
+This step is runnable independently with any valid `ingestion_run_id`.
+
+### Operator Invocation Paths
+
+Authoritative endpoint path: `POST /analysis/run`
+
+```bash
+curl -sS -X POST "http://127.0.0.1:18000/analysis/run" \
+  -H "Content-Type: application/json" \
+  -H "X-Cilly-Role: operator" \
+  -d '{
+    "ingestion_run_id": "<INGESTION_RUN_ID>",
+    "symbol": "AAPL",
+    "strategy": "RSI2",
+    "market_type": "stock",
+    "lookback_days": 200
+  }'
+```
+
+### Verification Point
+
+Inspect persisted signal state through the read-only surface:
+
+```bash
+curl -sS -H "X-Cilly-Role: read_only" \
+  "http://127.0.0.1:18000/signals?ingestion_run_id=<INGESTION_RUN_ID>&limit=100"
+```
+
+## Step 3 - Bounded Paper Execution Cycle
+
+This step is runnable independently against existing signal state.
+
+### Operator Invocation Paths
+
+Local:
+
+```bash
+python scripts/run_paper_execution_cycle.py \
+  --db-path cilly_trading.db \
+  --evidence-dir runs/paper-execution
+```
+
+Bounded staging:
+
+```bash
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_paper_execution_cycle.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/paper-execution
+```
+
+### Verification Point
+
+Inspect paper state through read-only surfaces:
+
+```bash
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/trades
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/positions
+```
+
+## Step 4 - Reconciliation
+
+This step is runnable independently after any execution cycle.
+
+### Operator Invocation Paths
+
+Local:
+
+```bash
+python scripts/run_post_run_reconciliation.py \
+  --db-path cilly_trading.db \
+  --evidence-dir runs/reconciliation
+```
+
+Bounded staging:
+
+```bash
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_post_run_reconciliation.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/reconciliation
+```
+
+### Verification Point
+
+Require reconciliation state:
+
+- `ok: true`
+- `mismatches: 0`
+
+Read-only inspection surface:
+
+```bash
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/reconciliation
+```
+
+## Step 5 - Evidence Capture and Run Record
+
+This step is runnable independently for daily evidence capture.
+
+### Operator Invocation Paths
+
+Capture deterministic review evidence:
+
+```bash
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/generate_weekly_review.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/daily-runtime
+```
+
+Capture endpoint snapshots for the daily run record:
+
+```bash
+RUN_DATE="$(date -u +%F)"
+mkdir -p "runs/daily-runtime/${RUN_DATE}"
+
+curl -sS -H "X-Cilly-Role: read_only" \
+  "http://127.0.0.1:18000/signals?ingestion_run_id=<INGESTION_RUN_ID>&limit=100" \
+  > "runs/daily-runtime/${RUN_DATE}/signals.json"
+
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/trades \
+  > "runs/daily-runtime/${RUN_DATE}/paper-trades.json"
+
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/positions \
+  > "runs/daily-runtime/${RUN_DATE}/paper-positions.json"
+
+curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/reconciliation \
+  > "runs/daily-runtime/${RUN_DATE}/paper-reconciliation.json"
+```
+
+## Daily Sequential Command Sequence (Bounded Staging)
+
+The full workflow is runnable sequentially in this order:
+
+```bash
+INGEST_OUTPUT="$(docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_snapshot_ingestion.py \
+  --symbols AAPL,MSFT,NVDA,GS,WMT,COST \
+  --timeframe D1 \
+  --limit 90 \
+  --provider yfinance \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/snapshot_ingestion)"
+
+INGESTION_RUN_ID="$(printf '%s\n' "${INGEST_OUTPUT}" | python -c "import json,sys; print(json.loads(sys.stdin.readline())['result']['ingestion_run_id'])")"
+
+curl -sS -X POST "http://127.0.0.1:18000/analysis/run" \
+  -H "Content-Type: application/json" \
+  -H "X-Cilly-Role: operator" \
+  -d "{\"ingestion_run_id\":\"${INGESTION_RUN_ID}\",\"symbol\":\"AAPL\",\"strategy\":\"RSI2\",\"market_type\":\"stock\",\"lookback_days\":200}"
+
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_paper_execution_cycle.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/paper-execution
+
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/run_post_run_reconciliation.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/reconciliation
+
+docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api \
+  python /app/scripts/generate_weekly_review.py \
+  --db-path /data/db/cilly_trading.db \
+  --evidence-dir /data/artifacts/daily-runtime
+```
+
+## Verification Surfaces (Read-Only)
+
+The workflow verification points use existing surfaces only:
+
+- `/signals`
+- `/paper/trades`
+- `/paper/positions`
+- `/paper/reconciliation`
+
+## Bounded End-to-End Validation Example (2026-04-05)
+
+Bounded staging validation example from the already-validated runtime path:
+
+- ingestion run id observed: `02f4d83e-5842-4216-8ba7-51a12be9ea3b`
+- analysis result produced persisted signals (`signals_read: 12`)
+- bounded paper execution cycle result:
+  - `eligible: 3`
+  - `status: pass`
+- read-only inspection after execution:
+  - `/paper/trades -> total: 3`
+  - `/paper/positions -> total: 3`
+- reconciliation result:
+  - `ok: true`
+  - `mismatches: 0`
+
+This example demonstrates the full daily sequence end-to-end in bounded staging. It does not widen runtime scope.
+
+## Explicit Claim Boundary
+
+This workflow remains bounded and non-live:
+
+- no live orders are placed
+- no broker APIs are called
+- no real capital is at risk
+- no production-readiness claim is made
+- no strategy optimization claim is made
+
+## References
+
+- `docs/operations/runtime/snapshot_ingestion_contract.md`
+- `docs/operations/runtime/p60-signal-to-paper-operator-path.md`
+- `docs/operations/runtime/p53-automated-review-operations.md`
+- `docs/operations/runtime/phase-44-paper-operator-workflow.md`
