@@ -31,6 +31,7 @@ Use this order:
 - [CLI usage](operations/cli/usage.md)
 - [Paper trading boundary](operations/paper-trading.md)
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
+- [OPS-P63 daily bounded paper runtime workflow](operations/runtime/p63-daily-bounded-paper-runtime-workflow.md)
 - [Staging-first deployment topology and runtime contract](operations/runtime/staging-first-deployment-topology.md)
 
 ## UI Surfaces
@@ -109,6 +110,9 @@ Phase 44 reference links remain navigational and do not override the authoritati
 
 ### P53 Reference Materials
 - [P53 automated review operations](operations/runtime/p53-automated-review-operations.md)
+
+### OPS-P63 Reference Materials
+- [OPS-P63 daily bounded paper runtime workflow](operations/runtime/p63-daily-bounded-paper-runtime-workflow.md)
 
 ### OPS-P61 Reference Materials
 - [OPS-P61 Practice and Analysis Article standards](phases/ops-p61-practice-analysis-article-standards.md)
