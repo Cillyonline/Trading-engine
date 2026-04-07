@@ -20,8 +20,10 @@ Closes #<IssueID>
 
 ## Test Evidence
 
+If tests were added or modified, `Not run (not requested)` is not acceptable. The PR must include the command used and full output or CI link.
+
 Command used:
-<paste test command here> `
+<paste test command here>
 
 Result:
 
