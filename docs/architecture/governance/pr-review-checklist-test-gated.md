@@ -8,7 +8,7 @@
 
 ## Test-Gated Requirements
 - [ ] CI status is **green** (all required checks passed)
-- [ ] All tests required by the Issue Acceptance Criteria are present and passing
+- [ ] If tests were added or modified, `Not run (not requested)` is not acceptable. The PR includes the command used and full output or CI link
 
 ## Governance & Scope
 - [ ] Changes are **strictly within** the Active Issue scope
