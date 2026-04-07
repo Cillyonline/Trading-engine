@@ -50,6 +50,32 @@ The command orchestrates:
 - `scripts/run_post_run_reconciliation.py`
 - `scripts/generate_weekly_review.py`
 
+## Base URL by Invocation Context (Critical)
+
+The `--base-url` value depends on where the runner command executes.
+
+Host-context invocation (from host shell; staging bind published on `18000`):
+
+```bash
+python scripts/run_daily_bounded_paper_runtime.py \
+  --db-path cilly_trading.db \
+  --base-url http://127.0.0.1:18000
+```
+
+In-container invocation (from `docker compose ... exec api`; target container port `8000`):
+
+```bash
+docker compose --env-file /root/Trading-engine/.env \
+  -f docker/staging/docker-compose.staging.yml \
+  exec api python /app/scripts/run_daily_bounded_paper_runtime.py \
+  --db-path /data/db/cilly_trading.db \
+  --base-url http://127.0.0.1:8000
+```
+
+Warning: do not use `http://127.0.0.1:18000` inside the `api` container. That
+host bind is not reachable from container-local loopback and will fail during
+`analysis_signal_generation`.
+
 ## Explicit Failure Behavior
 
 The runner is fail-fast:
@@ -86,6 +112,73 @@ The runner captures read-only run-record snapshots from existing surfaces:
 - `/paper/trades`
 - `/paper/positions`
 - `/paper/reconciliation`
+
+## OPS-P65 First Successful Bounded OPS-P64 Staging Run (2026-04-06)
+
+First attempted in-container command (failed due invocation context):
+
+```bash
+docker compose --env-file /root/Trading-engine/.env \
+  -f docker/staging/docker-compose.staging.yml \
+  exec api python /app/scripts/run_daily_bounded_paper_runtime.py \
+  --db-path /data/db/cilly_trading.db \
+  --base-url http://127.0.0.1:18000
+```
+
+Observed failure signature:
+
+- `failed_step: analysis_signal_generation`
+- `detail` included `URLError: <urlopen error [Errno 111] Connection refused>`
+
+Interpretation: invocation-context error only (host-vs-container base-url
+mismatch), not a runner logic defect.
+
+Successful corrected command:
+
+```bash
+docker compose --env-file /root/Trading-engine/.env \
+  -f docker/staging/docker-compose.staging.yml \
+  exec api python /app/scripts/run_daily_bounded_paper_runtime.py \
+  --db-path /data/db/cilly_trading.db \
+  --base-url http://127.0.0.1:8000
+```
+
+Recorded bounded success evidence:
+
+- `status: ok`
+- `ingestion_run_id: 813b4a13-de3d-4633-8968-1a7fbc0af2f3`
+- `analysis_run_id: 89cec8c4d8a92bbecb2c4f6d59eb9d06972b1c4b4f1ed59ee686bca1816787a0`
+- `step_order`:
+  - `snapshot_ingestion`
+  - `analysis_signal_generation`
+  - `bounded_paper_execution_cycle`
+  - `reconciliation`
+  - `evidence_capture`
+- `steps_completed` matched full `step_order` (all ordered steps completed)
+
+Bounded execution interpretation from the same summary:
+
+- bounded paper execution cycle completion: `status: no_eligible`
+- `eligible: 0`
+- `skipped: 12`
+- skip reasons observed: `duplicate_entry`, `score_below_threshold`
+- these bounded skip outcomes are valid non-error completion states
+
+Read-only verification outcomes captured in the run record:
+
+- `/paper/trades` -> `total: 3`
+- `/paper/positions` -> `total: 3`
+- `/paper/reconciliation` -> `ok: true`, `mismatches: 0`
+
+Summary and evidence file paths recorded under:
+
+- summary file:
+  - `/data/artifacts/daily-runtime/2026-04-06/daily-runtime-summary-20260406T144441Z.json`
+- verification surfaces:
+  - `/data/artifacts/daily-runtime/2026-04-06/signals.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-trades.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-positions.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-reconciliation.json`
 
 ## Evidence Path
 

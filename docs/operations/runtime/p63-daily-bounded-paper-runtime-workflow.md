@@ -98,6 +98,17 @@ curl -sS -H "X-Cilly-Role: read_only" \
   "http://127.0.0.1:18000/signals?ingestion_run_id=<INGESTION_RUN_ID>&limit=100"
 ```
 
+### Base URL Context Mapping (Host vs Container)
+
+When invoking the OPS-P64 daily runner, map `--base-url` to invocation context:
+
+- host shell invocation -> `http://127.0.0.1:18000`
+- `docker compose ... exec api` invocation -> `http://127.0.0.1:8000`
+
+Warning: do not use `http://127.0.0.1:18000` from inside the `api` container.
+That value is the host-published bind and causes
+`analysis_signal_generation` connection-refused failures in container context.
+
 ## Step 3 - Bounded Paper Execution Cycle
 
 This step is runnable independently against existing signal state.
@@ -264,6 +275,60 @@ Bounded staging validation example from the already-validated runtime path:
   - `mismatches: 0`
 
 This example demonstrates the full daily sequence end-to-end in bounded staging. It does not widen runtime scope.
+
+## OPS-P65 Bounded OPS-P64 Staging Evidence (2026-04-06)
+
+First in-container run used the wrong base URL and failed at
+`analysis_signal_generation` with
+`URLError: <urlopen error [Errno 111] Connection refused>`.
+This is an invocation-context issue (host-vs-container base-url mismatch), not
+runner logic failure.
+
+Successful in-container command:
+
+```bash
+docker compose --env-file /root/Trading-engine/.env \
+  -f docker/staging/docker-compose.staging.yml \
+  exec api python /app/scripts/run_daily_bounded_paper_runtime.py \
+  --db-path /data/db/cilly_trading.db \
+  --base-url http://127.0.0.1:8000
+```
+
+Recorded summary evidence:
+
+- `status: ok`
+- `ingestion_run_id: 813b4a13-de3d-4633-8968-1a7fbc0af2f3`
+- `analysis_run_id: 89cec8c4d8a92bbecb2c4f6d59eb9d06972b1c4b4f1ed59ee686bca1816787a0`
+- ordered steps completed:
+  - `snapshot_ingestion`
+  - `analysis_signal_generation`
+  - `bounded_paper_execution_cycle`
+  - `reconciliation`
+  - `evidence_capture`
+
+Bounded paper execution cycle interpretation for this run:
+
+- `status: no_eligible`
+- `eligible: 0`
+- `skipped: 12`
+- skip reasons: `duplicate_entry`, `score_below_threshold`
+- interpretation: bounded-valid non-error completion
+
+Read-only verification outcomes in the same run record:
+
+- `/paper/trades` -> `total: 3`
+- `/paper/positions` -> `total: 3`
+- `/paper/reconciliation` -> `ok: true`, `mismatches: 0`
+
+Summary and evidence path:
+
+- summary:
+  - `/data/artifacts/daily-runtime/2026-04-06/daily-runtime-summary-20260406T144441Z.json`
+- evidence files:
+  - `/data/artifacts/daily-runtime/2026-04-06/signals.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-trades.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-positions.json`
+  - `/data/artifacts/daily-runtime/2026-04-06/paper-reconciliation.json`
 
 ## Explicit Claim Boundary
 

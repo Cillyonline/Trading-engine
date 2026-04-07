@@ -18,7 +18,7 @@ It addresses the gap between:
 ### Path exists: YES (bounded, non-live)
 
 A complete bounded path from eligible signals to canonical paper execution state
-exists.  The path is implemented, documented, tested, and operationally
+exists. The path is implemented, documented, tested, and operationally
 invocable via a single operator script.
 
 ### Authoritative Components
@@ -81,7 +81,21 @@ docker compose --env-file .env \
   --evidence-dir /data/artifacts/paper-execution
 ```
 
-## Inputs
+### Host vs Container Base URL Note for Related Runtime Commands
+
+This document uses host-context read-only API checks (for example:
+`http://127.0.0.1:18000/paper/trades`). For related OPS-P63/OPS-P64 commands
+that accept `--base-url`, use context-specific mapping:
+
+- host shell invocation -> `http://127.0.0.1:18000`
+- `docker compose ... exec api` invocation -> `http://127.0.0.1:8000`
+
+Warning: do not use `http://127.0.0.1:18000` inside the `api` container.
+Observed failure signature in OPS-P65 was
+`analysis_signal_generation` + `URLError: <urlopen error [Errno 111] Connection refused>`,
+which is an invocation-context error, not runner logic failure.
+
+## Operator Inputs
 
 ### Inputs
 
@@ -92,12 +106,12 @@ docker compose --env-file .env \
 | Signals | `SqliteSignalRepository.list_signals()` | All persisted signals from the database |
 | Execution state | `SqliteCanonicalExecutionRepository` | Canonical orders, events, trades |
 
-## Policy Gates
+## Policy Gate Set
 
 ### Policy Gates
 
 Every signal passes through the ordered 5-step OPS-P52 policy evaluation before
-any paper entity is created.  The policy gates are:
+any paper entity is created. The policy gates are:
 
 1. `reject:invalid_signal_fields` - missing or invalid required fields
 2. `skip:score_below_threshold` - signal score below `60.0` (score range `0..100`)
@@ -107,7 +121,7 @@ any paper entity is created.  The policy gates are:
 6. `reject:total_exposure_exceeds_limit` - global exposure cap exceeded
 7. `reject:concurrent_position_limit_exceeded` - max concurrent positions exceeded
 
-## Outputs
+## Operator Outputs
 
 ### Outputs
 
@@ -174,11 +188,11 @@ python scripts/run_post_run_reconciliation.py --db-path /path/to/cilly_trading.d
   execution state was not clearly documented as a single bounded workflow.
   This is now documented in this file.
 
-## Remaining Boundaries
+## Boundaries
 
 ### Remaining Boundaries
 
-- The execution cycle script is operator-invoked (manual trigger).  There is
+- The execution cycle script is operator-invoked (manual trigger). There is
   no automated scheduler or API endpoint that triggers execution cycles.
 - The script reads all signals and processes them in batch.  There is no
   incremental or event-driven signal processing.
@@ -295,4 +309,3 @@ This OPS-P62 record is bounded staging evidence only. It does not claim:
 - production readiness
 - strategy calibration completeness
 - portfolio or risk optimization completeness
-
