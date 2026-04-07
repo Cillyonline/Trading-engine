@@ -8,6 +8,43 @@ closure on 2026-04-05.
 This note documents observed staging and paper inspection status only. It does
 not claim live trading, broker readiness, or production readiness.
 
+## OPS-P54 Bounded Acceptance-Gate Execution (2026-04-07)
+Status is now documented as one fully completed paper-install acceptance gate
+execution for issue #907 in the current local runtime path.
+
+Observed in scope:
+- bounded gate execution attempted end-to-end using canonical commands
+- staging validator rerun attempted:
+  - `python scripts/validate_staging_deployment.py` -> failed at compose config
+    due to missing `.env`
+  - `python scripts/validate_staging_deployment.py --env-file .env.example` ->
+    reached `STAGING_VALIDATE:CONFIG_OK`, then failed at compose up
+- compose startup failure evidence captured:
+  - `docker compose --env-file .env.example -f docker/staging/docker-compose.staging.yml up -d --build`
+  - docker API unavailable on
+    `npipe:////./pipe/dockerDesktopLinuxEngine`
+- staging health/paper endpoint probes attempted and recorded:
+  - `/health/engine`, `/health/data`, `/health/guards`, `/paper/workflow`,
+    `/paper/reconciliation` all returned connection failure because no staging
+    runtime was active at `127.0.0.1:18000`
+- paper-consistency tests rerun and passed:
+  - `python -m pytest tests/test_paper_trading_simulator.py tests/test_api_paper_inspection_read.py` -> `11 passed`
+  - `python -m pytest tests/cilly_trading/engine/test_non_live_risk_boundaries.py` -> `3 passed`
+- full repository regression rerun and passed:
+  - `python -m pytest` -> `973 passed, 4 warnings`
+
+Final gate result for this run:
+- `NOT ACCEPTED: REMAIN STAGING`
+
+Explicit bounded gaps:
+- staging runtime could not be started in this local session because Docker
+  daemon for `desktop-linux` was unavailable
+- readiness and long-run paper-review runtime evidence could therefore not be
+  captured as passing in this run
+
+Evidence source of record:
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
+
 ## OPS-P57 Final Verified Boundary Snapshot (2026-04-04)
 Status is now documented as finalized evidence from the bounded staging server
 session.
