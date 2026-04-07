@@ -13,6 +13,14 @@ AI agents are implementation assistants. They MUST NOT:
 
 Architecture decisions belong to the repository owner.
 
+## Authoritative repository content
+
+Files committed to governance, source, configuration, test, runtime, or documentation paths are authoritative repository content.
+
+Helper or drafting artifacts (for example scratch notes, exported issue text, prompt drafts, or temporary working files) are NON-authoritative by default.
+
+Unless the active issue explicitly requires them, helper or drafting artifacts MUST NOT be committed in the repository root or in authoritative tracked paths; keep them outside the repository or in ignored local-only workspace locations.
+
 ## Issue governance
 
 If a GitHub issue is referenced (e.g. `#521`), the agent MUST implement strictly within that issue.
