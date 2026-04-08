@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from cilly_trading.models import compute_signal_id
+from cilly_trading.db import init_db
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 
 
@@ -225,6 +226,145 @@ def test_save_signals_deduplicates_same_analysis_run_and_signal_id(tmp_path: Pat
             WHERE analysis_run_id = ? AND signal_id = ?;
             """,
             ("analysis-run-1", "signal-001"),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert row_count == 1
+
+
+def test_save_signals_deduplicates_same_ingestion_run_and_signal_id_across_analysis_runs(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path)
+    first = _base_signal(
+        ingestion_run_id="ing-dup-001",
+        analysis_run_id="analysis-run-manual",
+        signal_id="signal-dup-001",
+        symbol="AMD",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+    second = _base_signal(
+        ingestion_run_id="ing-dup-001",
+        analysis_run_id="analysis-run-watchlist",
+        signal_id="signal-dup-001",
+        symbol="AMD",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+
+    repo.save_signals([first])
+    repo.save_signals([second])
+
+    rows = repo.list_signals(limit=10)
+    assert len(rows) == 1
+    assert rows[0]["signal_id"] == "signal-dup-001"
+
+    conn = sqlite3.connect(tmp_path / "test_signals.db")
+    try:
+        row_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM signals
+            WHERE ingestion_run_id = ? AND signal_id = ?;
+            """,
+            ("ing-dup-001", "signal-dup-001"),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert row_count == 1
+
+
+def test_repo_init_migrates_legacy_duplicate_ingestion_run_signal_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy_dirty_signals.db"
+    init_db(db_path)
+
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO signals (
+                signal_id,
+                analysis_run_id,
+                ingestion_run_id,
+                symbol,
+                strategy,
+                direction,
+                score,
+                timestamp,
+                stage,
+                timeframe,
+                market_type,
+                data_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                "sig-legacy-001",
+                "analysis-run-manual",
+                "ing-legacy-001",
+                "AAPL",
+                "RSI2",
+                "long",
+                100.0,
+                "2025-01-03T00:00:00+00:00",
+                "setup",
+                "D1",
+                "stock",
+                "yahoo",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO signals (
+                signal_id,
+                analysis_run_id,
+                ingestion_run_id,
+                symbol,
+                strategy,
+                direction,
+                score,
+                timestamp,
+                stage,
+                timeframe,
+                market_type,
+                data_source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (
+                "sig-legacy-001",
+                "analysis-run-watchlist",
+                "ing-legacy-001",
+                "AAPL",
+                "RSI2",
+                "long",
+                100.0,
+                "2025-01-03T00:00:00+00:00",
+                "setup",
+                "D1",
+                "stock",
+                "yahoo",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    repo = SqliteSignalRepository(db_path=db_path)
+
+    items, total = repo.read_signals(ingestion_run_id="ing-legacy-001", limit=20, offset=0)
+    assert total == 1
+    assert len(items) == 1
+    assert items[0]["signal_id"] == "sig-legacy-001"
+
+    conn = sqlite3.connect(db_path)
+    try:
+        row_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM signals
+            WHERE ingestion_run_id = ? AND signal_id = ?;
+            """,
+            ("ing-legacy-001", "sig-legacy-001"),
         ).fetchone()[0]
     finally:
         conn.close()
