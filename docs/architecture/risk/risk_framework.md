@@ -51,7 +51,28 @@ Risk Framework enforcement logic must satisfy the following determinism guarante
 
 These guarantees ensure reproducibility, auditability, and governance consistency.
 
-## 8) MVP Guardrails
+## 8) Non-Live Execution Adapter Boundary
+For bounded non-live execution paths, risk-framework evaluation outcomes are
+adapted into the execution-layer risk decision contract using one deterministic
+mapping path:
+
+- Canonical evaluator source:
+  `src/cilly_trading/risk_framework/risk_evaluator.py`
+- Execution adapter target:
+  `src/cilly_trading/engine/risk/gate.py`
+
+Adapter scope is bounded to non-live operation and maps canonical outcomes for:
+
+- account exposure limit enforcement
+- strategy exposure limit enforcement
+- symbol exposure limit enforcement
+- position-size limit enforcement
+- kill-switch rejection
+
+The adapter does not alter risk rules. It only translates deterministic
+risk-framework outcomes into deterministic execution decision codes.
+
+## 9) MVP Guardrails
 For MVP scope control, the Risk Framework shall exclude the following:
 
 - No live trading

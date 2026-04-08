@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Optional, Sequence
 
+from cilly_trading.engine.risk import evaluate_risk_framework_execution_decision
 from cilly_trading.models import (
     ExecutionEvent,
     Order,
@@ -43,6 +44,7 @@ from cilly_trading.models import (
     sha256_hex,
 )
 from cilly_trading.repositories import CanonicalExecutionRepository
+from cilly_trading.risk_framework.allocation_rules import RiskLimits
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +62,12 @@ MAX_TOTAL_EXPOSURE_PCT: Decimal = Decimal("0.80")
 
 #: Maximum number of concurrent open paper positions.
 MAX_CONCURRENT_POSITIONS: int = 10
+
+#: Maximum fraction of account equity for a strategy aggregate.
+MAX_STRATEGY_EXPOSURE_PCT: Decimal = Decimal("0.80")
+
+#: Maximum fraction of account equity for a symbol aggregate.
+MAX_SYMBOL_EXPOSURE_PCT: Decimal = Decimal("0.80")
 
 #: Minimum cooldown in hours between accepted entries for the same
 #: ``(symbol, strategy)`` pair.
@@ -86,8 +94,27 @@ OutcomeCode = Literal[
     "reject:invalid_signal_fields",
     "reject:position_size_exceeds_limit",
     "reject:total_exposure_exceeds_limit",
+    "reject:strategy_exposure_exceeds_limit",
+    "reject:symbol_exposure_exceeds_limit",
     "reject:concurrent_position_limit_exceeded",
+    "reject:risk_kill_switch_enabled",
 ]
+
+_RISK_REASON_TO_OUTCOME: dict[str, OutcomeCode] = {
+    "rejected:risk_framework_max_position_size_exceeded": (
+        "reject:position_size_exceeds_limit"
+    ),
+    "rejected:risk_framework_max_account_exposure_pct_exceeded": (
+        "reject:total_exposure_exceeds_limit"
+    ),
+    "rejected:risk_framework_max_strategy_exposure_pct_exceeded": (
+        "reject:strategy_exposure_exceeds_limit"
+    ),
+    "rejected:risk_framework_max_symbol_exposure_pct_exceeded": (
+        "reject:symbol_exposure_exceeds_limit"
+    ),
+    "rejected:risk_framework_kill_switch_enabled": "reject:risk_kill_switch_enabled",
+}
 
 
 @dataclass(frozen=True)
@@ -201,6 +228,13 @@ def _validate_signal_fields(signal: Signal) -> Optional[str]:
     return None
 
 
+def _risk_rejection_outcome(reason: str) -> OutcomeCode:
+    outcome = _RISK_REASON_TO_OUTCOME.get(reason)
+    if outcome is None:
+        raise ValueError(f"unsupported risk rejection reason: {reason}")
+    return outcome
+
+
 # ---------------------------------------------------------------------------
 # Worker
 # ---------------------------------------------------------------------------
@@ -229,6 +263,8 @@ class BoundedPaperExecutionWorker:
         min_score_threshold: float = MIN_SCORE_THRESHOLD,
         max_position_pct: Decimal = MAX_POSITION_PCT,
         max_total_exposure_pct: Decimal = MAX_TOTAL_EXPOSURE_PCT,
+        max_strategy_exposure_pct: Decimal = MAX_STRATEGY_EXPOSURE_PCT,
+        max_symbol_exposure_pct: Decimal = MAX_SYMBOL_EXPOSURE_PCT,
         max_concurrent_positions: int = MAX_CONCURRENT_POSITIONS,
         cooldown_hours: int = COOLDOWN_HOURS,
         account_equity: Decimal = Decimal("100000"),
@@ -237,9 +273,12 @@ class BoundedPaperExecutionWorker:
         self._min_score = min_score_threshold
         self._max_position_pct = max_position_pct
         self._max_total_exposure_pct = max_total_exposure_pct
+        self._max_strategy_exposure_pct = max_strategy_exposure_pct
+        self._max_symbol_exposure_pct = max_symbol_exposure_pct
         self._max_concurrent_positions = max_concurrent_positions
         self._cooldown_hours = cooldown_hours
         self._account_equity = account_equity
+        self._risk_limits = self._build_risk_limits()
 
     # ------------------------------------------------------------------
     # Public API
@@ -263,6 +302,15 @@ class BoundedPaperExecutionWorker:
         Returns one ``SignalEvaluationResult`` per signal in input order.
         """
         return [self.process_signal(signal) for signal in signals]
+
+    def _build_risk_limits(self) -> RiskLimits:
+        """Build deterministic risk-framework limits for paper execution."""
+        return RiskLimits(
+            max_account_exposure_pct=float(self._max_total_exposure_pct),
+            max_position_size=float(self._account_equity * self._max_position_pct),
+            max_strategy_exposure_pct=float(self._max_strategy_exposure_pct),
+            max_symbol_exposure_pct=float(self._max_symbol_exposure_pct),
+        )
 
     # ------------------------------------------------------------------
     # Policy evaluation (read-only)
@@ -340,20 +388,8 @@ class BoundedPaperExecutionWorker:
         # Step 5: exposure and position-limit checks
         entry_price = _extract_entry_price(signal)
         proposed_notional = DEFAULT_PAPER_QUANTITY * entry_price
-        equity = self._account_equity
 
-        # Per-position exposure limit
-        max_position_notional = equity * self._max_position_pct
-        if proposed_notional > max_position_notional:
-            return SignalEvaluationResult(
-                outcome="reject:position_size_exceeds_limit",
-                reason=(
-                    f"proposed_notional={proposed_notional} > "
-                    f"max_position_notional={max_position_notional}"
-                ),
-            )
-
-        # Load all open trades for global exposure/concurrent-position checks.
+        # Load all open trades for canonical exposure/concurrent-position checks.
         # The limit of 1000 reflects the bounded paper simulation scope
         # (max_concurrent_positions=10 by default; even large sessions remain
         # well within this bound).
@@ -370,18 +406,37 @@ class BoundedPaperExecutionWorker:
                 ),
             )
 
-        # Global exposure limit
         current_exposure = sum(
             (t.exposure_notional or Decimal("0")) for t in all_open_trades
         )
-        max_total_exposure = equity * self._max_total_exposure_pct
-        if current_exposure + proposed_notional > max_total_exposure:
+        strategy_exposure = sum(
+            (t.exposure_notional or Decimal("0"))
+            for t in all_open_trades
+            if t.strategy_id == strategy
+        )
+        symbol_exposure = sum(
+            (t.exposure_notional or Decimal("0"))
+            for t in all_open_trades
+            if t.symbol == symbol
+        )
+        signal_id = _resolve_signal_id(signal)
+        risk_decision = evaluate_risk_framework_execution_decision(
+            request_id=f"paper:{signal_id}:risk",
+            strategy_id=strategy,
+            symbol=symbol,
+            proposed_position_size=float(proposed_notional),
+            account_equity=float(self._account_equity),
+            current_exposure=float(current_exposure),
+            strategy_exposure=float(strategy_exposure),
+            symbol_exposure=float(symbol_exposure),
+            limits=self._risk_limits,
+            rule_version="paper-risk-framework-v1",
+        )
+
+        if risk_decision.decision == "REJECTED":
             return SignalEvaluationResult(
-                outcome="reject:total_exposure_exceeds_limit",
-                reason=(
-                    f"total_exposure={current_exposure + proposed_notional} > "
-                    f"max_total_exposure={max_total_exposure}"
-                ),
+                outcome=_risk_rejection_outcome(risk_decision.reason),
+                reason=risk_decision.reason,
             )
 
         return SignalEvaluationResult(outcome="eligible")
@@ -536,6 +591,8 @@ __all__ = [
     "SignalEvaluationResult",
     "MIN_SCORE_THRESHOLD",
     "MAX_POSITION_PCT",
+    "MAX_STRATEGY_EXPOSURE_PCT",
+    "MAX_SYMBOL_EXPOSURE_PCT",
     "MAX_TOTAL_EXPOSURE_PCT",
     "MAX_CONCURRENT_POSITIONS",
     "COOLDOWN_HOURS",

@@ -148,8 +148,8 @@ def test_ops_p52_score_threshold_rules_are_explicit() -> None:
     content = _read(POLICY_DOC_PATH)
 
     assert "## Score Threshold Rules" in content
-    assert "`0.6`" in content
-    assert "`[0.0, 1.0]`" in content
+    assert "`60.0`" in content
+    assert "`[0.0, 100.0]`" in content
     assert "`skip:score_below_threshold`" in content
     assert "does not imply broker execution readiness" in content
     assert "docs/governance/score-semantics-cross-strategy.md" in content

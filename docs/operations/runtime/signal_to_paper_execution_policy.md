@@ -31,11 +31,21 @@ This policy operates exclusively within the bounded paper simulation boundary:
 A signal does not automatically become a paper trade. The following ordered
 evaluation sequence is applied to every candidate signal:
 
-1. **Eligibility check** — required signal fields must be present and valid.
-2. **Score threshold check** — signal score must meet the minimum threshold.
-3. **Duplicate-entry check** — no duplicate open position may exist.
-4. **Cooldown check** — minimum cooldown between entries must be satisfied.
-5. **Exposure check** — position and exposure limits must not be exceeded.
+1. **Eligibility check** - required signal fields must be present and valid.
+2. **Score threshold check** - signal score must meet the minimum threshold.
+3. **Duplicate-entry check** - no duplicate open position may exist.
+4. **Cooldown check** - minimum cooldown between entries must be satisfied.
+5. **Exposure check** - position and exposure limits must not be exceeded.
+
+Step 5 is evaluated through the canonical deterministic risk framework via one
+bounded adapter path:
+
+- Evaluator: `src/cilly_trading/risk_framework/risk_evaluator.py`
+- Adapter: `src/cilly_trading/engine/risk/gate.py`
+- Worker call-site: `src/cilly_trading/engine/paper_execution_worker.py`
+
+This keeps bounded paper decisions aligned with canonical
+account/strategy/symbol exposure semantics for equivalent bounded inputs.
 
 A signal that fails any step produces an explicit outcome:
 
@@ -54,7 +64,7 @@ A signal is ineligible (rejected) if any required field is absent or invalid:
 | `symbol` | Non-empty string instrument identifier. |
 | `strategy` | Non-empty string key matching a known governed strategy. |
 | `direction` | Must be `long` or `short`. |
-| `score` | Numeric value; must be present and within `[0.0, 1.0]`. |
+| `score` | Numeric value; must be present and within `[0.0, 100.0]`. |
 | `timestamp` | Parseable ISO-8601 datetime or Unix epoch milliseconds. |
 | `stage` | Must be non-empty and a recognized stage value such as `setup`. |
 
@@ -65,9 +75,9 @@ boundary, is **rejected** with outcome code `reject:invalid_signal_fields`.
 
 Signals are subject to a minimum score threshold before paper entry is allowed:
 
-- The default minimum score threshold is `0.6` (inclusive) on a `[0.0, 1.0]`
+- The default minimum score threshold is `60.0` (inclusive) on a `[0.0, 100.0]`
   scale.
-- Signals with `score < 0.6` are **skipped** with outcome code
+- Signals with `score < 60.0` are **skipped** with outcome code
   `skip:score_below_threshold`.
 - The threshold is a bounded paper simulation parameter. It is not a
   live-trading entry rule and does not imply broker execution readiness.
@@ -122,6 +132,22 @@ Paper entry is blocked when exposure or position limits would be exceeded.
   all open positions combined (`max_total_exposure_pct = 0.80`).
 - A signal that would push total exposure beyond this limit is **rejected** with
   outcome code `reject:total_exposure_exceeds_limit`.
+- This outcome maps to the canonical risk-framework account-exposure rule
+  (`max_account_exposure_pct`) through the bounded execution adapter.
+
+### Strategy exposure limit
+
+- Strategy aggregate exposure is evaluated by the canonical risk-framework rule
+  `max_strategy_exposure_pct`.
+- A signal blocked by this rule is **rejected** with outcome code
+  `reject:strategy_exposure_exceeds_limit`.
+
+### Symbol exposure limit
+
+- Symbol aggregate exposure is evaluated by the canonical risk-framework rule
+  `max_symbol_exposure_pct`.
+- A signal blocked by this rule is **rejected** with outcome code
+  `reject:symbol_exposure_exceeds_limit`.
 
 ### Concurrent position limit
 
@@ -144,7 +170,10 @@ are not live-trading risk controls and do not constitute broker risk management.
 | Reject | `reject:invalid_signal_fields` | Required signal field is absent or outside its allowed boundary. |
 | Reject | `reject:position_size_exceeds_limit` | Proposed position size exceeds per-position cap. |
 | Reject | `reject:total_exposure_exceeds_limit` | Proposed position would push total exposure over global cap. |
+| Reject | `reject:strategy_exposure_exceeds_limit` | Proposed position would push strategy exposure over strategy cap. |
+| Reject | `reject:symbol_exposure_exceeds_limit` | Proposed position would push symbol exposure over symbol cap. |
 | Reject | `reject:concurrent_position_limit_exceeded` | Maximum concurrent open positions would be exceeded. |
+| Reject | `reject:risk_kill_switch_enabled` | Canonical risk-framework kill-switch is enabled. |
 
 **Skip** outcomes indicate a valid signal that does not satisfy a soft entry
 rule. The signal is not an error; it is silently bypassed for this evaluation
@@ -152,6 +181,11 @@ cycle.
 
 **Reject** outcomes indicate a hard policy violation. The signal is blocked with
 an explicit reason code. The reason code must be logged for operator review.
+
+Risk decision reason codes are deterministic and adapter-driven (for example
+`rejected:risk_framework_max_account_exposure_pct_exceeded`), so equivalent
+bounded inputs produce equivalent approve/reject reasons across covered
+non-live execution paths.
 
 ## Policy Application Boundary
 

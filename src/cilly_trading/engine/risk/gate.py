@@ -19,6 +19,12 @@ from cilly_trading.engine.telemetry.schema import (
     TelemetryEvent,
     build_telemetry_event,
 )
+from cilly_trading.risk_framework.allocation_rules import RiskLimits as FrameworkRiskLimits
+from cilly_trading.risk_framework.contract import (
+    RiskEvaluationRequest as FrameworkRiskEvaluationRequest,
+    RiskEvaluationResponse as FrameworkRiskEvaluationResponse,
+)
+from cilly_trading.risk_framework.risk_evaluator import evaluate_risk as evaluate_framework_risk
 
 GUARD_TRIGGER_EVENT = "guard.triggered"
 GUARD_TRIGGER_PAYLOAD_KEY = "guard_type"
@@ -37,6 +43,136 @@ _GUARD_EMISSION_ORDER: tuple[str, ...] = (
     "daily_loss",
     "emergency",
 )
+
+RISK_FRAMEWORK_REASON_CODES: dict[str, str] = {
+    "approved: within_risk_limits": "approved:risk_framework_within_limits",
+    "rejected: kill_switch_enabled": "rejected:risk_framework_kill_switch_enabled",
+    "rejected: max_position_size_exceeded": (
+        "rejected:risk_framework_max_position_size_exceeded"
+    ),
+    "rejected: max_account_exposure_pct_exceeded": (
+        "rejected:risk_framework_max_account_exposure_pct_exceeded"
+    ),
+    "rejected: max_strategy_exposure_pct_exceeded": (
+        "rejected:risk_framework_max_strategy_exposure_pct_exceeded"
+    ),
+    "rejected: max_symbol_exposure_pct_exceeded": (
+        "rejected:risk_framework_max_symbol_exposure_pct_exceeded"
+    ),
+}
+
+
+def _safe_pct(numerator: float, denominator: float) -> float:
+    if denominator == 0.0:
+        return float("inf")
+    return numerator / denominator
+
+
+def adapt_risk_framework_response_to_risk_decision(
+    *,
+    framework_request: FrameworkRiskEvaluationRequest,
+    framework_response: FrameworkRiskEvaluationResponse,
+    limits: FrameworkRiskLimits,
+    strategy_exposure: float,
+    symbol_exposure: float,
+    rule_version: str,
+    evaluated_at: datetime | None = None,
+) -> RiskDecision:
+    """Map deterministic risk-framework outcomes into execution risk decisions."""
+
+    decision_reason = RISK_FRAMEWORK_REASON_CODES.get(framework_response.reason)
+    if decision_reason is None:
+        raise ValueError(
+            f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
+        )
+
+    normalized_equity = abs(framework_request.account_equity)
+    normalized_proposed = abs(framework_request.proposed_position_size)
+    normalized_strategy = abs(strategy_exposure)
+    normalized_symbol = abs(symbol_exposure)
+
+    reason = framework_response.reason
+    if reason == "approved: within_risk_limits":
+        decision = "APPROVED"
+        score = float(framework_response.risk_score)
+        max_allowed = float(limits.max_account_exposure_pct)
+    else:
+        decision = "REJECTED"
+        if reason == "rejected: kill_switch_enabled":
+            score = float("inf")
+            max_allowed = 0.0
+        elif reason == "rejected: max_position_size_exceeded":
+            score = float(normalized_proposed)
+            max_allowed = float(limits.max_position_size)
+        elif reason == "rejected: max_account_exposure_pct_exceeded":
+            score = float(framework_response.risk_score)
+            max_allowed = float(limits.max_account_exposure_pct)
+        elif reason == "rejected: max_strategy_exposure_pct_exceeded":
+            score = _safe_pct(normalized_strategy + normalized_proposed, normalized_equity)
+            max_allowed = float(limits.max_strategy_exposure_pct)
+        elif reason == "rejected: max_symbol_exposure_pct_exceeded":
+            score = _safe_pct(normalized_symbol + normalized_proposed, normalized_equity)
+            max_allowed = float(limits.max_symbol_exposure_pct)
+        else:  # pragma: no cover - guarded by reason map above
+            raise ValueError(f"unsupported risk-framework reason: {reason}")
+
+    if framework_response.approved != (decision == "APPROVED"):
+        raise ValueError("risk-framework approval flag conflicts with mapped execution decision")
+
+    timestamp = evaluated_at or datetime.now(tz=timezone.utc)
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("evaluated_at must be timezone-aware and in UTC")
+
+    return RiskDecision(
+        decision=decision,
+        score=score,
+        max_allowed=max_allowed,
+        reason=decision_reason,
+        timestamp=timestamp,
+        rule_version=rule_version,
+    )
+
+
+def evaluate_risk_framework_execution_decision(
+    *,
+    request_id: str,
+    strategy_id: str,
+    symbol: str,
+    proposed_position_size: float,
+    account_equity: float,
+    current_exposure: float,
+    strategy_exposure: float,
+    symbol_exposure: float,
+    limits: FrameworkRiskLimits,
+    rule_version: str = "risk-framework-v1",
+    config: Mapping[str, object] | None = None,
+    evaluated_at: datetime | None = None,
+) -> RiskDecision:
+    """Evaluate canonical risk-framework limits and return RiskDecision contract."""
+
+    framework_request = FrameworkRiskEvaluationRequest(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        proposed_position_size=proposed_position_size,
+        account_equity=account_equity,
+        current_exposure=current_exposure,
+    )
+    framework_response = evaluate_framework_risk(
+        framework_request,
+        limits=limits,
+        strategy_exposure=strategy_exposure,
+        symbol_exposure=symbol_exposure,
+        config=dict(config) if config is not None else None,
+    )
+    return adapt_risk_framework_response_to_risk_decision(
+        framework_request=framework_request,
+        framework_response=framework_response,
+        limits=limits,
+        strategy_exposure=strategy_exposure,
+        symbol_exposure=symbol_exposure,
+        rule_version=rule_version,
+        evaluated_at=evaluated_at,
+    )
 
 
 class RiskApprovalMissingError(ValueError):
@@ -67,18 +203,22 @@ class ThresholdRiskGate(RiskGate):
                 "RiskEvaluationRequest.notional_usd must be finite and >= 0 for bounded non-live operation"
             )
 
-        decision = "APPROVED" if score <= max_allowed else "REJECTED"
-        reason = (
-            "bounded non-live notional within threshold"
-            if decision == "APPROVED"
-            else "bounded non-live notional exceeds threshold"
+        threshold_limits = FrameworkRiskLimits(
+            max_account_exposure_pct=1.0,
+            max_position_size=max_allowed,
+            max_strategy_exposure_pct=1.0,
+            max_symbol_exposure_pct=1.0,
         )
-        return RiskDecision(
-            decision=decision,
-            score=score,
-            max_allowed=max_allowed,
-            reason=reason,
-            timestamp=datetime.now(tz=timezone.utc),
+        return evaluate_risk_framework_execution_decision(
+            request_id=request.request_id,
+            strategy_id=request.strategy_id,
+            symbol=request.symbol,
+            proposed_position_size=score,
+            account_equity=max_allowed,
+            current_exposure=0.0,
+            strategy_exposure=0.0,
+            symbol_exposure=0.0,
+            limits=threshold_limits,
             rule_version=self.rule_version,
         )
 
@@ -204,11 +344,14 @@ def _emit_guard_trigger_log(*, guard_type: str, payload: Mapping[str, Any]) -> N
 
 
 __all__ = [
+    "RISK_FRAMEWORK_REASON_CODES",
     "RiskApprovalMissingError",
     "RiskRejectedError",
     "ThresholdRiskGate",
+    "adapt_risk_framework_response_to_risk_decision",
     "build_guard_trigger_telemetry_event",
     "build_guard_trigger_telemetry_events",
     "enforce_approved_risk_decision",
+    "evaluate_risk_framework_execution_decision",
     "resolve_runtime_guard_type",
 ]
