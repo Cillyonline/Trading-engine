@@ -116,7 +116,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
           WHERE analysis_run_id IS NOT NULL AND signal_id IS NOT NULL;
         """
     )
-
     # Tabelle: trades
     cur.execute(
         """

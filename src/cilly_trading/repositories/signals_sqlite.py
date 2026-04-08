@@ -58,6 +58,27 @@ class SqliteSignalRepository(SignalRepository):
             cur.execute(f"ALTER TABLE signals ADD COLUMN {column_name} {column_type};")
         cur.execute(
             """
+            DELETE FROM signals
+            WHERE id IN (
+                SELECT older.id
+                FROM signals AS older
+                JOIN signals AS newer
+                  ON older.ingestion_run_id = newer.ingestion_run_id
+                 AND older.signal_id = newer.signal_id
+                 AND older.id < newer.id
+                WHERE older.ingestion_run_id IS NOT NULL AND older.signal_id IS NOT NULL
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_ingestion_run_signal_id_unique
+              ON signals(ingestion_run_id, signal_id)
+              WHERE ingestion_run_id IS NOT NULL AND signal_id IS NOT NULL;
+            """
+        )
+        cur.execute(
+            """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_analysis_run_signal_id_unique
               ON signals(analysis_run_id, signal_id)
               WHERE analysis_run_id IS NOT NULL AND signal_id IS NOT NULL;
