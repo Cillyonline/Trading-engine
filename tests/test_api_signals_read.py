@@ -224,6 +224,58 @@ def test_read_signals_filters_strategy_and_timeframe(tmp_path: Path, monkeypatch
     assert payload["items"][0]["symbol"] == "BBB"
 
 
+def test_read_signals_unfiltered_dedupes_same_signal_across_ingestion_runs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(
+                ingestion_run_id="ing-run-001",
+                analysis_run_id="analysis-run-001",
+                symbol="AAPL",
+                timestamp="2025-01-03T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-002",
+                analysis_run_id="analysis-run-002",
+                symbol="AAPL",
+                timestamp="2025-01-03T00:00:00+00:00",
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response_all = client.get("/signals", headers=READ_ONLY_HEADERS, params={"limit": 20})
+    assert response_all.status_code == 200
+    payload_all = response_all.json()
+    assert payload_all["total"] == 1
+    assert len(payload_all["items"]) == 1
+    assert payload_all["items"][0]["symbol"] == "AAPL"
+
+    response_first_run = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"ingestion_run_id": "ing-run-001", "limit": 20},
+    )
+    assert response_first_run.status_code == 200
+    payload_first_run = response_first_run.json()
+    assert payload_first_run["total"] == 1
+    assert payload_first_run["items"][0]["symbol"] == "AAPL"
+
+    response_second_run = client.get(
+        "/signals",
+        headers=READ_ONLY_HEADERS,
+        params={"ingestion_run_id": "ing-run-002", "limit": 20},
+    )
+    assert response_second_run.status_code == 200
+    payload_second_run = response_second_run.json()
+    assert payload_second_run["total"] == 1
+    assert payload_second_run["items"][0]["symbol"] == "AAPL"
+
+
 def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None:
     repo = _make_repo(tmp_path)
     repo.save_signals(

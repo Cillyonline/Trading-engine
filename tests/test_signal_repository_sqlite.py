@@ -275,6 +275,73 @@ def test_save_signals_deduplicates_same_ingestion_run_and_signal_id_across_analy
     assert row_count == 1
 
 
+def test_read_signals_unfiltered_deduplicates_same_signal_across_ingestion_runs(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path)
+    first = _base_signal(
+        ingestion_run_id="ing-run-001",
+        analysis_run_id="analysis-run-001",
+        symbol="AAPL",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+    second = _base_signal(
+        ingestion_run_id="ing-run-002",
+        analysis_run_id="analysis-run-002",
+        symbol="AAPL",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+
+    repo.save_signals([first])
+    repo.save_signals([second])
+
+    all_items, all_total = repo.read_signals(limit=20, offset=0)
+    run_one_items, run_one_total = repo.read_signals(
+        ingestion_run_id="ing-run-001",
+        limit=20,
+        offset=0,
+    )
+    run_two_items, run_two_total = repo.read_signals(
+        ingestion_run_id="ing-run-002",
+        limit=20,
+        offset=0,
+    )
+
+    assert all_total == 1
+    assert len(all_items) == 1
+    assert all_items[0]["signal_id"] == compute_signal_id(first)
+
+    assert run_one_total == 1
+    assert run_two_total == 1
+    assert run_one_items[0]["signal_id"] == compute_signal_id(first)
+    assert run_two_items[0]["signal_id"] == compute_signal_id(second)
+
+    conn = sqlite3.connect(tmp_path / "test_signals.db")
+    try:
+        signal_id = compute_signal_id(first)
+        row_count = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM signals
+            WHERE signal_id = ?;
+            """,
+            (signal_id,),
+        ).fetchone()[0]
+        ingestion_count = conn.execute(
+            """
+            SELECT COUNT(DISTINCT ingestion_run_id)
+            FROM signals
+            WHERE signal_id = ?;
+            """,
+            (signal_id,),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert row_count == 2
+    assert ingestion_count == 2
+
+
 def test_repo_init_migrates_legacy_duplicate_ingestion_run_signal_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy_dirty_signals.db"
     init_db(db_path)

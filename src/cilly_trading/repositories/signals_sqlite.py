@@ -270,6 +270,7 @@ class SqliteSignalRepository(SignalRepository):
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[List[Signal], int]:
+        dedupe_unfiltered_reads = ingestion_run_id is None
         where_clauses = []
         params: List[object] = []
 
@@ -305,37 +306,115 @@ class SqliteSignalRepository(SignalRepository):
         conn = self._get_connection()
         cur = conn.cursor()
 
-        count_query = f"SELECT COUNT(*) FROM signals {where_sql};"
-        cur.execute(count_query, params)
-        total = int(cur.fetchone()[0])
+        if dedupe_unfiltered_reads:
+            # Keep one row per deterministic signal identity when reads are not scoped
+            # to a single ingestion run. This prevents repeated entries caused by
+            # reruns that persisted the same signal under a new ingestion_run_id.
+            dedupe_identity_sql = (
+                "CASE "
+                "WHEN signal_id IS NOT NULL THEN signal_id "
+                "ELSE symbol || '|' || strategy || '|' || direction || '|' || "
+                "CAST(score AS TEXT) || '|' || timestamp || '|' || stage || '|' || "
+                "timeframe || '|' || market_type || '|' || data_source "
+                "END"
+            )
+            ranked_signals_cte = f"""
+                WITH ranked_signals AS (
+                    SELECT
+                        id,
+                        signal_id,
+                        analysis_run_id,
+                        ingestion_run_id,
+                        symbol,
+                        strategy,
+                        direction,
+                        score,
+                        timestamp,
+                        stage,
+                        entry_zone_from,
+                        entry_zone_to,
+                        confirmation_rule,
+                        timeframe,
+                        market_type,
+                        data_source,
+                        reasons_json,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY {dedupe_identity_sql}
+                            ORDER BY {normalized_timestamp} DESC, id DESC
+                        ) AS dedupe_rank
+                    FROM signals
+                    {where_sql}
+                )
+            """
+            count_query = f"""
+                {ranked_signals_cte}
+                SELECT COUNT(*)
+                FROM ranked_signals
+                WHERE dedupe_rank = 1;
+            """
+            cur.execute(count_query, params)
+            total = int(cur.fetchone()[0])
 
-        data_query = f"""
-            SELECT
-                id,
-                signal_id,
-                analysis_run_id,
-                ingestion_run_id,
-                symbol,
-                strategy,
-                direction,
-                score,
-                timestamp,
-                stage,
-                entry_zone_from,
-                entry_zone_to,
-                confirmation_rule,
-                timeframe,
-                market_type,
-                data_source,
-                reasons_json
-            FROM signals
-            {where_sql}
-            {order_sql}
-            LIMIT ?
-            OFFSET ?;
-        """
-        cur.execute(data_query, [*params, limit, offset])
-        rows = cur.fetchall()
+            data_query = f"""
+                {ranked_signals_cte}
+                SELECT
+                    id,
+                    signal_id,
+                    analysis_run_id,
+                    ingestion_run_id,
+                    symbol,
+                    strategy,
+                    direction,
+                    score,
+                    timestamp,
+                    stage,
+                    entry_zone_from,
+                    entry_zone_to,
+                    confirmation_rule,
+                    timeframe,
+                    market_type,
+                    data_source,
+                    reasons_json
+                FROM ranked_signals
+                WHERE dedupe_rank = 1
+                {order_sql}
+                LIMIT ?
+                OFFSET ?;
+            """
+            cur.execute(data_query, [*params, limit, offset])
+            rows = cur.fetchall()
+        else:
+            count_query = f"SELECT COUNT(*) FROM signals {where_sql};"
+            cur.execute(count_query, params)
+            total = int(cur.fetchone()[0])
+
+            data_query = f"""
+                SELECT
+                    id,
+                    signal_id,
+                    analysis_run_id,
+                    ingestion_run_id,
+                    symbol,
+                    strategy,
+                    direction,
+                    score,
+                    timestamp,
+                    stage,
+                    entry_zone_from,
+                    entry_zone_to,
+                    confirmation_rule,
+                    timeframe,
+                    market_type,
+                    data_source,
+                    reasons_json
+                FROM signals
+                {where_sql}
+                {order_sql}
+                LIMIT ?
+                OFFSET ?;
+            """
+            cur.execute(data_query, [*params, limit, offset])
+            rows = cur.fetchall()
         conn.close()
 
         result: List[Signal] = []
