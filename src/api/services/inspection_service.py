@@ -398,7 +398,49 @@ def read_signals(
         strategy=params.strategy,
         timeframe=params.timeframe,
         ingestion_run_id=params.ingestion_run_id,
-        dedupe=params.dedupe,
+        from_=params.from_,
+        to=params.to,
+        sort=params.sort,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+    response_items: List[SignalReadItemDTO] = []
+    for signal in items:
+        response_items.append(
+            SignalReadItemDTO(
+                symbol=signal["symbol"],
+                strategy=signal["strategy"],
+                direction=signal["direction"],
+                score=signal["score"],
+                created_at=signal["timestamp"],
+                stage=signal["stage"],
+                entry_zone=signal.get("entry_zone"),
+                confirmation_rule=signal.get("confirmation_rule"),
+                timeframe=signal["timeframe"],
+                market_type=signal["market_type"],
+                data_source=signal["data_source"],
+            )
+        )
+
+    return SignalReadResponseDTO(
+        items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+def read_signals_raw(
+    *,
+    params: SignalsReadQuery,
+    deps: InspectionServiceDependencies,
+) -> SignalReadResponseDTO:
+    items, total = deps.signal_repo.read_signals_raw(
+        symbol=params.symbol,
+        strategy=params.strategy,
+        timeframe=params.timeframe,
+        ingestion_run_id=params.ingestion_run_id,
         from_=params.from_,
         to=params.to,
         sort=params.sort,

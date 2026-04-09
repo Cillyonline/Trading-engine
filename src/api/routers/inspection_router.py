@@ -71,13 +71,6 @@ def _get_signals_query(
     strategy: Optional[str] = Query(default=None),
     timeframe: Optional[str] = Query(default=None),
     ingestion_run_id: Optional[str] = Query(default=None),
-    dedupe: bool = Query(
-        default=True,
-        description=(
-            "When true (default), unfiltered reads dedupe identical signals across ingestion runs. "
-            "Set false for raw cross-ingestion visibility."
-        ),
-    ),
     from_: Optional[datetime] = Query(default=None, alias="from"),
     to: Optional[datetime] = Query(default=None, alias="to"),
     sort: Literal["created_at_asc", "created_at_desc"] = Query(default="created_at_desc"),
@@ -102,7 +95,6 @@ def _get_signals_query(
         strategy=strategy,
         timeframe=timeframe,
         ingestion_run_id=ingestion_run_id,
-        dedupe=dedupe,
         from_=resolved_from,
         to=resolved_to,
         sort=sort,
@@ -431,8 +423,8 @@ def build_inspection_router(
         response_model=SignalReadResponseDTO,
         summary="Read Signals",
         description=(
-            "Read stored signals with optional filters. By default, unfiltered reads are deduped "
-            "across ingestion runs; set dedupe=false for raw cross-ingestion visibility."
+            "Read stored signals with optional filters on the deduped consumer-facing view. "
+            "For undeduped raw cross-ingestion observability use /signals/raw."
         ),
     )
     def read_signals_handler(
@@ -440,6 +432,21 @@ def build_inspection_router(
         _: str = Depends(deps.require_role("read_only")),
     ) -> SignalReadResponseDTO:
         return inspection_service.read_signals(params=params, deps=_service_dependencies(deps))
+
+    @router.get(
+        "/signals/raw",
+        response_model=SignalReadResponseDTO,
+        summary="Read Raw Signals",
+        description=(
+            "Read stored signals with optional filters on the undeduped raw persisted view across "
+            "ingestion runs for debugging and observability."
+        ),
+    )
+    def read_raw_signals_handler(
+        params: SignalsReadQuery = Depends(_get_signals_query),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> SignalReadResponseDTO:
+        return inspection_service.read_signals_raw(params=params, deps=_service_dependencies(deps))
 
     @router.get(
         "/execution/orders",
