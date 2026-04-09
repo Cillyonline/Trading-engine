@@ -18,6 +18,13 @@ class SignalsReadQuery(BaseModel):
     strategy: Optional[str] = Field(default=None)
     timeframe: Optional[str] = Field(default=None)
     ingestion_run_id: Optional[str] = Field(default=None)
+    dedupe: bool = Field(
+        default=True,
+        description=(
+            "If true (default), unfiltered reads dedupe identical signals across ingestion runs. "
+            "Set false for raw cross-ingestion visibility."
+        ),
+    )
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
     sort: Literal["created_at_asc", "created_at_desc"] = Field(default="created_at_desc")

@@ -264,13 +264,14 @@ class SqliteSignalRepository(SignalRepository):
         strategy: Optional[str] = None,
         timeframe: Optional[str] = None,
         ingestion_run_id: Optional[str] = None,
+        dedupe: bool = True,
         from_: Optional[datetime] = None,
         to: Optional[datetime] = None,
         sort: str = "created_at_desc",
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[List[Signal], int]:
-        dedupe_unfiltered_reads = ingestion_run_id is None
+        dedupe_unfiltered_reads = dedupe and ingestion_run_id is None
         where_clauses = []
         params: List[object] = []
 
@@ -307,8 +308,8 @@ class SqliteSignalRepository(SignalRepository):
         cur = conn.cursor()
 
         if dedupe_unfiltered_reads:
-            # Keep one row per deterministic signal identity when reads are not scoped
-            # to a single ingestion run. This prevents repeated entries caused by
+            # Keep one row per deterministic signal identity when reads are unscoped
+            # and dedupe is enabled. This prevents repeated entries caused by
             # reruns that persisted the same signal under a new ingestion_run_id.
             dedupe_identity_sql = (
                 "CASE "

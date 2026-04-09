@@ -398,6 +398,7 @@ def read_signals(
         strategy=params.strategy,
         timeframe=params.timeframe,
         ingestion_run_id=params.ingestion_run_id,
+        dedupe=params.dedupe,
         from_=params.from_,
         to=params.to,
         sort=params.sort,
