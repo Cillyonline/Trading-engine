@@ -99,15 +99,16 @@ def test_read_signals_openapi_exposes_timeframe_not_legacy_filters(tmp_path: Pat
     parameter_names = {item["name"] for item in parameters}
 
     assert "timeframe" in parameter_names
-    assert "dedupe" in parameter_names
+    assert "dedupe" not in parameter_names
     assert "preset" not in parameter_names
     assert "start" not in parameter_names
     assert "end" not in parameter_names
-
-    dedupe_param = next(item for item in parameters if item["name"] == "dedupe")
-    assert dedupe_param["required"] is False
-    assert dedupe_param["schema"]["default"] is True
-    assert "raw cross-ingestion visibility" in dedupe_param["description"]
+    assert "/signals/raw" in response.json()["paths"]
+    assert "deduped consumer-facing view" in response.json()["paths"]["/signals"]["get"]["description"]
+    assert (
+        "undeduped raw persisted view across ingestion runs"
+        in response.json()["paths"]["/signals/raw"]["get"]["description"]
+    )
 
 
 def test_read_signals_empty_result(tmp_path: Path, monkeypatch) -> None:
@@ -133,7 +134,6 @@ def test_read_signals_invalid_params(tmp_path: Path, monkeypatch) -> None:
         {"sort": "foo"},
         {"limit": SIGNALS_READ_MAX_LIMIT + 1},
         {"limit": 0},
-        {"dedupe": "not-a-bool"},
         {"from": "2025-01-02T00:00:00+00:00", "to": "2025-01-01T00:00:00+00:00"},
         {"preset": "D1"},
         {"start": "2025-01-01T00:00:00+00:00"},
@@ -283,7 +283,7 @@ def test_read_signals_unfiltered_dedupes_same_signal_across_ingestion_runs(
     assert payload_second_run["items"][0]["symbol"] == "AAPL"
 
 
-def test_read_signals_dedupe_false_exposes_raw_cross_ingestion_rows(
+def test_read_signals_raw_exposes_undeduped_cross_ingestion_rows(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = _make_repo(tmp_path)
@@ -307,25 +307,86 @@ def test_read_signals_dedupe_false_exposes_raw_cross_ingestion_rows(
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response_raw = client.get(
-        "/signals",
-        headers=READ_ONLY_HEADERS,
-        params={"dedupe": "false", "limit": 20},
-    )
+    response_raw = client.get("/signals/raw", headers=READ_ONLY_HEADERS, params={"limit": 20})
     assert response_raw.status_code == 200
     payload_raw = response_raw.json()
     assert payload_raw["total"] == 2
     assert len(payload_raw["items"]) == 2
 
     response_scoped_raw = client.get(
-        "/signals",
+        "/signals/raw",
         headers=READ_ONLY_HEADERS,
-        params={"ingestion_run_id": "ing-run-001", "dedupe": "false", "limit": 20},
+        params={"ingestion_run_id": "ing-run-001", "limit": 20},
     )
     assert response_scoped_raw.status_code == 200
     payload_scoped_raw = response_scoped_raw.json()
     assert payload_scoped_raw["total"] == 1
     assert payload_scoped_raw["items"][0]["symbol"] == "AAPL"
+
+
+def test_read_signals_raw_supports_filters_sort_and_pagination(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(
+                ingestion_run_id="ing-run-001",
+                analysis_run_id="analysis-run-001",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-01T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-002",
+                analysis_run_id="analysis-run-002",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-01T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-003",
+                analysis_run_id="analysis-run-003",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-02T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-004",
+                analysis_run_id="analysis-run-004",
+                symbol="MSFT",
+                strategy="TURTLE",
+                timeframe="H1",
+                timestamp="2025-01-03T00:00:00+00:00",
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get(
+        "/signals/raw",
+        headers=READ_ONLY_HEADERS,
+        params={
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "timeframe": "D1",
+            "sort": "created_at_asc",
+            "limit": 1,
+            "offset": 1,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 3
+    assert payload["limit"] == 1
+    assert payload["offset"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["symbol"] == "AAPL"
+    assert payload["items"][0]["created_at"] == "2025-01-01T00:00:00+00:00"
 
 
 def test_read_signals_default_limit_applied(tmp_path: Path, monkeypatch) -> None:
@@ -354,6 +415,17 @@ def test_read_signals_requires_authenticated_role(tmp_path: Path, monkeypatch) -
     client = TestClient(api_main.app)
 
     response = client.get("/signals")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "unauthorized"}
+
+
+def test_read_signals_raw_requires_authenticated_role(tmp_path: Path, monkeypatch) -> None:
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    client = TestClient(api_main.app)
+
+    response = client.get("/signals/raw")
 
     assert response.status_code == 401
     assert response.json() == {"detail": "unauthorized"}

@@ -342,7 +342,7 @@ def test_read_signals_unfiltered_deduplicates_same_signal_across_ingestion_runs(
     assert ingestion_count == 2
 
 
-def test_read_signals_dedupe_false_unfiltered_returns_raw_cross_ingestion_rows(
+def test_read_signals_raw_unfiltered_returns_cross_ingestion_rows(
     tmp_path: Path,
 ) -> None:
     repo = _make_repo(tmp_path)
@@ -362,10 +362,9 @@ def test_read_signals_dedupe_false_unfiltered_returns_raw_cross_ingestion_rows(
     repo.save_signals([first])
     repo.save_signals([second])
 
-    all_items, all_total = repo.read_signals(dedupe=False, limit=20, offset=0)
-    scoped_items, scoped_total = repo.read_signals(
+    all_items, all_total = repo.read_signals_raw(limit=20, offset=0)
+    scoped_items, scoped_total = repo.read_signals_raw(
         ingestion_run_id="ing-run-001",
-        dedupe=False,
         limit=20,
         offset=0,
     )
@@ -377,6 +376,60 @@ def test_read_signals_dedupe_false_unfiltered_returns_raw_cross_ingestion_rows(
     assert scoped_total == 1
     assert len(scoped_items) == 1
     assert scoped_items[0]["ingestion_run_id"] == "ing-run-001"
+
+
+def test_read_signals_raw_supports_filters_sort_and_pagination(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(
+                ingestion_run_id="ing-run-001",
+                analysis_run_id="analysis-run-001",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-01T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-002",
+                analysis_run_id="analysis-run-002",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-01T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-003",
+                analysis_run_id="analysis-run-003",
+                symbol="AAPL",
+                strategy="RSI2",
+                timeframe="D1",
+                timestamp="2025-01-02T00:00:00+00:00",
+            ),
+            _base_signal(
+                ingestion_run_id="ing-run-004",
+                analysis_run_id="analysis-run-004",
+                symbol="MSFT",
+                strategy="TURTLE",
+                timeframe="H1",
+                timestamp="2025-01-03T00:00:00+00:00",
+            ),
+        ]
+    )
+
+    items, total = repo.read_signals_raw(
+        symbol="AAPL",
+        strategy="RSI2",
+        timeframe="D1",
+        sort="created_at_asc",
+        limit=1,
+        offset=1,
+    )
+
+    assert total == 3
+    assert len(items) == 1
+    assert items[0]["symbol"] == "AAPL"
+    assert items[0]["timestamp"] == "2025-01-01T00:00:00+00:00"
 
 
 def test_repo_init_migrates_legacy_duplicate_ingestion_run_signal_rows(tmp_path: Path) -> None:

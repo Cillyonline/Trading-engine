@@ -264,14 +264,65 @@ class SqliteSignalRepository(SignalRepository):
         strategy: Optional[str] = None,
         timeframe: Optional[str] = None,
         ingestion_run_id: Optional[str] = None,
-        dedupe: bool = True,
         from_: Optional[datetime] = None,
         to: Optional[datetime] = None,
         sort: str = "created_at_desc",
         limit: int = 50,
         offset: int = 0,
     ) -> Tuple[List[Signal], int]:
-        dedupe_unfiltered_reads = dedupe and ingestion_run_id is None
+        return self._read_signals(
+            symbol=symbol,
+            strategy=strategy,
+            timeframe=timeframe,
+            ingestion_run_id=ingestion_run_id,
+            from_=from_,
+            to=to,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+            dedupe_unfiltered_reads=ingestion_run_id is None,
+        )
+
+    def read_signals_raw(
+        self,
+        *,
+        symbol: Optional[str] = None,
+        strategy: Optional[str] = None,
+        timeframe: Optional[str] = None,
+        ingestion_run_id: Optional[str] = None,
+        from_: Optional[datetime] = None,
+        to: Optional[datetime] = None,
+        sort: str = "created_at_desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Tuple[List[Signal], int]:
+        return self._read_signals(
+            symbol=symbol,
+            strategy=strategy,
+            timeframe=timeframe,
+            ingestion_run_id=ingestion_run_id,
+            from_=from_,
+            to=to,
+            sort=sort,
+            limit=limit,
+            offset=offset,
+            dedupe_unfiltered_reads=False,
+        )
+
+    def _read_signals(
+        self,
+        *,
+        symbol: Optional[str],
+        strategy: Optional[str],
+        timeframe: Optional[str],
+        ingestion_run_id: Optional[str],
+        from_: Optional[datetime],
+        to: Optional[datetime],
+        sort: str,
+        limit: int,
+        offset: int,
+        dedupe_unfiltered_reads: bool,
+    ) -> Tuple[List[Signal], int]:
         where_clauses = []
         params: List[object] = []
 
