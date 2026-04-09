@@ -342,6 +342,43 @@ def test_read_signals_unfiltered_deduplicates_same_signal_across_ingestion_runs(
     assert ingestion_count == 2
 
 
+def test_read_signals_dedupe_false_unfiltered_returns_raw_cross_ingestion_rows(
+    tmp_path: Path,
+) -> None:
+    repo = _make_repo(tmp_path)
+    first = _base_signal(
+        ingestion_run_id="ing-run-001",
+        analysis_run_id="analysis-run-001",
+        symbol="AAPL",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+    second = _base_signal(
+        ingestion_run_id="ing-run-002",
+        analysis_run_id="analysis-run-002",
+        symbol="AAPL",
+        timestamp="2025-01-03T00:00:00+00:00",
+    )
+
+    repo.save_signals([first])
+    repo.save_signals([second])
+
+    all_items, all_total = repo.read_signals(dedupe=False, limit=20, offset=0)
+    scoped_items, scoped_total = repo.read_signals(
+        ingestion_run_id="ing-run-001",
+        dedupe=False,
+        limit=20,
+        offset=0,
+    )
+
+    assert all_total == 2
+    assert len(all_items) == 2
+    assert {item["ingestion_run_id"] for item in all_items} == {"ing-run-001", "ing-run-002"}
+
+    assert scoped_total == 1
+    assert len(scoped_items) == 1
+    assert scoped_items[0]["ingestion_run_id"] == "ing-run-001"
+
+
 def test_repo_init_migrates_legacy_duplicate_ingestion_run_signal_rows(tmp_path: Path) -> None:
     db_path = tmp_path / "legacy_dirty_signals.db"
     init_db(db_path)
