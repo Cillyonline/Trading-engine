@@ -1,6 +1,6 @@
 # Cilly Trading Engine - Complete Master Roadmap
 Version: Bilingual (English -> Deutsch)
-Status Basis Date: 2026-03-11
+Status Basis Date: 2026-04-09
 Purpose: Repo-based roadmap aligned to the uploaded 45-phase master reference.
 
 This roadmap replaces the prior working copy at this path.
@@ -17,6 +17,11 @@ Primary status sources:
 - `docs/architecture/phases/phase-27-status.md`
 - `src/**`
 - `tests/**`
+- `docs/operations/runtime/p63-daily-bounded-paper-runtime-workflow.md`
+- `docs/operations/runtime/p64-one-command-bounded-daily-paper-runtime-runner.md`
+- `docs/operations/runtime/staging-paper-progress-2026-04-03.md`
+- `docs/operations/runtime/paper-deployment-acceptance-gate.md`
+- `docs/operations/runtime/paper-deployment-operator-checklist.md`
 - runtime and operator documentation under `docs/**`
 
 Authority model used in this file:
@@ -131,6 +136,23 @@ Market Data
 - Phase 37 is marked `Implemented in Repository` in this revision because watchlist persistence, CRUD API, execution/ranking, `/ui` behavior, and tests are now all present in-repo.
 - Phase 39 is marked `Implemented in Repository` in this revision because the backend-served `/ui` workbench now includes a bounded read-only chart panel, explicit source markers, and runtime/browser tests that verify the chart surface without expanding into Phase 40 desk scope.
 - Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present.
+- Phase 44 gained stronger bounded operational evidence after the prior status basis date through a documented daily bounded paper runtime workflow, a one-command bounded runner, first non-empty bounded execution evidence, repeat-safe duplicate-entry verification, and explicit acceptance-gate evidence that still keeps the repository in staging rather than granting broader readiness.
+- Signal inspection semantics were clarified after the prior status basis date through ingestion-run persistence dedupe, bounded consumer-facing unfiltered dedupe on `/signals`, and an explicit raw observability endpoint on `/signals/raw`; these changes strengthen observability and operator inspection without changing non-live scope boundaries.
+- Phase 27 evidence was further strengthened after the prior status basis date by aligning bounded execution gating with canonical deterministic risk-framework semantics.
+
+## Post-basis-date progress (2026-04-05 to 2026-04-09)
+
+* OPS-P61: aligned signal score contract between analysis output and bounded paper execution.
+* OPS-P62: recorded first non-empty bounded paper execution cycle and repeat-safe duplicate-entry verification.
+* OPS-P63: defined and validated a deterministic daily bounded paper runtime workflow.
+* OPS-P64: added one operator-facing command for the bounded daily paper runtime sequence.
+* P54 acceptance evidence was completed and explicitly kept the repository in staging rather than granting broader readiness.
+* RISK-P55 aligned bounded execution gating with canonical deterministic risk-framework semantics.
+* Signal inspection semantics were hardened through:
+
+  * ingestion-run persistence dedupe,
+  * bounded consumer-facing unfiltered dedupe on `/signals`,
+  * explicit raw observability on `/signals/raw`.
 
 ---
 
@@ -548,11 +570,12 @@ Ensure documentation reflects implementation reality.
 Separate current risk primitives from a future broader risk framework claim.
 
 **Current Status Basis**
-- Risk contracts, a concrete risk gate, pipeline integration, docs, and tests are all present.
-- Current governance wording still treats the phase with caution, so this roadmap uses the evidence-oriented label instead of a simpler blanket completion claim.
+- Risk contracts, a concrete risk gate, canonical score-threshold semantics, execution-path alignment, docs, and tests are present.
+- Recent repository changes further aligned bounded paper-execution gating with the canonical deterministic risk-framework evaluator and adapter semantics.
+- Current governance wording still keeps the broader phase more conservative than a flat completion claim.
 
 **Outcome**
-- The risk framework has real repository artifacts and should no longer be described as absent.
+- The risk framework has real repository artifacts and stronger canonical execution-path alignment, but broader framework-completion claims remain intentionally conservative.
 
 ---
 
@@ -822,11 +845,19 @@ Move from single-signal analysis to portfolio-level evaluation.
 Simulate real trading with live-like behavior and zero capital risk.
 
 **Current Status Basis**
-- Deterministic paper-trading simulator code, trade persistence integration, PnL tracking, and tests are present.
-- The full phase scope described in the reference roadmap, including a broader paper-trading workflow and dashboard layer, was not fully verified.
+- Deterministic paper-trading simulator code, trade persistence integration, PnL tracking, reconciliation surfaces, and tests are present.
+- The repository now also contains:
+
+  * a documented daily bounded paper runtime workflow,
+  * a one-command bounded daily runtime runner,
+  * bounded evidence for a first non-empty paper execution cycle,
+  * repeat-safe duplicate-entry verification,
+  * explicit staging acceptance-gate documentation.
+- Recent signal persistence and read-surface clarifications reduced duplicate-visibility ambiguity and improved operator inspection for bounded paper workflows.
+- Despite these gains, the broader phase remains only partially implemented because the accepted full paper-install/runtime gate was not achieved and the repository still does not justify broader product-readiness or production-style claims.
 
 **Outcome**
-- Paper-trading simulation exists, but the full user-facing paper-trading phase is not complete.
+- The repository supports a materially stronger bounded paper-runtime workflow and evidence model, but it still remains below full Phase 44 completion.
 
 ---
 
@@ -929,6 +960,23 @@ Marktdaten
 - Phase 25 und Phase 27 wurden gegen veraltete Roadmap-Aussagen korrigiert, weil Lifecycle- und Risk-Framework-Artefakte bereits im Repo vorhanden sind.
 - Phase 35 ist in dieser Fassung `Implemented`, weil Metrics, Telemetry, Runtime Health, Guard-Trigger-Monitoring und Integrationstests bereits vorhanden sind.
 - Phase 42b ist `Implemented in Repository`, weil deterministischer Backtest-Runner, CLI, Doku und Tests existieren.
+- Phase 44 hat seit der vorherigen Statusbasis deutlich staerkere begrenzte operative Evidenz erhalten: dokumentierter taeglicher bounded paper runtime workflow, One-Command-Runner, erste non-empty bounded execution evidence, repeat-safe duplicate-entry verification und explizite Acceptance-Gate-Evidenz, die den Status weiterhin bewusst in Staging haelt.
+- Die Signal-Inspektionssemantik wurde seit der vorherigen Statusbasis durch ingestion-run persistence dedupe, begrenzte consumer-facing unfiltered dedupe auf `/signals` und einen expliziten Raw-Observability-Endpunkt `/signals/raw` geschaerft; das staerkt Observability und Operator-Inspektion, ohne die Non-Live-Grenzen zu veraendern.
+- Die Evidenz fuer Phase 27 wurde seit der vorherigen Statusbasis weiter gestaerkt, indem bounded execution gating an kanonische deterministische Risk-Framework-Semantik angeglichen wurde.
+
+## Fortschritt seit Statusbasis (2026-04-05 bis 2026-04-09)
+
+* OPS-P61: Score-Contract zwischen Analyseausgabe und bounded paper execution angeglichen.
+* OPS-P62: erste non-empty bounded paper execution cycle evidence und repeat-safe duplicate-entry verification dokumentiert.
+* OPS-P63: deterministischen taeglichen bounded paper runtime workflow definiert und validiert.
+* OPS-P64: einen operator-facing One-Command-Runner fuer die bounded daily paper runtime sequence hinzugefuegt.
+* P54 Acceptance-Evidenz wurde abgeschlossen und hat den Repository-Status explizit in Staging belassen statt breitere Readiness zu behaupten.
+* RISK-P55 hat bounded execution gating an kanonische deterministische Risk-Framework-Semantik angeglichen.
+* Die Signal-Inspektionssemantik wurde gehaertet durch:
+
+  * ingestion-run persistence dedupe,
+  * bounded consumer-facing unfiltered dedupe auf `/signals`,
+  * explizite raw observability auf `/signals/raw`.
 
 ---
 
@@ -1346,11 +1394,12 @@ Sicherstellen, dass Dokumentation die Implementierungsrealitaet widerspiegelt.
 Aktuelle Risiko-Primitiven sauber von einem spaeteren breiteren Risk-Framework-Claim trennen.
 
 **Aktuelle Statusbasis**
-- Risk Contracts, konkretes Risk Gate, Pipeline-Integration, Doku und Tests sind vorhanden.
-- Die aktuelle Governance-Sprache bleibt vorsichtig, daher nutzt diese Roadmap ein evidenzorientiertes Label statt einer pauschalen Abschlussbehauptung.
+- Risk Contracts, konkretes Risk Gate, kanonische Score-Threshold-Semantik, Execution-Path-Alignment, Doku und Tests sind vorhanden.
+- Juengere Repository-Aenderungen haben bounded paper-execution gating weiter an den kanonischen deterministischen Risk-Framework-Evaluator und dessen Adapter-Semantik angeglichen.
+- Die aktuelle Governance-Sprache bleibt bewusst vorsichtig und haelt die breitere Phase konservativer als eine pauschale Abschlussbehauptung.
 
 **Ergebnis**
-- Das Risk Framework hat reale Repository-Artefakte und darf nicht mehr als fehlend beschrieben werden.
+- Das Risk Framework besitzt reale Repository-Artefakte und staerkere kanonische Execution-Path-Angleichung, waehrend breitere Framework-Completion-Claims bewusst konservativ bleiben.
 
 ---
 
@@ -1620,11 +1669,19 @@ Von Einzel-Signal-Analyse zu Bewertung auf Portfolio-Ebene wechseln.
 Reales Trading mit live-aehnlichem Verhalten ohne Kapitalrisiko simulieren.
 
 **Aktuelle Statusbasis**
-- Deterministischer Paper-Trading-Simulator, Trade-Persistenz-Integration, PnL-Tracking und Tests sind vorhanden.
-- Der volle Phasen-Scope aus der Referenz, inklusive breiterem Workflow und Dashboard-Layer, wurde nicht voll bestaetigt.
+- Deterministischer Paper-Trading-Simulator, Trade-Persistenz-Integration, PnL-Tracking, Reconciliation-Surfaces und Tests sind vorhanden.
+- Das Repository enthaelt inzwischen ausserdem:
+
+  * einen dokumentierten taeglichen bounded paper runtime workflow,
+  * einen One-Command bounded daily runtime runner,
+  * begrenzte Evidenz fuer einen ersten non-empty paper execution cycle,
+  * repeat-safe duplicate-entry verification,
+  * explizite Staging-Acceptance-Gate-Dokumentation.
+- Juengere Klarstellungen bei Signal-Persistenz und Read-Surfaces haben Duplicate-Visibility-Ambiguitaet reduziert und die Operator-Inspektion fuer bounded paper workflows verbessert.
+- Trotz dieses Fortschritts bleibt die breitere Phase nur teilweise implementiert, weil das akzeptierte vollstaendige paper-install/runtime gate nicht erreicht wurde und das Repository weiterhin keine breiteren Product-Readiness- oder Production-Style-Claims rechtfertigt.
 
 **Ergebnis**
-- Paper-Trading-Simulation existiert, aber die komplette user-facing Phase ist noch nicht abgeschlossen.
+- Das Repository unterstuetzt heute einen materiell staerkeren bounded paper-runtime workflow und ein staerkeres Evidenzmodell, bleibt aber weiterhin unterhalb einer vollstaendigen Phase-44-Completion.
 
 ---
 
