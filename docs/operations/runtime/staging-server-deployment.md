@@ -220,6 +220,14 @@ In bounded staging, `/data/artifacts/...` is bind-mounted to
 `/srv/cilly/staging/artifacts/...` on the host for persistent evidence
 retention.
 
+Interpretation rule alignment:
+- After an active server-testing period is complete, classify bounded review
+  packages using the `pass` / `pass-with-note` / `fail` semantics and follow-up
+  issue triggers in `docs/operations/runtime/p53-automated-review-operations.md`
+  (`Bounded Run-Evidence Interpretation and Review Rules` section).
+- This remains decision-support interpretation only and does not change
+  staging-only, non-production boundaries in this runbook.
+
 ## Conflicting Guidance Handling
 Any local-run or local development installation guidance is non-canonical for
 first-clean-server install. For first-clean-server install and startup, use this
