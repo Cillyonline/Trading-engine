@@ -146,6 +146,59 @@ All evidence files are deterministic JSON with the following common fields:
 
 Evidence files are written to `runs/` subdirectories which are excluded from version control via `.gitignore`.
 
+## Bounded Run-Evidence Interpretation and Review Rules
+
+These rules apply after an active server-testing period is complete and evidence
+comparison is being used for decision-support review. They do not change how
+evidence is captured during the active run period.
+
+Interpretation boundary:
+- Treat evidence as bounded to the evaluated server run window only.
+- Do not extrapolate bounded outcomes into production-readiness, broker-readiness,
+  or live-trading claims.
+- Use bounded evidence for decision support and follow-up prioritization only.
+- Keep raw evidence markers (`PASS`, `FAIL`, `ERROR`) unchanged; apply the review
+  semantics below on top of those markers.
+
+### Decision-Support Review Semantics
+
+Use one review classification per bounded review package:
+
+| Review classification | Meaning | Minimum criteria |
+| --- | --- | --- |
+| `pass` | Bounded evidence supports continued staged evaluation with no unresolved defects in scope. | Required bounded checks pass, no reproducible defect observed, and no unresolved blocking note. |
+| `pass-with-note` | Bounded evidence supports continued staged evaluation, but a non-blocking bounded caveat must be tracked. | Required bounded checks pass; caveat is documented with evidence path and owner; no currently reproducible defect that invalidates the run. |
+| `fail` | Bounded evidence does not support continuation without corrective action. | Any required bounded check fails, evidence is insufficient/conflicting for the review decision, or a reproducible defect is observed. |
+
+Classification boundary:
+- `pass` and `pass-with-note` are bounded decision-support outcomes, not release
+  or production decisions.
+- `pass-with-note` must include a concrete note linked to exact evidence files.
+- `fail` means corrective follow-up is required before claiming the reviewed run
+  as decision-support complete.
+
+### Follow-Up Issue Triggers for Reproducible Defects
+
+Open or update a follow-up issue when any of the following occurs in bounded
+server-run evidence:
+
+1. The same defect is reproduced in two or more bounded runs with the same
+   command path and comparable runtime inputs.
+2. Any required evidence script reports `FAIL` because of a product/runtime
+   defect (not operator environment setup failure).
+3. A `pass-with-note` caveat repeats in two consecutive review windows without
+   confirmed resolution.
+4. Evidence is missing or conflicting such that the bounded review package must
+   be classified as `fail`.
+
+Minimum follow-up issue content:
+- bounded defect statement and affected workflow step (`reconciliation`,
+  `weekly-review`, or `restart-evidence`)
+- exact evidence file paths and timestamps
+- reproduction command(s) and runtime context
+- observed result versus expected bounded result
+- explicit non-goal reminder (no production/live-trading claim)
+
 ## Integration with Phase 44 Operator Workflow
 
 The automation scripts implement the same logic defined in the Phase 44 operator workflow:

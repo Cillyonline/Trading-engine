@@ -106,6 +106,14 @@ Bound host persistence path: `/srv/cilly/staging/artifacts/...`
 
 See `docs/operations/runtime/p53-automated-review-operations.md` for the full automation contract.
 
+Interpretation alignment for post-run review:
+- After the active server-testing period, interpret bounded evidence bundles with
+  `pass` / `pass-with-note` / `fail` semantics from
+  `docs/operations/runtime/p53-automated-review-operations.md`
+  (`Bounded Run-Evidence Interpretation and Review Rules`).
+- Use those semantics for decision-support review and follow-up issue handling;
+  keep this checklist's final gate outcome bounded and non-production.
+
 ## F) Checklist Completion Evidence
 
 | # | Item | Evidence reference | Answer (YES/NO/N/A) |
