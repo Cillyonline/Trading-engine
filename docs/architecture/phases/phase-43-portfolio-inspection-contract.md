@@ -1,36 +1,86 @@
-# Phase 43 Portfolio Inspection Contract
+# Phase 43 Bounded Portfolio Simulation Acceptance Contract
 
-This document defines the bounded Phase 43 contract for portfolio/paper inspection surfaces:
+This document formalizes the bounded acceptance contract for currently implemented
+Phase 43 portfolio-simulation primitives, without expanding into broader product
+workflow scope.
+
+## Contract Intent
+
+Phase 43 remains **Partially Implemented**.
+
+This contract defines only the deterministic portfolio-simulation primitives that
+are currently implemented and test-verified in repository code. It does not claim
+paper-trading readiness, live-capital readiness, or broader product workflow
+completeness.
+
+## Bounded Acceptance Surface
+
+### Capital Allocation Primitive
+
+- Authority module:
+  - `src/cilly_trading/portfolio_framework/capital_allocation_policy.py`
+- Contract operation:
+  - `assess_capital_allocation(state, rules)`
+- Accepted behavior:
+  - deterministic global-cap enforcement
+  - deterministic strategy-cap enforcement
+  - deterministic reason ordering for violations
+
+### Exposure Handling Primitive
+
+- Authority module:
+  - `src/cilly_trading/portfolio_framework/exposure_aggregator.py`
+- Contract operation:
+  - `aggregate_portfolio_exposure(state)`
+- Accepted behavior:
+  - deterministic strategy/symbol/position exposure aggregation
+  - explicit gross/net exposure math
+  - explicit zero-equity behavior (`inf`, `-inf`, or `0.0` as implemented)
+
+### Multi-Position Consistency Primitive
+
+- Authority modules:
+  - `src/cilly_trading/portfolio_framework/capital_allocation_policy.py`
+  - `src/api/services/paper_inspection_service.py`
+- Contract operations:
+  - `run_portfolio_decision_pipeline(...)`
+  - `build_portfolio_positions_from_trades(...)`
+  - `build_bounded_paper_simulation_state(...)`
+- Accepted behavior:
+  - deterministic ranked-signal decisions across competing positions
+  - state mutation only for approved outcomes in decision pipeline
+  - deterministic `(strategy_id, symbol)` aggregation for inspection positions
+  - bounded runtime snapshot validation via `validate_bounded_paper_simulation_state(...)`
+
+## Inspection Surfaces Covered by the Same Bounded State
 
 - `GET /portfolio/positions`
 - `GET /paper/account`
 - `GET /paper/reconciliation`
 
-## Scope
+Covered endpoints are read-only and derived from one bounded canonical snapshot.
+They do not execute orders or mutate portfolio state.
 
-- The covered endpoints are read-only inspection surfaces.
-- Covered state is derived from canonical simulation artifacts persisted by the trading-core execution repository.
-- Covered endpoints do not execute orders, mutate portfolio state, or expose live broker state.
+## Implemented Primitives vs Missing Broader Workflow
 
-## Source Of Truth
+### Implemented In Scope
 
-- `src/api/services/paper_inspection_service.py`
-- `build_bounded_paper_simulation_state(...)`
+- deterministic capital-allocation assessment
+- deterministic exposure aggregation and guardrail evaluation inputs
+- deterministic ranked portfolio decision pipeline semantics
+- deterministic portfolio/paper inspection derivation from canonical execution entities
+- bounded runtime validation of simulation snapshot integrity
 
-The source of truth is one bounded in-memory simulation snapshot built from canonical repository reads (`list_orders`, `list_execution_events`, `list_trades`) and reused for covered inspection derivations.
+### Not Implemented In This Phase Scope
 
-## Derivation Rules
-
-- Closed exposure (`remaining_quantity <= 0`) is excluded.
-- Positions are aggregated by `(strategy_id, symbol)`.
-- `size` is the sum of remaining quantities in the aggregate group.
-- `average_price` is a weighted entry average over remaining quantity.
-- `unrealized_pnl` is the sum of unrealized PnL values (missing values treated as `0`).
-- Output ordering is deterministic: `symbol`, `strategy_id`, `size`, `average_price`, `unrealized_pnl`.
-- Paper account and reconciliation summaries are derived from the same bounded snapshot used for portfolio inspection output.
+- broad portfolio product workflow expansion
+- live-capital claims or readiness
+- broker integration or broker-state synchronization workflow
+- broad execution-system redesign
+- complete paper-trading operational lifecycle as a Phase 43 claim
 
 ## Explicit Non-Claims
 
-- No live broker portfolio sync.
-- No mutation workflow for paper-trading state.
-- No execution-capability claim beyond deterministic inspection of bounded internal artifacts.
+- This contract does **not** upgrade Phase 43 from partial maturity.
+- Passing this contract does **not** imply Phase 44 paper readiness by itself.
+- Passing this contract does **not** imply any live-trading or broker-readiness claim.
