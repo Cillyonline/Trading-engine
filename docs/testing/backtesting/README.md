@@ -19,6 +19,7 @@ python -m cilly_trading compare-strategies --snapshots <PATH> --strategy <NAME> 
 ## Comparable Harness
 - Detailed contract and workflow: `docs/testing/backtesting/strategy_comparison_harness.md`
 - Output artifact: `strategy-comparison.json` + `strategy-comparison.sha256`
+- Bounded realism assumptions contract: `docs/testing/backtesting/p56_bounded_backtest_realism_assumptions.md`
 
 ## Determinism Rules
 - Determinism guard is installed during backtest execution and uninstalled in a finally block.
