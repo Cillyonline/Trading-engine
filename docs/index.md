@@ -117,6 +117,9 @@ Phase 44 reference links remain navigational and do not override the authoritati
 ### OPS-P61 Reference Materials
 - [OPS-P61 Practice and Analysis Article standards](phases/ops-p61-practice-analysis-article-standards.md)
 
+### P56-RISK Reference Materials
+- [P56 bounded adverse scenario matrix](architecture/risk/p56-bounded-adverse-scenario-matrix.md)
+
 ### DEC-P47 Reference Materials
 - [DEC-P47 qualification claim boundary](phases/dec-p47-qualification-claim-boundary.md)
 
