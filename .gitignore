@@ -1,13 +1,26 @@
-﻿__pycache__/
+﻿# Python caches / metadata
+__pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+*.egg-info/
+
+# Local environments / secrets
+.venv*/
+.env
+.env.*
+
+# Local databases / runtime files
+*.db
+runs/
+
+# Local editor settings
+.vscode/
 
 # Transient PR body artifacts at repository root
 /pr_body.md
 /pr_body_*.md
 /.pr-body-*.md
-*.db
-.venv*/
 
 # local scripts
 scripts/*
@@ -19,13 +32,4 @@ scripts/*
 !scripts/capture_restart_evidence.py
 !scripts/run_paper_execution_cycle.py
 !scripts/run_daily_bounded_paper_runtime.py
-
-# Local runtime artifacts (never commit)
-# runs/ stores local execution/test artifacts and must never be committed.
-runs/
-# Python build metadata
-*.egg-info/
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
+*.code-workspace

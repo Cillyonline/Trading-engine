@@ -1,7 +1,4 @@
 ﻿# Codex project configuration
 
 approval_policy = "on-request"
-sandbox_mode = "workspace"
-
-# Prevent Codex from modifying files outside this repository
-# and require confirmation for risky commands.
+sandbox_mode = "workspace-write"
