@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -43,6 +44,7 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 settings = build_api_runtime_settings()
+UI_DIRECTORY: Path = settings.ui_directory
 repositories = create_api_repositories()
 _main_compat = bind_main_runtime_exports(
     module_globals=globals(),
@@ -69,7 +71,13 @@ app = FastAPI(
 )
 
 initialize_alert_state(app)
-app.mount("/ui", StaticFiles(directory=UI_DIRECTORY, html=True), name="ui")
+app.mount("/ui", StaticFiles(directory=str(UI_DIRECTORY), html=True), name="ui")
+RESEARCH_DASHBOARD_UI_DIRECTORY: Path = UI_DIRECTORY / "research_dashboard"
+app.mount(
+    "/research-dashboard",
+    StaticFiles(directory=str(RESEARCH_DASHBOARD_UI_DIRECTORY), html=True),
+    name="research-dashboard",
+)
 
 logger.info("Cilly Trading Engine API starting up")
 
