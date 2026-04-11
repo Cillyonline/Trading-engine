@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from cilly_trading.engine.paper_execution_risk_profile import PaperExecutionRiskProfile
 from cilly_trading.engine.paper_execution_worker import BoundedPaperExecutionWorker
 from cilly_trading.models import Signal
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
@@ -38,12 +39,14 @@ def test_paper_execution_account_exposure_rejection_uses_canonical_reason(
 ) -> None:
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        account_equity=Decimal("1000"),
-        max_position_pct=Decimal("0.20"),
-        max_total_exposure_pct=Decimal("0.80"),
-        max_strategy_exposure_pct=Decimal("1.00"),
-        max_symbol_exposure_pct=Decimal("1.00"),
-        max_concurrent_positions=20,
+        risk_profile=PaperExecutionRiskProfile(
+            account_equity=Decimal("1000"),
+            max_position_pct=Decimal("0.20"),
+            max_total_exposure_pct=Decimal("0.80"),
+            max_strategy_exposure_pct=Decimal("1.00"),
+            max_symbol_exposure_pct=Decimal("1.00"),
+            max_concurrent_positions=20,
+        ),
     )
 
     for index in range(8):
@@ -68,12 +71,14 @@ def test_paper_execution_strategy_exposure_rejection_uses_canonical_reason(
 ) -> None:
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        account_equity=Decimal("1000"),
-        max_position_pct=Decimal("0.20"),
-        max_total_exposure_pct=Decimal("1.00"),
-        max_strategy_exposure_pct=Decimal("0.20"),
-        max_symbol_exposure_pct=Decimal("1.00"),
-        max_concurrent_positions=20,
+        risk_profile=PaperExecutionRiskProfile(
+            account_equity=Decimal("1000"),
+            max_position_pct=Decimal("0.20"),
+            max_total_exposure_pct=Decimal("1.00"),
+            max_strategy_exposure_pct=Decimal("0.20"),
+            max_symbol_exposure_pct=Decimal("1.00"),
+            max_concurrent_positions=20,
+        ),
     )
 
     first = worker.process_signal(_signal(symbol="AAPL", strategy="strategy-a", signal_id="sig-s-1"))
@@ -91,12 +96,14 @@ def test_paper_execution_symbol_exposure_rejection_uses_canonical_reason(
 ) -> None:
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        account_equity=Decimal("1000"),
-        max_position_pct=Decimal("0.20"),
-        max_total_exposure_pct=Decimal("1.00"),
-        max_strategy_exposure_pct=Decimal("1.00"),
-        max_symbol_exposure_pct=Decimal("0.20"),
-        max_concurrent_positions=20,
+        risk_profile=PaperExecutionRiskProfile(
+            account_equity=Decimal("1000"),
+            max_position_pct=Decimal("0.20"),
+            max_total_exposure_pct=Decimal("1.00"),
+            max_strategy_exposure_pct=Decimal("1.00"),
+            max_symbol_exposure_pct=Decimal("0.20"),
+            max_concurrent_positions=20,
+        ),
     )
 
     first = worker.process_signal(_signal(symbol="AAPL", strategy="strategy-a", signal_id="sig-y-1"))

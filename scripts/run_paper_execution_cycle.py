@@ -38,6 +38,7 @@ if str(SRC) not in sys.path:
 
 from cilly_trading.engine.paper_execution_worker import (  # noqa: E402
     BoundedPaperExecutionWorker,
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE,
     SignalEvaluationResult,
 )
 from cilly_trading.repositories.execution_core_sqlite import (  # noqa: E402
@@ -144,7 +145,11 @@ def run_paper_execution_cycle(
 
         signals = signal_repo.list_signals(limit=signal_limit)
 
-        worker = BoundedPaperExecutionWorker(repository=execution_repo)
+        risk_profile = DEFAULT_PAPER_EXECUTION_RISK_PROFILE
+        worker = BoundedPaperExecutionWorker(
+            repository=execution_repo,
+            risk_profile=risk_profile,
+        )
         results = worker.process_batch(signals)
     except Exception as exc:
         error_payload: dict[str, Any] = {
@@ -173,6 +178,7 @@ def run_paper_execution_cycle(
         "ran_at": ran_at.isoformat(),
         "rejected": len(rejected),
         "results": [_result_to_dict(r) for r in results],
+        "risk_profile": risk_profile.to_payload(),
         "signals_read": len(signals),
         "skipped": len(skipped),
         "status": "pass" if eligible else "no_eligible",

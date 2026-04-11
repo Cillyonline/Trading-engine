@@ -55,6 +55,36 @@ A signal that fails any step produces an explicit outcome:
 - **reject**: signal violates a hard rule; it is blocked with an explicit reason
   code that must be logged.
 
+## Paper Execution Risk Profile Contract (P57-RISK)
+
+Bounded paper execution risk inputs are governed by one canonical validated
+contract:
+
+- `src/cilly_trading/engine/paper_execution_risk_profile.py`
+- contract id: `paper-execution-risk-profile-v1`
+
+The contract validates all bounded profile inputs fail-closed before execution
+begins. Invalid values raise explicit errors (for example, out-of-range
+percentages, non-positive limits, or non-finite numeric values), and execution
+does not proceed with implicit defaults.
+
+Validated by this contract:
+
+- score threshold bounds (`0.0..100.0`)
+- bounded exposure percentages (`(0, 1]`)
+- bounded concurrency/cooldown limits
+- bounded paper quantity, fallback entry price, and account equity (> `0`)
+
+Not claimed by this contract:
+
+- live-trading readiness
+- broker integration readiness
+- production-readiness approval
+
+P56 alignment note: this contract hardens paper-execution input governance for
+runtime determinism. It does not duplicate the existing P56 adverse-scenario
+matrix scope in `docs/architecture/risk/p56-bounded-adverse-scenario-matrix.md`.
+
 ## Eligibility Rules
 
 A signal is ineligible (rejected) if any required field is absent or invalid:
@@ -65,7 +95,7 @@ A signal is ineligible (rejected) if any required field is absent or invalid:
 | `strategy` | Non-empty string key matching a known governed strategy. |
 | `direction` | Must be `long` or `short`. |
 | `score` | Numeric value; must be present and within `[0.0, 100.0]`. |
-| `timestamp` | Parseable ISO-8601 datetime or Unix epoch milliseconds. |
+| `timestamp` | Parseable ISO-8601 datetime string. |
 | `stage` | Must be non-empty and a recognized stage value such as `setup`. |
 
 A signal missing any required field, or with a field value outside its allowed
