@@ -32,6 +32,10 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Optional, Sequence
 
+from cilly_trading.engine.paper_execution_risk_profile import (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE,
+    PaperExecutionRiskProfile,
+)
 from cilly_trading.engine.risk import evaluate_risk_framework_execution_decision
 from cilly_trading.models import (
     ExecutionEvent,
@@ -52,32 +56,44 @@ from cilly_trading.risk_framework.allocation_rules import RiskLimits
 # ---------------------------------------------------------------------------
 
 #: Minimum signal score required for paper entry (inclusive) on a 0..100 scale.
-MIN_SCORE_THRESHOLD: float = 60.0
+MIN_SCORE_THRESHOLD: float = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.min_score_threshold
 
 #: Maximum fraction of account equity for a single paper position.
-MAX_POSITION_PCT: Decimal = Decimal("0.10")
+MAX_POSITION_PCT: Decimal = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_position_pct
 
 #: Maximum fraction of account equity across all open paper positions.
-MAX_TOTAL_EXPOSURE_PCT: Decimal = Decimal("0.80")
+MAX_TOTAL_EXPOSURE_PCT: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_total_exposure_pct
+)
 
 #: Maximum number of concurrent open paper positions.
-MAX_CONCURRENT_POSITIONS: int = 10
+MAX_CONCURRENT_POSITIONS: int = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_concurrent_positions
+)
 
 #: Maximum fraction of account equity for a strategy aggregate.
-MAX_STRATEGY_EXPOSURE_PCT: Decimal = Decimal("0.80")
+MAX_STRATEGY_EXPOSURE_PCT: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_strategy_exposure_pct
+)
 
 #: Maximum fraction of account equity for a symbol aggregate.
-MAX_SYMBOL_EXPOSURE_PCT: Decimal = Decimal("0.80")
+MAX_SYMBOL_EXPOSURE_PCT: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_symbol_exposure_pct
+)
 
 #: Minimum cooldown in hours between accepted entries for the same
 #: ``(symbol, strategy)`` pair.
-COOLDOWN_HOURS: int = 24
+COOLDOWN_HOURS: int = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.cooldown_hours
 
 #: Default paper quantity (one unit per entry).
-DEFAULT_PAPER_QUANTITY: Decimal = Decimal("1")
+DEFAULT_PAPER_QUANTITY: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.default_paper_quantity
+)
 
 #: Fallback entry price used when the signal provides no price or entry_zone.
-DEFAULT_PAPER_ENTRY_PRICE: Decimal = Decimal("100")
+DEFAULT_PAPER_ENTRY_PRICE: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.default_paper_entry_price
+)
 
 _PRICE_SCALE: Decimal = Decimal("0.0001")
 
@@ -171,17 +187,21 @@ def _parse_timestamp(ts: str) -> datetime.datetime:
     return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
-def _extract_entry_price(signal: Signal) -> Decimal:
+def _extract_entry_price(
+    signal: Signal,
+    *,
+    fallback_entry_price: Decimal,
+) -> Decimal:
     """Extract a representative entry price from the signal.
 
     Uses the entry_zone midpoint when available; falls back to
-    ``DEFAULT_PAPER_ENTRY_PRICE`` otherwise.
+    ``fallback_entry_price`` otherwise.
     """
     entry_zone = signal.get("entry_zone")
     if entry_zone is not None:
         mid = Decimal(str(entry_zone["from_"] + entry_zone["to"])) / Decimal("2")
         return mid.quantize(_PRICE_SCALE, rounding=ROUND_HALF_UP)
-    return DEFAULT_PAPER_ENTRY_PRICE
+    return fallback_entry_price
 
 
 _DIRECTION_TO_SIDE: dict[str, str] = {
@@ -260,24 +280,10 @@ class BoundedPaperExecutionWorker:
         self,
         repository: CanonicalExecutionRepository,
         *,
-        min_score_threshold: float = MIN_SCORE_THRESHOLD,
-        max_position_pct: Decimal = MAX_POSITION_PCT,
-        max_total_exposure_pct: Decimal = MAX_TOTAL_EXPOSURE_PCT,
-        max_strategy_exposure_pct: Decimal = MAX_STRATEGY_EXPOSURE_PCT,
-        max_symbol_exposure_pct: Decimal = MAX_SYMBOL_EXPOSURE_PCT,
-        max_concurrent_positions: int = MAX_CONCURRENT_POSITIONS,
-        cooldown_hours: int = COOLDOWN_HOURS,
-        account_equity: Decimal = Decimal("100000"),
+        risk_profile: PaperExecutionRiskProfile = DEFAULT_PAPER_EXECUTION_RISK_PROFILE,
     ) -> None:
         self._repo = repository
-        self._min_score = min_score_threshold
-        self._max_position_pct = max_position_pct
-        self._max_total_exposure_pct = max_total_exposure_pct
-        self._max_strategy_exposure_pct = max_strategy_exposure_pct
-        self._max_symbol_exposure_pct = max_symbol_exposure_pct
-        self._max_concurrent_positions = max_concurrent_positions
-        self._cooldown_hours = cooldown_hours
-        self._account_equity = account_equity
+        self._risk_profile = risk_profile
         self._risk_limits = self._build_risk_limits()
 
     # ------------------------------------------------------------------
@@ -303,13 +309,22 @@ class BoundedPaperExecutionWorker:
         """
         return [self.process_signal(signal) for signal in signals]
 
+    @property
+    def risk_profile(self) -> PaperExecutionRiskProfile:
+        """Return the canonical validated risk profile used by this worker."""
+        return self._risk_profile
+
     def _build_risk_limits(self) -> RiskLimits:
         """Build deterministic risk-framework limits for paper execution."""
         return RiskLimits(
-            max_account_exposure_pct=float(self._max_total_exposure_pct),
-            max_position_size=float(self._account_equity * self._max_position_pct),
-            max_strategy_exposure_pct=float(self._max_strategy_exposure_pct),
-            max_symbol_exposure_pct=float(self._max_symbol_exposure_pct),
+            max_account_exposure_pct=float(self._risk_profile.max_total_exposure_pct),
+            max_position_size=float(
+                self._risk_profile.account_equity * self._risk_profile.max_position_pct
+            ),
+            max_strategy_exposure_pct=float(
+                self._risk_profile.max_strategy_exposure_pct
+            ),
+            max_symbol_exposure_pct=float(self._risk_profile.max_symbol_exposure_pct),
         )
 
     # ------------------------------------------------------------------
@@ -340,11 +355,11 @@ class BoundedPaperExecutionWorker:
         score = float(signal["score"])  # type: ignore[arg-type]
 
         # Step 2: score threshold
-        if score < self._min_score:
+        if score < self._risk_profile.min_score_threshold:
             return SignalEvaluationResult(
                 outcome="skip:score_below_threshold",
                 reason=(
-                    f"score={score} < min_score_threshold={self._min_score}"
+                    f"score={score} < min_score_threshold={self._risk_profile.min_score_threshold}"
                 ),
             )
 
@@ -375,7 +390,7 @@ class BoundedPaperExecutionWorker:
             signal_ts = _parse_timestamp(signal["timestamp"])  # type: ignore[arg-type]
             last_entry_ts = _parse_timestamp(most_recent_opened_at)
             elapsed = signal_ts - last_entry_ts
-            cooldown_window = datetime.timedelta(hours=self._cooldown_hours)
+            cooldown_window = datetime.timedelta(hours=self._risk_profile.cooldown_hours)
             if elapsed < cooldown_window:
                 return SignalEvaluationResult(
                     outcome="skip:cooldown_active",
@@ -386,8 +401,11 @@ class BoundedPaperExecutionWorker:
                 )
 
         # Step 5: exposure and position-limit checks
-        entry_price = _extract_entry_price(signal)
-        proposed_notional = DEFAULT_PAPER_QUANTITY * entry_price
+        entry_price = _extract_entry_price(
+            signal,
+            fallback_entry_price=self._risk_profile.default_paper_entry_price,
+        )
+        proposed_notional = self._risk_profile.default_paper_quantity * entry_price
 
         # Load all open trades for canonical exposure/concurrent-position checks.
         # The limit of 1000 reflects the bounded paper simulation scope
@@ -397,12 +415,12 @@ class BoundedPaperExecutionWorker:
         all_open_trades = [t for t in all_trades if t.status == "open"]
 
         # Concurrent position limit
-        if len(all_open_trades) >= self._max_concurrent_positions:
+        if len(all_open_trades) >= self._risk_profile.max_concurrent_positions:
             return SignalEvaluationResult(
                 outcome="reject:concurrent_position_limit_exceeded",
                 reason=(
                     f"concurrent_positions={len(all_open_trades)} >= "
-                    f"limit={self._max_concurrent_positions}"
+                    f"limit={self._risk_profile.max_concurrent_positions}"
                 ),
             )
 
@@ -425,7 +443,7 @@ class BoundedPaperExecutionWorker:
             strategy_id=strategy,
             symbol=symbol,
             proposed_position_size=float(proposed_notional),
-            account_equity=float(self._account_equity),
+            account_equity=float(self._risk_profile.account_equity),
             current_exposure=float(current_exposure),
             strategy_exposure=float(strategy_exposure),
             symbol_exposure=float(symbol_exposure),
@@ -461,8 +479,11 @@ class BoundedPaperExecutionWorker:
         strategy: str = signal["strategy"]  # type: ignore[assignment]
         direction: str = signal["direction"]  # type: ignore[assignment]
         occurred_at: str = signal["timestamp"]  # type: ignore[assignment]
-        entry_price = _extract_entry_price(signal)
-        quantity = DEFAULT_PAPER_QUANTITY
+        entry_price = _extract_entry_price(
+            signal,
+            fallback_entry_price=self._risk_profile.default_paper_entry_price,
+        )
+        quantity = self._risk_profile.default_paper_quantity
         side = _direction_to_order_side(direction)
 
         # --- Execution events ------------------------------------------
@@ -588,6 +609,7 @@ class BoundedPaperExecutionWorker:
 
 __all__ = [
     "BoundedPaperExecutionWorker",
+    "DEFAULT_PAPER_EXECUTION_RISK_PROFILE",
     "SignalEvaluationResult",
     "MIN_SCORE_THRESHOLD",
     "MAX_POSITION_PCT",
@@ -598,5 +620,6 @@ __all__ = [
     "COOLDOWN_HOURS",
     "DEFAULT_PAPER_QUANTITY",
     "DEFAULT_PAPER_ENTRY_PRICE",
+    "PaperExecutionRiskProfile",
     "_direction_to_order_side",
 ]

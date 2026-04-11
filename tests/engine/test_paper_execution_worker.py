@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from cilly_trading.engine.paper_execution_risk_profile import PaperExecutionRiskProfile
 from cilly_trading.engine.paper_execution_worker import (
     BoundedPaperExecutionWorker,
     COOLDOWN_HOURS,
@@ -474,7 +475,7 @@ def test_concurrent_position_limit_enforced(
     """AC5: exceeding concurrent position limit → reject:concurrent_position_limit_exceeded."""
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        max_concurrent_positions=2,
+        risk_profile=PaperExecutionRiskProfile(max_concurrent_positions=2),
     )
 
     symbols = ["SYM1", "SYM2", "SYM3"]
@@ -501,10 +502,12 @@ def test_total_exposure_limit_enforced(
     # after 8 positions exposure=800 → 9th should reject
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        account_equity=Decimal("1000"),
-        max_total_exposure_pct=Decimal("0.80"),
-        max_concurrent_positions=20,
-        max_position_pct=Decimal("0.20"),  # 20% of 1000 = 200 > 100 ✓
+        risk_profile=PaperExecutionRiskProfile(
+            account_equity=Decimal("1000"),
+            max_total_exposure_pct=Decimal("0.80"),
+            max_concurrent_positions=20,
+            max_position_pct=Decimal("0.20"),  # 20% of 1000 = 200 > 100 ✓
+        ),
     )
 
     eligible_count = 0
@@ -533,8 +536,10 @@ def test_position_size_limit_enforced(
     # DEFAULT_PAPER_ENTRY_PRICE=100 → proposed_notional=100 > 50 → reject
     worker = BoundedPaperExecutionWorker(
         repository=repo,
-        account_equity=Decimal("500"),
-        max_position_pct=Decimal("0.10"),
+        risk_profile=PaperExecutionRiskProfile(
+            account_equity=Decimal("500"),
+            max_position_pct=Decimal("0.10"),
+        ),
     )
     result = worker.process_signal(_make_signal(signal_id="sig-pos-001"))
     assert result.outcome == "reject:position_size_exceeds_limit"

@@ -73,6 +73,13 @@ def test_ops_p52_eligibility_rules_define_required_signal_fields() -> None:
     assert "`reject:invalid_signal_fields`" in content
 
 
+def test_ops_p52_timestamp_requirement_matches_iso8601_only_implementation_claim() -> None:
+    content = _read(POLICY_DOC_PATH)
+
+    assert "| `timestamp` | Parseable ISO-8601 datetime string. |" in content
+    assert "Unix epoch milliseconds" not in content
+
+
 def test_ops_p52_skip_and_reject_outcomes_are_explicit_with_codes() -> None:
     content = _read(POLICY_DOC_PATH)
 
