@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from cilly_trading.alerts.alert_models import AlertEvent
+from .bounded_non_live_channel import BoundedNonLiveChannel
 
 
 class NotificationChannel(Protocol):
@@ -16,4 +17,4 @@ class NotificationChannel(Protocol):
         """Deliver an alert event to an external notification destination."""
 
 
-__all__ = ["NotificationChannel"]
+__all__ = ["BoundedNonLiveChannel", "NotificationChannel"]
