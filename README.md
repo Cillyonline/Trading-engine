@@ -10,32 +10,33 @@ not be read as a production-readiness declaration.
 
 ## Documentation Roles
 
-`README.md` is the repository entry point only.
+`README.md` is an entry point only. It provides navigation into the canonical
+documentation structure and does not act as the source of truth for setup,
+local run, testing, or architecture topics.
+It also does not act as a source of authority for roadmap phase maturity/status.
 
 - Entry point: `README.md`
 - Navigation hub: `docs/index.md`
 - Structure and role map:
   `docs/architecture/documentation_structure.md`
+- Repository documentation index: `docs/index.md`
+- Setup authority: `docs/getting-started/getting-started.md`
+- Local run authority: `docs/getting-started/local-run.md`
+- Testing authority: `docs/testing/index.md`
+- Architecture authority root: `docs/architecture/`
+- Roadmap phase maturity/status authority: `ROADMAP_MASTER.md`
+- Server-ready release governance contract:
+  `docs/releases/release_governance_contract.md`
 
-## Documentation Navigation Flow
+## Verification Paths
 
-Use the primary navigation path:
-
-1. Start at `README.md`.
-2. Open `docs/index.md`.
-3. Follow links in `docs/index.md` to the target document.
-
-For canonical ownership rules and structure boundaries, use
-`docs/architecture/documentation_structure.md`.
-
-## Destination Shortcuts
-
-- Setup: `docs/getting-started/getting-started.md`
-- Local run: `docs/getting-started/local-run.md`
-- Testing: `docs/testing/index.md`
-- Architecture: `docs/architecture/`
-- Document status model: `docs/architecture/governance/document-status-model.md`
-- Release governance contract: `docs/releases/release_governance_contract.md`
+- Operators validating a local environment should start here, then follow
+  `docs/getting-started/getting-started.md` and `docs/getting-started/local-run.md`.
+- Operators validating the bounded staging server deployment path should use
+  `docs/operations/runtime/staging-server-deployment.md`.
+- Contributors or reviewers validating behavior and change scope should start
+  here, then use `docs/testing/index.md` and `docs/architecture/`.
+main
 
 ## Public API
 

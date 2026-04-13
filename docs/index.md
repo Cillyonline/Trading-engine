@@ -41,6 +41,7 @@ Use this order:
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [Phase 39 /ui charting contract](operations/ui/phase-39-charting-contract.md)
 - [Phase 39 runtime charting test plan](operations/ui/phase-39-test-plan.md)
+- [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md)
 - Legacy compatibility alias: `docs/ui/phase-39-test-plan.md`
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [Shared /ui phase boundary](architecture/ui-runtime-phase-ownership-boundary.md)
@@ -58,15 +59,32 @@ Use this order:
 - [Document status model](architecture/governance/document-status-model.md)
 - [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
 
-## Roadmap Navigation
+## Authoritative Phase Taxonomy
+The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
+The single authoritative in-repo source for phase maturity/status is [ROADMAP_MASTER.md](../ROADMAP_MASTER.md).
+The execution roadmap governs audited phase meaning and taxonomy only, while `ROADMAP_MASTER.md` governs canonical phase maturity/status.
+Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
+Status changes therefore follow one update path: update supporting evidence as needed, then update `ROADMAP_MASTER.md` to change the canonical phase maturity/status.
+PR review must reject roadmap status changes that are not reconciled in `ROADMAP_MASTER.md`.
 
-- [Execution roadmap](architecture/roadmap/execution_roadmap.md)
-- `ROADMAP_MASTER.md`
+| Phase | Meaning in the authoritative taxonomy | Primary trace |
+|-------|---------------------------------------|---------------|
+| Phase 5 | External Ready exit gate | `docs/architecture/governance/phase-5-exit-criteria.md` |
+| Phase 16 | No authoritative in-repo meaning located | `docs/architecture/roadmap/execution_roadmap.md` |
+| Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | `docs/architecture/roadmap/execution_roadmap.md` |
+| Phase 17b | Owner Dashboard sub-phase | `docs/architecture/roadmap/execution_roadmap.md` |
+| Phase 23 | `Research Dashboard`: one dedicated research-only dashboard surface; it is `PARTIALLY IMPLEMENTED` under a bounded minimum contract (`/research-dashboard`) and remains explicitly non-trader-ready/non-production-ready | `docs/architecture/phases/phase-23-status.md` |
+| Phase 25 | Strategy Lifecycle Management | `docs/architecture/phases/phase_25_strategy_lifecycle.md` |
+| Phase 26 | No authoritative in-repo meaning located | `docs/architecture/roadmap/execution_roadmap.md` |
+| Phase 27 | Risk Framework | `docs/architecture/phases/phase-27-status.md` |
+| Phase 37 | Watchlist Engine | `docs/architecture/phases/phase-37-status.md` |
 
-## Phase Reference Navigation
+## Reference Navigation
+The links below are navigation aids only. They do not redefine the authoritative phase taxonomy or the canonical phase maturity/status in the master roadmap.
 
-### Phase 17 References
-
+### Phase 17 Reference Materials
+Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap. Any status wording in the links below is derived and must defer to the master roadmap.
+main
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [API guarantees](operations/api/api_guarantees.md)
@@ -78,11 +96,8 @@ Use this order:
 - [CLI contract](operations/interfaces/cli_contract.md)
 - [Interface usage patterns](operations/interfaces/usage_patterns.md)
 
-### Phase 23 References
-
-- [Phase 23 status](architecture/phases/phase-23-status.md)
-
-### Phase 24 References
+### Phase 23 Boundary Note
+Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface as defined in [Phase 23 status](architecture/phases/phase-23-status.md). The minimum bounded evidence contract is documented in [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md) and is currently treated as `PARTIALLY IMPLEMENTED` via `/research-dashboard`. Current operator `/ui` surfaces, analytics artifacts, Phase 39 charting docs, and Phase 40 trading-desk wording remain adjacent references and are insufficient on their own to claim Phase 23 implementation.
 
 - [Paper trading boundary](operations/paper-trading.md)
 - [Runbook](operations/runbook.md)

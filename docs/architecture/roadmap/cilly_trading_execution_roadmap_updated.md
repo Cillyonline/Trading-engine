@@ -1,9 +1,11 @@
 # Cilly Trading Engine - Complete Master Roadmap
 Version: Bilingual (English -> Deutsch)
 Status Basis Date: 2026-04-09
+Status Authority: Derived Snapshot (Non-Authoritative for phase maturity/status)
 Purpose: Repo-based roadmap aligned to the uploaded 45-phase master reference.
 
 This roadmap replaces the prior working copy at this path.
+Canonical phase maturity/status authority is `ROADMAP_MASTER.md`.
 
 Reference input:
 - `C:\Users\Serdar Cil\Downloads\cilly_trading_execution_roadmap.md`
@@ -26,15 +28,15 @@ Primary status sources:
 
 Authority model used in this file:
 - `docs/architecture/roadmap/execution_roadmap.md` is the authoritative in-repo source for audited phase meaning and taxonomy.
-- This master roadmap is the single authoritative in-repo source for phase maturity/status across the 45-phase reference set.
-- Per-phase status artifacts, audit reports, indexes, and other roadmap/navigation documents are evidence-bearing or explanatory surfaces only; they do not set canonical phase maturity/status unless their change is also reflected in this file.
+- `ROADMAP_MASTER.md` is the single authoritative in-repo source for phase maturity/status across the 45-phase reference set.
+- This file is a derived roadmap snapshot for context/navigation only. Per-phase status artifacts, audit reports, indexes, and other roadmap/navigation documents (including this file) do not set canonical phase maturity/status unless their change is also reflected in `ROADMAP_MASTER.md`.
 - This file does not redefine audited phase meanings that are governed by the authoritative execution roadmap.
 - Where this file references an audited phase that is covered by the authoritative execution roadmap, phase meaning must defer to that file and any conflicting wording here should be read as non-authoritative for taxonomy.
 
 Status update path:
 - Update supporting evidence first, as needed, in the relevant per-phase or audit artifact.
-- Update this file to record the canonical phase maturity/status change.
-- Treat any secondary document that has not yet been reconciled to this file as stale derived documentation rather than as a competing status source.
+- Update `ROADMAP_MASTER.md` to record the canonical phase maturity/status change.
+- Treat this file and any other secondary document that has not yet been reconciled to `ROADMAP_MASTER.md` as stale derived documentation rather than as a competing status source.
 
 Status policy used in this file:
 - `Implemented`: repo-verifiable implementation exists without a documented material completion gap for this phase scope.
@@ -52,8 +54,9 @@ Status policy used in this file:
 ## Authority Relationship
 
 - `docs/architecture/roadmap/execution_roadmap.md` governs audited phase meaning.
-- This document governs the broader master-roadmap view, sequencing, and the canonical phase maturity/status labels for the 45-phase reference set.
-- Per-phase status files, audit artifacts, and index/navigation pages may explain or evidence a phase, but they remain derived surfaces for status and must defer to this document for the canonical maturity/status label.
+- `ROADMAP_MASTER.md` governs the broader master-roadmap view, sequencing, and the canonical phase maturity/status labels for the 45-phase reference set.
+- This document is derived/non-authoritative for status and is retained for compatibility and navigation only.
+- Per-phase status files, audit artifacts, and index/navigation pages may explain or evidence a phase, but they remain derived surfaces for status and must defer to `ROADMAP_MASTER.md` for the canonical maturity/status label.
 - For audited phases, this document must defer to the authoritative execution roadmap for taxonomy and phase-name interpretation.
 
 ## System Workflow
@@ -124,8 +127,8 @@ Market Data
 
 ## Status Notes
 
-- Status changes follow one update path: update evidence as needed, then update this master roadmap to change the canonical phase maturity/status label.
-- Secondary docs that describe a phase do not create an independent status authority; they are reconciled to this file.
+- Status changes follow one update path: update evidence as needed, then update `ROADMAP_MASTER.md` to change the canonical phase maturity/status label.
+- Secondary docs that describe a phase do not create an independent status authority; they are reconciled to `ROADMAP_MASTER.md`.
 - Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
 - Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface.
 - Phase 23 remains `Not Implemented` because the repository does not yet contain the full minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
