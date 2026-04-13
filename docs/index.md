@@ -1,33 +1,31 @@
-# Cilly Trading Engine - Documentation
+# Cilly Trading Engine - Documentation Index
 
-## Start Here
-The Cilly Trading Engine is a deterministic execution and analysis engine for teams that need reproducible workflows, stable interfaces, and controlled change management. This index is intended for new consumers who need a fixed, step-by-step path to start using documented capabilities.
+`docs/index.md` is a navigation surface.
+
+For role boundaries and canonical topic ownership rules, see
+`docs/architecture/documentation_structure.md`.
+
+## Start Path
+
+Use this order:
+
+1. [Quickstart](getting-started/quickstart.md)
+2. [Run deterministic smoke test](testing/smoke-run.md)
+3. [Getting started guide](getting-started/getting-started.md)
+4. [Local run guide](getting-started/local-run.md)
+5. Continue with API, CLI, UI, and governance links below
 
 Canonical first-clean-server install contract:
 - `docs/operations/runtime/staging-server-deployment.md`
 - Docker/Compose (`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`) is the only canonical first-clean-server startup path.
 - Local development setup guides are non-canonical for first-clean-server installation.
 
-Use this order:
-1. Quickstart
-2. Run deterministic smoke test
-3. Explore API
-4. Explore CLI
-5. Understand versioning model
+## Runtime Deployment
 
-## Document Status Model
-- Canonical document-status classification model:
-  `docs/architecture/governance/document-status-model.md`
-- For governance-/roadmap-/audit-/status-relevant documents, explicit
-  `Document Status` classification is mandatory.
-- `docs/index.md` is a derived navigation surface and must defer to canonical
-  status/governance authorities declared by the model.
-
-## Quickstart
-- [Quickstart](getting-started/quickstart.md)
-- [Run deterministic smoke test](testing/smoke-run.md)
+- [Staging server deployment](operations/runtime/staging-server-deployment.md)
 
 ## API Usage
+
 - [API usage](operations/api/usage.md)
 - [Trading core inspection API](api/trading_core_inspection.md)
 - [Paper inspection and reconciliation API](api/paper_inspection.md)
@@ -36,6 +34,7 @@ Use this order:
 - Legacy compatibility alias: `docs/api/runtime_chart_data_contract.md`
 
 ## CLI Usage
+
 - [CLI usage](operations/cli/usage.md)
 - [Paper trading boundary](operations/paper-trading.md)
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
@@ -43,62 +42,36 @@ Use this order:
 - [Staging-first deployment topology and runtime contract](operations/runtime/staging-first-deployment-topology.md)
 
 ## UI Surfaces
+
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [Phase 39 /ui charting contract](operations/ui/phase-39-charting-contract.md)
 - [Phase 39 runtime charting test plan](operations/ui/phase-39-test-plan.md)
-- [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md)
 - Legacy compatibility alias: `docs/ui/phase-39-test-plan.md`
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
-  - Runtime-served operator UI is `/ui`.
-  - Phase 36 bounded browser workflow: `/system/state`, `POST /analysis/run`, `/strategies`, `/signals`, `/journal/artifacts`, `/journal/decision-trace`, `/execution/orders`.
-  - Phase 37 bounded workflow on the same `/ui` shell: `/watchlists`, `/watchlists/{watchlist_id}`, `POST /watchlists/{watchlist_id}/execute`.
-  - Shared-shell alert inspection marker on the same `/ui` shell: `GET /alerts/history`.
-  - Phase 39 claim boundary is contract-based (`docs/operations/api/runtime_chart_data_contract.md`) and must not be inferred from `/ui` section adjacency.
-  - `/owner` is not a canonical runtime entrypoint.
-- [Shared /ui phase ownership boundary](architecture/ui-runtime-phase-ownership-boundary.md)
+- [Shared /ui phase boundary](architecture/ui-runtime-phase-ownership-boundary.md)
 - [Phase 36 web activation evidence](architecture/roadmap/phase-36-web-activation-evidence.md)
 - [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
 
-## Versioning & Governance
+## Versioning And Governance
+
 - [Versioning model](architecture/versioning/model.md)
 - [Versioning scope](architecture/versioning/scope.md)
 - [Change enforcement](architecture/versioning/change_enforcement.md)
 - [Release boundary](architecture/versioning/release_boundary.md)
 - [Version declaration](architecture/versioning/declaration.md)
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
-- [Canonical document status model](architecture/governance/document-status-model.md)
+- [Document status model](architecture/governance/document-status-model.md)
 - [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
 
-## Authoritative Phase Taxonomy
-The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
-<<<<<<< codex/repo-rationalization-02-document-status-model-940
-The authoritative in-repo source for phase maturity/status is `ROADMAP_MASTER.md`.
-The execution roadmap governs audited phase meaning and taxonomy only, while the master roadmap governs canonical phase maturity/status.
-=======
-The single authoritative in-repo source for phase maturity/status is [ROADMAP_MASTER.md](../ROADMAP_MASTER.md).
-The execution roadmap governs audited phase meaning and taxonomy only, while `ROADMAP_MASTER.md` governs canonical phase maturity/status.
->>>>>>> main
-Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
-Status changes therefore follow one update path: update supporting evidence as needed, then update `ROADMAP_MASTER.md` to change the canonical phase maturity/status.
-PR review must reject roadmap status changes that are not reconciled in `ROADMAP_MASTER.md`.
+## Roadmap Navigation
 
-| Phase | Meaning in the authoritative taxonomy | Primary trace |
-|-------|---------------------------------------|---------------|
-| Phase 5 | External Ready exit gate | `docs/architecture/governance/phase-5-exit-criteria.md` |
-| Phase 16 | No authoritative in-repo meaning located | `docs/architecture/roadmap/execution_roadmap.md` |
-| Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | `docs/architecture/roadmap/execution_roadmap.md` |
-| Phase 17b | Owner Dashboard sub-phase | `docs/architecture/roadmap/execution_roadmap.md` |
-| Phase 23 | `Research Dashboard`: one dedicated research-only dashboard surface; it is `PARTIALLY IMPLEMENTED` under a bounded minimum contract (`/research-dashboard`) and remains explicitly non-trader-ready/non-production-ready | `docs/architecture/phases/phase-23-status.md` |
-| Phase 25 | Strategy Lifecycle Management | `docs/architecture/phases/phase_25_strategy_lifecycle.md` |
-| Phase 26 | No authoritative in-repo meaning located | `docs/architecture/roadmap/execution_roadmap.md` |
-| Phase 27 | Risk Framework | `docs/architecture/phases/phase-27-status.md` |
-| Phase 37 | Watchlist Engine | `docs/architecture/phases/phase-37-status.md` |
+- [Execution roadmap](architecture/roadmap/execution_roadmap.md)
+- `ROADMAP_MASTER.md`
 
-## Reference Navigation
-The links below are navigation aids only. They do not redefine the authoritative phase taxonomy or the canonical phase maturity/status in the master roadmap.
+## Phase Reference Navigation
 
 ### Phase 17 Reference Materials
-Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b remains the distinct Owner Dashboard sub-phase in the authoritative roadmap. Any status wording in the links below is derived and must defer to the master roadmap.
+
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [API guarantees](operations/api/api_guarantees.md)
@@ -110,43 +83,51 @@ Phase 17 is the Consumer Interfaces and Usage Patterns umbrella phase. Phase 17b
 - [CLI contract](operations/interfaces/cli_contract.md)
 - [Interface usage patterns](operations/interfaces/usage_patterns.md)
 
-### Phase 23 Boundary Note
-Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface as defined in [Phase 23 status](architecture/phases/phase-23-status.md). The minimum bounded evidence contract is documented in [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md) and is currently treated as `PARTIALLY IMPLEMENTED` via `/research-dashboard`. Current operator `/ui` surfaces, analytics artifacts, Phase 39 charting docs, and Phase 40 trading-desk wording remain adjacent references and are insufficient on their own to claim Phase 23 implementation.
+### Phase 23 Reference Materials
+
+- [Phase 23 status](architecture/phases/phase-23-status.md)
+- [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md)
+- Phase 23 | `Research Dashboard` | PARTIALLY IMPLEMENTED
 
 ### Phase 24 Reference Materials
-Phase 24 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+
 - [Paper trading boundary](operations/paper-trading.md)
 - [Runbook](operations/runbook.md)
 
 ### Phase 44 Reference Materials
-Phase 44 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
 - [Paper inspection and reconciliation API](api/paper_inspection.md)
 - [Paper deployment acceptance gate](operations/runtime/paper-deployment-acceptance-gate.md)
 
 ### P53 Reference Materials
+
 - [P53 automated review operations](operations/runtime/p53-automated-review-operations.md)
 
 ### OPS-P63 Reference Materials
+
 - [OPS-P63 daily bounded paper runtime workflow](operations/runtime/p63-daily-bounded-paper-runtime-workflow.md)
 
 ### OPS-P61 Reference Materials
+
 - [OPS-P61 Practice and Analysis Article standards](phases/ops-p61-practice-analysis-article-standards.md)
 
 ### P56-RISK Reference Materials
+
 - [P56 bounded adverse scenario matrix](architecture/risk/p56-bounded-adverse-scenario-matrix.md)
 
 ### DEC-P47 Reference Materials
+
 - [DEC-P47 qualification claim boundary](phases/dec-p47-qualification-claim-boundary.md)
 
 ### Phase 37 Reference Materials
-Phase 37 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+
 - [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [API usage contract](operations/api/usage_contract.md)
 
 ### Phase 18 Reference Materials
-Phase 18 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+
 - [Change policy](operations/external/change_policy.md)
 - [Client types](operations/external/client_types.md)
 - [Contract surface](operations/external/contract_surface.md)
@@ -154,7 +135,7 @@ Phase 18 reference links remain navigational and do not override the authoritati
 - [Integration assumptions](operations/external/integration_assumptions.md)
 
 ### Phase 19 Reference Materials
-Phase 19 reference links remain navigational and do not override the authoritative audited taxonomy above or the canonical phase maturity/status in the master roadmap.
+
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
 - [Change enforcement](architecture/versioning/change_enforcement.md)
 - [Version declaration](architecture/versioning/declaration.md)

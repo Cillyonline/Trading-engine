@@ -1,31 +1,30 @@
 # Cilly Trading Engine
 
-The Cilly Trading Engine repository contains a deterministic trading-analysis and execution platform with documented API, CLI, UI, runtime, and governance surfaces. This repository is the canonical entrypoint for navigating those materials.
+The Cilly Trading Engine repository contains a deterministic trading-analysis
+and execution platform with documented API, CLI, UI, runtime, and governance
+surfaces.
 
-The current repository state supports local runtime, deterministic smoke-run and test workflows, and bounded operator-facing UI and API surfaces. It should not be read as a production-readiness declaration.
+The current repository state supports local runtime, deterministic smoke-run
+and test workflows, and bounded operator-facing UI and API surfaces. It should
+not be read as a production-readiness declaration.
 
-## Documentation Entry Point
+## Documentation Roles
 
 `README.md` is an entry point only. It provides navigation into the canonical
 documentation structure and does not act as the source of truth for setup,
 local run, testing, or architecture topics.
 It also does not act as a source of authority for roadmap phase maturity/status.
 
-Start from these documents:
-
-- Canonical documentation structure and navigation flow:
+- Entry point: `README.md`
+- Navigation hub: `docs/index.md`
+- Structure and role map:
   `docs/architecture/documentation_structure.md`
 - Repository documentation index: `docs/index.md`
 - Setup authority: `docs/getting-started/getting-started.md`
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
-<<<<<<< codex/repo-rationalization-02-document-status-model-940
-- Canonical document status model for governance/roadmap/audit/status documents:
-  `docs/architecture/governance/document-status-model.md`
-=======
 - Roadmap phase maturity/status authority: `ROADMAP_MASTER.md`
->>>>>>> main
 - Server-ready release governance contract:
   `docs/releases/release_governance_contract.md`
 
@@ -37,6 +36,7 @@ Start from these documents:
   `docs/operations/runtime/staging-server-deployment.md`.
 - Contributors or reviewers validating behavior and change scope should start
   here, then use `docs/testing/index.md` and `docs/architecture/`.
+main
 
 ## Public API
 
