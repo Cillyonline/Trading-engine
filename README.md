@@ -9,6 +9,7 @@ The current repository state supports local runtime, deterministic smoke-run and
 `README.md` is an entry point only. It provides navigation into the canonical
 documentation structure and does not act as the source of truth for setup,
 local run, testing, or architecture topics.
+It also does not act as a source of authority for roadmap phase maturity/status.
 
 Start from these documents:
 
@@ -19,6 +20,7 @@ Start from these documents:
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
+- Roadmap phase maturity/status authority: `ROADMAP_MASTER.md`
 - Server-ready release governance contract:
   `docs/releases/release_governance_contract.md`
 

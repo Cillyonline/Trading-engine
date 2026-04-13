@@ -61,10 +61,11 @@ Use this order:
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
-The authoritative in-repo source for phase maturity/status is the broader [Complete Master Roadmap](architecture/roadmap/cilly_trading_execution_roadmap_updated.md).
-The execution roadmap governs audited phase meaning and taxonomy only, while the master roadmap governs canonical phase maturity/status.
+The single authoritative in-repo source for phase maturity/status is [ROADMAP_MASTER.md](../ROADMAP_MASTER.md).
+The execution roadmap governs audited phase meaning and taxonomy only, while `ROADMAP_MASTER.md` governs canonical phase maturity/status.
 Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
-Status changes therefore follow one update path: update supporting evidence as needed, then update the master roadmap to change the canonical phase maturity/status.
+Status changes therefore follow one update path: update supporting evidence as needed, then update `ROADMAP_MASTER.md` to change the canonical phase maturity/status.
+PR review must reject roadmap status changes that are not reconciled in `ROADMAP_MASTER.md`.
 
 | Phase | Meaning in the authoritative taxonomy | Primary trace |
 |-------|---------------------------------------|---------------|
