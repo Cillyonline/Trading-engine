@@ -9,14 +9,14 @@ This file is the single authoritative in-repo source for audited phase-number me
 
 ## Authority Relationship
 - This file governs the meaning of the audited phase numbers listed below.
-- The master roadmap at `docs/architecture/roadmap/cilly_trading_execution_roadmap_updated.md` is the single authoritative in-repo source for phase maturity/status labels and status-change decisions.
+- `ROADMAP_MASTER.md` is the single authoritative in-repo source for phase maturity/status labels and status-change decisions.
 - This file does not authoritatively set phase maturity/status labels. Any status wording here, in a per-phase artifact, or in an index must defer to the master roadmap for canonical maturity/status.
 - The master roadmap may summarize broader sequencing and implementation-status context, but it must defer to this file for audited phase meaning.
 - If wording in a secondary roadmap, index, or audit artifact conflicts with the audited phase meanings defined here, this file controls the taxonomy interpretation.
 
 ## Status Update Rule
 - Taxonomy updates follow this file.
-- Phase maturity/status updates follow `docs/architecture/roadmap/cilly_trading_execution_roadmap_updated.md`.
+- Phase maturity/status updates follow `ROADMAP_MASTER.md`.
 - Per-phase status artifacts, audit reports, and index/navigation documents may provide evidence, scoped detail, or traceability, but they do not become canonical status sources unless the master roadmap is updated to reflect the change.
 - Reviewers should reject status changes that update a secondary document without also updating the master roadmap.
 
@@ -46,7 +46,7 @@ This file is the single authoritative in-repo source for audited phase-number me
 - Phase 17 and Phase 17b are not interchangeable: Phase 17 is the umbrella phase, and Phase 17b is the Owner Dashboard sub-phase.
 - Phase 27 and Phase 27b are not interchangeable: Phase 27 is Risk Framework taxonomy; Phase 27b remains a distinct Pipeline Enforcement Layer artifact.
 - Phase 25 and Phase 26 must not be grouped into a shared replacement meaning. Phase 25 is defined above, while Phase 26 remains unmapped in current authoritative in-repo taxonomy.
-- This document establishes taxonomy only. Canonical implementation-status corrections must be made in `docs/architecture/roadmap/cilly_trading_execution_roadmap_updated.md`, with any supporting per-phase artifacts updated as derived evidence.
+- This document establishes taxonomy only. Canonical implementation-status corrections must be made in `ROADMAP_MASTER.md`, with any supporting per-phase artifacts updated as derived evidence.
 
 ---
 

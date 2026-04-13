@@ -29,6 +29,7 @@ Authority model used in this file:
 Status update path:
 - Update supporting evidence first, as needed, in the relevant per-phase or audit artifact.
 - Update this file to record the canonical phase maturity/status change.
+- PR review rule: reject status-changing roadmap/doc updates unless `ROADMAP_MASTER.md` is updated in the same change (or the PR explicitly proves no maturity/status change occurred).
 - Treat any secondary document that has not yet been reconciled to this file as stale derived documentation rather than as a competing status source.
 
 Status policy used in this file:
@@ -92,7 +93,7 @@ Market Data
 | 20 | Error Handling System | Implemented |
 | 21 | Governance Rules | Implemented |
 | 22 | Artifact Integrity | Implemented |
-| 23 | Research Dashboard | Not Implemented |
+| 23 | Research Dashboard | Partially Implemented |
 | 24 | Paper Trading Governance | Implemented |
 | 25 | Roadmap Traceability | Implemented in Repository |
 | 26 | Documentation Alignment | Implemented |
@@ -123,8 +124,9 @@ Market Data
 - Secondary docs that describe a phase do not create an independent status authority; they are reconciled to this file.
 - Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
 - Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface.
-- Phase 23 remains `Not Implemented` because the repository does not yet contain the full minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
+- Phase 23 is `Partially Implemented` because the repository now contains a bounded minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
 - Current `/ui` operator panels, analytics artifacts, charting surfaces, and trading-desk wording are adjacent only and do not count on their own as Phase 23 implementation evidence.
+- This bounded Phase 23 evidence is explicitly non-trader-ready and non-production-ready.
 - Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
 - Phase 35 is marked `Implemented` in this revision because metrics, telemetry, runtime health, guard-trigger monitoring, and integration tests are all present in-repo.
@@ -481,18 +483,19 @@ Guarantee reproducible research artifacts.
 ---
 
 ## Phase 23 - Research Dashboard
-**Status:** Not Implemented
+**Status:** Partially Implemented
 
 **Goal**
 Align the bounded Phase 23 `Research Dashboard` meaning and keep its status evidence-based.
 
 **Current Status Basis**
 - Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface.
-- Phase 23 remains `Not Implemented` because the repository does not yet contain the full minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
+- Phase 23 is `Partially Implemented` because the repository now contains a bounded minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
 - Existing evidence from Phase 17b `/ui`, Phase 30 analytics artifacts, Phase 39 read-only charting, and Phase 40 desk-style dashboard wording is adjacent only and does not count on its own as Phase 23 implementation evidence.
+- The bounded Phase 23 claim is explicitly non-trader-ready and non-production-ready.
 
 **Outcome**
-- The roadmap now presents the same bounded Phase 23 message as the phase status and index surfaces, without changing the non-implementation status.
+- The roadmap now aligns with the bounded minimum evidence claim while keeping explicit non-trader-ready and non-production-ready boundaries.
 
 ---
 
@@ -893,7 +896,7 @@ Marktdaten
 | 20 | Error Handling System | Implemented |
 | 21 | Governance Rules | Implemented |
 | 22 | Artifact Integrity | Implemented |
-| 23 | Research Dashboard | Not Implemented |
+| 23 | Research Dashboard | Partially Implemented |
 | 24 | Paper Trading Governance | Implemented |
 | 25 | Roadmap Traceability | Implemented in Repository |
 | 26 | Documentation Alignment | Implemented |
@@ -922,8 +925,9 @@ Marktdaten
 
 - Phase 17b wird im Backend unter `/ui` ausgeliefert; `/owner` ist nur als Frontend-Development-Route dokumentiert und keine Runtime-Backend-Surface.
 - Phase 23 bedeutet `Research Dashboard`: eine einzelne dedizierte research-only Dashboard-Surface.
-- Phase 23 bleibt `Not Implemented`, weil das Repository noch nicht den vollstaendigen minimalen Evidenzvertrag fuer eine zusammenhaengende Research-Dashboard-Surface enthaelt: einen begrenzten Dashboard-Vertrag, ein Runtime- oder UI-Implementierungsartefakt und ein Verifizierungsartefakt fuer dieselbe beanspruchte Surface.
+- Phase 23 ist `Partially Implemented`, weil das Repository jetzt einen begrenzten minimalen Evidenzvertrag fuer eine zusammenhaengende Research-Dashboard-Surface enthaelt: einen begrenzten Dashboard-Vertrag, ein Runtime- oder UI-Implementierungsartefakt und ein Verifizierungsartefakt fuer dieselbe beanspruchte Surface.
 - Aktuelle `/ui`-Operator-Panels, Analytics-Artefakte, Charting-Surfaces und Trading-Desk-Sprache sind nur benachbart und zaehlen fuer sich allein nicht als Phase-23-Implementierungsevidenz.
+- Diese begrenzte Phase-23-Evidenz ist explizit nicht trader-ready und nicht production-ready.
 - Phase 24 gilt jetzt als implementiert, weil Simulator-Grenzen und Non-Live-Constraints konsistent dokumentiert sind; Phase 44 bleibt als breitere Produktphase nur teilweise implementiert.
 - Phase 25 und Phase 27 wurden gegen veraltete Roadmap-Aussagen korrigiert, weil Lifecycle- und Risk-Framework-Artefakte bereits im Repo vorhanden sind.
 - Phase 35 ist in dieser Fassung `Implemented`, weil Metrics, Telemetry, Runtime Health, Guard-Trigger-Monitoring und Integrationstests bereits vorhanden sind.
@@ -1278,18 +1282,19 @@ Reproduzierbare Research-Artefakte garantieren.
 ---
 
 ## Phase 23 - Research Dashboard
-**Status:** Not Implemented
+**Status:** Partially Implemented
 
 **Ziel**
 Die klar begrenzte Phase-23-Bedeutung `Research Dashboard` angleichen und den Status evidenzbasiert halten.
 
 **Aktuelle Statusbasis**
 - Phase 23 bedeutet `Research Dashboard`: eine einzelne dedizierte research-only Dashboard-Surface.
-- Phase 23 bleibt `Not Implemented`, weil das Repository noch nicht den vollstaendigen minimalen Evidenzvertrag fuer eine zusammenhaengende Research-Dashboard-Surface enthaelt: einen begrenzten Dashboard-Vertrag, ein Runtime- oder UI-Implementierungsartefakt und ein Verifizierungsartefakt fuer dieselbe beanspruchte Surface.
+- Phase 23 ist `Partially Implemented`, weil das Repository jetzt einen begrenzten minimalen Evidenzvertrag fuer eine zusammenhaengende Research-Dashboard-Surface enthaelt: einen begrenzten Dashboard-Vertrag, ein Runtime- oder UI-Implementierungsartefakt und ein Verifizierungsartefakt fuer dieselbe beanspruchte Surface.
 - Vorhandene Evidenz aus Phase 17b `/ui`, Phase 30 Analytics-Artefakten, Phase 39 read-only Charting und Phase-40-artiger Trading-Desk-Sprache ist nur benachbart und zaehlt fuer sich allein nicht als Phase-23-Implementierungsevidenz.
+- Der begrenzte Phase-23-Claim ist explizit nicht trader-ready und nicht production-ready.
 
 **Ergebnis**
-- Die Roadmap zeigt jetzt dieselbe begrenzte Phase-23-Aussage wie Phasenstatus und Index, ohne den Nicht-Implementiert-Status zu veraendern.
+- Die Roadmap ist jetzt mit dem begrenzten Minimal-Evidenz-Claim abgeglichen und behaelt explizite Nicht-Trader-Ready- sowie Nicht-Production-Ready-Grenzen bei.
 
 ---
 

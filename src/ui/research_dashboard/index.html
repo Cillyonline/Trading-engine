@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phase 23 Research Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.5;
+    }
+    body {
+      margin: 0;
+      background: #f3f6f8;
+      color: #12202b;
+    }
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+    section {
+      background: #ffffff;
+      border: 1px solid #d6e2ea;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    h1,
+    h2 {
+      margin-top: 0;
+    }
+    .surface-marker {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid #7aa0b8;
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: #2d556e;
+    }
+    code {
+      background: #edf3f7;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <main id="phase23-research-dashboard-surface">
+    <p class="surface-marker">Phase 23 research-only surface</p>
+    <h1>Research Dashboard</h1>
+    <p>
+      Runtime entrypoint: <code>/research-dashboard</code>. This page is a bounded
+      research review surface and is separate from the shared operator shell at <code>/ui</code>.
+    </p>
+
+    <section id="phase23-research-review-panels" aria-label="research-review-panels">
+      <h2>Bounded research review panels</h2>
+      <ul>
+        <li>Research focus and hypothesis review context</li>
+        <li>Signal sample review checklist markers</li>
+        <li>Experiment note and next-question prompts</li>
+      </ul>
+    </section>
+
+    <section id="phase23-boundary-non-claims" aria-label="boundary-non-claims">
+      <h2>Boundary and non-claims</h2>
+      <p>
+        This surface does not claim trader readiness, production readiness, live trading,
+        or execution automation. Operational run evidence remains governed separately.
+      </p>
+      <p>
+        The OPS-P56 issue <code>#914</code> remains the single operational run log issue.
+      </p>
+    </section>
+  </main>
+</body>
+</html>
