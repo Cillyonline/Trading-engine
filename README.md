@@ -20,7 +20,12 @@ Start from these documents:
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
+<<<<<<< codex/repo-rationalization-02-document-status-model-940
+- Canonical document status model for governance/roadmap/audit/status documents:
+  `docs/architecture/governance/document-status-model.md`
+=======
 - Roadmap phase maturity/status authority: `ROADMAP_MASTER.md`
+>>>>>>> main
 - Server-ready release governance contract:
   `docs/releases/release_governance_contract.md`
 

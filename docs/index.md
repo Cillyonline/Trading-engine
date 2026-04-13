@@ -15,6 +15,14 @@ Use this order:
 4. Explore CLI
 5. Understand versioning model
 
+## Document Status Model
+- Canonical document-status classification model:
+  `docs/architecture/governance/document-status-model.md`
+- For governance-/roadmap-/audit-/status-relevant documents, explicit
+  `Document Status` classification is mandatory.
+- `docs/index.md` is a derived navigation surface and must defer to canonical
+  status/governance authorities declared by the model.
+
 ## Quickstart
 - [Quickstart](getting-started/quickstart.md)
 - [Run deterministic smoke test](testing/smoke-run.md)
@@ -58,12 +66,18 @@ Use this order:
 - [Release boundary](architecture/versioning/release_boundary.md)
 - [Version declaration](architecture/versioning/declaration.md)
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
+- [Canonical document status model](architecture/governance/document-status-model.md)
 - [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
+<<<<<<< codex/repo-rationalization-02-document-status-model-940
+The authoritative in-repo source for phase maturity/status is `ROADMAP_MASTER.md`.
+The execution roadmap governs audited phase meaning and taxonomy only, while the master roadmap governs canonical phase maturity/status.
+=======
 The single authoritative in-repo source for phase maturity/status is [ROADMAP_MASTER.md](../ROADMAP_MASTER.md).
 The execution roadmap governs audited phase meaning and taxonomy only, while `ROADMAP_MASTER.md` governs canonical phase maturity/status.
+>>>>>>> main
 Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
 Status changes therefore follow one update path: update supporting evidence as needed, then update `ROADMAP_MASTER.md` to change the canonical phase maturity/status.
 PR review must reject roadmap status changes that are not reconciled in `ROADMAP_MASTER.md`.
