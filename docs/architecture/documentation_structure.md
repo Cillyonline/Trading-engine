@@ -2,70 +2,46 @@
 
 ## Purpose
 
-This document defines the canonical documentation structure for the Cilly
-Trading Engine repository.
+This document defines documentation structure boundaries for the Cilly Trading
+Engine repository.
 
-It establishes exactly one authoritative location for each in-scope topic and
-defines how readers should navigate between those documents. It defines the canonical ownership and navigation model for the current documentation hierarchy.
+It is the single location that declares documentation roles and canonical topic
+ownership.
 
-## README Role
+## Core Document Roles
 
-`README.md` is the repository entry point only.
+- `README.md`: repository entry point only.
+- `docs/index.md`: documentation navigation only.
+- `docs/architecture/documentation_structure.md`: canonical structure and topic
+  ownership rules.
 
-- It may introduce the repository and route readers to canonical documents.
-- It must not become the source of truth for setup, local run, testing, or
-  architecture content.
-- Topic-specific instructions belong in their canonical documentation file, not
-  in `README.md`.
+`README.md` and `docs/index.md` may route readers to canonical documents, but
+they do not define or redefine topic ownership.
 
 ## Canonical Topic Ownership
 
-The authoritative file or directory for each in-scope topic is:
+Each in-scope topic has one canonical owner:
 
 - Setup: `docs/getting-started/getting-started.md`
 - Local run: `docs/getting-started/local-run.md`
 - Testing: `docs/testing/index.md`
 - Architecture: `docs/architecture/`
 
-Within this structure, each topic has exactly one source of truth:
+Any other document that mentions one of these topics is a supporting navigation
+or reference surface and must defer to the canonical owner listed above.
 
-- Setup content is authoritative only in `docs/getting-started/getting-started.md`.
-- Local run content is authoritative only in `docs/getting-started/local-run.md`.
-- Testing content is authoritative only in `docs/testing/index.md`.
-- Architecture content is authoritative only under `docs/architecture/`.
+## Required Navigation Flow
 
-If other existing documents mention one of these topics, those documents are
-supporting or historical references and must defer to the canonical location
-above rather than redefine the topic.
-
-## Navigation Flow
-
-The required navigation flow is:
+The default path for readers is:
 
 1. Start at `README.md`.
-2. Follow `README.md` to this document for canonical structure and ownership.
-3. From this document, navigate to the authoritative topic document:
-   `docs/getting-started/getting-started.md`, `docs/getting-started/local-run.md`, `docs/testing/index.md`, or
-   `docs/architecture/`.
-4. From a topic document, follow links only to supporting documents that do not
-   replace the topic's canonical source of truth.
+2. Continue to `docs/index.md`.
+3. Select the canonical target document from `docs/index.md`.
+4. Use topic-local links from that canonical document.
 
 ## Structure Rules
 
-- New setup documentation must consolidate into `docs/getting-started/getting-started.md`.
-- New local run documentation must consolidate into `docs/getting-started/local-run.md`.
-- New testing documentation must consolidate into `docs/testing/index.md`.
-- New architecture documentation must live under `docs/architecture/`.
-- `README.md` must continue to function as a navigation entry point only.
-- No in-scope topic may have multiple authoritative files.
-
-## Manual Validation For Issue #684
-
-Manual review for this issue should confirm all of the following:
-
-- `README.md` points to this document as the canonical documentation structure.
-- `README.md` is positioned as an entry point only, not as a topic authority.
-- Setup, local run, testing, and architecture each have exactly one
-  authoritative location defined here.
-- The navigation flow from `README.md` to the canonical topic documents is
-  explicit and unambiguous.
+- Keep `README.md` as the entry point.
+- Keep `docs/index.md` as navigation.
+- Keep canonical ownership declarations in this document only.
+- Do not assign multiple canonical owners to the same topic.

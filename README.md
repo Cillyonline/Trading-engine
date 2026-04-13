@@ -1,37 +1,41 @@
 # Cilly Trading Engine
 
-The Cilly Trading Engine repository contains a deterministic trading-analysis and execution platform with documented API, CLI, UI, runtime, and governance surfaces. This repository is the canonical entrypoint for navigating those materials.
+The Cilly Trading Engine repository contains a deterministic trading-analysis
+and execution platform with documented API, CLI, UI, runtime, and governance
+surfaces.
 
-The current repository state supports local runtime, deterministic smoke-run and test workflows, and bounded operator-facing UI and API surfaces. It should not be read as a production-readiness declaration.
+The current repository state supports local runtime, deterministic smoke-run
+and test workflows, and bounded operator-facing UI and API surfaces. It should
+not be read as a production-readiness declaration.
 
-## Documentation Entry Point
+## Documentation Roles
 
-`README.md` is an entry point only. It provides navigation into the canonical
-documentation structure and does not act as the source of truth for setup,
-local run, testing, or architecture topics.
+`README.md` is the repository entry point only.
 
-Start from these documents:
-
-- Canonical documentation structure and navigation flow:
+- Entry point: `README.md`
+- Navigation hub: `docs/index.md`
+- Structure and role map:
   `docs/architecture/documentation_structure.md`
-- Repository documentation index: `docs/index.md`
-- Setup authority: `docs/getting-started/getting-started.md`
-- Local run authority: `docs/getting-started/local-run.md`
-- Testing authority: `docs/testing/index.md`
-- Architecture authority root: `docs/architecture/`
-- Canonical document status model for governance/roadmap/audit/status documents:
-  `docs/architecture/governance/document-status-model.md`
-- Server-ready release governance contract:
-  `docs/releases/release_governance_contract.md`
 
-## Verification Paths
+## Documentation Navigation Flow
 
-- Operators validating a local environment should start here, then follow
-  `docs/getting-started/getting-started.md` and `docs/getting-started/local-run.md`.
-- Operators validating the bounded staging server deployment path should use
-  `docs/operations/runtime/staging-server-deployment.md`.
-- Contributors or reviewers validating behavior and change scope should start
-  here, then use `docs/testing/index.md` and `docs/architecture/`.
+Use the primary navigation path:
+
+1. Start at `README.md`.
+2. Open `docs/index.md`.
+3. Follow links in `docs/index.md` to the target document.
+
+For canonical ownership rules and structure boundaries, use
+`docs/architecture/documentation_structure.md`.
+
+## Destination Shortcuts
+
+- Setup: `docs/getting-started/getting-started.md`
+- Local run: `docs/getting-started/local-run.md`
+- Testing: `docs/testing/index.md`
+- Architecture: `docs/architecture/`
+- Document status model: `docs/architecture/governance/document-status-model.md`
+- Release governance contract: `docs/releases/release_governance_contract.md`
 
 ## Public API
 
