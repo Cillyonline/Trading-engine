@@ -1,4 +1,4 @@
-﻿# Cilly Trading Engine - Documentation Index
+# Cilly Trading Engine - Documentation Index
 
 `docs/index.md` is a navigation surface.
 
@@ -86,6 +86,8 @@ Canonical first-clean-server install contract:
 ### Phase 23 Reference Materials
 
 - [Phase 23 status](architecture/phases/phase-23-status.md)
+- [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md)
+- Phase 23 | `Research Dashboard` | PARTIALLY IMPLEMENTED
 
 ### Phase 24 Reference Materials
 
