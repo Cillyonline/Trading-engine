@@ -15,6 +15,14 @@ Use this order:
 4. Explore CLI
 5. Understand versioning model
 
+## Document Status Model
+- Canonical document-status classification model:
+  `docs/architecture/governance/document-status-model.md`
+- For governance-/roadmap-/audit-/status-relevant documents, explicit
+  `Document Status` classification is mandatory.
+- `docs/index.md` is a derived navigation surface and must defer to canonical
+  status/governance authorities declared by the model.
+
 ## Quickstart
 - [Quickstart](getting-started/quickstart.md)
 - [Run deterministic smoke test](testing/smoke-run.md)
@@ -57,11 +65,12 @@ Use this order:
 - [Release boundary](architecture/versioning/release_boundary.md)
 - [Version declaration](architecture/versioning/declaration.md)
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
+- [Canonical document status model](architecture/governance/document-status-model.md)
 - [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
 
 ## Authoritative Phase Taxonomy
 The authoritative in-repo source for audited phase-number meanings is [Execution Roadmap](architecture/roadmap/execution_roadmap.md).
-The authoritative in-repo source for phase maturity/status is the broader [Complete Master Roadmap](architecture/roadmap/cilly_trading_execution_roadmap_updated.md).
+The authoritative in-repo source for phase maturity/status is `ROADMAP_MASTER.md`.
 The execution roadmap governs audited phase meaning and taxonomy only, while the master roadmap governs canonical phase maturity/status.
 Per-phase status files, audit artifacts, and the index are derived navigation or evidence surfaces and must defer to those two authorities.
 Status changes therefore follow one update path: update supporting evidence as needed, then update the master roadmap to change the canonical phase maturity/status.

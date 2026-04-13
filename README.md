@@ -19,6 +19,8 @@ Start from these documents:
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
 - Architecture authority root: `docs/architecture/`
+- Canonical document status model for governance/roadmap/audit/status documents:
+  `docs/architecture/governance/document-status-model.md`
 - Server-ready release governance contract:
   `docs/releases/release_governance_contract.md`
 
