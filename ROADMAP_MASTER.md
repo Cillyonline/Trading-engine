@@ -29,6 +29,7 @@ Authority model used in this file:
 Status update path:
 - Update supporting evidence first, as needed, in the relevant per-phase or audit artifact.
 - Update this file to record the canonical phase maturity/status change.
+- PR review rule: reject status-changing roadmap/doc updates unless `ROADMAP_MASTER.md` is updated in the same change (or the PR explicitly proves no maturity/status change occurred).
 - Treat any secondary document that has not yet been reconciled to this file as stale derived documentation rather than as a competing status source.
 
 Status policy used in this file:
