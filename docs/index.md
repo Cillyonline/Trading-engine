@@ -86,8 +86,8 @@ Canonical first-clean-server install contract:
 ### Phase 23 Reference Materials
 
 - [Phase 23 status](architecture/phases/phase-23-status.md)
-- [Phase 23 research dashboard minimum contract](operations/ui/phase-23-research-dashboard-contract.md)
-- Phase 23 | `Research Dashboard` | PARTIALLY IMPLEMENTED
+- [Phase 23 /ui workflow consolidation contract](operations/ui/phase-23-research-dashboard-contract.md)
+- Phase 23 | `Canonical /ui Workflow Shell` | PARTIALLY IMPLEMENTED
 
 ### Phase 24 Reference Materials
 

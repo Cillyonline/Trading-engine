@@ -1,98 +1,79 @@
-# Phase 23 - Research Dashboard
+# Phase 23 - Website-Facing /ui Workflow Consolidation
 
 ## Status
 PARTIALLY IMPLEMENTED
 
 ## Taxonomy Alignment
-Phase 23 means `Research Dashboard` in the authoritative taxonomy source:
-`docs/architecture/roadmap/execution_roadmap.md`
+Phase 23 means bounded website-facing workflow consolidation under the canonical `/ui` shell in this repository revision.
 
 ## Canonical Bounded Message
-Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface.
-Phase 23 is `PARTIALLY IMPLEMENTED` in this revision because one coherent minimum evidence set now exists for one bounded surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact.
-Current operator `/ui` surfaces, analytics artifacts, Phase 39 charting surfaces, and Phase 40 trading-desk wording are adjacent only and do not count on their own as Phase 23 implementation evidence.
+Phase 23 is `PARTIALLY IMPLEMENTED` because one coherent bounded evidence set now defines one canonical website-facing workflow shell at `/ui`.
+
+The consolidated IA contract is intentionally non-live and does not imply trader validation or operational readiness.
 
 ## Authoritative Bounded Scope
-Phase 23 is the repo-verifiable phase for one dedicated research-only dashboard surface that consolidates research review into a single bounded workspace.
+Phase 23 in this revision is the repository-verifiable phase for:
+- one canonical `/ui` workflow shell
+- one bounded primary navigation contract for website-facing workflow entry
+- explicit non-live boundaries that prevent readiness inference from IA consolidation
 
-That bounded Phase 23 meaning requires repository evidence for a dashboard artifact that:
-- is explicitly identified as a Research Dashboard
-- is dedicated to research review rather than operator control or trade execution
-- combines research-oriented views into one coherent surface instead of scattering them across unrelated routes, panels, or metrics outputs
+This scope does not introduce new product surfaces, live execution claims, or architecture expansion.
 
 ## Minimum Repo-Verifiable Evidence Contract
-A Phase 23 claim must be supported by one coherent minimum artifact set inside the repository. Reviewers should treat the phase as `NOT IMPLEMENTED` unless all three required evidence classes below are present for the same bounded Research Dashboard surface.
+A Phase 23 claim in this repository revision requires all evidence classes below for the same canonical `/ui` shell.
 
-### Required evidence class 1: bounded dashboard contract
-The repository must contain documentation that identifies one concrete Research Dashboard surface and lets a reviewer distinguish it from adjacent phases. That documentation must:
-- name the surface as the Research Dashboard
-- state the runtime entrypoint, route, or launch surface being claimed
-- describe the bounded research-only purpose of the surface
-- identify the core research views or panels that are part of the claimed dashboard
+### Required evidence class 1: bounded IA contract
+The repository must contain documentation that:
+- identifies `/ui` as the canonical website-facing workflow entrypoint
+- defines the bounded primary navigation workflow contract
+- states explicit non-live and non-readiness boundaries
 
-### Required evidence class 2: runtime or UI implementation artifact
-The repository must contain at least one implementation artifact for that same bounded surface. Acceptable evidence includes:
-- runtime-served UI files or frontend assets that clearly render the named Research Dashboard surface
-- backend route, mount, or handler code that serves or exposes the claimed dashboard surface
-- a bounded UI contract document tied to existing runtime code and endpoints for that dashboard surface
+### Required evidence class 2: runtime/UI implementation artifact
+The repository must contain implementation artifacts that enforce the same bounded shell claim:
+- `src/ui/index.html` (canonical shell and navigation markers)
+- static mount in `src/api/main.py` at `/ui`
 
 ### Required evidence class 3: verification artifact
-The repository must contain at least one verification artifact that checks the same bounded dashboard claim. Acceptable evidence includes:
-- tests that assert the dashboard route, mount, rendered marker, or bounded research panels
-- reviewable manual verification instructions that reference the exact route, marker, and research-only surface being claimed
-- a bounded contract or checklist that a reviewer can apply directly to repo artifacts without guessing
+The repository must contain tests that validate canonical ownership and bounded entrypoints:
+- `src/api/test_research_dashboard_surface.py`
+- `src/api/test_operator_workbench_surface.py`
+- `tests/test_ui_runtime_browser_flow.py`
+- `tests/test_phase23_research_dashboard_contract.py`
 
 ## Classification Rule
-Use the following gate when reviewing future Phase 23 claims:
-- `NOT IMPLEMENTED`: any required evidence class above is missing, or the artifacts do not point to the same bounded Research Dashboard surface
-- `PARTIALLY IMPLEMENTED`: all three required evidence classes are present, but the documented dashboard scope is explicitly incomplete or only some of the defined research views are implemented
-- `IMPLEMENTED`: all three required evidence classes are present and they support the complete bounded Research Dashboard scope being claimed in repository docs
-
-Reviewers should reject a status advance when the artifacts require inference across unrelated surfaces instead of demonstrating one coherent dashboard contract.
+- `NOT IMPLEMENTED`: any required evidence class is missing, inconsistent, or points to multiple canonical website-facing entry surfaces
+- `PARTIALLY IMPLEMENTED`: all required classes exist, but broader product-surface expansion remains intentionally out of scope
+- `IMPLEMENTED`: all required classes exist and support complete bounded scope being claimed, without readiness inference
 
 ## Explicit Phase Boundaries
-Phase 23 is not satisfied by adjacent phases or by overlapping dashboard language.
+Phase 23 consolidation in this revision does not claim:
+- live trading
+- broker execution
+- production-readiness
+- trader-readiness
+- operational readiness
+- promotion of `frontend/` to authoritative product surface
 
-- Phase 17b is the Owner Dashboard and the existing runtime-served `/ui` operator surface. Operator workbench panels on `/ui` do not count as implied Phase 23 evidence.
-- Phase 30 is the Trading Analytics Layer. Metrics artifacts, performance reports, and analytics outputs do not count as a Research Dashboard by themselves.
-- Phase 39 is Charting & Visual Analysis. Read-only chart panels and visual-analysis surfaces do not count as a Research Dashboard by themselves.
-- Phase 40 is the Trading Desk Dashboard. Broader desk, overview, or professional trading dashboard language does not define or satisfy Phase 23.
+Adjacency to Phase 39 charting, Phase 40 desk wording, or broader UX ideas is not evidence for this bounded Phase 23 claim.
 
 ## Verified Repository Evidence
-The current repository review confirms a bounded minimum evidence set for one Phase 23 surface:
+The current repository review confirms one bounded evidence set for canonical `/ui` ownership:
 - bounded contract documentation:
   - `docs/operations/ui/phase-23-research-dashboard-contract.md`
-- runtime/UI artifact:
-  - `src/ui/research_dashboard/index.html`
-  - static mount in `src/api/main.py` at `/research-dashboard`
+- runtime/UI artifacts:
+  - `src/ui/index.html`
+  - static mount in `src/api/main.py` at `/ui`
 - verification artifacts:
   - `src/api/test_research_dashboard_surface.py`
+  - `src/api/test_operator_workbench_surface.py`
+  - `tests/test_ui_runtime_browser_flow.py`
   - `tests/test_phase23_research_dashboard_contract.py`
 
-These artifacts satisfy the bounded minimum contract for one identifiable research-only dashboard surface.
-They do not claim full research workstation completeness, trader readiness, or production readiness.
-
-## Non-Evidence Clarification
-The following artifact classes are insufficient on their own to claim Phase 23 implementation progress, even if they mention dashboards, research, analysis, or review:
-- roadmap, status, or navigation wording that names a Research Dashboard but is not tied to a concrete runtime surface
-- generic dashboard language without a bounded route, mount, or named research-only UI surface
-- standalone analytics outputs, metrics reports, or performance summaries
-- standalone chart panels, visual-analysis widgets, or chart data contracts
-- operator-dashboard, trading-desk, or broader `/ui` documentation that is not explicitly bounded as the Research Dashboard
-- endpoint lists, schemas, or data models that could support a dashboard but do not prove a dashboard surface exists
-- tests that only cover underlying data endpoints or analytics logic without checking a bounded dashboard surface
-
-The following existing repository surfaces must not be treated as implied Phase 23 implementation evidence unless they are explicitly extended and documented as the bounded Research Dashboard defined above:
-- current operator `/ui` surfaces
-- existing analytics artifacts or metrics reports
-- current charting or visual-analysis surfaces
-- trading-desk or operator-dashboard wording in roadmap or navigation documents
-
 ## OPS-P56 Non-Interference
-This Phase 23 minimum contract does not replace or widen operational run logging scope.
+This Phase 23 consolidation contract does not replace or widen operational run logging scope.
 
 `OPS-P56: Start bounded staged paper-trading runbook and evidence log #914` remains the single operational run log issue.
 
 ## Explicit Declaration
-As of this revision, one repository-verifiable minimum Phase 23 Research Dashboard surface is confirmed through bounded docs, runtime/UI artifact, and verification tests.
-Phase 23 is therefore PARTIALLY IMPLEMENTED under the minimum contract.
+As of this revision, one repository-verifiable canonical `/ui` website-facing workflow shell is confirmed under bounded non-live scope.
+Phase 23 is therefore PARTIALLY IMPLEMENTED under this consolidation contract.

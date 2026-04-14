@@ -12,6 +12,8 @@ It prevents overlap-based phase claims across Phase 36, 37, 39, 40, and 41.
 
 `/ui` is one shared shell. Phase ownership is determined by bounded behavior and evidence, not by adjacency of sections on the same page.
 
+`/ui` is also the single canonical website-facing workflow entrypoint in the bounded IA consolidation contract.
+
 ## /ui Section Inventory and Ownership
 
 | Visible `/ui` section or marker | Linked backend surface(s) | Ownership classification |
@@ -26,6 +28,15 @@ It prevents overlap-based phase claims across Phase 36, 37, 39, 40, and 41.
 | Journal Artifacts / Decision Trace | `GET /journal/artifacts`, `GET /journal/decision-trace` | Shared-shell evidence navigation |
 | Runtime Lifecycle | `GET /execution/orders` | Shared-shell evidence navigation |
 | Recent Alerts card (`id="alert-status"`, `id="alert-list"`) | `GET /alerts/history` | Shared-shell read-only inspection boundary |
+
+The `/ui` primary navigation contract is explicitly bounded to:
+- `Workflow: Run Analysis`
+- `Workflow: Manage Watchlists`
+- `Workflow: Review Ranked Watchlist Results`
+- `Workflow: Inspect Runtime Data`
+- `Workflow: Review Run Evidence`
+
+This navigation contract does not imply live trading, broker execution, trader validation, or operational readiness.
 
 ## Evidence Boundaries by Phase
 
@@ -87,4 +98,3 @@ They verify:
 - alert history markers as shared-shell inspection markers
 
 They must not infer Phase 39 chart-panel implementation, Phase 40 desk completion, or Phase 41 delivery completion from section adjacency.
-

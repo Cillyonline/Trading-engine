@@ -35,8 +35,16 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "Overview" in response.text
     assert "Runtime Status" in response.text
     assert "Analysis Runs" in response.text
-    assert "Phase 37 Runtime UI" in response.text
-    assert "Manage Watchlists" in response.text
+    assert "Canonical /ui Workflow Shell" in response.text
+    assert "Bounded Website-Facing Workflow Shell" in response.text
+    assert "Workflow: Run Analysis" in response.text
+    assert "Workflow: Manage Watchlists" in response.text
+    assert "Workflow: Review Ranked Watchlist Results" in response.text
+    assert "Workflow: Inspect Runtime Data" in response.text
+    assert "Workflow: Review Run Evidence" in response.text
+    assert "single canonical website-facing workflow entrypoint" in response.text
+    assert "No live trading" in response.text
+    assert "broker execution controls" in response.text
     assert "Watchlist Management Panel" in response.text
     assert "Watchlist Execution Panel" in response.text
     assert "Watchlist Ranked Results Panel" in response.text
