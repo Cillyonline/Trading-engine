@@ -13,23 +13,24 @@
   <div class="shell">
     <section class="hero">
       <header class="card">
-        <p class="eyebrow">Phase 37 Runtime UI</p>
-        <h1>Browser Runtime Analysis Entrypoint</h1>
-        <p class="muted"><code>/ui</code> remains the canonical browser entrypoint for the backend-served runtime workflow. This phase adds bounded watchlist management and ranked execution results without introducing owner routing, alerts, or later-phase trading controls.</p>
+        <p class="eyebrow">Canonical /ui Workflow Shell</p>
+        <h1>Bounded Website-Facing Workflow Shell</h1>
+        <p class="muted"><code>/ui</code> is the single canonical website-facing workflow entrypoint for this repository. This shell consolidates bounded analysis, watchlist, evidence, and read-only runtime visibility without introducing live trading, broker execution, trader validation, or operational-readiness claims.</p>
+        <span class="pill" id="ui-workflow-boundary-marker">Explicitly non-live bounded workflow</span>
       </header>
-      <nav class="card nav" aria-label="Runtime entry navigation">
-        <a class="active" href="#analysis-entry">Start Analysis</a>
-        <a href="#watchlist-workflow">Manage Watchlists</a>
-        <a href="#watchlist-results">Watchlist Results</a>
-        <a href="#runtime-data">Runtime Data</a>
-        <a href="#run-evidence">Run Evidence</a>
+      <nav class="card nav" aria-label="Runtime entry navigation" id="ui-primary-navigation-contract">
+        <a class="active" href="#analysis-entry">Workflow: Run Analysis</a>
+        <a href="#watchlist-workflow">Workflow: Manage Watchlists</a>
+        <a href="#watchlist-results">Workflow: Review Ranked Watchlist Results</a>
+        <a href="#runtime-data">Workflow: Inspect Runtime Data</a>
+        <a href="#run-evidence">Workflow: Review Run Evidence</a>
       </nav>
     </section>
     <section class="grid" aria-label="Runtime entry summary">
-      <article class="card"><h2>Primary flow</h2><p class="muted">Submit a single-symbol analysis run, or manage and execute a persisted watchlist from the browser.</p><span class="pill">Canonical /ui path</span></article>
-      <article class="card"><h2>Watchlist workflow</h2><p class="muted">Create, select, edit, delete, and execute watchlists through the runtime API surface at <code>/watchlists</code>.</p></article>
-      <article class="card"><h2>Ranked output</h2><p class="muted">Completed watchlist runs render ranked symbols, setup details, and isolated symbol failures returned by the backend.</p></article>
-      <article class="card"><h2>Bounded scope</h2><p class="muted">This surface stays within Phase 37 runtime watchlists. No Phase 39 or Phase 40 features, no alerts, and no live trading controls are exposed here.</p></article>
+      <article class="card"><h2>Primary flow</h2><p class="muted">Submit bounded analysis and watchlist workflows from one canonical shell at <code>/ui</code>.</p><span class="pill">Canonical /ui path</span></article>
+      <article class="card"><h2>Workflow ownership</h2><p class="muted">Navigation labels and section anchors in this shell are the website-facing workflow ownership contract.</p></article>
+      <article class="card"><h2>Bounded output</h2><p class="muted">Watchlist runs render ranked symbols and isolated failures returned by existing bounded API routes.</p></article>
+      <article class="card"><h2>Non-live boundary</h2><p class="muted">No Phase 39 or Phase 40 features are implied here. No live trading, no broker execution controls, and no trader-validation or operational-readiness inference is introduced by this IA consolidation.</p></article>
     </section>
     <main class="two" style="grid-template-columns:1fr">
       <section id="analysis-entry" class="card" aria-label="manual-analysis-controls">

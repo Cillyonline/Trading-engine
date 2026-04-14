@@ -12,6 +12,14 @@ It defines bounded Phase 36 ownership on a shared runtime shell and prevents ove
 
 For Phase 36, `/ui` is the runtime-served browser activation route. No other route is an equivalent runtime activation URL.
 
+## Website-Facing IA Consolidation Boundary
+The canonical website-facing IA contract is consolidated on `/ui`.
+
+That consolidation means:
+- `/ui` is the only canonical workflow entrypoint for bounded website-facing runtime usage.
+- primary workflow navigation ownership is declared directly on the `/ui` shell.
+- IA consolidation does not imply trader validation, operational readiness, or production readiness.
+
 ## Supported Phase 36 Browser Workflow
 Phase 36 documents one bounded browser workflow:
 

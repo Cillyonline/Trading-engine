@@ -72,12 +72,6 @@ app = FastAPI(
 
 initialize_alert_state(app)
 app.mount("/ui", StaticFiles(directory=str(UI_DIRECTORY), html=True), name="ui")
-RESEARCH_DASHBOARD_UI_DIRECTORY: Path = UI_DIRECTORY / "research_dashboard"
-app.mount(
-    "/research-dashboard",
-    StaticFiles(directory=str(RESEARCH_DASHBOARD_UI_DIRECTORY), html=True),
-    name="research-dashboard",
-)
 
 logger.info("Cilly Trading Engine API starting up")
 

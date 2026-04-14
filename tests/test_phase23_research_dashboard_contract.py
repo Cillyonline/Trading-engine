@@ -7,80 +7,79 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PHASE23_STATUS_DOC = "docs/architecture/phases/phase-23-status.md"
 PHASE23_CONTRACT_DOC = "docs/operations/ui/phase-23-research-dashboard-contract.md"
 DOCS_INDEX = "docs/index.md"
-ROADMAP_MASTER = "ROADMAP_MASTER.md"
-RESEARCH_UI_FILE = "src/ui/research_dashboard/index.html"
+UI_FILE = "src/ui/index.html"
+API_MAIN_FILE = "src/api/main.py"
 
 
 def _read(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
-def test_phase23_contract_defines_single_bounded_research_surface() -> None:
+def test_phase23_contract_defines_single_canonical_ui_workflow_shell() -> None:
     content = _read(PHASE23_CONTRACT_DOC)
 
-    assert content.startswith("# Phase 23 Research Dashboard Minimum Contract")
-    assert "Surface name: `Research Dashboard`" in content
-    assert "Runtime entrypoint: `/research-dashboard`" in content
-    assert "src/ui/research_dashboard/index.html" in content
+    assert content.startswith("# Phase 23 /ui Website-Facing Workflow Consolidation Contract")
+    assert "Surface name: `Canonical /ui Workflow Shell`" in content
+    assert "Runtime entrypoint: `/ui`" in content
+    assert "src/ui/index.html" in content
     assert "src/api/main.py" in content
+    assert "only canonical website-facing workflow entrypoint" in content
 
 
-def test_phase23_contract_explicitly_separates_from_operator_shell_and_ops_p56_log_issue() -> None:
+def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     content = _read(PHASE23_CONTRACT_DOC)
 
-    assert "separate from the shared operator shell at `/ui`" in content
+    assert "Workflow: Run Analysis" in content
+    assert "Workflow: Manage Watchlists" in content
+    assert "Workflow: Review Ranked Watchlist Results" in content
+    assert "Workflow: Inspect Runtime Data" in content
+    assert "Workflow: Review Run Evidence" in content
+    assert "live trading" in content
+    assert "broker execution" in content
+    assert "trader validation" in content
+    assert "operational-readiness claims" in content
+    assert "production-readiness claims" in content
+
+
+def test_phase23_contract_retains_ops_p56_non_interference_boundary() -> None:
+    content = _read(PHASE23_CONTRACT_DOC)
+
     assert "OPS-P56: Start bounded staged paper-trading runbook and evidence log #914" in content
     assert "remains the single operational run log issue" in content
 
 
-def test_phase23_contract_has_explicit_non_readiness_non_claims() -> None:
-    content = _read(PHASE23_CONTRACT_DOC)
-
-    assert "live trading" in content
-    assert "execution automation" in content
-    assert "trader-readiness claims" in content
-    assert "production-readiness claims" in content
-    assert "technically good, but traderically weak" in content
-
-
-def test_phase23_status_reflects_bounded_partial_implementation() -> None:
+def test_phase23_status_reflects_bounded_ui_consolidation() -> None:
     content = _read(PHASE23_STATUS_DOC)
 
     assert "## Status" in content
     assert "PARTIALLY IMPLEMENTED" in content
-    assert "src/ui/research_dashboard/index.html" in content
-    assert "src/api/test_research_dashboard_surface.py" in content
-    assert "tests/test_phase23_research_dashboard_contract.py" in content
-    assert "remains the single operational run log issue" in content
-    assert "trader readiness" in content
-    assert "production readiness" in content
+    assert "canonical `/ui` workflow shell" in content
+    assert "src/ui/index.html" in content
+    assert "src/api/main.py" in content
+    assert "trader-readiness" in content
+    assert "production-readiness" in content
 
 
-def test_research_ui_surface_contains_identifiable_marker_and_boundaries() -> None:
-    content = _read(RESEARCH_UI_FILE)
+def test_ui_surface_contains_canonical_navigation_and_boundary_markers() -> None:
+    content = _read(UI_FILE)
 
-    assert 'id="phase23-research-dashboard-surface"' in content
-    assert "/research-dashboard" in content
-    assert "/ui" in content
-    assert "#914" in content
-    assert "Research Dashboard" in content
-    assert "Operator Workbench" not in content
+    assert "Bounded Website-Facing Workflow Shell" in content
+    assert 'id="ui-primary-navigation-contract"' in content
+    assert 'id="ui-workflow-boundary-marker"' in content
+    assert "single canonical website-facing workflow entrypoint" in content
+    assert "No live trading" in content
 
 
-def test_index_includes_phase23_minimum_contract_reference() -> None:
+def test_api_main_mounts_ui_and_does_not_mount_research_dashboard_route() -> None:
+    content = _read(API_MAIN_FILE)
+
+    assert 'app.mount("/ui"' in content
+    assert '"/research-dashboard"' not in content
+
+
+def test_index_includes_phase23_consolidation_contract_reference() -> None:
     index_content = _read(DOCS_INDEX)
 
     assert "phase-23-research-dashboard-contract.md" in index_content
-    assert "Phase 23 | `Research Dashboard`" in index_content
-    assert "PARTIALLY IMPLEMENTED" in index_content
-
-
-def test_roadmap_master_phase23_status_and_boundaries_align_with_phase23_docs() -> None:
-    roadmap_content = _read(ROADMAP_MASTER)
-
-    assert "| 23 | Research Dashboard | Partially Implemented |" in roadmap_content
-    assert "## Phase 23 - Research Dashboard" in roadmap_content
-    assert "**Status:** Partially Implemented" in roadmap_content
-    assert "bounded minimum evidence contract" in roadmap_content
-    assert "non-trader-ready" in roadmap_content
-    assert "non-production-ready" in roadmap_content
+    assert "Phase 23 /ui workflow consolidation contract" in index_content
+    assert "Phase 23 | `Canonical /ui Workflow Shell` | PARTIALLY IMPLEMENTED" in index_content
