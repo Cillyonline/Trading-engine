@@ -32,6 +32,7 @@ def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     assert "Workflow: Run Analysis" in content
     assert "Workflow: Manage Watchlists" in content
     assert "Workflow: Review Ranked Watchlist Results" in content
+    assert "Workflow: Inspect Backtest Artifacts" in content
     assert "Workflow: Inspect Runtime Data" in content
     assert "Workflow: Review Run Evidence" in content
     assert "live trading" in content
@@ -39,6 +40,8 @@ def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     assert "trader validation" in content
     assert "operational-readiness claims" in content
     assert "production-readiness claims" in content
+    assert "technical backtest availability" in content
+    assert "trader validation" in content
 
 
 def test_phase23_contract_retains_ops_p56_non_interference_boundary() -> None:
@@ -68,6 +71,7 @@ def test_ui_surface_contains_canonical_navigation_and_boundary_markers() -> None
     assert 'id="ui-workflow-boundary-marker"' in content
     assert "single canonical website-facing workflow entrypoint" in content
     assert "No live trading" in content
+    assert "Backtest Entry/Read Panel" in content
 
 
 def test_api_main_mounts_ui_and_does_not_mount_research_dashboard_route() -> None:

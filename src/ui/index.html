@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-  <!-- Operator Workbench --><!-- Workbench navigation --><!-- Overview --><!-- Runtime Status --><!-- Analysis Runs --><!-- Strategies --><!-- Strategy List Panel --><!-- Signals Panel --><!-- Journal Artifacts Panel --><!-- Decision Trace Panel --><!-- Trade Lifecycle Panel --><!-- Audit Trail --><!-- Watchlist Management Panel --><!-- Watchlist Execution Panel --><!-- Watchlist Ranked Results Panel -->
+  <!-- Operator Workbench --><!-- Workbench navigation --><!-- Overview --><!-- Runtime Status --><!-- Analysis Runs --><!-- Strategies --><!-- Strategy List Panel --><!-- Signals Panel --><!-- Journal Artifacts Panel --><!-- Decision Trace Panel --><!-- Trade Lifecycle Panel --><!-- Audit Trail --><!-- Watchlist Management Panel --><!-- Watchlist Execution Panel --><!-- Watchlist Ranked Results Panel --><!-- Backtest Entry/Read Panel -->
   <div class="shell">
     <section class="hero">
       <header class="card">
@@ -22,6 +22,7 @@
         <a class="active" href="#analysis-entry">Workflow: Run Analysis</a>
         <a href="#watchlist-workflow">Workflow: Manage Watchlists</a>
         <a href="#watchlist-results">Workflow: Review Ranked Watchlist Results</a>
+        <a href="#backtest-entry">Workflow: Inspect Backtest Artifacts</a>
         <a href="#runtime-data">Workflow: Inspect Runtime Data</a>
         <a href="#run-evidence">Workflow: Review Run Evidence</a>
       </nav>
@@ -120,6 +121,28 @@
           </div>
         </article>
       </section>
+      <section id="backtest-entry" class="watchlist-layout" aria-label="backtest-entry-read">
+        <article class="card" aria-label="backtest-entry-read-panel">
+          <h2>Backtest Entry/Read Panel</h2>
+          <p class="muted">Use <code>/backtest/artifacts</code> to list governed non-live backtest artifacts and <code>/backtest/artifacts/{run_id}/{artifact_name}</code> to preview selected artifact content.</p>
+          <p class="muted">Technical availability of bounded backtest artifacts is not trader validation.</p>
+          <p class="muted">Backtest artifact visibility does not establish operational readiness or live execution readiness.</p>
+          <form id="backtest-entry-read-form">
+            <label for="backtest-run-id-filter">Run ID Filter (optional)</label><input id="backtest-run-id-filter" type="text" placeholder="bt-run-001" />
+            <button id="backtest-refresh-button" type="submit">Load Backtest Artifacts</button>
+          </form>
+          <p class="status" id="backtest-status">Loading bounded backtest artifacts...</p>
+          <div id="backtest-error" class="alert" hidden></div>
+        </article>
+        <article class="card" aria-label="backtest-artifact-browser">
+          <h2>Backtest Artifact Browser</h2>
+          <div id="backtest-empty" class="empty-card">No governed backtest artifacts are currently available.</div>
+          <div class="wrap"><table aria-label="Backtest artifact browser table"><thead><tr><th>Run ID</th><th>Artifact</th><th>Size</th><th>Modified</th></tr></thead><tbody id="backtest-artifact-list"></tbody></table></div>
+          <p class="status" id="backtest-boundary-status">Waiting for bounded backtest boundary metadata.</p>
+          <p class="status" id="backtest-artifact-content-status">Select a backtest artifact to preview content.</p>
+          <pre id="backtest-artifact-content-preview" class="preview"></pre>
+        </article>
+      </section>
       <section id="runtime-data" class="two" aria-label="Runtime data visibility">
         <article class="card"><h2>Runtime State</h2><p class="muted">Read-only runtime state fetched from <code>/system/state</code>.</p><p class="status" id="runtime-state-status">Loading runtime state...</p><dl class="summary"><div class="box"><dt>Status</dt><dd id="runtime-state-value">-</dd></div><div class="box"><dt>Runtime Mode</dt><dd id="runtime-mode-value">-</dd></div><div class="box"><dt>Runtime ID</dt><dd id="runtime-id-value">-</dd></div><div class="box"><dt>Owner</dt><dd id="runtime-owner-value">-</dd></div></dl></article>
         <article class="card"><h2>Strategy Reference</h2><p class="muted">Read-only strategy metadata fetched from <code>/strategies</code>.</p><p class="status" id="strategy-status">Loading strategy list...</p><div class="wrap"><table aria-label="Active strategy metadata table"><thead><tr><th>Strategy</th><th>Display</th><th>Default Keys</th></tr></thead><tbody id="strategy-list"></tbody></table></div></article>
@@ -169,6 +192,140 @@
     function renderTimeline(group){lifeTimeline.innerHTML="";if(!group){const li=document.createElement("li");li.textContent="No lifecycle events available.";lifeTimeline.appendChild(li);lifeSelected.textContent="No order selected.";return}lifeSelected.textContent=`Selected order ${group.order_id} (run ${group.run_id}) with ${group.events.length} events.`;group.events.forEach(event=>{const li=document.createElement("li"),top=document.createElement("div"),time=document.createElement("span"),state=document.createElement("span"),detail=document.createElement("div");top.className="top";state.className="state";time.textContent=event.event_timestamp||"";state.textContent=event.state||"";top.append(time,state);detail.style.marginTop=".35rem";detail.style.color="var(--muted)";detail.style.fontSize=".82rem";detail.textContent=`sequence=${event.event_sequence} symbol=${event.symbol} strategy=${event.strategy}`;li.append(top,detail);lifeTimeline.appendChild(li)})}
     async function loadLifecycle(){lifeStatus.textContent="Loading order lifecycle events from /execution/orders...";try{const response=await fetch("/execution/orders?limit=200&offset=0");if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json(),items=Array.isArray(payload.items)?payload.items:[];if(!items.length){lifeStatus.textContent="No order lifecycle events found.";lifeOrders.innerHTML="";renderTimeline(null);return}const grouped=new Map();items.forEach(item=>{const key=orderKey(item);if(!grouped.has(key))grouped.set(key,{key,run_id:item.run_id||"",order_id:item.order_id||"",symbol:item.symbol||"",strategy:item.strategy||"",events:[]});grouped.get(key).events.push(item)});const groups=Array.from(grouped.values());groups.forEach(g=>g.events.sort(compare));groups.sort((a,b)=>compare(b.events[b.events.length-1],a.events[a.events.length-1]));lifeOrders.innerHTML="";groups.forEach(group=>{const last=group.events[group.events.length-1]||{},tr=row([group.run_id,group.order_id,group.symbol,group.strategy,String(group.events.length),last.state||""]);tr.style.cursor="pointer";tr.addEventListener("click",()=>{selectedKey=group.key;renderTimeline(group)});lifeOrders.appendChild(tr)});const selected=groups.find(g=>g.key===selectedKey)||groups[0];selectedKey=selected.key;renderTimeline(selected);lifeStatus.textContent=`Loaded ${items.length} events across ${groups.length} orders.`}catch(error){lifeStatus.textContent=`Failed to load trade lifecycle events: ${error.message}`;lifeOrders.innerHTML="";renderTimeline(null)}}
     void Promise.all([loadRuntimeState(),loadStrategies(),loadSignals(),loadAlerts(),loadWatchlists(),loadJournal(),loadLifecycle()]);setInterval(()=>{void loadLifecycle();void loadRuntimeState();void loadAlerts()},15000);
+  </script>
+  <script>
+    (function () {
+      const backtestHeaders = {"X-Cilly-Role": "read_only"};
+      const backtestStatus = document.getElementById("backtest-status");
+      const backtestError = document.getElementById("backtest-error");
+      const backtestEmpty = document.getElementById("backtest-empty");
+      const backtestList = document.getElementById("backtest-artifact-list");
+      const backtestBoundaryStatus = document.getElementById("backtest-boundary-status");
+      const backtestArtifactStatus = document.getElementById("backtest-artifact-content-status");
+      const backtestArtifactPreview = document.getElementById("backtest-artifact-content-preview");
+      const backtestForm = document.getElementById("backtest-entry-read-form");
+      const backtestRunIdFilter = document.getElementById("backtest-run-id-filter");
+
+      const backtestRow = (cells) => {
+        const tr = document.createElement("tr");
+        cells.forEach((value) => {
+          const td = document.createElement("td");
+          td.textContent = value;
+          tr.appendChild(td);
+        });
+        return tr;
+      };
+
+      const showBacktestError = (message) => {
+        backtestError.hidden = !message;
+        backtestError.textContent = message || "";
+      };
+
+      const boundarySummary = (boundary) => {
+        if (!boundary || typeof boundary !== "object") {
+          return "Boundary metadata unavailable.";
+        }
+        const technical = boundary.technical_availability_statement || "Technical availability not declared.";
+        const trader = boundary.trader_validation_statement || "Trader validation boundary not declared.";
+        const readiness = boundary.operational_readiness_statement || "Operational readiness boundary not declared.";
+        return `${technical} ${trader} ${readiness}`;
+      };
+
+      const renderBacktestArtifacts = (payload) => {
+        backtestList.innerHTML = "";
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        backtestBoundaryStatus.textContent = boundarySummary(payload.boundary);
+        backtestArtifactPreview.textContent = "";
+        backtestArtifactStatus.textContent = "Select a backtest artifact to preview content.";
+        if (!items.length) {
+          backtestEmpty.hidden = false;
+          return;
+        }
+
+        backtestEmpty.hidden = true;
+        items.forEach((item) => {
+          const tr = backtestRow([
+            item.run_id || "",
+            item.artifact_name || "",
+            item.size_bytes != null ? String(item.size_bytes) : "",
+            item.modified_at || "",
+          ]);
+          tr.style.cursor = "pointer";
+          tr.addEventListener("click", () => {
+            void loadBacktestArtifactContent(item.run_id, item.artifact_name);
+          });
+          backtestList.appendChild(tr);
+        });
+      };
+
+      async function loadBacktestArtifactContent(runId, artifactName) {
+        backtestArtifactStatus.textContent = `Loading ${artifactName}...`;
+        backtestArtifactPreview.textContent = "";
+        try {
+          const response = await fetch(
+            `/backtest/artifacts/${encodeURIComponent(runId)}/${encodeURIComponent(artifactName)}`,
+            {headers: backtestHeaders},
+          );
+          if (!response.ok) {
+            let detail = `HTTP ${response.status}`;
+            try {
+              const errorPayload = await response.json();
+              if (errorPayload && errorPayload.detail) {
+                detail = typeof errorPayload.detail === "string"
+                  ? errorPayload.detail
+                  : JSON.stringify(errorPayload.detail);
+              }
+            } catch (_) {}
+            throw new Error(detail);
+          }
+          const payload = await response.json();
+          const content = payload.content_type === "json"
+            ? JSON.stringify(payload.content, null, 2)
+            : String(payload.content || "");
+          backtestArtifactPreview.textContent = content;
+          backtestArtifactStatus.textContent = `Loaded ${payload.artifact_name} for run ${payload.run_id}.`;
+          backtestBoundaryStatus.textContent = boundarySummary(payload.boundary);
+        } catch (error) {
+          backtestArtifactStatus.textContent = `Failed to load backtest artifact content: ${error.message}`;
+        }
+      }
+
+      async function loadBacktestArtifacts() {
+        showBacktestError("");
+        const runId = backtestRunIdFilter.value.trim();
+        backtestStatus.textContent = "Loading bounded backtest artifacts from /backtest/artifacts...";
+        const query = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
+        try {
+          const response = await fetch(`/backtest/artifacts${query}`, {headers: backtestHeaders});
+          if (!response.ok) {
+            let detail = `HTTP ${response.status}`;
+            try {
+              const errorPayload = await response.json();
+              if (errorPayload && errorPayload.detail) {
+                detail = typeof errorPayload.detail === "string"
+                  ? errorPayload.detail
+                  : JSON.stringify(errorPayload.detail);
+              }
+            } catch (_) {}
+            throw new Error(detail);
+          }
+          const payload = await response.json();
+          renderBacktestArtifacts(payload);
+          backtestStatus.textContent = `Loaded ${payload.total} governed backtest artifacts from /backtest/artifacts.`;
+        } catch (error) {
+          renderBacktestArtifacts({items: [], boundary: null});
+          showBacktestError(`Failed to load bounded backtest artifacts: ${error.message}`);
+          backtestStatus.textContent = "Backtest artifact load failed.";
+        }
+      }
+
+      backtestForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        void loadBacktestArtifacts();
+      });
+
+      void loadBacktestArtifacts();
+    })();
   </script>
 </body>
 </html>

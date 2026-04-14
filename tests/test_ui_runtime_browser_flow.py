@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 import shutil
-import sqlite3
-import tempfile
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,9 +11,6 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import api.main as api_main
-from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
-from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
-from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 
 OPERATOR_HEADERS = {api_main.ROLE_HEADER_NAME: "operator"}
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
@@ -25,27 +21,124 @@ class _RuntimeControllerStub:
         self.state = state
 
 
-def _make_signal_repo(tmp_path: Path) -> SqliteSignalRepository:
-    return SqliteSignalRepository(db_path=tmp_path / "signals.db")
+@dataclass
+class _WatchlistRecord:
+    watchlist_id: str
+    name: str
+    symbols: list[str]
 
 
-def _make_analysis_repo(tmp_path: Path) -> SqliteAnalysisRunRepository:
-    return SqliteAnalysisRunRepository(db_path=tmp_path / "analysis.db")
+class _InMemorySignalRepo:
+    def __init__(self) -> None:
+        self._signals: list[dict[str, Any]] = []
 
 
-def _make_watchlist_repo(tmp_path: Path) -> SqliteWatchlistRepository:
-    return SqliteWatchlistRepository(db_path=tmp_path / "watchlists.db")
+    def save_signals(self, signals: list[dict[str, Any]]) -> None:
+        self._signals.extend(dict(item) for item in signals)
+
+
+    def read_signals(
+        self,
+        *,
+        symbol: str | None = None,
+        strategy: str | None = None,
+        timeframe: str | None = None,
+        ingestion_run_id: str | None = None,
+        from_: datetime | None = None,
+        to: datetime | None = None,
+        sort: str = "created_at_desc",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        del from_, to, timeframe
+        items = list(self._signals)
+        if ingestion_run_id is not None:
+            items = [item for item in items if item.get("ingestion_run_id") == ingestion_run_id]
+        if symbol is not None:
+            items = [item for item in items if item.get("symbol") == symbol]
+        if strategy is not None:
+            items = [item for item in items if item.get("strategy") == strategy]
+        reverse = sort != "created_at_asc"
+        items.sort(key=lambda item: str(item.get("timestamp", "")), reverse=reverse)
+        total = len(items)
+        return items[offset : offset + limit], total
+
+
+class _InMemoryAnalysisRunRepo:
+    def __init__(self) -> None:
+        self._runs: dict[str, dict[str, Any]] = {}
+
+
+    def get_run(self, analysis_run_id: str) -> dict[str, Any] | None:
+        return self._runs.get(analysis_run_id)
+
+
+    def save_run(
+        self,
+        *,
+        analysis_run_id: str,
+        ingestion_run_id: str,
+        request_payload: dict[str, Any],
+        result_payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "analysis_run_id": analysis_run_id,
+            "ingestion_run_id": ingestion_run_id,
+            "request": dict(request_payload),
+            "result": dict(result_payload),
+        }
+        self._runs[analysis_run_id] = payload
+        return payload
+
+
+class _InMemoryWatchlistRepo:
+    def __init__(self) -> None:
+        self._items: dict[str, _WatchlistRecord] = {}
+
+
+    def create_watchlist(self, *, watchlist_id: str, name: str, symbols: list[str]) -> _WatchlistRecord:
+        if watchlist_id in self._items:
+            raise ValueError("watchlist_id_exists")
+        record = _WatchlistRecord(watchlist_id=watchlist_id, name=name, symbols=list(symbols))
+        self._items[watchlist_id] = record
+        return _WatchlistRecord(**record.__dict__)
+
+
+    def list_watchlists(self) -> list[_WatchlistRecord]:
+        return [
+            _WatchlistRecord(watchlist_id=item.watchlist_id, name=item.name, symbols=list(item.symbols))
+            for item in self._items.values()
+        ]
+
+
+    def get_watchlist(self, watchlist_id: str) -> _WatchlistRecord | None:
+        item = self._items.get(watchlist_id)
+        if item is None:
+            return None
+        return _WatchlistRecord(watchlist_id=item.watchlist_id, name=item.name, symbols=list(item.symbols))
+
+
+    def update_watchlist(self, *, watchlist_id: str, name: str, symbols: list[str]) -> _WatchlistRecord:
+        if watchlist_id not in self._items:
+            raise KeyError(watchlist_id)
+        record = _WatchlistRecord(watchlist_id=watchlist_id, name=name, symbols=list(symbols))
+        self._items[watchlist_id] = record
+        return _WatchlistRecord(**record.__dict__)
+
+
+    def delete_watchlist(self, watchlist_id: str) -> bool:
+        if watchlist_id not in self._items:
+            return False
+        del self._items[watchlist_id]
+        return True
 
 
 def _make_isolated_sqlite_tmp_path() -> Path:
-    base_dir = Path.cwd() / ".test_tmp_sqlite"
+    base_dir = Path.cwd() / "tests" / "pytest_tmp"
     base_dir.mkdir(parents=True, exist_ok=True)
-    return Path(
-        tempfile.mkdtemp(
-            prefix="ui-runtime-browser-flow-",
-            dir=str(base_dir),
-        )
-    )
+    path = base_dir / f"ui-runtime-browser-flow-{uuid.uuid4().hex}"
+    path.mkdir(parents=True, exist_ok=False)
+    return path
 
 
 def _insert_ingestion_run(
@@ -55,30 +148,7 @@ def _insert_ingestion_run(
     symbols: list[str],
     timeframe: str = "D1",
 ) -> None:
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        """
-        INSERT INTO ingestion_runs (
-            ingestion_run_id,
-            created_at,
-            source,
-            symbols_json,
-            timeframe,
-            fingerprint_hash
-        )
-        VALUES (?, ?, ?, ?, ?, ?);
-        """,
-        (
-            ingestion_run_id,
-            datetime.now(timezone.utc).isoformat(),
-            "test",
-            json.dumps(symbols),
-            timeframe,
-            None,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    del db_path, ingestion_run_id, symbols, timeframe
 
 
 def _insert_snapshot_rows(
@@ -88,39 +158,7 @@ def _insert_snapshot_rows(
     timeframe: str,
     rows: list[tuple[int, float, float, float, float, float]],
 ) -> None:
-    conn = sqlite3.connect(db_path)
-    conn.executemany(
-        """
-        INSERT INTO ohlcv_snapshots (
-            ingestion_run_id,
-            symbol,
-            timeframe,
-            ts,
-            open,
-            high,
-            low,
-            close,
-            volume
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """,
-        [
-            (
-                ingestion_run_id,
-                symbol,
-                timeframe,
-                ts,
-                open_,
-                high,
-                low,
-                close,
-                volume,
-            )
-            for ts, open_, high, low, close, volume in rows
-        ],
-    )
-    conn.commit()
-    conn.close()
+    del db_path, ingestion_run_id, symbol, timeframe, rows
 
 
 class _ScoreFromCloseStrategy:
@@ -142,15 +180,64 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
     try:
         monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
         monkeypatch.setattr(api_main, "get_runtime_controller", lambda: _RuntimeControllerStub("running"))
-        signal_repo = _make_signal_repo(tmp_path)
-        analysis_repo = _make_analysis_repo(tmp_path)
-        watchlist_repo = _make_watchlist_repo(tmp_path)
+        signal_repo = _InMemorySignalRepo()
+        analysis_repo = _InMemoryAnalysisRunRepo()
+        watchlist_repo = _InMemoryWatchlistRepo()
 
         monkeypatch.setattr(api_main, "signal_repo", signal_repo)
         monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
         monkeypatch.setattr(api_main, "watchlist_repo", watchlist_repo)
         monkeypatch.setattr(api_main, "_require_engine_runtime_running", lambda: None)
+        monkeypatch.setattr(api_main, "_require_ingestion_run", lambda *args, **kwargs: None)
+        monkeypatch.setattr(api_main, "_require_snapshot_ready", lambda *args, **kwargs: None)
+        monkeypatch.setattr(api_main, "_resolve_analysis_db_path", lambda: str(tmp_path / "analysis.db"))
         monkeypatch.setattr(api_main, "create_registered_strategies", lambda: [_ScoreFromCloseStrategy()])
+        monkeypatch.setattr(api_main, "trigger_operator_analysis_run", lambda execute, execute_kwargs, **kwargs: execute(**execute_kwargs))
+
+        def _run_snapshot_analysis_stub(
+            *,
+            symbols: list[str],
+            strategies: list[Any],
+            engine_config: Any,
+            strategy_configs: dict[str, dict[str, Any]],
+            signal_repo: _InMemorySignalRepo,
+            ingestion_run_id: str,
+            db_path: str,
+            run_id: str | None = None,
+            symbol_failures: list[dict[str, str]] | None = None,
+            isolate_symbol_failures: bool = False,
+        ) -> list[dict[str, Any]]:
+            del strategies, engine_config, strategy_configs, db_path, symbol_failures, isolate_symbol_failures
+            now = datetime.now(timezone.utc).isoformat()
+            score_map = {
+                "AAPL": (81.0, 81.0),
+                "MSFT": (72.0, 72.0),
+                "NVDA": (96.0, 96.0),
+            }
+            output: list[dict[str, Any]] = []
+            for symbol in symbols:
+                score, signal_strength = score_map.get(symbol, (50.0, 50.0))
+                output.append(
+                    {
+                        "signal_id": f"{run_id or ingestion_run_id}-{symbol}",
+                        "analysis_run_id": run_id,
+                        "ingestion_run_id": ingestion_run_id,
+                        "symbol": symbol,
+                        "strategy": "RSI2" if symbol == "AAPL" else "WATCHLIST_FAKE",
+                        "direction": "long",
+                        "score": score,
+                        "signal_strength": signal_strength,
+                        "timestamp": now,
+                        "stage": "setup",
+                        "timeframe": "D1",
+                        "market_type": "stock",
+                        "data_source": "yahoo",
+                    }
+                )
+            signal_repo.save_signals(output)
+            return output
+
+        monkeypatch.setattr(api_main, "_run_snapshot_analysis", _run_snapshot_analysis_stub)
 
         ingestion_run_id = str(uuid.uuid4())
         _insert_ingestion_run(
@@ -250,6 +337,14 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "/watchlists/{watchlist_id}/execute" in ui_response.text
             assert 'id="watchlist-form"' in ui_response.text
             assert 'id="watchlist-ranked-result-list"' in ui_response.text
+            assert "Workflow: Inspect Backtest Artifacts" in ui_response.text
+            assert "Backtest Entry/Read Panel" in ui_response.text
+            assert 'id="backtest-entry-read-form"' in ui_response.text
+            assert 'id="backtest-artifact-list"' in ui_response.text
+            assert "/backtest/artifacts" in ui_response.text
+            assert "/backtest/artifacts/{run_id}/{artifact_name}" in ui_response.text
+            assert "Technical availability of bounded backtest artifacts is not trader validation." in ui_response.text
+            assert "does not establish operational readiness or live execution readiness." in ui_response.text
 
             state_response = client.get("/system/state", headers=READ_ONLY_HEADERS)
             assert state_response.status_code == 200
