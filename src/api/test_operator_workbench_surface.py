@@ -40,6 +40,7 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "Workflow: Run Analysis" in response.text
     assert "Workflow: Manage Watchlists" in response.text
     assert "Workflow: Review Ranked Watchlist Results" in response.text
+    assert "Workflow: Inspect Backtest Artifacts" in response.text
     assert "Workflow: Inspect Runtime Data" in response.text
     assert "Workflow: Review Run Evidence" in response.text
     assert "single canonical website-facing workflow entrypoint" in response.text
@@ -55,6 +56,13 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "/watchlists" in response.text
     assert "/watchlists/{watchlist_id}" in response.text
     assert "/watchlists/{watchlist_id}/execute" in response.text
+    assert "Backtest Entry/Read Panel" in response.text
+    assert "id=\"backtest-entry-read-form\"" in response.text
+    assert "id=\"backtest-artifact-list\"" in response.text
+    assert "/backtest/artifacts" in response.text
+    assert "/backtest/artifacts/{run_id}/{artifact_name}" in response.text
+    assert "Technical availability of bounded backtest artifacts is not trader validation." in response.text
+    assert "does not establish operational readiness or live execution readiness." in response.text
     assert "No Phase 39 or Phase 40 features" in response.text
     assert "/alerts/history" in response.text
     assert 'id="alert-status"' in response.text

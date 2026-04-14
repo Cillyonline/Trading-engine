@@ -11,6 +11,8 @@ from cilly_trading.models import SignalReadResponseDTO
 
 from ..config import SCREENER_RESULTS_READ_MAX_LIMIT, SIGNALS_READ_MAX_LIMIT
 from ..models import (
+    BacktestArtifactContentResponse,
+    BacktestArtifactListResponse,
     DecisionCardInspectionQuery,
     DecisionCardInspectionResponse,
     DecisionTraceResponse,
@@ -367,6 +369,50 @@ def build_inspection_router(
         _: str = Depends(deps.require_role("read_only")),
     ) -> JournalArtifactContentResponse:
         return inspection_service.read_journal_artifact_file_content(
+            run_id=run_id,
+            artifact_name=artifact_name,
+            journal_artifacts_root=deps.get_journal_artifacts_root(),
+        )
+
+    @router.get(
+        "/backtest/artifacts",
+        response_model=BacktestArtifactListResponse,
+        summary="Backtest Artifact Entry/Read",
+        description=(
+            "Read-only bounded backtest artifact listing for browser-native /ui inspection. "
+            "This route is explicitly non-live and separates technical artifact visibility from "
+            "trader validation and operational readiness."
+        ),
+    )
+    def read_backtest_artifacts_handler(
+        run_id: Optional[str] = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> BacktestArtifactListResponse:
+        return inspection_service.read_backtest_artifacts(
+            limit=limit,
+            offset=offset,
+            run_id=run_id,
+            journal_artifacts_root=deps.get_journal_artifacts_root(),
+        )
+
+    @router.get(
+        "/backtest/artifacts/{run_id}/{artifact_name}",
+        response_model=BacktestArtifactContentResponse,
+        summary="Backtest Artifact Content Read",
+        description=(
+            "Read-only bounded backtest artifact content for browser-native /ui inspection. "
+            "This route is explicitly non-live and does not imply trader validation or "
+            "operational readiness."
+        ),
+    )
+    def read_backtest_artifact_content_handler(
+        run_id: str,
+        artifact_name: str,
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> BacktestArtifactContentResponse:
+        return inspection_service.read_backtest_artifact_content(
             run_id=run_id,
             artifact_name=artifact_name,
             journal_artifacts_root=deps.get_journal_artifacts_root(),

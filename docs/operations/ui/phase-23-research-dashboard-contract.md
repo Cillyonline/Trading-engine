@@ -19,8 +19,9 @@ The canonical `/ui` shell owns one bounded workflow navigation contract:
 1. `Workflow: Run Analysis` (`#analysis-entry`)
 2. `Workflow: Manage Watchlists` (`#watchlist-workflow`)
 3. `Workflow: Review Ranked Watchlist Results` (`#watchlist-results`)
-4. `Workflow: Inspect Runtime Data` (`#runtime-data`)
-5. `Workflow: Review Run Evidence` (`#run-evidence`)
+4. `Workflow: Inspect Backtest Artifacts` (`#backtest-entry`)
+5. `Workflow: Inspect Runtime Data` (`#runtime-data`)
+6. `Workflow: Review Run Evidence` (`#run-evidence`)
 
 These navigation labels and anchors are the website-facing IA ownership markers for this issue slice.
 
@@ -31,6 +32,7 @@ IA consolidation in `/ui` does not introduce:
 - trader validation
 - operational-readiness claims
 - production-readiness claims
+- technical backtest availability as a substitute for trader validation or readiness evidence
 
 `No Phase 39 or Phase 40 features` wording in the `/ui` shell remains an explicit non-inference marker.
 
@@ -42,6 +44,8 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 - `GET /system/state`
 - `GET /strategies`
 - `GET /signals`
+- `GET /backtest/artifacts`
+- `GET /backtest/artifacts/{run_id}/{artifact_name}`
 - `GET /alerts/history`
 - `GET /journal/artifacts`
 - `GET /journal/decision-trace`

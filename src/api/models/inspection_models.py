@@ -379,6 +379,48 @@ class JournalArtifactContentResponse(BaseModel):
     content: Any
 
 
+class BacktestReadBoundaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["non_live_backtest_read_only"]
+    technical_availability_statement: str
+    trader_validation_statement: str
+    operational_readiness_statement: str
+    in_scope: List[str]
+    out_of_scope: List[str]
+
+
+class BacktestArtifactItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    artifact_name: str
+    size_bytes: int
+    modified_at: str
+
+
+class BacktestArtifactListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    boundary: BacktestReadBoundaryResponse
+    items: List[BacktestArtifactItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
+class BacktestArtifactContentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    boundary: BacktestReadBoundaryResponse
+    run_id: str
+    artifact_name: str
+    content_type: Literal["json", "text"]
+    content: Any
+
+
 class DecisionTraceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

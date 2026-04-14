@@ -13,6 +13,10 @@ from cilly_trading.engine.decision_card_contract import validate_decision_card
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
 
 from ..models import (
+    BacktestArtifactContentResponse,
+    BacktestArtifactItemResponse,
+    BacktestArtifactListResponse,
+    BacktestReadBoundaryResponse,
     DecisionCardComponentScoreInspectionResponse,
     DecisionCardHardGateInspectionResponse,
     DecisionCardInspectionItemResponse,
@@ -58,6 +62,22 @@ from ..models import (
 )
 from . import paper_inspection_service
 from .analysis_service import build_strategy_metadata_response
+
+
+BACKTEST_WORKFLOW_ID = "ui_bounded_backtest_entry_read"
+GOVERNED_BACKTEST_ARTIFACT_NAMES = frozenset(
+    {
+        "backtest-result.json",
+        "backtest-result.sha256",
+        "metrics-result.json",
+        "trade-ledger.json",
+        "trade-ledger.sha256",
+        "equity-curve.json",
+        "equity-curve.sha256",
+        "performance-report.json",
+        "performance-report.sha256",
+    }
+)
 
 
 @dataclass
@@ -890,6 +910,102 @@ def read_journal_artifact_file_content(
     )
     content_type, content = read_journal_artifact_content(path)
     return JournalArtifactContentResponse(
+        run_id=run_id,
+        artifact_name=artifact_name,
+        content_type=content_type,
+        content=content,
+    )
+
+
+def _build_backtest_read_boundary() -> BacktestReadBoundaryResponse:
+    return BacktestReadBoundaryResponse(
+        mode="non_live_backtest_read_only",
+        technical_availability_statement=(
+            "This flow only confirms technical availability of governed backtest artifacts."
+        ),
+        trader_validation_statement=(
+            "Technical artifact availability is not trader validation and must not be interpreted "
+            "as strategy approval."
+        ),
+        operational_readiness_statement=(
+            "Backtest artifact visibility is not operational readiness evidence for live or broker "
+            "execution."
+        ),
+        in_scope=[
+            "read-only listing of governed backtest artifacts",
+            "read-only artifact content preview for governed backtest artifacts",
+            "bounded non-live technical inspection through /ui",
+        ],
+        out_of_scope=[
+            "live trading and broker connectivity",
+            "order execution enablement",
+            "trader validation and operational readiness claims",
+        ],
+    )
+
+
+def _is_governed_backtest_artifact_name(artifact_name: str) -> bool:
+    return artifact_name in GOVERNED_BACKTEST_ARTIFACT_NAMES
+
+
+def read_backtest_artifacts(
+    *,
+    limit: int,
+    offset: int,
+    run_id: Optional[str],
+    journal_artifacts_root: Path,
+) -> BacktestArtifactListResponse:
+    files = iter_journal_artifact_files(journal_artifacts_root=journal_artifacts_root)
+    filtered: List[tuple[str, Path]] = []
+    for item_run_id, path in files:
+        if run_id is not None and item_run_id != run_id:
+            continue
+        if not _is_governed_backtest_artifact_name(path.name):
+            continue
+        filtered.append((item_run_id, path))
+    filtered.sort(key=lambda item: item[1].stat().st_mtime, reverse=True)
+
+    total = len(filtered)
+    page = filtered[offset : offset + limit]
+    items: List[BacktestArtifactItemResponse] = []
+    for item_run_id, path in page:
+        stat = path.stat()
+        items.append(
+            BacktestArtifactItemResponse(
+                run_id=item_run_id,
+                artifact_name=path.name,
+                size_bytes=stat.st_size,
+                modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            )
+        )
+
+    return BacktestArtifactListResponse(
+        workflow_id=BACKTEST_WORKFLOW_ID,
+        boundary=_build_backtest_read_boundary(),
+        items=items,
+        limit=limit,
+        offset=offset,
+        total=total,
+    )
+
+
+def read_backtest_artifact_content(
+    *,
+    run_id: str,
+    artifact_name: str,
+    journal_artifacts_root: Path,
+) -> BacktestArtifactContentResponse:
+    if not _is_governed_backtest_artifact_name(artifact_name):
+        raise HTTPException(status_code=404, detail="backtest_artifact_not_found")
+    path = resolve_journal_artifact_path(
+        run_id=run_id,
+        artifact_name=artifact_name,
+        journal_artifacts_root=journal_artifacts_root,
+    )
+    content_type, content = read_journal_artifact_content(path)
+    return BacktestArtifactContentResponse(
+        workflow_id=BACKTEST_WORKFLOW_ID,
+        boundary=_build_backtest_read_boundary(),
         run_id=run_id,
         artifact_name=artifact_name,
         content_type=content_type,

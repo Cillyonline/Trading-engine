@@ -19,6 +19,8 @@ from .composition import (
     register_runtime_lifecycle,
 )
 from .models import (
+    BacktestArtifactContentResponse,
+    BacktestArtifactListResponse,
     ComplianceGuardStatusResponse,
     DecisionCardInspectionResponse,
     PaperAccountReadResponse,
