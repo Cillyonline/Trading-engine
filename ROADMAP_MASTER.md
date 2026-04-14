@@ -52,6 +52,28 @@ Status policy used in this file:
 - Per-phase status files, audit artifacts, and index/navigation pages may explain or evidence a phase, but they remain derived surfaces for status and must defer to this document for the canonical maturity/status label.
 - For audited phases, this document must defer to the authoritative execution roadmap for taxonomy and phase-name interpretation.
 
+## Governance Direction (Option 2)
+
+- Active roadmap direction is ratified as Option 2: productization-first, bounded, and strictly non-live.
+- This direction preserves the existing phase taxonomy and canonical phase status authority in this file.
+- This direction does not authorize live-trading expansion, broker integration expansion, architecture rewrite, or uncontrolled dashboard expansion.
+
+## Product Surface Track (Governance Overlay)
+
+- Product Surface Track is a governance overlay; it does not replace phase taxonomy or canonical phase status authority.
+- `/ui` is ratified as the canonical website-facing product authority for bounded runtime/browser productization.
+- `frontend/` is non-authoritative and development-only unless later governance explicitly promotes it in this roadmap and aligned supporting contracts.
+- Near-term productization target is bounded browser-native workflow consolidation for analysis, signal review, bounded backtest evidence consumption, and trade-evaluation UX.
+- This overlay is consolidation-focused and explicitly excludes uncontrolled dashboard expansion.
+
+## Strategy Readiness Track (Governance Overlay)
+
+- Strategy Readiness Track is a governance overlay; it does not replace phase taxonomy or canonical phase status authority.
+- Strategy-readiness governance is explicitly separated into: technical implementation status, trader validation status, and operational readiness.
+- Technical implementation completion does not imply trader validation readiness.
+- Local/operator usability does not imply production readiness.
+- This overlay remains strictly non-live and does not authorize live-trading scope.
+
 ## System Workflow
 
 Professional trading systems follow this workflow:
@@ -111,7 +133,7 @@ Market Data
 | 38 | Market Data Integration | Partially Implemented |
 | 39 | Charting & Visual Analysis | Implemented in Repository |
 | 40 | Trading Desk Dashboard | Partially Implemented |
-| 41 | Alerts & Notification System | Planned |
+| 41 | Alerts & Notification System | Partially Implemented |
 | 42 | Strategy Lab | Planned |
 | 42b | Backtesting Engine | Implemented in Repository |
 | 43 | Portfolio Simulation | Partially Implemented |
@@ -122,17 +144,26 @@ Market Data
 
 - Status changes follow one update path: update evidence as needed, then update this master roadmap to change the canonical phase maturity/status label.
 - Secondary docs that describe a phase do not create an independent status authority; they are reconciled to this file.
+- Option 2 is the active governance direction in this roadmap: productization-first, bounded, and strictly non-live.
+- Product Surface Track and Strategy Readiness Track are governance overlays only; they do not replace phase taxonomy or canonical phase maturity/status authority.
+- Readiness non-inference is mandatory: phase maturity/status labels must not be over-read as trader validation or operational readiness.
+- `/ui` is the canonical website-facing product authority for bounded browser productization in this roadmap revision.
+- `frontend/` is non-authoritative/development-only unless later governance explicitly promotes it in this roadmap and aligned contracts.
 - Phase 17b is backend-served at `/ui`; `/owner` is documented only as a frontend development-only route and not as a runtime backend surface.
 - Phase 23 means `Research Dashboard`: one dedicated research-only dashboard surface.
 - Phase 23 is `Partially Implemented` because the repository now contains a bounded minimum evidence contract for one coherent Research Dashboard surface: a bounded dashboard contract, a runtime or UI implementation artifact, and a verification artifact for the same claimed surface.
 - Current `/ui` operator panels, analytics artifacts, charting surfaces, and trading-desk wording are adjacent only and do not count on their own as Phase 23 implementation evidence.
 - This bounded Phase 23 evidence is explicitly non-trader-ready and non-production-ready.
+- Phase 36 is treated as a key productization lane for bounded browser workflow consolidation, without status inflation beyond verified evidence.
+- Phase 40 remains bounded and consolidation-focused; this roadmap direction does not authorize uncontrolled dashboard expansion.
+- Phase 42 remains planned and is connected to bounded Strategy Readiness outcomes rather than broad strategy-lab expansion.
 - Phase 24 is now treated as implemented because the simulator boundary and non-live constraints are documented consistently; Phase 44 remains broader and only partially implemented.
 - Phase 25 and Phase 27 were corrected away from stale older wording because lifecycle and risk-framework artifacts are already present in the repository.
 - Phase 35 is marked `Implemented` in this revision because metrics, telemetry, runtime health, guard-trigger monitoring, and integration tests are all present in-repo.
 - Phase 37 is marked `Implemented in Repository` in this revision because watchlist persistence, CRUD API, execution/ranking, `/ui` behavior, and tests are now all present in-repo.
 - Phase 39 is marked `Implemented in Repository` in this revision because deterministic chart-data contract artifacts and tests are present, with explicit shared-shell non-inference boundaries for `/ui`.
-- Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present.
+- Phase 41 is reconciled as `Partially Implemented` with conservative bounded non-live evidence: alert configuration, bounded dispatch workflow, bounded delivery-result persistence, and read surfaces are repo-verifiable, while broader external notification-channel scope remains incomplete.
+- Phase 42b is marked `Implemented in Repository` because deterministic backtest runner, CLI, docs, and tests are present; browser-native productization of that backtesting workflow remains incomplete.
 
 ---
 
@@ -760,16 +791,17 @@ Provide a central professional trading interface.
 ---
 
 ## Phase 41 - Alerts & Notification System
-**Status:** Planned
+**Status:** Partially Implemented
 
 **Goal**
 Notify users automatically when relevant events occur.
 
 **Current Status Basis**
-- No repo-verifiable Telegram, email, browser notification, or alert-routing implementation was confirmed.
+- Repo-verifiable bounded non-live alert implementation exists: alert configuration APIs, bounded dispatch workflow, bounded delivery-result persistence, alert history surfaces, and associated tests.
+- Broader external-channel notification scope (for example Telegram, email, or browser push routing) is not yet fully implemented as a complete production notification system.
 
 **Outcome**
-- Alerts remain planned work.
+- Alerts are partially implemented with conservative bounded non-live scope; broader notification-channel completion remains future work.
 
 ---
 
@@ -796,9 +828,10 @@ Validate strategies on historical data before simulation and paper trading.
 **Current Status Basis**
 - Deterministic backtest runner, CLI entrypoint, backtest docs, artifacts, and tests are present.
 - The repository already supports snapshot-driven backtest execution and deterministic result writing.
+- Browser-native productization of the backtesting workflow remains incomplete and is tracked as a product-surface maintenance gap rather than as missing core engine implementation.
 
 **Outcome**
-- Backtesting is no longer just planned; core implementation already exists in the repository.
+- Backtesting is no longer just planned; core implementation already exists in the repository, while browser-native productization remains incomplete.
 
 ---
 
@@ -854,6 +887,28 @@ Enable controlled real-capital trading only after all earlier layers are proven.
 - `docs/architecture/roadmap/execution_roadmap.md` steuert die autoritative Bedeutung der auditierten Phasen.
 - Dieses Dokument steuert die breitere Master-Roadmap-Sicht, die Einordnung im 45-Phasen-Referenzmodell und die hier verwendeten Statuslabels.
 - Fuer auditierte Phasen muss dieses Dokument bei Taxonomie und Phasenbedeutung auf die autoritative Execution-Roadmap verweisen.
+
+## Governance-Richtung (Option 2)
+
+- Die aktive Roadmap-Richtung ist als Option 2 ratifiziert: produktisierungsorientiert, begrenzt und strikt non-live.
+- Diese Richtung behaelt die bestehende Phasen-Taxonomie und die kanonische Phasen-Statusautoritaet in dieser Datei bei.
+- Diese Richtung erlaubt weder Live-Trading-Expansion noch Broker-Integrations-Expansion noch Architektur-Rewrite noch unkontrollierte Dashboard-Expansion.
+
+## Product Surface Track (Governance Overlay)
+
+- Der Product Surface Track ist ein Governance-Overlay; er ersetzt weder die Phasen-Taxonomie noch die kanonische Phasen-Statusautoritaet.
+- `/ui` ist als kanonische website-facing Produktautoritaet fuer begrenzte Runtime/Browser-Produktisierung ratifiziert.
+- `frontend/` ist non-authoritative und development-only, solange spaetere Governance es nicht explizit in dieser Roadmap und in ausgerichteten Supporting Contracts promoted.
+- Das kurzfristige Produktisierungsziel ist eine begrenzte browser-native Workflow-Konsolidierung fuer Analysis, Signal Review, begrenzte Backtest-Evidence-Nutzung und Trade-Evaluation-UX.
+- Dieses Overlay ist konsolidierungsorientiert und schliesst unkontrollierte Dashboard-Expansion explizit aus.
+
+## Strategy Readiness Track (Governance Overlay)
+
+- Der Strategy Readiness Track ist ein Governance-Overlay; er ersetzt weder die Phasen-Taxonomie noch die kanonische Phasen-Statusautoritaet.
+- Die Strategy-Readiness-Governance trennt explizit: technical implementation status, trader validation status und operational readiness.
+- Der Abschluss technischer Implementierung impliziert keine trader validation readiness.
+- Lokale/Operator-Usability impliziert keine production readiness.
+- Dieses Overlay bleibt strikt non-live und autorisiert keinen Live-Trading-Scope.
 
 ## System-Workflow
 
@@ -914,7 +969,7 @@ Marktdaten
 | 38 | Market Data Integration | Partially Implemented |
 | 39 | Charting & Visual Analysis | Implemented in Repository |
 | 40 | Trading Desk Dashboard | Partially Implemented |
-| 41 | Alerts & Notification System | Planned |
+| 41 | Alerts & Notification System | Partially Implemented |
 | 42 | Strategy Lab | Planned |
 | 42b | Backtesting Engine | Implemented in Repository |
 | 43 | Portfolio Simulation | Partially Implemented |
@@ -923,15 +978,24 @@ Marktdaten
 
 ## Status-Hinweise
 
+- Option 2 ist die aktive Governance-Richtung in dieser Roadmap: produktisierungsorientiert, begrenzt und strikt non-live.
+- Product Surface Track und Strategy Readiness Track sind reine Governance-Overlays; sie ersetzen weder Phasen-Taxonomie noch kanonische Phasen-Statusautoritaet.
+- Readiness-Non-Inference ist verbindlich: Phasenstatus duerfen nicht als trader validation oder operational readiness ueberinterpretiert werden.
+- `/ui` ist in dieser Roadmap-Fassung die kanonische website-facing Produktautoritaet fuer begrenzte Browser-Produktisierung.
+- `frontend/` ist non-authoritative/development-only, solange spaetere Governance keine explizite Promotion in dieser Roadmap und in ausgerichteten Contracts vornimmt.
 - Phase 17b wird im Backend unter `/ui` ausgeliefert; `/owner` ist nur als Frontend-Development-Route dokumentiert und keine Runtime-Backend-Surface.
 - Phase 23 bedeutet `Research Dashboard`: eine einzelne dedizierte research-only Dashboard-Surface.
 - Phase 23 ist `Partially Implemented`, weil das Repository jetzt einen begrenzten minimalen Evidenzvertrag fuer eine zusammenhaengende Research-Dashboard-Surface enthaelt: einen begrenzten Dashboard-Vertrag, ein Runtime- oder UI-Implementierungsartefakt und ein Verifizierungsartefakt fuer dieselbe beanspruchte Surface.
 - Aktuelle `/ui`-Operator-Panels, Analytics-Artefakte, Charting-Surfaces und Trading-Desk-Sprache sind nur benachbart und zaehlen fuer sich allein nicht als Phase-23-Implementierungsevidenz.
 - Diese begrenzte Phase-23-Evidenz ist explizit nicht trader-ready und nicht production-ready.
+- Phase 36 wird als zentrale Produktisierungs-Bahn fuer begrenzte Browser-Workflow-Konsolidierung behandelt, ohne Statusinflation ueber verifizierte Evidenz hinaus.
+- Phase 40 bleibt begrenzt und konsolidierungsorientiert; diese Roadmap-Richtung erlaubt keine unkontrollierte Dashboard-Expansion.
+- Phase 42 bleibt planned und ist mit begrenzten Strategy-Readiness-Ergebnissen verbunden statt mit breiter Strategy-Lab-Expansion.
 - Phase 24 gilt jetzt als implementiert, weil Simulator-Grenzen und Non-Live-Constraints konsistent dokumentiert sind; Phase 44 bleibt als breitere Produktphase nur teilweise implementiert.
 - Phase 25 und Phase 27 wurden gegen veraltete Roadmap-Aussagen korrigiert, weil Lifecycle- und Risk-Framework-Artefakte bereits im Repo vorhanden sind.
 - Phase 35 ist in dieser Fassung `Implemented`, weil Metrics, Telemetry, Runtime Health, Guard-Trigger-Monitoring und Integrationstests bereits vorhanden sind.
-- Phase 42b ist `Implemented in Repository`, weil deterministischer Backtest-Runner, CLI, Doku und Tests existieren.
+- Phase 41 ist konservativ als `Partially Implemented` abgeglichen: begrenzte non-live Evidenz fuer Alert-Konfiguration, begrenzten Dispatch-Workflow, begrenzte Delivery-Result-Persistenz und Read-Surfaces ist im Repo verifizierbar; breiterer externer Notification-Channel-Scope bleibt unvollstaendig.
+- Phase 42b ist `Implemented in Repository`, weil deterministischer Backtest-Runner, CLI, Doku und Tests existieren; browser-native Produktisierung dieses Backtesting-Workflows bleibt unvollstaendig.
 
 ---
 
@@ -1559,16 +1623,17 @@ Eine zentrale professionelle Trading-Oberflaeche bereitstellen.
 ---
 
 ## Phase 41 - Alerts & Notification System
-**Status:** Planned
+**Status:** Partially Implemented
 
 **Ziel**
 Nutzer automatisch ueber relevante Ereignisse informieren.
 
 **Aktuelle Statusbasis**
-- Es wurden keine Telegram-, E-Mail-, Browser-Notification- oder Alert-Routing-Implementierungen bestaetigt.
+- Repo-verifizierbare begrenzte non-live Alert-Implementierung existiert: Alert-Configuration-APIs, begrenzter Dispatch-Workflow, begrenzte Delivery-Result-Persistenz, Alert-History-Surfaces und zugehoerige Tests.
+- Breiterer externer Notification-Channel-Scope (zum Beispiel Telegram, E-Mail oder Browser-Push-Routing) ist als vollstaendiges Produktions-Notification-System noch nicht voll implementiert.
 
 **Ergebnis**
-- Alerts bleiben geplante Arbeit.
+- Alerts sind teilweise implementiert mit konservativ begrenztem non-live Scope; breitere Notification-Channel-Completion bleibt Zukunftsarbeit.
 
 ---
 
@@ -1595,9 +1660,10 @@ Strategien auf historischen Daten validieren, bevor sie in Simulation und Paper 
 **Aktuelle Statusbasis**
 - Deterministischer Backtest-Runner, CLI-Einstiegspunkt, Backtest-Doku, Artefakte und Tests sind vorhanden.
 - Das Repo unterstuetzt bereits snapshot-getriebene Backtest-Ausfuehrung und deterministische Ergebnis-Schreibung.
+- Browser-native Produktisierung des Backtesting-Workflows bleibt unvollstaendig und wird als Product-Surface-Maintenance-Luecke behandelt, nicht als fehlende Core-Engine-Implementierung.
 
 **Ergebnis**
-- Backtesting ist nicht mehr nur geplant; die Kern-Implementierung existiert bereits im Repository.
+- Backtesting ist nicht mehr nur geplant; die Kern-Implementierung existiert bereits im Repository, waehrend browser-native Produktisierung unvollstaendig bleibt.
 
 ---
 
