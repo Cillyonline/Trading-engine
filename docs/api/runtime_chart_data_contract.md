@@ -1,5 +1,15 @@
 # Runtime Chart Data Contract
 
+## Document Status
+- Class: Deprecated
+- Canonical Source(s): docs/operations/api/runtime_chart_data_contract.md
+- Superseded by: docs/operations/api/runtime_chart_data_contract.md
+- Rationale: Legacy compatibility path retained while consumers migrate to the
+  operations namespace.
+
+This legacy path is deprecated. The active canonical location is
+`docs/operations/api/runtime_chart_data_contract.md`.
+
 ## Purpose
 This document defines the deterministic chart-data contract for Phase 39 runtime visual analysis on the backend-served `/ui` surface.
 

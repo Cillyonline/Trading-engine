@@ -1,5 +1,14 @@
 # Public API Boundary
 
+## Document Status
+- Class: Deprecated
+- Canonical Source(s): docs/operations/api/public_api_boundary.md
+- Superseded by: docs/operations/api/public_api_boundary.md
+- Rationale: Legacy compatibility path retained for older references.
+
+This document is deprecated. Use
+`docs/operations/api/public_api_boundary.md` as the active path.
+
 This document freezes the supported Python import surface for `src/api`.
 
 ## Public surface (supported)
