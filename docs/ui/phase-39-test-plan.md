@@ -1,5 +1,15 @@
 # Phase 39 Runtime Charting Test Plan
 
+## Document Status
+- Class: Deprecated
+- Canonical Source(s): docs/operations/ui/phase-39-test-plan.md
+- Superseded by: docs/operations/ui/phase-39-test-plan.md
+- Rationale: Legacy compatibility path retained while active navigation uses the
+  operations namespace.
+
+This legacy path is deprecated. The active canonical location is
+`docs/operations/ui/phase-39-test-plan.md`.
+
 ## Purpose
 This document defines the minimum verification coverage for the bounded Phase 39 chart-data contract while `/ui` is a shared runtime shell.
 
@@ -79,4 +89,3 @@ Required assertions:
 
 ## Success Condition
 Phase 39 verification coverage is considered defined when this plan remains aligned with the repository and the minimum test set above passes.
-
