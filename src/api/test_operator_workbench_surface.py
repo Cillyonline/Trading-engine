@@ -64,6 +64,9 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "/backtest/artifacts/{run_id}/{artifact_name}" in response.text
     assert "Technical availability of bounded backtest artifacts is not trader validation." in response.text
     assert "does not establish operational readiness or live execution readiness." in response.text
+    assert "strategy_readiness_evidence" in response.text
+    assert "inferred_readiness_claim" in response.text
+    assert "Inferred readiness claim:" in response.text
     assert "No Phase 39 or Phase 40 features" in response.text
     assert "/alerts/history" in response.text
     assert 'id="alert-status"' in response.text

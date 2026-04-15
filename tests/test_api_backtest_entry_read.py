@@ -65,6 +65,15 @@ def test_backtest_entry_read_route_exposes_bounded_non_live_contract(
         assert "technical availability" in payload["boundary"]["technical_availability_statement"]
         assert "not trader validation" in payload["boundary"]["trader_validation_statement"]
         assert "not operational readiness" in payload["boundary"]["operational_readiness_statement"]
+        evidence = payload["boundary"]["strategy_readiness_evidence"]
+        assert "bounded API/UI evidence surfacing scope" in evidence["bounded_scope"]
+        assert evidence["technical"]["gate"] == "technical_implementation"
+        assert evidence["technical"]["status"] == "technical_in_progress"
+        assert evidence["trader_validation"]["gate"] == "trader_validation"
+        assert evidence["trader_validation"]["status"] == "trader_validation_not_started"
+        assert evidence["operational_readiness"]["gate"] == "operational_readiness"
+        assert evidence["operational_readiness"]["status"] == "operational_not_started"
+        assert evidence["inferred_readiness_claim"] == "prohibited"
         assert payload["total"] == 1
         assert payload["items"][0]["run_id"] == "bt-run-1"
         assert payload["items"][0]["artifact_name"] == "backtest-result.json"

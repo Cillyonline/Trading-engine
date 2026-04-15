@@ -45,6 +45,18 @@ def test_strategy_readiness_gates_prohibit_trader_ready_inference_from_technical
     assert "does not declare production trading readiness" in content
 
 
+def test_strategy_readiness_gates_define_bounded_api_ui_evidence_surface_scope() -> None:
+    content = GATES_DOC.read_text(encoding="utf-8")
+
+    assert "Bounded API/UI Evidence Surfacing Scope" in content
+    assert "strategy_readiness_api_ui_evidence_surface_v1" in content
+    assert "GET /backtest/artifacts" in content
+    assert "GET /backtest/artifacts/{run_id}/{artifact_name}" in content
+    assert "must not collapse these states into a single inferred readiness claim" in content
+    assert "no live-trading readiness or authorization claim" in content
+    assert "no production-readiness claim" in content
+
+
 def test_docs_index_references_strategy_readiness_gates_contract() -> None:
     index_content = (REPO_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
 

@@ -116,7 +116,30 @@ Passing any strategy-readiness gate:
 - does not authorize broker execution
 - does not declare production trading readiness
 
-## 6. Alignment References
+## 6. Bounded API/UI Evidence Surfacing Scope
+
+One bounded API/UI contract scope is defined for strategy-readiness evidence surfacing:
+
+- scope id: `strategy_readiness_api_ui_evidence_surface_v1`
+- bounded routes: `GET /backtest/artifacts` and `GET /backtest/artifacts/{run_id}/{artifact_name}`
+- bounded UI surface: `/ui` backtest entry/read panel boundary metadata summary
+- bounded purpose: expose technical implementation evidence state without collapsing trader-validation and operational-readiness evidence semantics
+
+Bounded API/UI evidence semantics:
+
+- technical evidence state is surfaced as technical-implementation-only evidence
+- trader-validation evidence state is surfaced separately and must remain independent from technical evidence
+- operational-readiness evidence state is surfaced separately and must remain independent from technical and trader-validation evidence
+- API/UI outputs must not collapse these states into a single inferred readiness claim
+
+Non-live and governance boundary for this scope:
+
+- no live-trading readiness or authorization claim
+- no broker-connectivity or execution-enablement claim
+- no production-readiness claim
+- no replacement of governance gates with inferred UI/API status
+
+## 7. Alignment References
 
 - `docs/governance/qualification-claim-evidence-discipline.md`
 - `docs/operations/ui/product-surface-authority-contract.md`

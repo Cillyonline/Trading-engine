@@ -17,6 +17,8 @@ from ..models import (
     BacktestArtifactItemResponse,
     BacktestArtifactListResponse,
     BacktestReadBoundaryResponse,
+    StrategyReadinessEvidenceResponse,
+    StrategyReadinessEvidenceStateResponse,
     DecisionCardComponentScoreInspectionResponse,
     DecisionCardHardGateInspectionResponse,
     DecisionCardInspectionItemResponse,
@@ -930,6 +932,48 @@ def _build_backtest_read_boundary() -> BacktestReadBoundaryResponse:
         operational_readiness_statement=(
             "Backtest artifact visibility is not operational readiness evidence for live or broker "
             "execution."
+        ),
+        strategy_readiness_evidence=StrategyReadinessEvidenceResponse(
+            bounded_scope=(
+                "One bounded API/UI evidence surfacing scope for governed non-live backtest "
+                "artifact inspection."
+            ),
+            technical=StrategyReadinessEvidenceStateResponse(
+                gate="technical_implementation",
+                status="technical_in_progress",
+                evidence_scope=(
+                    "API/UI contract and test evidence for read-only governed backtest artifact "
+                    "visibility."
+                ),
+                non_inference_note=(
+                    "Technical evidence does not imply trader validation, operational readiness, "
+                    "live trading, or production readiness."
+                ),
+            ),
+            trader_validation=StrategyReadinessEvidenceStateResponse(
+                gate="trader_validation",
+                status="trader_validation_not_started",
+                evidence_scope=(
+                    "Trader-owned validation evidence is outside this API/UI technical contract."
+                ),
+                non_inference_note=(
+                    "Trader validation status cannot be inferred from technical artifact "
+                    "visibility."
+                ),
+            ),
+            operational_readiness=StrategyReadinessEvidenceStateResponse(
+                gate="operational_readiness",
+                status="operational_not_started",
+                evidence_scope=(
+                    "Operational-readiness evidence is outside this API/UI technical contract and "
+                    "requires governed runbook acceptance artifacts."
+                ),
+                non_inference_note=(
+                    "Operational-readiness status cannot be inferred from technical or "
+                    "trader-validation evidence fields."
+                ),
+            ),
+            inferred_readiness_claim="prohibited",
         ),
         in_scope=[
             "read-only listing of governed backtest artifacts",
