@@ -10,12 +10,15 @@ Phase 23 means bounded website-facing workflow consolidation under the canonical
 Phase 23 is `PARTIALLY IMPLEMENTED` because one coherent bounded evidence set now defines one canonical website-facing workflow shell at `/ui`.
 
 The consolidated IA contract is intentionally non-live and does not imply trader validation or operational readiness.
+Canonical product-surface authority and non-inference status separation are defined in:
+- `docs/operations/ui/product-surface-authority-contract.md`
 
 ## Authoritative Bounded Scope
 Phase 23 in this revision is the repository-verifiable phase for:
 - one canonical `/ui` workflow shell
 - one bounded primary navigation contract for website-facing workflow entry
 - explicit non-live boundaries that prevent readiness inference from IA consolidation
+- explicit separation between technical implementation, trader validation, and operational readiness statuses
 
 This scope does not introduce new product surfaces, live execution claims, or architecture expansion.
 

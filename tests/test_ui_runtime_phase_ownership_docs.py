@@ -4,6 +4,9 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+PRODUCT_SURFACE_CONTRACT = (
+    REPO_ROOT / "docs" / "operations" / "ui" / "product-surface-authority-contract.md"
+)
 
 
 def test_ui_runtime_phase_ownership_boundary_doc_maps_shared_ui_sections() -> None:
@@ -43,7 +46,8 @@ def test_index_and_phase41_docs_reference_shared_shell_boundary() -> None:
     ).read_text(encoding="utf-8")
 
     assert "architecture/ui-runtime-phase-ownership-boundary.md" in index_content
-    assert "Status: Planned" in phase41_content
+    assert "Status:" in phase41_content
+    assert "read-only inspection boundary implemented" in phase41_content
     assert "shared-shell read-only inspection boundary" in phase41_content
 
 
@@ -62,3 +66,17 @@ def test_phase36_and_phase23_docs_define_canonical_ui_entrypoint_and_non_live_bo
     assert "live trading" in phase23_content
     assert "broker execution" in phase23_content
     assert "operational-readiness claims" in phase23_content
+
+
+def test_product_surface_contract_separates_status_classes_without_readiness_inference() -> None:
+    content = PRODUCT_SURFACE_CONTRACT.read_text(encoding="utf-8")
+
+    assert "Canonical website-facing product-surface authority: `/ui`" in content
+    assert "`frontend/` is non-authoritative" in content
+    assert "Technical Implementation Status" in content
+    assert "Trader Validation Status" in content
+    assert "Operational Readiness Status" in content
+    assert "must not be inferred as evidence in another class" in content
+    assert "does not imply" in content
+    assert "live trading authorization" in content
+    assert "production readiness declarations" in content

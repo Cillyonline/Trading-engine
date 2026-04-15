@@ -20,6 +20,8 @@ It also does not act as a source of authority for roadmap phase maturity/status.
 - Structure and role map:
   `docs/architecture/documentation_structure.md`
 - Repository documentation index: `docs/index.md`
+- Canonical /ui product-surface authority contract:
+  `docs/operations/ui/product-surface-authority-contract.md`
 - Setup authority: `docs/getting-started/getting-started.md`
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
@@ -36,7 +38,6 @@ It also does not act as a source of authority for roadmap phase maturity/status.
   `docs/operations/runtime/staging-server-deployment.md`.
 - Contributors or reviewers validating behavior and change scope should start
   here, then use `docs/testing/index.md` and `docs/architecture/`.
-main
 
 ## Public API
 

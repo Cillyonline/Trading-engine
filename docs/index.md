@@ -43,6 +43,7 @@ Canonical first-clean-server install contract:
 
 ## UI Surfaces
 
+- [Canonical /ui product-surface authority contract](operations/ui/product-surface-authority-contract.md)
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [Phase 39 /ui charting contract](operations/ui/phase-39-charting-contract.md)
 - [Phase 39 runtime charting test plan](operations/ui/phase-39-test-plan.md)
