@@ -16,7 +16,7 @@ Use this order:
 5. Continue with API, CLI, UI, and governance links below
 
 Canonical first-clean-server install contract:
-- `docs/operations/runtime/staging-server-deployment.md`
+- [docs/operations/runtime/staging-server-deployment.md](operations/runtime/staging-server-deployment.md)
 - Docker/Compose (`docker compose -f docker/staging/docker-compose.staging.yml up -d --build`) is the only canonical first-clean-server startup path.
 - Local development setup guides are non-canonical for first-clean-server installation.
 
@@ -31,7 +31,7 @@ Canonical first-clean-server install contract:
 - [Paper inspection and reconciliation API](api/paper_inspection.md)
 - [Decision card inspection API](api/decision_card_inspection.md)
 - [Phase 39 runtime chart data contract](operations/api/runtime_chart_data_contract.md)
-- Legacy compatibility alias: `docs/api/runtime_chart_data_contract.md`
+- Deprecated compatibility alias: [docs/api/runtime_chart_data_contract.md](api/runtime_chart_data_contract.md)
 
 ## CLI Usage
 
@@ -47,7 +47,7 @@ Canonical first-clean-server install contract:
 - [Phase 36 /ui web activation contract](operations/ui/phase-36-web-activation-contract.md)
 - [Phase 39 /ui charting contract](operations/ui/phase-39-charting-contract.md)
 - [Phase 39 runtime charting test plan](operations/ui/phase-39-test-plan.md)
-- Legacy compatibility alias: `docs/ui/phase-39-test-plan.md`
+- Deprecated compatibility alias: [docs/ui/phase-39-test-plan.md](ui/phase-39-test-plan.md)
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [Shared /ui phase boundary](architecture/ui-runtime-phase-ownership-boundary.md)
 - [Phase 36 web activation evidence](architecture/roadmap/phase-36-web-activation-evidence.md)
@@ -73,7 +73,7 @@ Roadmap track alignment:
 ## Roadmap Navigation
 
 - [Execution roadmap](architecture/roadmap/execution_roadmap.md)
-- `ROADMAP_MASTER.md`
+- [ROADMAP_MASTER.md](../ROADMAP_MASTER.md)
 
 ## Phase Reference Navigation
 
