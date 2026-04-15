@@ -12,7 +12,7 @@ It prevents overlap-based phase claims across Phase 36, 37, 39, 40, and 41.
 
 `/ui` is one shared shell. Phase ownership is determined by bounded behavior and evidence, not by adjacency of sections on the same page.
 
-`/ui` is also the single canonical website-facing workflow entrypoint in the bounded IA consolidation contract.
+`/ui` is also the single canonical website-facing workflow entrypoint in the bounded IA consolidation contract, with one bounded non-live signal review and trade-evaluation workflow.
 
 ## /ui Section Inventory and Ownership
 
@@ -29,14 +29,16 @@ It prevents overlap-based phase claims across Phase 36, 37, 39, 40, and 41.
 | Runtime Lifecycle | `GET /execution/orders` | Shared-shell evidence navigation |
 | Recent Alerts card (`id="alert-status"`, `id="alert-list"`) | `GET /alerts/history` | Shared-shell read-only inspection boundary |
 
-The `/ui` primary navigation contract is explicitly bounded to:
-- `Workflow: Run Analysis`
-- `Workflow: Manage Watchlists`
-- `Workflow: Review Ranked Watchlist Results`
-- `Workflow: Inspect Runtime Data`
-- `Workflow: Review Run Evidence`
+The `/ui` primary navigation contract is explicitly bounded to one signal review/trade-evaluation workflow with these governed steps:
+- `Signal Review Workflow Step 1: Run Analysis`
+- `Signal Review Workflow Step 2: Configure Watchlist Scope`
+- `Signal Review Workflow Step 3: Evaluate Ranked Signals`
+- `Signal Review Workflow Step 4: Inspect Backtest Artifacts`
+- `Signal Review Workflow Step 5: Inspect Runtime Data`
+- `Signal Review Workflow Step 6: Review Run Evidence`
 
 This navigation contract does not imply live trading, broker execution, trader validation, or operational readiness.
+Technical signal visibility and ranked signal output remain separate from trader validation and operational readiness claims.
 
 ## Evidence Boundaries by Phase
 

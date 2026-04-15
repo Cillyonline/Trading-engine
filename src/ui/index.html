@@ -15,23 +15,34 @@
       <header class="card">
         <p class="eyebrow">Canonical /ui Workflow Shell</p>
         <h1>Bounded Website-Facing Workflow Shell</h1>
-        <p class="muted"><code>/ui</code> is the single canonical website-facing workflow entrypoint for this repository. This shell consolidates bounded analysis, watchlist, evidence, and read-only runtime visibility without introducing live trading, broker execution, trader validation, or operational-readiness claims.</p>
+        <p class="muted"><code>/ui</code> is the single canonical website-facing workflow entrypoint for this repository. It defines one bounded non-live signal review and trade-evaluation workflow using governed read-only/runtime routes without introducing live trading, broker execution, trader validation, or operational-readiness claims.</p>
         <span class="pill" id="ui-workflow-boundary-marker">Explicitly non-live bounded workflow</span>
       </header>
       <nav class="card nav" aria-label="Runtime entry navigation" id="ui-primary-navigation-contract">
-        <a class="active" href="#analysis-entry">Workflow: Run Analysis</a>
-        <a href="#watchlist-workflow">Workflow: Manage Watchlists</a>
-        <a href="#watchlist-results">Workflow: Review Ranked Watchlist Results</a>
-        <a href="#backtest-entry">Workflow: Inspect Backtest Artifacts</a>
-        <a href="#runtime-data">Workflow: Inspect Runtime Data</a>
-        <a href="#run-evidence">Workflow: Review Run Evidence</a>
+        <a class="active" href="#analysis-entry">Signal Review Workflow Step 1: Run Analysis</a>
+        <a href="#watchlist-workflow">Signal Review Workflow Step 2: Configure Watchlist Scope</a>
+        <a href="#watchlist-results">Signal Review Workflow Step 3: Evaluate Ranked Signals</a>
+        <a href="#backtest-entry">Signal Review Workflow Step 4: Inspect Backtest Artifacts</a>
+        <a href="#runtime-data">Signal Review Workflow Step 5: Inspect Runtime Data</a>
+        <a href="#run-evidence">Signal Review Workflow Step 6: Review Run Evidence</a>
       </nav>
     </section>
     <section class="grid" aria-label="Runtime entry summary">
-      <article class="card"><h2>Primary flow</h2><p class="muted">Submit bounded analysis and watchlist workflows from one canonical shell at <code>/ui</code>.</p><span class="pill">Canonical /ui path</span></article>
-      <article class="card"><h2>Workflow ownership</h2><p class="muted">Navigation labels and section anchors in this shell are the website-facing workflow ownership contract.</p></article>
-      <article class="card"><h2>Bounded output</h2><p class="muted">Watchlist runs render ranked symbols and isolated failures returned by existing bounded API routes.</p></article>
-      <article class="card"><h2>Non-live boundary</h2><p class="muted">No Phase 39 or Phase 40 features are implied here. No live trading, no broker execution controls, and no trader-validation or operational-readiness inference is introduced by this IA consolidation.</p></article>
+      <article class="card"><h2>Primary flow</h2><p class="muted">Run one bounded non-live signal review and trade-evaluation workflow from one canonical shell at <code>/ui</code>.</p><span class="pill">Canonical /ui path</span></article>
+      <article class="card"><h2>Workflow ownership</h2><p class="muted">Navigation labels and section anchors define one bounded workflow scope and prevent dashboard sprawl.</p></article>
+      <article class="card"><h2>Bounded output</h2><p class="muted">Signal ranking output is technical visibility for evaluation context only; it is not trader validation or readiness evidence.</p></article>
+      <article class="card"><h2>Non-live boundary</h2><p class="muted">No Phase 39 or Phase 40 features are implied here. No live trading, no broker execution controls, and no trader-validation or operational-readiness inference is introduced by this consolidation.</p></article>
+    </section>
+    <section class="card" id="ui-signal-review-workflow-contract" aria-label="Bounded signal review and trade-evaluation workflow contract">
+      <h2>Bounded Signal Review and Trade-Evaluation Workflow (Non-live)</h2>
+      <p class="muted">This page has one bounded workflow: review technical signals and evaluate trade candidates through non-live runtime evidence. The workflow remains technical-only and does not assert trader validation, operational readiness, or production readiness.</p>
+      <ol>
+        <li>Run bounded analysis.</li>
+        <li>Define bounded watchlist scope.</li>
+        <li>Evaluate ranked signal output.</li>
+        <li>Inspect backtest artifacts and runtime evidence.</li>
+      </ol>
+      <p class="muted">Technical signal visibility is explicitly separate from trader validation and operational readiness decisions.</p>
     </section>
     <main class="two" style="grid-template-columns:1fr">
       <section id="analysis-entry" class="card" aria-label="manual-analysis-controls">
@@ -146,7 +157,7 @@
       <section id="runtime-data" class="two" aria-label="Runtime data visibility">
         <article class="card"><h2>Runtime State</h2><p class="muted">Read-only runtime state fetched from <code>/system/state</code>.</p><p class="status" id="runtime-state-status">Loading runtime state...</p><dl class="summary"><div class="box"><dt>Status</dt><dd id="runtime-state-value">-</dd></div><div class="box"><dt>Runtime Mode</dt><dd id="runtime-mode-value">-</dd></div><div class="box"><dt>Runtime ID</dt><dd id="runtime-id-value">-</dd></div><div class="box"><dt>Owner</dt><dd id="runtime-owner-value">-</dd></div></dl></article>
         <article class="card"><h2>Strategy Reference</h2><p class="muted">Read-only strategy metadata fetched from <code>/strategies</code>.</p><p class="status" id="strategy-status">Loading strategy list...</p><div class="wrap"><table aria-label="Active strategy metadata table"><thead><tr><th>Strategy</th><th>Display</th><th>Default Keys</th></tr></thead><tbody id="strategy-list"></tbody></table></div></article>
-        <article class="card"><h2>Latest Signals</h2><p class="muted">Read-only runtime signal visibility fetched from <code>/signals</code>.</p><p class="status" id="signal-status">Loading signals...</p><div class="wrap"><table aria-label="Signal visibility table"><thead><tr><th>Created</th><th>Symbol</th><th>Strategy</th><th>Direction</th><th>Score</th><th>Stage</th></tr></thead><tbody id="signal-list"></tbody></table></div></article>
+        <article class="card"><h2>Latest Signals</h2><p class="muted">Read-only runtime signal visibility fetched from <code>/signals</code>. Technical signal visibility is not trader validation or operational readiness evidence.</p><p class="status" id="signal-status">Loading signals...</p><div class="wrap"><table aria-label="Signal visibility table"><thead><tr><th>Created</th><th>Symbol</th><th>Strategy</th><th>Direction</th><th>Score</th><th>Stage</th></tr></thead><tbody id="signal-list"></tbody></table></div></article>
         <article class="card"><h2>Recent Alerts</h2><p class="muted">Read-only recent alert events fetched from <code>/alerts/history</code>.</p><p class="status" id="alert-status">Loading alert history...</p><div id="alert-empty" class="empty-card">No alert events yet.</div><div class="wrap"><table aria-label="Alert event history"><thead><tr><th>Occurred</th><th>Severity</th><th>Event Type</th><th>Symbol</th><th>Source</th></tr></thead><tbody id="alert-list"></tbody></table></div></article>
       </section>
       <section id="run-evidence" class="two" aria-label="Run evidence visibility">

@@ -37,15 +37,16 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "Analysis Runs" in response.text
     assert "Canonical /ui Workflow Shell" in response.text
     assert "Bounded Website-Facing Workflow Shell" in response.text
-    assert "Workflow: Run Analysis" in response.text
-    assert "Workflow: Manage Watchlists" in response.text
-    assert "Workflow: Review Ranked Watchlist Results" in response.text
-    assert "Workflow: Inspect Backtest Artifacts" in response.text
-    assert "Workflow: Inspect Runtime Data" in response.text
-    assert "Workflow: Review Run Evidence" in response.text
+    assert "Signal Review Workflow Step 1: Run Analysis" in response.text
+    assert "Signal Review Workflow Step 2: Configure Watchlist Scope" in response.text
+    assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in response.text
+    assert "Signal Review Workflow Step 4: Inspect Backtest Artifacts" in response.text
+    assert "Signal Review Workflow Step 5: Inspect Runtime Data" in response.text
+    assert "Signal Review Workflow Step 6: Review Run Evidence" in response.text
     assert "single canonical website-facing workflow entrypoint" in response.text
     assert "No live trading" in response.text
     assert "broker execution controls" in response.text
+    assert "Technical signal visibility is explicitly separate from trader validation and operational readiness decisions." in response.text
     assert "Watchlist Management Panel" in response.text
     assert "Watchlist Execution Panel" in response.text
     assert "Watchlist Ranked Results Panel" in response.text
