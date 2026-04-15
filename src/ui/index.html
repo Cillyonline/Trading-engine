@@ -179,7 +179,35 @@
     const showError=message=>{err.hidden=!message;err.textContent=message||""},showWatchlistError=message=>{watchlistError.hidden=!message;watchlistError.textContent=message||""},showWatchlistExecutionError=message=>{watchlistExecutionError.hidden=!message;watchlistExecutionError.textContent=message||""};
     function setWatchlistForm(item){$("watchlist-id").value=item?item.watchlist_id||"":"";$("watchlist-name").value=item?item.name||"":"";$("watchlist-symbols").value=item?(item.symbols||[]).join(", "):""}
     function setActiveWatchlist(item){activeWatchlistId=item&&item.watchlist_id?item.watchlist_id:"";watchlistSelect.value=activeWatchlistId;setWatchlistForm(item);watchlistSelectionStatus.textContent=activeWatchlistId?`Selected persisted watchlist ${activeWatchlistId}.`:"No watchlist selected.";Array.from(watchlistList.children).forEach(entry=>entry.classList.toggle("selected-row",entry.dataset.watchlistId===activeWatchlistId))}
-    function renderWatchlists(items){watchlistSelect.innerHTML="";watchlistList.innerHTML="";if(!Array.isArray(items)||!items.length){const option=document.createElement("option");option.value="";option.textContent="No watchlists available";watchlistSelect.appendChild(option);watchlistEmpty.hidden=false;watchlistList.hidden=true;setActiveWatchlist(null);return}items.forEach(item=>{const option=document.createElement("option");option.value=item.watchlist_id;option.textContent=`${item.name} (${item.watchlist_id})`;watchlistSelect.appendChild(option);const entry=document.createElement("li");entry.dataset.watchlistId=item.watchlist_id;entry.style.cursor="pointer";entry.innerHTML=`<strong>${item.name}</strong><br /><span class="muted">${item.watchlist_id}</span><br /><span class="muted">${(item.symbols||[]).join(", ")}</span>`;entry.addEventListener("click",()=>setActiveWatchlist(item));watchlistList.appendChild(entry)});watchlistEmpty.hidden=true;watchlistList.hidden=false;setActiveWatchlist(items.find(item=>item.watchlist_id===activeWatchlistId)||items[0])}
+    function renderWatchlists(items){
+      watchlistSelect.innerHTML="";
+      watchlistList.innerHTML="";
+      if(!Array.isArray(items)||!items.length){
+        const option=document.createElement("option");
+        option.value="";
+        option.textContent="No watchlists available";
+        watchlistSelect.appendChild(option);
+        watchlistEmpty.hidden=false;
+        watchlistList.hidden=true;
+        setActiveWatchlist(null);
+        return;
+      }
+      items.forEach(item=>{
+        const option=document.createElement("option");
+        option.value=item.watchlist_id;
+        option.textContent=`${item.name} (${item.watchlist_id})`;
+        watchlistSelect.appendChild(option);
+        const entry=document.createElement("li");
+        entry.dataset.watchlistId=item.watchlist_id;
+        entry.style.cursor="pointer";
+        entry.innerHTML=`<strong>${item.name}</strong><br /><span class="muted">${item.watchlist_id}</span><br /><span class="muted">${(item.symbols||[]).join(", ")}</span>`;
+        entry.addEventListener("click",()=>setActiveWatchlist(item));
+        watchlistList.appendChild(entry);
+      });
+      watchlistEmpty.hidden=true;
+      watchlistList.hidden=false;
+      setActiveWatchlist(items.find(item=>item.watchlist_id===activeWatchlistId)||items[0]);
+    }
     const renderResult=payload=>{["analysis-run-id","analysis-ingestion-run-id","analysis-symbol","analysis-strategy"].forEach((id,i)=>$(id).textContent=[payload.analysis_run_id,payload.ingestion_run_id,payload.symbol,payload.strategy][i]||"-");signalBody.innerHTML="";const signals=Array.isArray(payload.signals)?payload.signals:[];if(!signals.length){resultStatus.textContent="No signals returned."}else{signals.forEach(item=>signalBody.appendChild(row([item.symbol||payload.symbol||"",item.strategy||"",item.direction||"-",item.stage||"-",formatScore(item.score),item.timestamp||"-"])));resultStatus.textContent=`Loaded ${signals.length} signals from analysis run ${payload.analysis_run_id}.`}empty.hidden=true;content.hidden=false};
     const renderWatchlistExecutionResult=payload=>{$("watchlist-analysis-run-id").textContent=payload.analysis_run_id||"-";$("watchlist-result-name").textContent=payload.watchlist_name||payload.watchlist_id||"-";$("watchlist-result-ingestion-run-id").textContent=payload.ingestion_run_id||"-";$("watchlist-result-market-type").textContent=payload.market_type||"-";watchlistRankedResultList.innerHTML="";const ranked=Array.isArray(payload.ranked_results)?payload.ranked_results:[];if(!ranked.length){watchlistRankedStatus.textContent="No ranked watchlist results returned."}else{ranked.forEach(item=>watchlistRankedResultList.appendChild(row([String(item.rank||""),item.symbol||"",formatScore(item.score),formatScore(item.signal_strength),String(Array.isArray(item.setups)?item.setups.length:0)])));watchlistRankedStatus.textContent=`Loaded ${ranked.length} ranked watchlist results from analysis run ${payload.analysis_run_id}.`}watchlistFailureList.innerHTML="";const failures=Array.isArray(payload.failures)?payload.failures:[];if(!failures.length){watchlistFailureStatus.textContent="No execution failures reported."}else{failures.forEach(item=>watchlistFailureList.appendChild(row([item.symbol||"",item.code||"",item.detail||""])));watchlistFailureStatus.textContent=`Execution reported ${failures.length} isolated symbol failures.`}watchlistResultEmpty.hidden=true;watchlistResultContent.hidden=false};
     async function loadRuntimeState(){runtimeStateStatus.textContent="Loading runtime state from /system/state...";try{const response=await fetch("/system/state",{headers:readOnlyHeaders});if(!response.ok)throw new Error(`HTTP ${response.status}`);const payload=await response.json(),runtime=payload.runtime||{},ownership=runtime.ownership||{};runtimeStateValue.textContent=payload.status||"-";runtimeModeValue.textContent=runtime.mode||"-";runtimeIdValue.textContent=runtime.runtime_id||"-";runtimeOwnerValue.textContent=ownership.owner_tag||"-";runtimeStateStatus.textContent=`Runtime state loaded from ${payload.metadata&&payload.metadata.source?payload.metadata.source:"system state"}.`}catch(error){runtimeStateValue.textContent="-";runtimeModeValue.textContent="-";runtimeIdValue.textContent="-";runtimeOwnerValue.textContent="-";runtimeStateStatus.textContent=`Failed to load runtime state: ${error.message}`}}
@@ -239,7 +267,12 @@
         const technical = boundary.technical_availability_statement || "Technical availability not declared.";
         const trader = boundary.trader_validation_statement || "Trader validation boundary not declared.";
         const readiness = boundary.operational_readiness_statement || "Operational readiness boundary not declared.";
-        return `${technical} ${trader} ${readiness}`;
+        const readinessEvidence = boundary.strategy_readiness_evidence || {};
+        const technicalState = readinessEvidence.technical?.status || "technical status unknown";
+        const traderState = readinessEvidence.trader_validation?.status || "trader-validation status unknown";
+        const operationalState = readinessEvidence.operational_readiness?.status || "operational-readiness status unknown";
+        const inferredClaim = readinessEvidence.inferred_readiness_claim || "unspecified";
+        return `${technical} ${trader} ${readiness} Technical state: ${technicalState}. Trader-validation state: ${traderState}. Operational-readiness state: ${operationalState}. Inferred readiness claim: ${inferredClaim}.`;
       };
 
       const renderBacktestArtifacts = (payload) => {
