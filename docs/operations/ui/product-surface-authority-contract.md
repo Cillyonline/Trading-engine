@@ -12,6 +12,11 @@ This contract is bounded to repository documentation and verification evidence.
 
 `/ui` is the only canonical website-facing product-surface authority in this repository revision.
 
+## Roadmap Track Alignment
+- Product Surface Track authority is owned by canonical `/ui` documentation and verification evidence.
+- `frontend/` remains interim non-authoritative unless governance explicitly promotes it.
+- Strategy Readiness Track is a separate governance track and must not be inferred from Product Surface Track evidence.
+
 ## Non-Authoritative `frontend/` Status
 - `frontend/` is non-authoritative for website-facing product-surface authority in this repository revision.
 - `frontend/` may contain exploratory or parallel implementation artifacts, but those artifacts are not authority evidence.
@@ -66,4 +71,3 @@ Prohibited implication patterns:
 - `docs/operations/ui/phase-23-research-dashboard-contract.md`
 - `docs/architecture/ui-runtime-phase-ownership-boundary.md`
 - `docs/architecture/phases/phase-23-status.md`
-

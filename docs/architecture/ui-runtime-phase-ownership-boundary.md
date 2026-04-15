@@ -14,6 +14,10 @@ It prevents overlap-based phase claims across Phase 36, 37, 39, 40, and 41.
 
 `/ui` is also the single canonical website-facing workflow entrypoint in the bounded IA consolidation contract, with one bounded non-live signal review and trade-evaluation workflow.
 
+Track alignment:
+- Product Surface Track authority remains canonical `/ui`.
+- Strategy Readiness Track remains separate and is not inferred from `/ui` phase-boundary evidence.
+
 ## /ui Section Inventory and Ownership
 
 | Visible `/ui` section or marker | Linked backend surface(s) | Ownership classification |

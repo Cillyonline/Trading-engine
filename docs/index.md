@@ -53,6 +53,11 @@ Canonical first-clean-server install contract:
 - [Phase 36 web activation evidence](architecture/roadmap/phase-36-web-activation-evidence.md)
 - [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
 
+Roadmap track alignment:
+- Product Surface Track: `/ui` is the canonical website-facing authority.
+- Product Surface Track: `frontend/` is interim non-authoritative unless governance explicitly promotes it.
+- Strategy Readiness Track: readiness claims are governed separately from product-surface implementation evidence.
+
 ## Versioning And Governance
 
 - [Versioning model](architecture/versioning/model.md)

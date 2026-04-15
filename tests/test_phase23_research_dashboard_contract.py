@@ -28,6 +28,9 @@ def test_phase23_contract_defines_single_canonical_ui_workflow_shell() -> None:
     assert "only canonical website-facing workflow entrypoint" in content
     assert "product-surface-authority-contract.md" in content
     assert "frontend/` remains non-authoritative unless governance promotion is explicitly documented" in content
+    assert "Roadmap track alignment:" in content
+    assert "Product Surface Track" in content
+    assert "Strategy Readiness Track" in content
 
 
 def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
@@ -98,6 +101,9 @@ def test_index_includes_phase23_consolidation_contract_reference() -> None:
     assert "Canonical /ui product-surface authority contract" in index_content
     assert "Phase 23 /ui workflow consolidation contract" in index_content
     assert "Phase 23 | `Canonical /ui Workflow Shell` | PARTIALLY IMPLEMENTED" in index_content
+    assert "Roadmap track alignment:" in index_content
+    assert "Product Surface Track: `/ui` is the canonical website-facing authority." in index_content
+    assert "Strategy Readiness Track: readiness claims are governed separately" in index_content
 
 
 def test_product_surface_contract_defines_canonical_authority_and_non_inference() -> None:
@@ -110,6 +116,9 @@ def test_product_surface_contract_defines_canonical_authority_and_non_inference(
     assert "Technical Implementation Status" in content
     assert "Trader Validation Status" in content
     assert "Operational Readiness Status" in content
+    assert "Roadmap Track Alignment" in content
+    assert "Product Surface Track authority is owned by canonical `/ui`" in content
+    assert "Strategy Readiness Track is a separate governance track" in content
     assert "Evidence in one class must not be inferred as evidence in another class." in content
     assert "live trading readiness" in content
     assert "broker execution readiness" in content
@@ -121,4 +130,28 @@ def test_readme_references_canonical_ui_product_surface_contract() -> None:
 
     assert "product-surface-authority-contract.md" in content
     assert "Canonical /ui product-surface authority contract" in content
+    assert "Product Surface Track authority: `/ui` is the canonical website-facing authority;" in content
+    assert "frontend/` remains interim non-authoritative unless governance promotion is explicit." in content
+    assert "Strategy Readiness Track boundary: readiness semantics are governed separately" in content
     assert "not be read as a production-readiness declaration." in content
+
+
+def test_aligned_docs_do_not_state_readiness_inference_claims() -> None:
+    aligned_docs = [
+        README_FILE,
+        DOCS_INDEX,
+        PHASE23_CONTRACT_DOC,
+        PRODUCT_SURFACE_CONTRACT_DOC,
+    ]
+    prohibited_phrases = [
+        "implies live trading readiness",
+        "implies broker execution readiness",
+        "implies production readiness",
+        "confers operational readiness",
+        "is production ready",
+    ]
+
+    for path in aligned_docs:
+        content = _read(path).lower()
+        for phrase in prohibited_phrases:
+            assert phrase not in content, f"{phrase!r} must not appear in {path}"
