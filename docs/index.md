@@ -63,6 +63,7 @@ Canonical first-clean-server install contract:
 - [Compatibility gate](architecture/versioning/compatibility_gate.md)
 - [Document status model](architecture/governance/document-status-model.md)
 - [Qualification claim evidence discipline](governance/qualification-claim-evidence-discipline.md)
+- [Strategy readiness governance gates](governance/strategy-readiness-gates.md)
 
 ## Roadmap Navigation
 
