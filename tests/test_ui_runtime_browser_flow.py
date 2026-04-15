@@ -355,6 +355,9 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "/backtest/artifacts/{run_id}/{artifact_name}" in ui_response.text
             assert "Technical availability of bounded backtest artifacts is not trader validation." in ui_response.text
             assert "does not establish operational readiness or live execution readiness." in ui_response.text
+            assert "strategy_readiness_evidence" in ui_response.text
+            assert "inferred_readiness_claim" in ui_response.text
+            assert "Inferred readiness claim:" in ui_response.text
 
             state_response = client.get("/system/state", headers=READ_ONLY_HEADERS)
             assert state_response.status_code == 200

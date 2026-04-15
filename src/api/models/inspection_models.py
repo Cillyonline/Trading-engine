@@ -379,6 +379,25 @@ class JournalArtifactContentResponse(BaseModel):
     content: Any
 
 
+class StrategyReadinessEvidenceStateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gate: Literal["technical_implementation", "trader_validation", "operational_readiness"]
+    status: str
+    evidence_scope: str
+    non_inference_note: str
+
+
+class StrategyReadinessEvidenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bounded_scope: str
+    technical: StrategyReadinessEvidenceStateResponse
+    trader_validation: StrategyReadinessEvidenceStateResponse
+    operational_readiness: StrategyReadinessEvidenceStateResponse
+    inferred_readiness_claim: Literal["prohibited"]
+
+
 class BacktestReadBoundaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -386,6 +405,7 @@ class BacktestReadBoundaryResponse(BaseModel):
     technical_availability_statement: str
     trader_validation_statement: str
     operational_readiness_statement: str
+    strategy_readiness_evidence: StrategyReadinessEvidenceResponse
     in_scope: List[str]
     out_of_scope: List[str]
 
