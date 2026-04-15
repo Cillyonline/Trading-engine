@@ -16,6 +16,10 @@ Canonical product-surface authority and non-inference semantics are defined in:
 
 `/ui` is the only canonical website-facing workflow entrypoint in this contract.
 
+Roadmap track alignment:
+- Product Surface Track: this contract governs canonical `/ui` website-facing workflow authority.
+- Strategy Readiness Track: readiness evidence remains separate and must not be inferred from this Product Surface Track contract.
+
 ## Primary Navigation Contract
 The canonical `/ui` shell owns one bounded signal review and trade-evaluation workflow navigation contract:
 

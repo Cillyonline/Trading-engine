@@ -21,6 +21,9 @@ def test_ui_runtime_phase_ownership_boundary_doc_maps_shared_ui_sections() -> No
     assert "Watchlist Management / Saved Watchlists" in content
     assert "Recent Alerts card" in content
     assert "Shared-shell read-only inspection boundary" in content
+    assert "Track alignment:" in content
+    assert "Product Surface Track authority remains canonical `/ui`." in content
+    assert "Strategy Readiness Track remains separate" in content
     assert "Technical signal visibility and ranked signal output remain separate" in content
     assert "does not prove" in content
 

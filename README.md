@@ -22,6 +22,10 @@ It also does not act as a source of authority for roadmap phase maturity/status.
 - Repository documentation index: `docs/index.md`
 - Canonical /ui product-surface authority contract:
   `docs/operations/ui/product-surface-authority-contract.md`
+- Product Surface Track authority: `/ui` is the canonical website-facing authority;
+  `frontend/` remains interim non-authoritative unless governance promotion is explicit.
+- Strategy Readiness Track boundary: readiness semantics are governed separately from
+  Product Surface Track implementation evidence.
 - Setup authority: `docs/getting-started/getting-started.md`
 - Local run authority: `docs/getting-started/local-run.md`
 - Testing authority: `docs/testing/index.md`
