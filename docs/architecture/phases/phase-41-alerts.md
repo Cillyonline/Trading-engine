@@ -1,6 +1,6 @@
 # Phase 41 - Alerts & Notification System Status
 
-Status: Planned  
+Status: IN PROGRESS (read-only inspection boundary implemented; delivery/routing evidence pending)  
 Scope: Notification delivery and routing workflows  
 Owner: Governance
 
@@ -34,5 +34,4 @@ Cross-phase ownership reference:
 - `docs/architecture/ui-runtime-phase-ownership-boundary.md`
 
 ## Outcome
-Phase 41 remains `Planned` until repository-verifiable alert-delivery workflows are implemented and tested as a coherent bounded system.
-
+Phase 41 remains in-progress until repository-verifiable alert-delivery workflows are implemented and tested as a coherent bounded system.

@@ -4,12 +4,15 @@
 Define the bounded website-facing information architecture (IA) contract after Option 2 ratification:
 one canonical `/ui` workflow shell with one bounded non-live signal review and trade-evaluation workflow.
 
+Canonical product-surface authority and non-inference semantics are defined in:
+- `docs/operations/ui/product-surface-authority-contract.md`
+
 ## Canonical Surface
 - Surface name: `Canonical /ui Workflow Shell`
 - Runtime entrypoint: `/ui`
 - Runtime artifact: `src/ui/index.html`
 - Runtime mount: `src/api/main.py`
-- Non-authoritative parallel surface: `frontend/` remains non-authoritative unless later promoted by governance
+- Non-authoritative parallel surface: `frontend/` remains non-authoritative unless governance promotion is explicitly documented
 
 `/ui` is the only canonical website-facing workflow entrypoint in this contract.
 
@@ -34,6 +37,7 @@ IA consolidation in `/ui` does not introduce:
 - production-readiness claims
 - technical backtest availability as a substitute for trader validation or readiness evidence
 - technical signal visibility as a substitute for trader validation or operational readiness evidence
+- trader validation status as a substitute for operational readiness status
 
 `No Phase 39 or Phase 40 features` wording in the `/ui` shell remains an explicit non-inference marker.
 
