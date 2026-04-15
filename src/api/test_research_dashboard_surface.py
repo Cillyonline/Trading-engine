@@ -25,5 +25,9 @@ def test_ui_surface_is_canonical_website_facing_workflow_shell(monkeypatch) -> N
     assert "single canonical website-facing workflow entrypoint" in response.text
     assert 'id="ui-primary-navigation-contract"' in response.text
     assert 'id="ui-workflow-boundary-marker"' in response.text
+    assert 'id="ui-signal-review-workflow-contract"' in response.text
+    assert "Signal Review Workflow Step 1: Run Analysis" in response.text
+    assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in response.text
+    assert "one bounded non-live signal review and trade-evaluation workflow" in response.text
     assert "No live trading" in response.text
     assert "No Phase 39 or Phase 40 features" in response.text

@@ -29,19 +29,19 @@ def test_phase23_contract_defines_single_canonical_ui_workflow_shell() -> None:
 def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     content = _read(PHASE23_CONTRACT_DOC)
 
-    assert "Workflow: Run Analysis" in content
-    assert "Workflow: Manage Watchlists" in content
-    assert "Workflow: Review Ranked Watchlist Results" in content
-    assert "Workflow: Inspect Backtest Artifacts" in content
-    assert "Workflow: Inspect Runtime Data" in content
-    assert "Workflow: Review Run Evidence" in content
+    assert "Signal Review Workflow Step 1: Run Analysis" in content
+    assert "Signal Review Workflow Step 2: Configure Watchlist Scope" in content
+    assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in content
+    assert "Signal Review Workflow Step 4: Inspect Backtest Artifacts" in content
+    assert "Signal Review Workflow Step 5: Inspect Runtime Data" in content
+    assert "Signal Review Workflow Step 6: Review Run Evidence" in content
     assert "live trading" in content
     assert "broker execution" in content
     assert "trader validation" in content
     assert "operational-readiness claims" in content
     assert "production-readiness claims" in content
     assert "technical backtest availability" in content
-    assert "trader validation" in content
+    assert "technical signal visibility" in content
 
 
 def test_phase23_contract_retains_ops_p56_non_interference_boundary() -> None:
@@ -69,7 +69,11 @@ def test_ui_surface_contains_canonical_navigation_and_boundary_markers() -> None
     assert "Bounded Website-Facing Workflow Shell" in content
     assert 'id="ui-primary-navigation-contract"' in content
     assert 'id="ui-workflow-boundary-marker"' in content
+    assert 'id="ui-signal-review-workflow-contract"' in content
     assert "single canonical website-facing workflow entrypoint" in content
+    assert "one bounded non-live signal review and trade-evaluation workflow" in content
+    assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in content
+    assert "Technical signal visibility is explicitly separate from trader validation and operational readiness decisions." in content
     assert "No live trading" in content
     assert "Backtest Entry/Read Panel" in content
 

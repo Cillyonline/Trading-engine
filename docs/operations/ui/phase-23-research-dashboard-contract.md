@@ -2,7 +2,7 @@
 
 ## Purpose
 Define the bounded website-facing information architecture (IA) contract after Option 2 ratification:
-one canonical `/ui` workflow shell with explicit non-live boundaries.
+one canonical `/ui` workflow shell with one bounded non-live signal review and trade-evaluation workflow.
 
 ## Canonical Surface
 - Surface name: `Canonical /ui Workflow Shell`
@@ -14,16 +14,16 @@ one canonical `/ui` workflow shell with explicit non-live boundaries.
 `/ui` is the only canonical website-facing workflow entrypoint in this contract.
 
 ## Primary Navigation Contract
-The canonical `/ui` shell owns one bounded workflow navigation contract:
+The canonical `/ui` shell owns one bounded signal review and trade-evaluation workflow navigation contract:
 
-1. `Workflow: Run Analysis` (`#analysis-entry`)
-2. `Workflow: Manage Watchlists` (`#watchlist-workflow`)
-3. `Workflow: Review Ranked Watchlist Results` (`#watchlist-results`)
-4. `Workflow: Inspect Backtest Artifacts` (`#backtest-entry`)
-5. `Workflow: Inspect Runtime Data` (`#runtime-data`)
-6. `Workflow: Review Run Evidence` (`#run-evidence`)
+1. `Signal Review Workflow Step 1: Run Analysis` (`#analysis-entry`)
+2. `Signal Review Workflow Step 2: Configure Watchlist Scope` (`#watchlist-workflow`)
+3. `Signal Review Workflow Step 3: Evaluate Ranked Signals` (`#watchlist-results`)
+4. `Signal Review Workflow Step 4: Inspect Backtest Artifacts` (`#backtest-entry`)
+5. `Signal Review Workflow Step 5: Inspect Runtime Data` (`#runtime-data`)
+6. `Signal Review Workflow Step 6: Review Run Evidence` (`#run-evidence`)
 
-These navigation labels and anchors are the website-facing IA ownership markers for this issue slice.
+These navigation labels and anchors are the website-facing IA ownership markers for this issue slice and explicitly constrain scope to one bounded workflow.
 
 ## Explicit Non-Live Boundary
 IA consolidation in `/ui` does not introduce:
@@ -33,6 +33,7 @@ IA consolidation in `/ui` does not introduce:
 - operational-readiness claims
 - production-readiness claims
 - technical backtest availability as a substitute for trader validation or readiness evidence
+- technical signal visibility as a substitute for trader validation or operational readiness evidence
 
 `No Phase 39 or Phase 40 features` wording in the `/ui` shell remains an explicit non-inference marker.
 
@@ -52,6 +53,7 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 - `GET /execution/orders`
 
 Consolidation of IA does not widen route scope and does not imply trader validation or operational readiness.
+Technical signal visibility and ranked evaluation output are explicitly separated from trader validation and operational readiness claims.
 
 ## Minimum Evidence Set
 1. Bounded contract documentation  

@@ -317,6 +317,16 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "single canonical website-facing workflow entrypoint" in ui_response.text
             assert 'id="ui-primary-navigation-contract"' in ui_response.text
             assert 'id="ui-workflow-boundary-marker"' in ui_response.text
+            assert 'id="ui-signal-review-workflow-contract"' in ui_response.text
+            assert "Bounded Signal Review and Trade-Evaluation Workflow (Non-live)" in ui_response.text
+            assert "technical signals and evaluate trade candidates through non-live runtime evidence" in ui_response.text
+            assert "Technical signal visibility is explicitly separate from trader validation and operational readiness decisions." in ui_response.text
+            assert "Signal Review Workflow Step 1: Run Analysis" in ui_response.text
+            assert "Signal Review Workflow Step 2: Configure Watchlist Scope" in ui_response.text
+            assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in ui_response.text
+            assert "Signal Review Workflow Step 4: Inspect Backtest Artifacts" in ui_response.text
+            assert "Signal Review Workflow Step 5: Inspect Runtime Data" in ui_response.text
+            assert "Signal Review Workflow Step 6: Review Run Evidence" in ui_response.text
             assert "No live trading" in ui_response.text
             assert "broker execution controls" in ui_response.text
             assert "operational-readiness inference" in ui_response.text
@@ -337,7 +347,7 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "/watchlists/{watchlist_id}/execute" in ui_response.text
             assert 'id="watchlist-form"' in ui_response.text
             assert 'id="watchlist-ranked-result-list"' in ui_response.text
-            assert "Workflow: Inspect Backtest Artifacts" in ui_response.text
+            assert "Signal Review Workflow Step 4: Inspect Backtest Artifacts" in ui_response.text
             assert "Backtest Entry/Read Panel" in ui_response.text
             assert 'id="backtest-entry-read-form"' in ui_response.text
             assert 'id="backtest-artifact-list"' in ui_response.text
