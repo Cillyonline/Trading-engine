@@ -1,50 +1,39 @@
 # Cilly Trading Engine
 
-The Cilly Trading Engine repository contains a deterministic trading-analysis
-and execution platform with documented API, CLI, UI, runtime, and governance
-surfaces.
+Cilly Trading Engine is a deterministic trading analysis and execution platform.
 
-The current repository state supports local runtime, deterministic smoke-run
-and test workflows, and bounded operator-facing UI and API surfaces. It should
-not be read as a production-readiness declaration.
+This README is intentionally a thin entry point. It does not define setup, runtime,
+testing, architecture, or roadmap status semantics; those are owned by canonical
+documents.
 
-## Documentation Roles
+## Boundaries / Non-Claims
 
-`README.md` is an entry point only. It provides navigation into the canonical
-documentation structure and does not act as the source of truth for setup,
-local run, testing, or architecture topics.
-It also does not act as a source of authority for roadmap phase maturity/status.
+- This repository state should not be read as a production-readiness declaration.
+- `README.md` is navigation only, not a second documentation platform.
+- Roadmap maturity and phase status are governed outside this file.
 
-- Entry point: [README.md](README.md)
-- Navigation hub: [docs/index.md](docs/index.md)
-- Structure and role map:
-  [docs/architecture/documentation_structure.md](docs/architecture/documentation_structure.md)
-- Repository documentation index: [docs/index.md](docs/index.md)
-- Canonical /ui product-surface authority contract:
-  [docs/operations/ui/product-surface-authority-contract.md](docs/operations/ui/product-surface-authority-contract.md)
-- Product Surface Track authority: `/ui` is the canonical website-facing authority;
-  `frontend/` remains interim non-authoritative unless governance promotion is explicit.
-- Strategy Readiness Track boundary: readiness semantics are governed separately from
-  Product Surface Track implementation evidence.
+## Start Here
+
+- Documentation hub: [docs/index.md](docs/index.md)
+- Quickstart path: [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md)
 - Setup authority: [docs/getting-started/getting-started.md](docs/getting-started/getting-started.md)
 - Local run authority: [docs/getting-started/local-run.md](docs/getting-started/local-run.md)
 - Testing authority: [docs/testing/index.md](docs/testing/index.md)
-- Architecture authority root: [`docs/architecture/`](docs/architecture/)
-- Roadmap phase maturity/status authority: [ROADMAP_MASTER.md](ROADMAP_MASTER.md)
-- Server-ready release governance contract:
-  [docs/releases/release_governance_contract.md](docs/releases/release_governance_contract.md)
-
-## Verification Paths
-
-- Operators validating a local environment should start here, then follow
-  [docs/getting-started/getting-started.md](docs/getting-started/getting-started.md) and [docs/getting-started/local-run.md](docs/getting-started/local-run.md).
-- Operators validating the bounded staging server deployment path should use
-  [docs/operations/runtime/staging-server-deployment.md](docs/operations/runtime/staging-server-deployment.md).
-- Contributors or reviewers validating behavior and change scope should start
-  here, then use [docs/testing/index.md](docs/testing/index.md) and [`docs/architecture/`](docs/architecture/).
 
 ## Public API
 
-The supported package-level public API for `src/api` is documented in
-[docs/operations/api/public_api_boundary.md](docs/operations/api/public_api_boundary.md).
-Deprecated compatibility alias: [docs/api/public_api_boundary.md](docs/api/public_api_boundary.md).
+- Public API boundary authority: [docs/operations/api/public_api_boundary.md](docs/operations/api/public_api_boundary.md)
+- Deprecated compatibility alias: [docs/api/public_api_boundary.md](docs/api/public_api_boundary.md)
+
+## Product Surface
+
+- Canonical /ui product-surface authority contract: [docs/operations/ui/product-surface-authority-contract.md](docs/operations/ui/product-surface-authority-contract.md)
+- Product Surface Track authority: `/ui` is the canonical website-facing authority; `frontend/` remains interim non-authoritative unless governance promotion is explicit.
+- Strategy Readiness Track boundary: readiness semantics are governed separately from Product Surface Track implementation evidence.
+
+## Governance And Roadmap
+
+- Documentation ownership model: [docs/architecture/documentation_structure.md](docs/architecture/documentation_structure.md)
+- Stop conditions and merge authority: [docs/architecture/governance/stop-conditions-and-merge-authority.md](docs/architecture/governance/stop-conditions-and-merge-authority.md)
+- Canonical roadmap status source: [ROADMAP_MASTER.md](ROADMAP_MASTER.md)
+- Audited phase taxonomy: [docs/architecture/roadmap/execution_roadmap.md](docs/architecture/roadmap/execution_roadmap.md)
