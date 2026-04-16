@@ -24,31 +24,32 @@ package, API, CLI, UI, or test contracts.
 
 Reference checks were executed with:
 
-```powershell
+~~~powershell
 git grep -n "pr_issue_935.md|\.tmp_issue955_broader_output\.txt|\.tmp_issue955_targeted_output\.txt|issue955_review_package\.txt" -- .
-```
+~~~
 
 Result: no references found.
 
 ## Per-Candidate Verification Dimensions
 
-1. Imports/Usages
-- All four candidates: no code imports/usages found (`git grep` result empty).
+### Imports/Usages
+All four candidates: no code imports/usages found.
 
-2. Tests
-- No test module references to any candidate path by name.
-- Candidates under `tests/` are artifact files, not pytest modules (`test_*.py`).
+### Tests
+No test module references to any candidate path by name.
+Candidates under `tests/` are artifact files, not pytest modules.
 
-3. Runtime mounts
-- No candidate is mounted or loaded by runtime bootstrap (`src/api/main.py` mounts only `/ui` static directory).
+### Runtime Mounts
+No candidate is mounted or loaded by runtime bootstrap.
 
-4. Documented API/CLI/UI contracts
-- No candidate path appears in `docs/operations/api/**`, `docs/operations/cli/**`, `docs/operations/ui/**`, or `docs/index.md`.
+### Documented API/CLI/UI Contracts
+No candidate path appears in documented API, CLI, UI, or index contracts.
 
-5. Relevant documentation references
-- No cross-document links to any candidate path were found by repository path search.
+### Relevant Documentation References
+No cross-document links to any candidate path were found by repository path search.
 
 ## Remediation Eligibility Summary
-- All listed candidates are classified `probable dead` with `high` confidence.
-- Eligibility is explicitly conditional on a separate remediation issue (e.g. #948).
-- No deletion or functional code change is performed by this register issue (#945).
+
+All listed candidates are classified probable dead with high confidence.
+Eligibility is explicitly conditional on a separate remediation issue, such as #948.
+No deletion or functional code change is performed by this register issue #945.
