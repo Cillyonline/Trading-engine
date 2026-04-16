@@ -2,27 +2,27 @@
 
 ## Document Status
 - Class: Derived
-- Canonical Source(s): Issue #945, Issue #948
-- Rationale: Register and evidence surface for bounded dead-code candidate handling.
+- Canonical Source(s): Issue #945
+- Rationale: Register and evidence surface for bounded dead-code candidate classification without deletion.
 
 ## Scope
 
-This register is intentionally bounded to one isolated cleanup cluster for issue
-`#948`: tracked temporary review artifacts that are not part of runtime,
+This register is intentionally bounded to one isolated candidate cluster for
+issue `#945`: tracked temporary review artifacts that are not part of runtime,
 package, API, CLI, UI, or test contracts.
 
-## Candidate Register (Pre-Removal)
+## Candidate Register
 
-| Candidate path | Classification | Confidence | Rationale | Status before wave |
-| --- | --- | --- | --- | --- |
-| `pr_issue_935.md` | probable dead | high | One-off PR drafting artifact at repository root; not part of canonical docs, runtime, or tests. | registered |
-| `tests/.tmp_issue955_broader_output.txt` | probable dead | high | Temporary pytest output artifact; non-authoritative transient log content. | registered |
-| `tests/.tmp_issue955_targeted_output.txt` | probable dead | high | Temporary targeted pytest output artifact; non-authoritative transient log content. | registered |
-| `tests/issue955_review_package.txt` | probable dead | high | Generated review package dump for a prior issue; not imported, executed, or contract-bound. | registered |
+| Candidate path | Classification | Confidence | Rationale | Reference-check evidence | Remediation eligibility |
+| --- | --- | --- | --- | --- | --- |
+| `pr_issue_935.md` | probable dead | high | One-off PR drafting artifact at repository root; not part of canonical docs, runtime, or tests. | No repo references by name (`git grep` check), no contract docs reference. | Eligible for future bounded remediation wave (#948), not removed in #945. |
+| `tests/.tmp_issue955_broader_output.txt` | probable dead | high | Temporary pytest output artifact; non-authoritative transient log content. | No repo references by name (`git grep` check), not a pytest module (`test_*.py`). | Eligible for future bounded remediation wave (#948), not removed in #945. |
+| `tests/.tmp_issue955_targeted_output.txt` | probable dead | high | Temporary targeted pytest output artifact; non-authoritative transient log content. | No repo references by name (`git grep` check), not a pytest module (`test_*.py`). | Eligible for future bounded remediation wave (#948), not removed in #945. |
+| `tests/issue955_review_package.txt` | probable dead | high | Generated review package dump for a prior issue; not imported, executed, or contract-bound. | No repo references by name (`git grep` check), no runtime/API/CLI/UI contract references. | Eligible for future bounded remediation wave (#948), not removed in #945. |
 
-## Reference Check Result
+## Reference Check Evidence
 
-Reference checks were executed before removal with:
+Reference checks were executed with:
 
 ```powershell
 git grep -n "pr_issue_935.md|\.tmp_issue955_broader_output\.txt|\.tmp_issue955_targeted_output\.txt|issue955_review_package\.txt" -- .
@@ -48,14 +48,7 @@ Result: no references found.
 5. Relevant documentation references
 - No cross-document links to any candidate path were found by repository path search.
 
-## Wave #948 Execution
-
-Removed candidates in this bounded first wave:
-- `pr_issue_935.md`
-- `tests/.tmp_issue955_broader_output.txt`
-- `tests/.tmp_issue955_targeted_output.txt`
-- `tests/issue955_review_package.txt`
-
-## Boundary Confirmation
-- One isolated cluster only (temporary/review artifacts).
-- No runtime code path, subsystem boundary, or public contract surface changed.
+## Remediation Eligibility Summary
+- All listed candidates are classified `probable dead` with `high` confidence.
+- Eligibility is explicitly conditional on a separate remediation issue (e.g. #948).
+- No deletion or functional code change is performed by this register issue (#945).
