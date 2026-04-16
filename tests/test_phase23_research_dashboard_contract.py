@@ -62,8 +62,9 @@ def test_phase23_contract_retains_ops_p56_non_interference_boundary() -> None:
 def test_phase23_status_reflects_bounded_ui_consolidation() -> None:
     content = _read(PHASE23_STATUS_DOC)
 
-    assert "## Status" in content
-    assert "PARTIALLY IMPLEMENTED" in content
+    assert "## Document Role" in content
+    assert "Derived evidence snapshot for Phase 23 scope verification." in content
+    assert "Phase maturity/status labels: `ROADMAP_MASTER.md`" in content
     assert "canonical `/ui` workflow shell" in content
     assert "src/ui/index.html" in content
     assert "src/api/main.py" in content
@@ -100,7 +101,8 @@ def test_index_includes_phase23_consolidation_contract_reference() -> None:
     assert "product-surface-authority-contract.md" in index_content
     assert "Canonical /ui product-surface authority contract" in index_content
     assert "Phase 23 /ui workflow consolidation contract" in index_content
-    assert "Phase 23 | `Canonical /ui Workflow Shell` | PARTIALLY IMPLEMENTED" in index_content
+    assert "Phase 23 references in this index are navigation/evidence only; canonical maturity/status remains in `ROADMAP_MASTER.md`." in index_content
+    assert "Canonical phase maturity/status source: `ROADMAP_MASTER.md`" in index_content
     assert "Roadmap track alignment:" in index_content
     assert "Product Surface Track: `/ui` is the canonical website-facing authority." in index_content
     assert "Strategy Readiness Track: readiness claims are governed separately" in index_content

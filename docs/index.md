@@ -51,7 +51,7 @@ Canonical first-clean-server install contract:
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [Shared /ui phase boundary](architecture/ui-runtime-phase-ownership-boundary.md)
 - [Phase 36 web activation evidence](architecture/roadmap/phase-36-web-activation-evidence.md)
-- [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
+- [Phase 37 watchlist evidence snapshot](architecture/phases/phase-37-status.md)
 
 Roadmap track alignment:
 - Product Surface Track: `/ui` is the canonical website-facing authority.
@@ -74,6 +74,8 @@ Roadmap track alignment:
 
 - [Execution roadmap](architecture/roadmap/execution_roadmap.md)
 - [ROADMAP_MASTER.md](../ROADMAP_MASTER.md)
+- Canonical phase maturity/status source: `ROADMAP_MASTER.md`
+- Canonical audited phase taxonomy source: `docs/architecture/roadmap/execution_roadmap.md`
 
 ## Phase Reference Navigation
 
@@ -92,9 +94,9 @@ Roadmap track alignment:
 
 ### Phase 23 Reference Materials
 
-- [Phase 23 status](architecture/phases/phase-23-status.md)
+- [Phase 23 evidence snapshot](architecture/phases/phase-23-status.md)
 - [Phase 23 /ui workflow consolidation contract](operations/ui/phase-23-research-dashboard-contract.md)
-- Phase 23 | `Canonical /ui Workflow Shell` | PARTIALLY IMPLEMENTED
+- Phase 23 references in this index are navigation/evidence only; canonical maturity/status remains in `ROADMAP_MASTER.md`.
 
 ### Phase 24 Reference Materials
 
@@ -129,7 +131,7 @@ Roadmap track alignment:
 
 ### Phase 37 Reference Materials
 
-- [Phase 37 watchlist engine status](architecture/phases/phase-37-status.md)
+- [Phase 37 watchlist evidence snapshot](architecture/phases/phase-37-status.md)
 - [Operator dashboard runtime surface](operations/ui/owner_dashboard.md)
 - [API usage contract](operations/api/usage_contract.md)
 

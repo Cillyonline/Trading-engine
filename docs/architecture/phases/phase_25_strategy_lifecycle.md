@@ -1,6 +1,11 @@
 # Phase 25 - Strategy Lifecycle Management
 
-**Status:** IMPLEMENTED IN REPOSITORY
+## Document Role
+Derived evidence snapshot for Phase 25 lifecycle artifacts.
+
+Canonical authority:
+- Phase maturity/status labels: `ROADMAP_MASTER.md`
+- Audited phase taxonomy/meaning: `docs/architecture/roadmap/execution_roadmap.md`
 
 ## Taxonomy Alignment
 Phase 25 means `Strategy Lifecycle Management` in the authoritative taxonomy source:
@@ -50,4 +55,5 @@ Execution is governed by a strict production-only policy:
 - Non-production strategies are rejected before execution.
 
 ## Explicit Declaration
-This phase-status artifact is evidence-based. It reflects repository artifacts already present and tested in-tree, rather than pending PR or merge state.
+This artifact is evidence-based and reflects repository artifacts present and tested in-tree.
+It does not set canonical phase maturity/status.

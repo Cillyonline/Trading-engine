@@ -1,19 +1,23 @@
 # Phase 23 - Website-Facing /ui Workflow Consolidation
 
-## Status
-PARTIALLY IMPLEMENTED
+## Document Role
+Derived evidence snapshot for Phase 23 scope verification.
+
+Canonical authority:
+- Phase maturity/status labels: `ROADMAP_MASTER.md`
+- Audited phase taxonomy/meaning: `docs/architecture/roadmap/execution_roadmap.md`
 
 ## Taxonomy Alignment
 Phase 23 means bounded website-facing workflow consolidation under the canonical `/ui` shell in this repository revision.
 
-## Canonical Bounded Message
-Phase 23 is `PARTIALLY IMPLEMENTED` because one coherent bounded evidence set now defines one canonical website-facing workflow shell at `/ui`.
+## Bounded Evidence Message
+This document records one coherent bounded evidence set for a canonical website-facing workflow shell at `/ui`.
 
 The consolidated IA contract is intentionally non-live and does not imply trader validation or operational readiness.
 Canonical product-surface authority and non-inference status separation are defined in:
 - `docs/operations/ui/product-surface-authority-contract.md`
 
-## Authoritative Bounded Scope
+## Bounded Scope Evidence
 Phase 23 in this revision is the repository-verifiable phase for:
 - one canonical `/ui` workflow shell
 - one bounded primary navigation contract for website-facing workflow entry
@@ -43,10 +47,10 @@ The repository must contain tests that validate canonical ownership and bounded 
 - `tests/test_ui_runtime_browser_flow.py`
 - `tests/test_phase23_research_dashboard_contract.py`
 
-## Classification Rule
-- `NOT IMPLEMENTED`: any required evidence class is missing, inconsistent, or points to multiple canonical website-facing entry surfaces
-- `PARTIALLY IMPLEMENTED`: all required classes exist, but broader product-surface expansion remains intentionally out of scope
-- `IMPLEMENTED`: all required classes exist and support complete bounded scope being claimed, without readiness inference
+## Evidence Interpretation (Non-Canonical)
+- Missing evidence classes indicate an incomplete Phase 23 evidence chain.
+- Complete evidence classes indicate bounded implementation evidence exists.
+- Canonical maturity/status labels are set only in `ROADMAP_MASTER.md`.
 
 ## Explicit Phase Boundaries
 Phase 23 consolidation in this revision does not claim:
@@ -77,6 +81,6 @@ This Phase 23 consolidation contract does not replace or widen operational run l
 
 `OPS-P56: Start bounded staged paper-trading runbook and evidence log #914` remains the single operational run log issue.
 
-## Explicit Declaration
+## Snapshot Declaration
 As of this revision, one repository-verifiable canonical `/ui` website-facing workflow shell is confirmed under bounded non-live scope.
-Phase 23 is therefore PARTIALLY IMPLEMENTED under this consolidation contract.
+This declaration is evidence-only and does not set canonical phase maturity/status.

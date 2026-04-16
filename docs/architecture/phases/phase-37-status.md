@@ -1,11 +1,15 @@
 # Phase 37 - Watchlist Engine Status
 
-Status: Implemented in Repository  
 Scope: Repository-verified watchlist persistence, CRUD API, execution/ranking workflow, and bounded `/ui` watchlist surface  
-Owner: Governance
+Owner: Governance  
+Role: Derived evidence snapshot (non-canonical status source)
+
+Canonical authority:
+- Phase maturity/status labels: `ROADMAP_MASTER.md`
+- Audited phase taxonomy/meaning: `docs/architecture/roadmap/execution_roadmap.md`
 
 ## Purpose
-This file is the canonical Phase 37 status and contract artifact for repository-verified watchlist workflow.
+This file records repository-verified Phase 37 watchlist workflow evidence.
 
 ## Verified Phase 37 Scope
 
@@ -47,5 +51,5 @@ These endpoints provide deterministic watchlist CRUD and snapshot-only execution
 - Shared-shell sections such as alert history on `/ui` are non-authoritative for Phase 37 completion.
 
 ## Documentation Alignment Rule
-Phase 37 references in `docs/**` must align to this file, `docs/architecture/roadmap/execution_roadmap.md`, and `docs/architecture/ui-runtime-phase-ownership-boundary.md`.
-
+Phase 37 references in `docs/**` must align to `ROADMAP_MASTER.md`, `docs/architecture/roadmap/execution_roadmap.md`, and `docs/architecture/ui-runtime-phase-ownership-boundary.md`.
+This file is an evidence surface and not a canonical status authority.
