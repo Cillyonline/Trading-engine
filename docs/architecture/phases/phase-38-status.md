@@ -1,11 +1,15 @@
 # Phase 38 - Market Data Integration Status
 
-Status: Partially Implemented  
 Scope: Direct provider adapter presence, deterministic snapshot boundary, and runtime-safe claim evidence requirements  
-Owner: Governance
+Owner: Governance  
+Role: Derived evidence snapshot (non-canonical status source)
+
+Canonical authority:
+- Phase maturity/status labels: `ROADMAP_MASTER.md`
+- Audited phase taxonomy/meaning: `docs/architecture/roadmap/execution_roadmap.md`
 
 ## Purpose
-This file is the canonical Phase 38 status and contract artifact for repository-safe market-data claims.
+This file records repository-safe Phase 38 market-data evidence and boundaries.
 
 ## Verified In-Repository Artifacts
 - Direct provider loaders exist in `src/cilly_trading/engine/data.py`:
@@ -57,4 +61,5 @@ Tests prove snapshot-only runtime paths do not use live provider loaders and tha
 - No claim that broker integration, live-trading feeds, or websocket market-data delivery is implemented.
 
 ## Documentation Alignment Rule
-Phase 38 references in `docs/**` must align to this file, `docs/architecture/roadmap/execution_roadmap.md`, and `docs/operations/api/usage_contract.md`.
+Phase 38 references in `docs/**` must align to `ROADMAP_MASTER.md`, `docs/architecture/roadmap/execution_roadmap.md`, and `docs/operations/api/usage_contract.md`.
+This file is an evidence surface and not a canonical status authority.

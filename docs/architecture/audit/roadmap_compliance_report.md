@@ -5,6 +5,7 @@
 This audit is based only on repository-verifiable evidence (code, tests, endpoints, and documentation files).
 
 The authoritative in-repo source for audited phase taxonomy is `docs/architecture/roadmap/execution_roadmap.md`. This report now defers to that roadmap for phase-number meanings and uses this document only for audit findings and traceability.
+Canonical phase maturity/status labels are governed only by `ROADMAP_MASTER.md`.
 
 Owner Dashboard is verifiably backend-served at `/ui` via FastAPI `app.mount("/ui", StaticFiles(..., html=True), ...)` and HTML marker `<title>Owner Dashboard</title>`.
 
@@ -18,7 +19,7 @@ Snapshot runtime execution capability is implemented in-repo, while scheduling r
 
 Documentation and implementation are aligned for the audited paper-trading and owner-dashboard surfaces, with remaining caution focused on still-unimplemented roadmap phases rather than stale contradictions.
 
-**Current overall alignment assessment:** **Aligned for audited active surfaces**
+**Current overall alignment assessment (audit snapshot, non-canonical):** **Aligned for audited active surfaces**
 
 ---
 
@@ -30,16 +31,16 @@ Documentation and implementation are aligned for the audited paper-trading and o
 | Phase 16 | No authoritative in-repo phase taxonomy artifact located | `docs/architecture/roadmap/execution_roadmap.md` | Reviewers should treat the phase as unmapped unless a future governance artifact establishes it. |
 | Phase 17 | Consumer Interfaces and Usage Patterns umbrella phase | `docs/architecture/roadmap/execution_roadmap.md` | Distinct from Phase 17b; secondary index links are navigation only. |
 | Phase 17b | Owner Dashboard | `docs/architecture/roadmap/execution_roadmap.md` | This report's Owner Dashboard findings map only to Phase 17b. |
-| Phase 23 | Research Dashboard | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase-23-status.md` is the dedicated status artifact. |
-| Phase 25 | Strategy Lifecycle Management | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase_25_strategy_lifecycle.md` is the dedicated status artifact aligned to verified lifecycle modules and tests. |
+| Phase 23 | Research Dashboard | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase-23-status.md` is a derived evidence artifact. |
+| Phase 25 | Strategy Lifecycle Management | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase_25_strategy_lifecycle.md` is a derived evidence artifact aligned to verified lifecycle modules and tests. |
 | Phase 26 | No authoritative in-repo phase taxonomy artifact located | `docs/architecture/roadmap/execution_roadmap.md` | Reviewers should not infer a Phase 26 meaning from adjacent roadmap blocks. |
-| Phase 27 | Risk Framework | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase-27-status.md` is the dedicated status artifact, and Phase 27 remains distinct from Phase 27b Pipeline Enforcement Layer artifacts. |
+| Phase 27 | Risk Framework | `docs/architecture/roadmap/execution_roadmap.md` | Taxonomy authority remains with the roadmap; `docs/architecture/phases/phase-27-status.md` is a derived evidence artifact, and Phase 27 remains distinct from Phase 27b Pipeline Enforcement Layer artifacts. |
 
 ---
 
-## 3. Roadmap Phase Matrix
+## 3. Roadmap Phase Matrix (Audit Snapshot)
 
-| Phase | Status | Evidence | Notes |
+| Phase | Audit observation (non-canonical snapshot) | Evidence | Notes |
 |-------|--------|----------|-------|
 | Phase 17b - Owner Dashboard | Implemented | Backend UI mount in `src/api/main.py` (`app.mount("/ui", StaticFiles(..., html=True), name="ui")`); HTML marker in `src/ui/index.html` (`<title>Owner Dashboard</title>`); tests in `tests/health_endpoint.py`; manual trigger endpoint `POST /analysis/run` in `src/api/main.py`; test in `tests/test_api_manual_analysis_trigger.py`; documentation in `docs/operations/ui/owner_dashboard.md` and `docs/index.md`. | `/ui` is confirmed backend-served. `/owner` is documented only as a frontend development route and not as a runtime backend route. |
 | Hourly Snapshot Runtime | Partially Implemented | `docs/operations/runtime/snapshot_runtime.md` declares in-repo execution capability and external scheduling boundary; `docs/operations/interfaces/batch_execution.md` states no scheduler implementation; no scheduler/cron endpoint verified in `src/api/main.py`. | Runtime execution capability exists in-repo; hourly scheduling is external and not provided by this repository. |
@@ -109,8 +110,8 @@ Documentation and implementation are aligned for the audited paper-trading and o
    - Formally declare the operational boundary: in-repo runtime execution capability with external scheduling ownership.  
    - **Phase classification:** Snapshot Runtime  
 
-2. **Proposed Issue:** `Phase 23 status artifact`  
-   - Keep explicit not-implemented declaration aligned to current repo evidence until implementation artifacts exist.  
+2. **Proposed Issue:** `Phase 23 evidence artifact alignment`  
+   - Keep Phase 23 evidence wording aligned to current repo evidence until additional implementation artifacts exist.  
    - **Phase classification:** Phase 23  
 
 ---
