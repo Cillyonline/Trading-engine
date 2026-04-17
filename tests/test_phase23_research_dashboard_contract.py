@@ -39,6 +39,7 @@ def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     assert "Signal Review Workflow Step 1: Run Analysis" in content
     assert "Signal Review Workflow Step 2: Configure Watchlist Scope" in content
     assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in content
+    assert "blocked`, `watch`, `paper_candidate`" in content
     assert "Signal Review Workflow Step 4: Inspect Backtest Artifacts" in content
     assert "Signal Review Workflow Step 5: Inspect Runtime Data" in content
     assert "Signal Review Workflow Step 6: Review Run Evidence" in content
@@ -49,6 +50,8 @@ def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     assert "production-readiness claims" in content
     assert "technical backtest availability" in content
     assert "technical signal visibility" in content
+    assert "missing criteria" in content
+    assert "blocking conditions" in content
     assert "trader validation status as a substitute for operational readiness status" in content
 
 
@@ -82,6 +85,13 @@ def test_ui_surface_contains_canonical_navigation_and_boundary_markers() -> None
     assert "single canonical website-facing workflow entrypoint" in content
     assert "one bounded non-live signal review and trade-evaluation workflow" in content
     assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in content
+    assert "Signal Decision Surface" in content
+    assert 'id="runtime-chart-panel"' in content
+    assert "phase39-visual-analysis" in content
+    assert "/signals/decision-surface" in content
+    assert "blocked" in content
+    assert "watch" in content
+    assert "paper_candidate" in content
     assert "Technical signal visibility is explicitly separate from trader validation and operational readiness decisions." in content
     assert "No live trading" in content
     assert "Backtest Entry/Read Panel" in content
@@ -118,6 +128,11 @@ def test_product_surface_contract_defines_canonical_authority_and_non_inference(
     assert "Technical Implementation Status" in content
     assert "Trader Validation Status" in content
     assert "Operational Readiness Status" in content
+    assert "Bounded Signal Decision Surface v1" in content
+    assert "technical decision states are explicit and easy to distinguish" in content
+    assert "missing criteria and blocking conditions are visible" in content
+    assert "Coexistence With Bounded Phase 39 Visual Analysis" in content
+    assert "must coexist on `/ui`" in content
     assert "Roadmap Track Alignment" in content
     assert "Product Surface Track authority is owned by canonical `/ui`" in content
     assert "Strategy Readiness Track is a separate governance track" in content

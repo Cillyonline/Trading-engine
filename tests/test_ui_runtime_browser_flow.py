@@ -338,10 +338,17 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "/alerts/history" in ui_response.text
             assert 'id="alert-status"' in ui_response.text
             assert 'id="alert-list"' in ui_response.text
-            assert "No Phase 39 or Phase 40 features" in ui_response.text
-            assert 'id="runtime-chart-panel"' not in ui_response.text
-            assert "phase39-visual-analysis" not in ui_response.text
-            assert "/signals?limit=20&sort=created_at_desc" in ui_response.text
+            assert "Bounded Phase 39 visual-analysis/charting markers coexist" in ui_response.text
+            assert 'id="runtime-chart-panel"' in ui_response.text
+            assert "phase39-visual-analysis" in ui_response.text
+            assert "/signals/decision-surface?limit=20&sort=created_at_desc" in ui_response.text
+            assert "Signal Decision Surface" in ui_response.text
+            assert "decision_state" in ui_response.text
+            assert "missing_criteria" in ui_response.text
+            assert "blocking_conditions" in ui_response.text
+            assert "blocked" in ui_response.text
+            assert "watch" in ui_response.text
+            assert "paper_candidate" in ui_response.text
             assert "/watchlists" in ui_response.text
             assert "/watchlists/{watchlist_id}" in ui_response.text
             assert "/watchlists/{watchlist_id}/execute" in ui_response.text
@@ -392,6 +399,28 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             signals_payload = signals_response.json()
             assert signals_payload["total"] >= 1
             assert any(item["symbol"] == "AAPL" for item in signals_payload["items"])
+
+            decision_surface_response = client.get(
+                "/signals/decision-surface",
+                headers=READ_ONLY_HEADERS,
+                params={
+                    "ingestion_run_id": ingestion_run_id,
+                    "symbol": "AAPL",
+                    "sort": "created_at_desc",
+                },
+            )
+            assert decision_surface_response.status_code == 200
+            decision_surface_payload = decision_surface_response.json()
+            assert decision_surface_payload["items"]
+            assert decision_surface_payload["boundary"]["mode"] == "non_live_signal_decision_surface"
+            assert (
+                decision_surface_payload["boundary"]["strategy_readiness_evidence"]["inferred_readiness_claim"]
+                == "prohibited"
+            )
+            decision_item = decision_surface_payload["items"][0]
+            assert decision_item["decision_state"] in {"blocked", "watch", "paper_candidate"}
+            assert "score" in decision_item["score_contribution"].lower()
+            assert "stage" in decision_item["stage_assessment"].lower()
 
             create_watchlist_response = client.post(
                 "/watchlists",

@@ -29,6 +29,7 @@ from ..models import (
     PaperTradesReadQuery,
     PaperTradesReadResponse,
     PortfolioPositionsResponse,
+    SignalDecisionSurfaceResponse,
     ScreenerResultsQuery,
     ScreenerResultsResponse,
     SignalsReadQuery,
@@ -478,6 +479,25 @@ def build_inspection_router(
         _: str = Depends(deps.require_role("read_only")),
     ) -> SignalReadResponseDTO:
         return inspection_service.read_signals(params=params, deps=_service_dependencies(deps))
+
+    @router.get(
+        "/signals/decision-surface",
+        response_model=SignalDecisionSurfaceResponse,
+        summary="Read Signal Decision Surface",
+        description=(
+            "Read bounded non-live technical decision states for reviewed signals with concise rationale, "
+            "missing criteria visibility, and blocking-condition visibility. This route is explicitly "
+            "technical-only and does not imply trader validation or operational readiness."
+        ),
+    )
+    def read_signal_decision_surface_handler(
+        params: SignalsReadQuery = Depends(_get_signals_query),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> SignalDecisionSurfaceResponse:
+        return inspection_service.read_signal_decision_surface(
+            params=params,
+            deps=_service_dependencies(deps),
+        )
 
     @router.get(
         "/signals/raw",

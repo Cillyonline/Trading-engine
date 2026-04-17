@@ -28,6 +28,13 @@ def test_ui_surface_is_canonical_website_facing_workflow_shell(monkeypatch) -> N
     assert 'id="ui-signal-review-workflow-contract"' in response.text
     assert "Signal Review Workflow Step 1: Run Analysis" in response.text
     assert "Signal Review Workflow Step 3: Evaluate Ranked Signals" in response.text
+    assert "Signal Decision Surface" in response.text
+    assert "/signals/decision-surface" in response.text
+    assert "blocked" in response.text
+    assert "watch" in response.text
+    assert "paper_candidate" in response.text
     assert "one bounded non-live signal review and trade-evaluation workflow" in response.text
     assert "No live trading" in response.text
-    assert "No Phase 39 or Phase 40 features" in response.text
+    assert "Bounded Phase 39 visual-analysis/charting markers coexist" in response.text
+    assert 'id="runtime-chart-panel"' in response.text
+    assert "phase39-visual-analysis" in response.text

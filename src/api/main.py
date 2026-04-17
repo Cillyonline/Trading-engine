@@ -30,6 +30,7 @@ from .models import (
     PaperTradesReadResponse,
     PortfolioPositionsResponse,
     RuntimeIntrospectionResponse,
+    SignalDecisionSurfaceResponse,
     ScreenerRequest,
     ScreenerResponse,
     SystemStateResponse,

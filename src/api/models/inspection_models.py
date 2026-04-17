@@ -398,6 +398,49 @@ class StrategyReadinessEvidenceResponse(BaseModel):
     inferred_readiness_claim: Literal["prohibited"]
 
 
+class SignalDecisionSurfaceBoundaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["non_live_signal_decision_surface"]
+    technical_decision_state_statement: str
+    trader_validation_statement: str
+    operational_readiness_statement: str
+    strategy_readiness_evidence: StrategyReadinessEvidenceResponse
+    in_scope: List[str]
+    out_of_scope: List[str]
+
+
+class SignalDecisionSurfaceItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    strategy: str
+    direction: str
+    score: float
+    created_at: str
+    stage: str
+    timeframe: str
+    market_type: str
+    data_source: str
+    decision_state: Literal["blocked", "watch", "paper_candidate"]
+    rationale_summary: str
+    score_contribution: str
+    stage_assessment: str
+    missing_criteria: List[str]
+    blocking_conditions: List[str]
+
+
+class SignalDecisionSurfaceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    boundary: SignalDecisionSurfaceBoundaryResponse
+    items: List[SignalDecisionSurfaceItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
 class BacktestReadBoundaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
