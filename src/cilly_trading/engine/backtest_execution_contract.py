@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Literal, Mapping, Sequence
 
 from risk.contracts import RiskDecision, RiskEvaluationRequest, RiskGate
@@ -89,18 +89,42 @@ class BacktestExecutionAssumptions:
     partial_fills_allowed: bool = False
 
     def __post_init__(self) -> None:
+        if self.fill_model != "deterministic_market":
+            raise ValueError("Execution assumption fill_model must be deterministic_market")
+        if self.fill_timing not in {"next_snapshot", "same_snapshot"}:
+            raise ValueError("Execution assumption fill_timing is unsupported")
+        if self.price_source != "open_then_price":
+            raise ValueError("Execution assumption price_source must be open_then_price")
+        if not isinstance(self.partial_fills_allowed, bool):
+            raise ValueError("Execution assumption partial_fills_allowed must be a boolean")
+        if self.partial_fills_allowed:
+            raise ValueError("Execution assumption partial_fills_allowed must be false")
+
+        if isinstance(self.slippage_bps, bool) or not isinstance(self.slippage_bps, int):
+            raise ValueError("Execution assumption slippage_bps must be an integer")
         if self.slippage_bps < 0:
             raise ValueError("Execution assumption slippage_bps must be >= 0")
         if self.slippage_bps > MAX_SLIPPAGE_BPS:
             raise ValueError(f"Execution assumption slippage_bps must be <= {MAX_SLIPPAGE_BPS}")
-        if self.commission_per_order < Decimal("0"):
+
+        normalized_commission = self._normalize_commission(self.commission_per_order)
+        if normalized_commission < Decimal("0"):
             raise ValueError("Execution assumption commission_per_order must be >= 0")
-        if self.commission_per_order > MAX_COMMISSION_PER_ORDER:
+        if normalized_commission > MAX_COMMISSION_PER_ORDER:
             raise ValueError(
                 f"Execution assumption commission_per_order must be <= {MAX_COMMISSION_PER_ORDER}"
             )
-        if self.partial_fills_allowed:
-            raise ValueError("Execution assumption partial_fills_allowed must be false")
+        object.__setattr__(self, "commission_per_order", normalized_commission)
+
+    @staticmethod
+    def _normalize_commission(value: Decimal | int | float | str) -> Decimal:
+        try:
+            normalized = Decimal(str(value))
+        except (InvalidOperation, ValueError, TypeError) as exc:
+            raise ValueError("Execution assumption commission_per_order must be decimal-compatible") from exc
+        if not normalized.is_finite():
+            raise ValueError("Execution assumption commission_per_order must be finite")
+        return normalized
 
     def to_execution_config(self) -> DeterministicExecutionConfig:
         return DeterministicExecutionConfig(

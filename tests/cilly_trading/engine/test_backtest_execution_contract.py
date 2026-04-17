@@ -63,6 +63,28 @@ def test_contract_validation_rejects_invalid_execution_assumptions() -> None:
         BacktestExecutionAssumptions(partial_fills_allowed=True)
 
 
+def test_contract_validation_rejects_unsupported_execution_assumption_values() -> None:
+    with pytest.raises(ValueError, match="fill_model"):
+        BacktestExecutionAssumptions(fill_model="synthetic_market")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="fill_timing"):
+        BacktestExecutionAssumptions(fill_timing="next_tick")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="price_source"):
+        BacktestExecutionAssumptions(price_source="close_only")  # type: ignore[arg-type]
+
+
+def test_contract_validation_rejects_invalid_execution_input_types() -> None:
+    with pytest.raises(ValueError, match="slippage_bps must be an integer"):
+        BacktestExecutionAssumptions(slippage_bps=True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="slippage_bps must be an integer"):
+        BacktestExecutionAssumptions(slippage_bps="10")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="commission_per_order must be decimal-compatible"):
+        BacktestExecutionAssumptions(commission_per_order="not-a-number")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="commission_per_order must be finite"):
+        BacktestExecutionAssumptions(commission_per_order=Decimal("NaN"))
+    with pytest.raises(ValueError, match="partial_fills_allowed must be a boolean"):
+        BacktestExecutionAssumptions(partial_fills_allowed="false")  # type: ignore[arg-type]
+
+
 def test_contract_validation_rejects_invalid_contract_version() -> None:
     with pytest.raises(ValueError, match="Unsupported backtest contract_version"):
         BacktestRunContract(contract_version="2.0.0")
@@ -194,6 +216,51 @@ def test_cost_slippage_baseline_is_reproducible() -> None:
     )
 
     assert first == second
+
+
+def test_cost_slippage_baseline_changes_deterministically_when_cost_assumptions_change() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    low_cost_assumptions = BacktestExecutionAssumptions(
+        slippage_bps=0,
+        commission_per_order=Decimal("0"),
+        fill_timing="next_snapshot",
+    )
+    high_cost_assumptions = BacktestExecutionAssumptions(
+        slippage_bps=25,
+        commission_per_order=Decimal("2.00"),
+        fill_timing="next_snapshot",
+    )
+
+    flow_low = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-cost-low",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(execution_assumptions=low_cost_assumptions),
+    )
+    flow_high = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-cost-high",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(execution_assumptions=high_cost_assumptions),
+    )
+
+    baseline_low = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=flow_low.fills,
+        execution_assumptions=low_cost_assumptions,
+    )
+    baseline_high = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=flow_high.fills,
+        execution_assumptions=high_cost_assumptions,
+    )
+
+    assert baseline_low["summary"]["total_transaction_cost"] == 0.0
+    assert baseline_high["summary"]["total_transaction_cost"] > baseline_low["summary"]["total_transaction_cost"]
+    assert (
+        baseline_high["summary"]["ending_equity_cost_aware"]
+        < baseline_low["summary"]["ending_equity_cost_aware"]
+    )
 
 
 def test_backtest_realism_boundary_reports_modeled_and_unmodeled_assumptions() -> None:

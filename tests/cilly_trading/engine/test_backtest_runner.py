@@ -82,6 +82,56 @@ def test_backtest_runner_deterministic_repeat(tmp_path: Path) -> None:
     assert result1.artifact_sha256 == result2.artifact_sha256
 
 
+def test_backtest_runner_deterministic_repeat_with_identical_realism_assumptions(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=11,
+            commission_per_order=Decimal("1.75"),
+            fill_timing="next_snapshot",
+        )
+    )
+    snapshots = [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+        },
+        {
+            "id": "s2",
+            "timestamp": "2024-01-02T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "101",
+            "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+        },
+        {
+            "id": "s3",
+            "timestamp": "2024-01-03T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "102",
+        },
+    ]
+    result1 = runner.run(
+        snapshots=snapshots,
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "run-1", run_contract=run_contract),
+    )
+    result2 = runner.run(
+        snapshots=snapshots,
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "run-2", run_contract=run_contract),
+    )
+
+    assert result1.artifact_path.read_bytes() == result2.artifact_path.read_bytes()
+    assert result1.artifact_sha256 == result2.artifact_sha256
+
+
 def test_backtest_runner_snapshot_consistency_order(tmp_path: Path) -> None:
     result, _ = _run_with_spy(tmp_path / "ordered")
 
@@ -365,4 +415,120 @@ def test_backtest_runner_metrics_baseline_cost_aware_differs_from_cost_free(tmp_
             "run_config_execution_assumptions_match_metrics_baseline_assumptions"
         ]
         is True
+    )
+
+
+def test_backtest_runner_cost_outputs_change_when_realism_assumptions_change(tmp_path: Path) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    snapshots = [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+        },
+        {
+            "id": "s2",
+            "timestamp": "2024-01-02T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "101",
+            "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+        },
+        {
+            "id": "s3",
+            "timestamp": "2024-01-03T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "102",
+        },
+    ]
+    low_cost = runner.run(
+        snapshots=snapshots,
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "low-cost",
+            run_contract=BacktestRunContract(
+                execution_assumptions=BacktestExecutionAssumptions(
+                    slippage_bps=0,
+                    commission_per_order=Decimal("0"),
+                )
+            ),
+        ),
+    )
+    high_cost = runner.run(
+        snapshots=snapshots,
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "high-cost",
+            run_contract=BacktestRunContract(
+                execution_assumptions=BacktestExecutionAssumptions(
+                    slippage_bps=20,
+                    commission_per_order=Decimal("2.50"),
+                )
+            ),
+        ),
+    )
+
+    low_payload = json.loads(low_cost.artifact_path.read_text(encoding="utf-8"))
+    high_payload = json.loads(high_cost.artifact_path.read_text(encoding="utf-8"))
+
+    assert low_payload["metrics_baseline"]["summary"]["total_transaction_cost"] == 0.0
+    assert (
+        high_payload["metrics_baseline"]["summary"]["total_transaction_cost"]
+        > low_payload["metrics_baseline"]["summary"]["total_transaction_cost"]
+    )
+    assert (
+        high_payload["metrics_baseline"]["summary"]["ending_equity_cost_aware"]
+        < low_payload["metrics_baseline"]["summary"]["ending_equity_cost_aware"]
+    )
+
+
+def test_backtest_runner_persists_identical_realism_assumptions_across_artifact_sections(
+    tmp_path: Path,
+) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    assumptions = BacktestExecutionAssumptions(
+        slippage_bps=9,
+        commission_per_order=Decimal("1.40"),
+        fill_timing="same_snapshot",
+    )
+    result = runner.run(
+        snapshots=[
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "102"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "assumption-contract",
+            run_contract=BacktestRunContract(execution_assumptions=assumptions),
+        ),
+    )
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    expected = assumptions.to_payload()
+
+    assert payload["run_config"]["execution_assumptions"] == expected
+    assert payload["metrics_baseline"]["assumptions"] == expected
+    assert payload["realism_boundary"]["modeled_assumptions"]["fills"]["fill_timing"] == expected["fill_timing"]
+    assert payload["realism_boundary"]["modeled_assumptions"]["fills"]["price_source"] == expected["price_source"]
+    assert (
+        payload["realism_boundary"]["modeled_assumptions"]["fees"]["commission_per_order"]
+        == expected["commission_per_order"]
+    )
+    assert (
+        payload["realism_boundary"]["modeled_assumptions"]["slippage"]["slippage_bps"]
+        == expected["slippage_bps"]
     )

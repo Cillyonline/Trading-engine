@@ -6,6 +6,7 @@ Document and validate currently implemented realism-sensitive assumptions in the
 ## Scope Boundary
 This contract covers only the current deterministic backtest implementation.
 It does not define live-trading behavior, broker behavior, or a market-microstructure simulator.
+Trader validation status for this implementation remains `trader_validation_not_started`.
 
 ## Current Implemented Assumptions (Validated)
 
@@ -35,12 +36,14 @@ It does not define live-trading behavior, broker behavior, or a market-microstru
 ## Evidence Interpretation Boundary
 - Backtest output is bounded evidence for deterministic replay under declared assumptions.
 - It supports controlled review of what the model did on supplied snapshots under fixed cost/fill rules.
+- This implementation improves technical realism only; it does not validate trader readiness, live tradability, or execution quality in production markets.
 
 Unsupported claims:
 - live-trading readiness or approval
 - broker execution realism
 - market-hours compliance realism
 - liquidity or market microstructure realism
+- trader validation or trader approval
 - future profitability or out-of-sample robustness
 
 ## Validation Evidence (Current Repository)
@@ -58,3 +61,4 @@ Classification: technically good, traderically weak.
 Rationale:
 - technically good: deterministic and test-validated for implemented assumptions
 - traderically weak: key market-realism dimensions are intentionally unmodeled
+- trader validation status remains `trader_validation_not_started`

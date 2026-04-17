@@ -102,3 +102,70 @@ def test_p56_bt_cost_assumptions_are_fixed_per_order_and_side_aware() -> None:
     assert baseline["summary"]["total_slippage_cost"] == 0.2
     assert baseline["summary"]["total_transaction_cost"] == 2.7
 
+
+def test_p56_bt_replay_is_deterministic_and_cost_sensitive_to_assumptions() -> None:
+    snapshots = sort_snapshots(
+        [
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {
+                "id": "s2",
+                "timestamp": "2024-01-02T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "101",
+                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "symbol": "AAPL", "open": "102"},
+        ]
+    )
+    assumptions = BacktestExecutionAssumptions(slippage_bps=10, commission_per_order=Decimal("1.25"))
+    run_contract = BacktestRunContract(execution_assumptions=assumptions)
+
+    first = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="p56-bt-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+    second = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="p56-bt-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+    baseline_first = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=first.fills,
+        execution_assumptions=assumptions,
+    )
+    baseline_second = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=second.fills,
+        execution_assumptions=assumptions,
+    )
+    higher_cost_assumptions = BacktestExecutionAssumptions(
+        slippage_bps=20,
+        commission_per_order=Decimal("2.50"),
+    )
+    higher_cost_flow = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="p56-bt-repro",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(execution_assumptions=higher_cost_assumptions),
+    )
+    higher_cost_baseline = build_cost_slippage_metrics_baseline(
+        ordered_snapshots=snapshots,
+        fills=higher_cost_flow.fills,
+        execution_assumptions=higher_cost_assumptions,
+    )
+
+    assert baseline_first == baseline_second
+    assert (
+        higher_cost_baseline["summary"]["ending_equity_cost_aware"]
+        < baseline_first["summary"]["ending_equity_cost_aware"]
+    )

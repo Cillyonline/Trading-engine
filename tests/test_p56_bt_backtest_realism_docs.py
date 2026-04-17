@@ -17,6 +17,7 @@ def test_p56_bt_doc_explicitly_documents_current_assumptions() -> None:
     assert "Fill model is fixed to `deterministic_market`." in content
     assert "Price source is fixed to `open_then_price`" in content
     assert "Commission model is fixed per filled order (`commission_per_order`)." in content
+    assert "Trader validation status for this implementation remains `trader_validation_not_started`." in content
 
 
 def test_p56_bt_doc_explicitly_states_realism_gaps_and_unsupported_claims() -> None:
@@ -28,6 +29,7 @@ def test_p56_bt_doc_explicitly_states_realism_gaps_and_unsupported_claims() -> N
     assert "Order-book depth, queue position" in content
     assert "Unsupported claims:" in content
     assert "live-trading readiness or approval" in content
+    assert "trader validation or trader approval" in content
     assert "future profitability or out-of-sample robustness" in content
 
 
@@ -38,3 +40,4 @@ def test_p56_bt_doc_status_wording_is_evidence_bounded() -> None:
     assert "Classification: technically good, traderically weak." in content
     assert "deterministic and test-validated for implemented assumptions" in content
     assert "key market-realism dimensions are intentionally unmodeled" in content
+    assert "trader validation status remains `trader_validation_not_started`" in content
