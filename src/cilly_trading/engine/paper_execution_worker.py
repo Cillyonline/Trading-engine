@@ -47,6 +47,10 @@ from cilly_trading.models import (
     compute_signal_id,
     sha256_hex,
 )
+from cilly_trading.portfolio_framework.capital_allocation_policy import (
+    DeterministicTradeSizingInput,
+    compute_deterministic_trade_notional,
+)
 from cilly_trading.repositories import CanonicalExecutionRepository
 from cilly_trading.risk_framework.allocation_rules import RiskLimits
 
@@ -60,6 +64,22 @@ MIN_SCORE_THRESHOLD: float = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.min_score_thre
 
 #: Maximum fraction of account equity for a single paper position.
 MAX_POSITION_PCT: Decimal = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_position_pct
+
+#: Maximum trade-level risk budget fraction of account equity.
+MAX_RISK_PER_TRADE_PCT: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_risk_per_trade_pct
+)
+
+#: Minimum bounded trade-risk input used for deterministic sizing.
+MIN_TRADE_RISK_PCT: Decimal = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.min_trade_risk_pct
+
+#: Maximum bounded trade-risk input used for deterministic sizing.
+MAX_TRADE_RISK_PCT: Decimal = DEFAULT_PAPER_EXECUTION_RISK_PROFILE.max_trade_risk_pct
+
+#: Notional rounding quantum for deterministic sizing.
+NOTIONAL_ROUNDING_QUANTUM: Decimal = (
+    DEFAULT_PAPER_EXECUTION_RISK_PROFILE.notional_rounding_quantum
+)
 
 #: Maximum fraction of account equity across all open paper positions.
 MAX_TOTAL_EXPOSURE_PCT: Decimal = (
@@ -108,6 +128,9 @@ OutcomeCode = Literal[
     "skip:duplicate_entry",
     "skip:cooldown_active",
     "reject:invalid_signal_fields",
+    "reject:missing_trade_risk_input",
+    "reject:invalid_trade_risk_input",
+    "reject:max_risk_per_trade_exceeded",
     "reject:position_size_exceeds_limit",
     "reject:total_exposure_exceeds_limit",
     "reject:strategy_exposure_exceeds_limit",
@@ -148,6 +171,7 @@ class SignalEvaluationResult:
     order_id: Optional[str] = None
     trade_id: Optional[str] = None
     reason: Optional[str] = None
+    decision_inputs: Optional[dict[str, str]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +279,62 @@ def _risk_rejection_outcome(reason: str) -> OutcomeCode:
     return outcome
 
 
+def _resolve_trade_risk_pct(signal: Signal) -> tuple[OutcomeCode | None, Decimal | None, str | None]:
+    raw_trade_risk_pct = signal.get("trade_risk_pct")
+    if raw_trade_risk_pct is None:
+        return (
+            "reject:missing_trade_risk_input",
+            None,
+            "trade_risk_pct is required for deterministic sizing",
+        )
+    try:
+        trade_risk_pct = Decimal(str(raw_trade_risk_pct))
+    except Exception:
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"trade_risk_pct is not numeric: {raw_trade_risk_pct!r}",
+        )
+    if not trade_risk_pct.is_finite():
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            "trade_risk_pct must be finite",
+        )
+    if trade_risk_pct <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"trade_risk_pct must be > 0, got {trade_risk_pct}",
+        )
+    return None, trade_risk_pct, None
+
+
+def _build_decision_inputs_payload(
+    *,
+    trade_risk_pct: Decimal,
+    bounded_trade_risk_pct: Decimal,
+    risk_budget_notional: Decimal,
+    proposed_notional: Decimal,
+    account_equity: Decimal,
+    profile: PaperExecutionRiskProfile,
+    entry_price: Decimal,
+) -> dict[str, str]:
+    return {
+        "account_equity": str(account_equity),
+        "max_risk_per_trade_pct": str(profile.max_risk_per_trade_pct),
+        "trade_risk_pct": str(trade_risk_pct),
+        "bounded_trade_risk_pct": str(bounded_trade_risk_pct),
+        "risk_budget_notional": str(risk_budget_notional),
+        "proposed_position_notional": str(proposed_notional),
+        "entry_price": str(entry_price),
+        "max_total_exposure_pct": str(profile.max_total_exposure_pct),
+        "max_strategy_exposure_pct": str(profile.max_strategy_exposure_pct),
+        "max_symbol_exposure_pct": str(profile.max_symbol_exposure_pct),
+        "max_concurrent_positions": str(profile.max_concurrent_positions),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Worker
 # ---------------------------------------------------------------------------
@@ -299,7 +379,10 @@ class BoundedPaperExecutionWorker:
         """
         result = self._evaluate(signal)
         if result.outcome == "eligible":
-            result = self._persist_paper_entry(signal)
+            result = self._persist_paper_entry(
+                signal,
+                decision_inputs=result.decision_inputs,
+            )
         return result
 
     def process_batch(self, signals: Sequence[Signal]) -> list[SignalEvaluationResult]:
@@ -316,16 +399,70 @@ class BoundedPaperExecutionWorker:
 
     def _build_risk_limits(self) -> RiskLimits:
         """Build deterministic risk-framework limits for paper execution."""
+        max_notional_from_risk_budget = (
+            self._risk_profile.account_equity
+            * self._risk_profile.max_risk_per_trade_pct
+            / self._risk_profile.min_trade_risk_pct
+        )
         return RiskLimits(
             max_account_exposure_pct=float(self._risk_profile.max_total_exposure_pct),
-            max_position_size=float(
-                self._risk_profile.account_equity * self._risk_profile.max_position_pct
-            ),
+            max_position_size=float(max_notional_from_risk_budget),
             max_strategy_exposure_pct=float(
                 self._risk_profile.max_strategy_exposure_pct
             ),
             max_symbol_exposure_pct=float(self._risk_profile.max_symbol_exposure_pct),
         )
+
+    def _compute_trade_sizing_for_signal(
+        self,
+        signal: Signal,
+        *,
+        entry_price: Decimal,
+    ) -> tuple[SignalEvaluationResult | None, Decimal | None, dict[str, str] | None]:
+        rejection_outcome, trade_risk_pct, rejection_reason = _resolve_trade_risk_pct(signal)
+        if rejection_outcome is not None or trade_risk_pct is None:
+            return (
+                SignalEvaluationResult(
+                    outcome=rejection_outcome or "reject:invalid_trade_risk_input",
+                    reason=rejection_reason,
+                ),
+                None,
+                None,
+            )
+
+        sizing_decision = compute_deterministic_trade_notional(
+            DeterministicTradeSizingInput(
+                account_equity=self._risk_profile.account_equity,
+                max_risk_per_trade_pct=self._risk_profile.max_risk_per_trade_pct,
+                trade_risk_pct=trade_risk_pct,
+                min_trade_risk_pct=self._risk_profile.min_trade_risk_pct,
+                max_trade_risk_pct=self._risk_profile.max_trade_risk_pct,
+                notional_rounding_quantum=self._risk_profile.notional_rounding_quantum,
+            )
+        )
+        decision_inputs = _build_decision_inputs_payload(
+            trade_risk_pct=sizing_decision.trade_risk_pct,
+            bounded_trade_risk_pct=sizing_decision.bounded_trade_risk_pct,
+            risk_budget_notional=sizing_decision.risk_budget_notional,
+            proposed_notional=sizing_decision.rounded_position_notional,
+            account_equity=self._risk_profile.account_equity,
+            profile=self._risk_profile,
+            entry_price=entry_price,
+        )
+        if not sizing_decision.accepted:
+            rejection_outcome_code: OutcomeCode = "reject:invalid_trade_risk_input"
+            if sizing_decision.reason_code == "sizing_rejected:max_risk_per_trade_exceeded":
+                rejection_outcome_code = "reject:max_risk_per_trade_exceeded"
+            return (
+                SignalEvaluationResult(
+                    outcome=rejection_outcome_code,
+                    reason=sizing_decision.reason_code,
+                    decision_inputs=decision_inputs,
+                ),
+                None,
+                decision_inputs,
+            )
+        return None, sizing_decision.rounded_position_notional, decision_inputs
 
     # ------------------------------------------------------------------
     # Policy evaluation (read-only)
@@ -405,7 +542,15 @@ class BoundedPaperExecutionWorker:
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
         )
-        proposed_notional = self._risk_profile.default_paper_quantity * entry_price
+        sizing_rejection, proposed_notional, decision_inputs = self._compute_trade_sizing_for_signal(
+            signal,
+            entry_price=entry_price,
+        )
+        if sizing_rejection is not None or proposed_notional is None:
+            return sizing_rejection or SignalEvaluationResult(
+                outcome="reject:invalid_trade_risk_input",
+                reason="trade sizing failed",
+            )
 
         # Load all open trades for canonical exposure/concurrent-position checks.
         # The limit of 1000 reflects the bounded paper simulation scope
@@ -422,6 +567,7 @@ class BoundedPaperExecutionWorker:
                     f"concurrent_positions={len(all_open_trades)} >= "
                     f"limit={self._risk_profile.max_concurrent_positions}"
                 ),
+                decision_inputs=decision_inputs,
             )
 
         current_exposure = sum(
@@ -455,15 +601,21 @@ class BoundedPaperExecutionWorker:
             return SignalEvaluationResult(
                 outcome=_risk_rejection_outcome(risk_decision.reason),
                 reason=risk_decision.reason,
+                decision_inputs=decision_inputs,
             )
 
-        return SignalEvaluationResult(outcome="eligible")
+        return SignalEvaluationResult(outcome="eligible", decision_inputs=decision_inputs)
 
     # ------------------------------------------------------------------
     # Paper entity creation and persistence
     # ------------------------------------------------------------------
 
-    def _persist_paper_entry(self, signal: Signal) -> SignalEvaluationResult:
+    def _persist_paper_entry(
+        self,
+        signal: Signal,
+        *,
+        decision_inputs: dict[str, str] | None,
+    ) -> SignalEvaluationResult:
         """Create and persist canonical paper entities for an eligible signal.
 
         Deterministic: the same signal always produces the same entity IDs
@@ -483,7 +635,15 @@ class BoundedPaperExecutionWorker:
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
         )
-        quantity = self._risk_profile.default_paper_quantity
+        proposed_notional = (
+            Decimal(decision_inputs["proposed_position_notional"])
+            if decision_inputs is not None
+            else self._risk_profile.default_paper_quantity * entry_price
+        )
+        quantity = (proposed_notional / entry_price).quantize(
+            Decimal("0.00000001"),
+            rounding=ROUND_HALF_UP,
+        )
         side = _direction_to_order_side(direction)
 
         # --- Execution events ------------------------------------------
@@ -604,6 +764,7 @@ class BoundedPaperExecutionWorker:
             signal_id=signal_id,
             order_id=order_id,
             trade_id=trade_id,
+            decision_inputs=decision_inputs,
         )
 
 
@@ -613,6 +774,10 @@ __all__ = [
     "SignalEvaluationResult",
     "MIN_SCORE_THRESHOLD",
     "MAX_POSITION_PCT",
+    "MAX_RISK_PER_TRADE_PCT",
+    "MIN_TRADE_RISK_PCT",
+    "MAX_TRADE_RISK_PCT",
+    "NOTIONAL_ROUNDING_QUANTUM",
     "MAX_STRATEGY_EXPOSURE_PCT",
     "MAX_SYMBOL_EXPOSURE_PCT",
     "MAX_TOTAL_EXPOSURE_PCT",

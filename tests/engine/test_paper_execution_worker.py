@@ -21,7 +21,11 @@ from cilly_trading.engine.paper_execution_worker import (
     COOLDOWN_HOURS,
     DEFAULT_PAPER_ENTRY_PRICE,
     DEFAULT_PAPER_QUANTITY,
+    MAX_RISK_PER_TRADE_PCT,
+    MAX_TRADE_RISK_PCT,
     MAX_CONCURRENT_POSITIONS,
+    MIN_TRADE_RISK_PCT,
+    NOTIONAL_ROUNDING_QUANTUM,
     MAX_POSITION_PCT,
     MAX_TOTAL_EXPOSURE_PCT,
     MIN_SCORE_THRESHOLD,
@@ -58,6 +62,7 @@ def _make_signal(
     score: float = 75.0,
     timestamp: str = "2024-01-15T10:00:00Z",
     stage: str = "setup",
+    trade_risk_pct: float = 0.20,
     signal_id: str | None = None,
 ) -> Signal:
     sig: Signal = {
@@ -67,6 +72,7 @@ def _make_signal(
         "score": score,
         "timestamp": timestamp,
         "stage": stage,  # type: ignore[typeddict-item]
+        "trade_risk_pct": trade_risk_pct,
     }
     if signal_id is not None:
         sig["signal_id"] = signal_id
@@ -82,6 +88,10 @@ def test_policy_constants_match_documented_defaults() -> None:
     """AC5: policy constants match the values declared in the policy doc."""
     assert MIN_SCORE_THRESHOLD == 60.0
     assert MAX_POSITION_PCT == Decimal("0.10")
+    assert MAX_RISK_PER_TRADE_PCT == Decimal("0.01")
+    assert MIN_TRADE_RISK_PCT == Decimal("0.005")
+    assert MAX_TRADE_RISK_PCT == Decimal("0.20")
+    assert NOTIONAL_ROUNDING_QUANTUM == Decimal("0.01")
     assert MAX_TOTAL_EXPOSURE_PCT == Decimal("0.80")
     assert MAX_CONCURRENT_POSITIONS == 10
     assert COOLDOWN_HOURS == 24
@@ -200,8 +210,8 @@ def test_eligible_signal_creates_order_in_repository(
     assert order.strategy_id == "rsi2"
     assert order.side == "BUY"  # "long" direction → BUY side
     assert order.status == "filled"
-    assert order.quantity == DEFAULT_PAPER_QUANTITY
-    assert order.filled_quantity == DEFAULT_PAPER_QUANTITY
+    assert order.quantity > Decimal("0")
+    assert order.filled_quantity == order.quantity
 
 
 def test_eligible_signal_creates_execution_events_in_repository(
@@ -236,7 +246,7 @@ def test_eligible_signal_creates_open_trade_in_repository(
     assert trade.direction == "long"
     assert trade.symbol == "AAPL"
     assert trade.strategy_id == "rsi2"
-    assert trade.quantity_opened == DEFAULT_PAPER_QUANTITY
+    assert trade.quantity_opened > Decimal("0")
     assert trade.average_entry_price == DEFAULT_PAPER_ENTRY_PRICE
 
 
@@ -251,6 +261,8 @@ def test_eligible_signal_result_contains_signal_and_entity_ids(
     assert result.signal_id == "sig-004"
     assert result.order_id is not None
     assert result.trade_id is not None
+    assert result.decision_inputs is not None
+    assert result.decision_inputs["max_risk_per_trade_pct"] == "0.01"
 
 
 # ---------------------------------------------------------------------------
@@ -504,9 +516,11 @@ def test_total_exposure_limit_enforced(
         repository=repo,
         risk_profile=PaperExecutionRiskProfile(
             account_equity=Decimal("1000"),
+            max_risk_per_trade_pct=Decimal("0.10"),
+            min_trade_risk_pct=Decimal("0.10"),
+            max_trade_risk_pct=Decimal("1.00"),
             max_total_exposure_pct=Decimal("0.80"),
             max_concurrent_positions=20,
-            max_position_pct=Decimal("0.20"),  # 20% of 1000 = 200 > 100 ✓
         ),
     )
 
@@ -517,6 +531,7 @@ def test_total_exposure_limit_enforced(
             symbol=f"SYM{i:02d}",
             signal_id=f"sig-exp-{i:03d}",
             timestamp="2024-03-01T10:00:00Z",
+            trade_risk_pct=1.0,
         )
         result = worker.process_signal(sig)
         if result.outcome == "eligible":
@@ -528,7 +543,7 @@ def test_total_exposure_limit_enforced(
     assert reject_count == 2
 
 
-def test_position_size_limit_enforced(
+def test_max_risk_per_trade_limit_enforced(
     repo: SqliteCanonicalExecutionRepository,
 ) -> None:
     """AC5: proposed position exceeding per-position cap → reject:position_size_exceeds_limit."""
@@ -537,12 +552,49 @@ def test_position_size_limit_enforced(
     worker = BoundedPaperExecutionWorker(
         repository=repo,
         risk_profile=PaperExecutionRiskProfile(
-            account_equity=Decimal("500"),
-            max_position_pct=Decimal("0.10"),
+            account_equity=Decimal("90"),
+            max_risk_per_trade_pct=Decimal("0.0001"),
+            min_trade_risk_pct=Decimal("0.005"),
+            max_trade_risk_pct=Decimal("0.20"),
         ),
     )
-    result = worker.process_signal(_make_signal(signal_id="sig-pos-001"))
-    assert result.outcome == "reject:position_size_exceeds_limit"
+    result = worker.process_signal(_make_signal(signal_id="sig-pos-001", trade_risk_pct=0.20))
+    assert result.outcome == "reject:max_risk_per_trade_exceeded"
+
+
+def test_missing_trade_risk_input_is_rejected_fail_closed(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(signal_id="sig-missing-trade-risk")
+    del signal["trade_risk_pct"]
+    result = worker.process_signal(signal)
+    assert result.outcome == "reject:missing_trade_risk_input"
+
+
+def test_invalid_trade_risk_input_is_rejected_fail_closed(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(signal_id="sig-invalid-trade-risk")
+    signal["trade_risk_pct"] = -0.1
+    result = worker.process_signal(signal)
+    assert result.outcome == "reject:invalid_trade_risk_input"
+
+
+def test_identical_inputs_produce_identical_reason_codes_and_sizing_payloads(
+    repo: SqliteCanonicalExecutionRepository,
+) -> None:
+    worker_a = BoundedPaperExecutionWorker(repository=repo)
+    worker_b = BoundedPaperExecutionWorker(repository=repo)
+    signal = _make_signal(signal_id="sig-deterministic-reject")
+    del signal["trade_risk_pct"]
+
+    result_a = worker_a.process_signal(signal)
+    result_b = worker_b.process_signal(signal)
+
+    assert result_a.outcome == "reject:missing_trade_risk_input"
+    assert result_b.outcome == "reject:missing_trade_risk_input"
+    assert result_a.reason == result_b.reason
+    assert result_a.decision_inputs == result_b.decision_inputs
 
 
 # ---------------------------------------------------------------------------

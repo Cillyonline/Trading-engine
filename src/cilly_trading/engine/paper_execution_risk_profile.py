@@ -48,6 +48,10 @@ class PaperExecutionRiskProfile:
     contract_id: str = PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID
     min_score_threshold: float = 60.0
     max_position_pct: Decimal = Decimal("0.10")
+    max_risk_per_trade_pct: Decimal = Decimal("0.01")
+    min_trade_risk_pct: Decimal = Decimal("0.005")
+    max_trade_risk_pct: Decimal = Decimal("0.20")
+    notional_rounding_quantum: Decimal = Decimal("0.01")
     max_total_exposure_pct: Decimal = Decimal("0.80")
     max_strategy_exposure_pct: Decimal = Decimal("0.80")
     max_symbol_exposure_pct: Decimal = Decimal("0.80")
@@ -68,6 +72,24 @@ class PaperExecutionRiskProfile:
             value=self.min_score_threshold,
         )
         _require_finite_pct(name="max_position_pct", value=self.max_position_pct)
+        _require_finite_pct(
+            name="max_risk_per_trade_pct",
+            value=self.max_risk_per_trade_pct,
+        )
+        _require_finite_pct(
+            name="min_trade_risk_pct",
+            value=self.min_trade_risk_pct,
+        )
+        _require_finite_pct(
+            name="max_trade_risk_pct",
+            value=self.max_trade_risk_pct,
+        )
+        if self.min_trade_risk_pct > self.max_trade_risk_pct:
+            raise ValueError("min_trade_risk_pct must be <= max_trade_risk_pct")
+        _require_finite_positive_decimal(
+            name="notional_rounding_quantum",
+            value=self.notional_rounding_quantum,
+        )
         _require_finite_pct(
             name="max_total_exposure_pct",
             value=self.max_total_exposure_pct,
@@ -103,6 +125,10 @@ class PaperExecutionRiskProfile:
             "contract_id": self.contract_id,
             "min_score_threshold": self.min_score_threshold,
             "max_position_pct": str(self.max_position_pct),
+            "max_risk_per_trade_pct": str(self.max_risk_per_trade_pct),
+            "min_trade_risk_pct": str(self.min_trade_risk_pct),
+            "max_trade_risk_pct": str(self.max_trade_risk_pct),
+            "notional_rounding_quantum": str(self.notional_rounding_quantum),
             "max_total_exposure_pct": str(self.max_total_exposure_pct),
             "max_strategy_exposure_pct": str(self.max_strategy_exposure_pct),
             "max_symbol_exposure_pct": str(self.max_symbol_exposure_pct),

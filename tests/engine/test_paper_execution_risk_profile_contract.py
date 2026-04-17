@@ -23,6 +23,7 @@ def _signal(*, signal_id: str, score: float = 90.0) -> Signal:
         "score": score,
         "timestamp": "2026-01-01T00:00:00Z",
         "stage": "setup",  # type: ignore[typeddict-item]
+        "trade_risk_pct": 0.02,
         "signal_id": signal_id,
     }
 
@@ -43,6 +44,13 @@ def test_invalid_profile_values_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="min_score_threshold must be in range"):
         PaperExecutionRiskProfile(min_score_threshold=101.0)
+    with pytest.raises(ValueError, match="max_risk_per_trade_pct must be in range"):
+        PaperExecutionRiskProfile(max_risk_per_trade_pct=Decimal("0"))
+    with pytest.raises(ValueError, match="min_trade_risk_pct must be <= max_trade_risk_pct"):
+        PaperExecutionRiskProfile(
+            min_trade_risk_pct=Decimal("0.21"),
+            max_trade_risk_pct=Decimal("0.20"),
+        )
 
 
 def test_same_profile_and_same_input_produce_same_outcome(tmp_path: Path) -> None:

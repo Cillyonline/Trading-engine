@@ -36,6 +36,8 @@ evaluation sequence is applied to every candidate signal:
 3. **Duplicate-entry check** - no duplicate open position may exist.
 4. **Cooldown check** - minimum cooldown between entries must be satisfied.
 5. **Exposure check** - position and exposure limits must not be exceeded.
+   This step includes deterministic trade-level sizing from account equity,
+   max risk per trade, and bounded `trade_risk_pct`.
 
 Step 5 is evaluated through the canonical deterministic risk framework via one
 bounded adapter path:
@@ -149,6 +151,29 @@ A minimum cooldown period must elapse between paper entries for the same
 
 Paper entry is blocked when exposure or position limits would be exceeded.
 
+### Deterministic trade-level sizing (Issue #981)
+
+Before exposure-cap checks are evaluated, paper-entry sizing is computed in a
+fail-closed deterministic function:
+
+- required input: `trade_risk_pct` on the signal candidate
+- bounded risk input: `trade_risk_pct` is clamped to
+  `[min_trade_risk_pct, max_trade_risk_pct]`
+- risk budget: `account_equity * max_risk_per_trade_pct`
+- proposed notional: `risk_budget_notional / bounded_trade_risk_pct`
+- deterministic rounding: configured notional quantum with `ROUND_HALF_UP`
+
+Fail-closed outcomes:
+
+- missing trade-risk input -> `reject:missing_trade_risk_input`
+- invalid trade-risk input -> `reject:invalid_trade_risk_input`
+- rounded sizing that breaches max risk per trade ->
+  `reject:max_risk_per_trade_exceeded`
+
+Sizing and cap-evaluation inputs are exposed in non-UI worker decision
+artifacts (`SignalEvaluationResult.decision_inputs`) for deterministic
+inspection.
+
 ### Per-position exposure limit
 
 - The default maximum position size is `10%` of current account equity per
@@ -199,6 +224,9 @@ are not live-trading risk controls and do not constitute broker risk management.
 | Skip | `skip:cooldown_active` | Cooldown window has not elapsed for `(symbol, strategy)`. |
 | Reject | `reject:invalid_signal_fields` | Required signal field is absent or outside its allowed boundary. |
 | Reject | `reject:position_size_exceeds_limit` | Proposed position size exceeds per-position cap. |
+| Reject | `reject:missing_trade_risk_input` | Required bounded trade-risk input is missing. |
+| Reject | `reject:invalid_trade_risk_input` | Required bounded trade-risk input is invalid. |
+| Reject | `reject:max_risk_per_trade_exceeded` | Rounded deterministic size breaches max risk per trade. |
 | Reject | `reject:total_exposure_exceeds_limit` | Proposed position would push total exposure over global cap. |
 | Reject | `reject:strategy_exposure_exceeds_limit` | Proposed position would push strategy exposure over strategy cap. |
 | Reject | `reject:symbol_exposure_exceeds_limit` | Proposed position would push symbol exposure over symbol cap. |
@@ -216,6 +244,10 @@ Risk decision reason codes are deterministic and adapter-driven (for example
 `rejected:risk_framework_max_account_exposure_pct_exceeded`), so equivalent
 bounded inputs produce equivalent approve/reject reasons across covered
 non-live execution paths.
+
+Issue #981 completion is technical implementation evidence only. It does not
+claim trader validation, trader approval of thresholds, live readiness, or
+broker readiness.
 
 ## Policy Application Boundary
 

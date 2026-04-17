@@ -276,3 +276,29 @@ When signals compete for constrained portfolio capacity, the pipeline remains st
    - `intent.higher_priority_approved_signal_ids` listing the approved signals that consumed capacity earlier in the same run
 
 This keeps constrained-capacity behavior deterministic and operator-inspectable without introducing optimization or trader-readiness claims beyond the verified decision semantics.
+
+## 12. Deterministic Trade-Level Risk Allocation (Issue #981)
+
+For bounded paper/simulation entry, deterministic trade-level notional sizing is
+computed from:
+
+- `account_equity`
+- `max_risk_per_trade_pct`
+- bounded trade-risk input (`trade_risk_pct`)
+
+The sizing contract is fail-closed for missing or invalid inputs and emits
+stable machine-readable reason codes for equivalent inputs. Portfolio-level
+enforcement in the same decision path blocks candidates that would exceed:
+
+- max risk per trade
+- max total portfolio exposure
+- max strategy exposure
+- max symbol exposure
+- max concurrent positions
+
+Sizing and cap-evaluation inputs are exposed in non-UI decision artifacts for
+deterministic inspection.
+
+Implementation scope note: this issue provides technical implementation
+evidence only. It does not imply trader validation, trader-approved thresholds,
+live readiness, or broker readiness.
