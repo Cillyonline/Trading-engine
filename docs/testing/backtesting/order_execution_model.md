@@ -2,17 +2,17 @@
 
 ## Scope
 
-This document defines the deterministic market order execution model for backtesting.
+This document defines the deterministic market-order execution model for backtesting.
 The model is intentionally fixed and reproducible for identical inputs.
+It is a technical replay model only and does not represent live broker execution.
 
-## 1) Market order execution semantics
+## 1) Market-order execution semantics
 
-Fill timing mode is **`next_snapshot`**.
+Fill timing mode is configurable as `next_snapshot` or `same_snapshot`.
 
-- An order created at snapshot `t` is **not** fillable at snapshot `t`.
-- The earliest fill opportunity is snapshot `t+1`.
-- This enforces no-lookahead behavior.
-- No partial fills are allowed. If an order is eligible for a snapshot and snapshot price data exists, the full order quantity is filled deterministically.
+- For `next_snapshot`, an order created at snapshot `t` is not fillable at snapshot `t`; earliest fill is snapshot `t+1`.
+- For `same_snapshot`, an order created at snapshot `t` is fillable at snapshot `t`.
+- No partial fills are allowed. If an order is eligible and snapshot price data exists, the full order quantity is filled deterministically.
 
 ## 2) Deterministic fill price rule
 
@@ -22,16 +22,18 @@ For each fill snapshot:
 2. Else, base fill price is `snapshot.price`.
 3. If neither field exists, execution raises a deterministic error.
 
+Price source is fixed to `open_then_price`.
+
 ## 3) Deterministic slippage model
 
-`slippage_bps` is a fixed integer config value.
+`slippage_bps` is a bounded integer config value.
 
 - BUY: `fill_price = base_price * (1 + slippage_bps / 10_000)`
 - SELL: `fill_price = base_price * (1 - slippage_bps / 10_000)`
 
 ## 4) Deterministic commission model
 
-Commission model is fixed **per order** (`commission_per_order`).
+Commission model is fixed per filled order (`commission_per_order`).
 
 - Every filled order uses the same fixed commission amount from config.
 - Formula: `commission = commission_per_order`
@@ -80,20 +82,12 @@ Snapshot lookup is field-address based (`open`, then `price`) and does not rely 
 
 ## 8) Unmodeled realism boundary
 
-codex/ops-p51-write-only-evidence
 The deterministic execution model is intentionally narrower than real execution.
 
 - Market hours and exchange session rules are not modeled.
 - Broker routing, rejects, cancels, and venue-specific behavior are not modeled.
-- Liquidity, queue position, and market impact are not modeled.
+- Liquidity, queue position, fill probability, latency, and market impact are not modeled.
+- This model is non-live and non-broker by design.
 
 This execution model does not support live-trading readiness claims.
-=======
-The deterministic execution model intentionally excludes the following:
-
-- Market hours and exchange session rules are not modeled.
-- Order book depth and market impact are not modeled.
-- Broker-specific execution behavior and fill quality are not modeled.
-- Exchange-level order rejection or throttling is not modeled.
-
-This model does not support live-trading readiness claims. Backtest output is bounded evidence only and MUST NOT be used to infer production trading performance or broker fill quality.
+This implementation improves technical realism only and does not constitute trader validation.

@@ -92,4 +92,7 @@ def test_backtest_schema_and_execution_docs_define_realism_disclosures() -> None
     assert "`canonical_handoffs`" in schema_content
     assert "## 8) Unmodeled realism boundary" in execution_content
     assert "Market hours and exchange session rules are not modeled." in execution_content
+    assert "Broker routing, rejects, cancels, and venue-specific behavior are not modeled." in execution_content
+    assert "This model is non-live and non-broker by design." in execution_content
     assert "does not support live-trading readiness claims" in execution_content
+    assert "does not constitute trader validation" in execution_content
