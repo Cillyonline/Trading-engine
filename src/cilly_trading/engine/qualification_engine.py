@@ -6,12 +6,15 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from cilly_trading.engine.decision_card_contract import (
+    ACTION_ENTRY_WIN_RATE_MIN,
+    ACTION_EXIT_WIN_RATE_MAX,
     DECISION_CARD_CONTRACT_VERSION,
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
     UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND,
     REQUIRED_COMPONENT_CATEGORIES,
     ComponentScore,
     DecisionCard,
+    DecisionAction,
     DecisionComponentCategory,
     DecisionConfidenceTier,
     HardGateEvaluation,
@@ -40,6 +43,12 @@ CONFIDENCE_THRESHOLDS: dict[str, float] = {
 
 SENTIMENT_OVERLAY_MAX_POINTS = 4.0
 SENTIMENT_DEFAULT_STALE_AFTER_HOURS = 24
+WIN_RATE_SIGNAL_QUALITY_WEIGHT = 0.60
+WIN_RATE_BACKTEST_QUALITY_WEIGHT = 0.40
+EXPECTED_VALUE_REWARD_MULTIPLIER_MIN = 0.50
+EXPECTED_VALUE_REWARD_MULTIPLIER_MAX = 1.50
+EXPECTED_VALUE_MIN = -1.0
+EXPECTED_VALUE_MAX = 1.0
 
 
 @dataclass(frozen=True)
@@ -111,10 +120,23 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         component_scores=integrated_component_scores,
     )
     confidence_reason = _confidence_reason(confidence_tier=confidence_tier, aggregate_score=aggregate_score)
+    win_rate = compute_bounded_win_rate(component_scores=integrated_component_scores)
+    expected_value = compute_bounded_expected_value(
+        component_scores=integrated_component_scores,
+        win_rate=win_rate,
+    )
     state, color, qualification_summary = resolve_qualification_state(
         hard_gate_evaluation=hard_gate_evaluation,
         aggregate_score=aggregate_score,
         confidence_tier=confidence_tier,
+    )
+    action = resolve_decision_action(
+        hard_gate_evaluation=hard_gate_evaluation,
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        qualification_state=state,
+        win_rate=win_rate,
+        expected_value=expected_value,
     )
     payload = {
         "contract_version": DECISION_CARD_CONTRACT_VERSION,
@@ -137,7 +159,10 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
             "confidence_tier": confidence_tier,
             "confidence_reason": confidence_reason,
             "aggregate_score": aggregate_score,
+            "win_rate": win_rate,
+            "expected_value": expected_value,
         },
+        "action": action,
         "qualification": {
             "state": state,
             "color": color,
@@ -151,19 +176,26 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
                 base_aggregate_score=base_aggregate_score,
                 aggregate_score=aggregate_score,
                 confidence_tier=confidence_tier,
+                win_rate=win_rate,
+                expected_value=expected_value,
+                action=action,
                 sentiment_resolution=sentiment_resolution,
                 backtest_input_applied=input_data.backtest_evidence is not None,
                 portfolio_fit_input_applied=input_data.portfolio_fit_input is not None,
             ),
             "final_explanation": (
-                "Action state is deterministic and does not imply live-trading approval; "
-                "it indicates reject, watch, paper candidate, or paper approved."
+                "Decision action and qualification are deterministic technical implementation evidence "
+                "and does not imply live-trading approval. Validation gate status remains explicitly "
+                "separate and defaults to trader_validation_not_started unless governed evidence is recorded."
             ),
         },
         "metadata": _build_metadata(
             input_data=input_data,
             base_aggregate_score=base_aggregate_score,
             sentiment_resolution=sentiment_resolution,
+            win_rate=win_rate,
+            expected_value=expected_value,
+            action=action,
         ),
     }
     return validate_decision_card(payload)
@@ -305,6 +337,34 @@ def assign_confidence_tier(
     return "low"
 
 
+def compute_bounded_win_rate(*, component_scores: list[ComponentScore]) -> float:
+    """Compute bounded win-rate evidence in [0, 1] from deterministic component inputs."""
+    score_by_category = {component.category: float(component.score) for component in component_scores}
+    weighted_score = (
+        (score_by_category["signal_quality"] * WIN_RATE_SIGNAL_QUALITY_WEIGHT)
+        + (score_by_category["backtest_quality"] * WIN_RATE_BACKTEST_QUALITY_WEIGHT)
+    )
+    return max(0.0, min(1.0, round(weighted_score / 100.0, 4)))
+
+
+def compute_bounded_expected_value(
+    *,
+    component_scores: list[ComponentScore],
+    win_rate: float,
+) -> float:
+    """Compute bounded expected value in [-1, 1] from win-rate and reward multiplier evidence."""
+    score_by_category = {component.category: float(component.score) for component in component_scores}
+    reward_multiplier = (
+        score_by_category["risk_alignment"] + score_by_category["execution_readiness"]
+    ) / 100.0
+    bounded_reward_multiplier = max(
+        EXPECTED_VALUE_REWARD_MULTIPLIER_MIN,
+        min(EXPECTED_VALUE_REWARD_MULTIPLIER_MAX, reward_multiplier),
+    )
+    expected_value = (win_rate * bounded_reward_multiplier) - (1.0 - win_rate)
+    return max(EXPECTED_VALUE_MIN, min(EXPECTED_VALUE_MAX, round(expected_value, 4)))
+
+
 def resolve_qualification_state(
     *,
     hard_gate_evaluation: HardGateEvaluation,
@@ -335,6 +395,29 @@ def resolve_qualification_state(
         "yellow",
         "Opportunity is a paper-trading candidate but not yet approved.",
     )
+
+
+def resolve_decision_action(
+    *,
+    hard_gate_evaluation: HardGateEvaluation,
+    aggregate_score: float,
+    confidence_tier: DecisionConfidenceTier,
+    qualification_state: DecisionActionState,
+    win_rate: float,
+    expected_value: float,
+) -> DecisionAction:
+    """Resolve deterministic paper-evaluation action from bounded evidence fields."""
+    if hard_gate_evaluation.has_blocking_failure:
+        return "ignore"
+    if expected_value < 0.0:
+        return "exit"
+    if qualification_state in {"paper_candidate", "paper_approved"} and win_rate <= ACTION_EXIT_WIN_RATE_MAX:
+        return "exit"
+    if confidence_tier == "low" or aggregate_score < CONFIDENCE_THRESHOLDS["medium_aggregate"]:
+        return "ignore"
+    if qualification_state in {"paper_candidate", "paper_approved"} and win_rate >= ACTION_ENTRY_WIN_RATE_MIN:
+        return "entry"
+    return "ignore"
 
 
 def _confidence_reason(*, confidence_tier: DecisionConfidenceTier, aggregate_score: float) -> str:
@@ -377,6 +460,9 @@ def _score_explanations(
     base_aggregate_score: float,
     aggregate_score: float,
     confidence_tier: DecisionConfidenceTier,
+    win_rate: float,
+    expected_value: float,
+    action: DecisionAction,
     sentiment_resolution: SentimentOverlayResolution,
     backtest_input_applied: bool,
     portfolio_fit_input_applied: bool,
@@ -390,12 +476,29 @@ def _score_explanations(
         f"Portfolio-fit input path is {'explicitly integrated' if portfolio_fit_input_applied else 'not provided; component value is used as-is'}.",
         f"Bounded weighted aggregate score={base_aggregate_score:.4f} using fixed category weights.",
         (
+            "Bounded win-rate formula: "
+            "win_rate=((signal_quality*0.60)+(backtest_quality*0.40))/100 -> "
+            f"{win_rate:.4f}."
+        ),
+        (
+            "Bounded expected-value formula: "
+            "expected_value=(win_rate*bounded_reward_multiplier)-(1-win_rate), "
+            "bounded_reward_multiplier=clamp((risk_alignment+execution_readiness)/100,0.50,1.50) -> "
+            f"{expected_value:.4f}."
+        ),
+        (
             f"Sentiment overlay status={sentiment_resolution.status}, points={sentiment_resolution.points:.4f}, "
             f"cap={sentiment_resolution.cap_points:.4f}."
         ),
         f"Final aggregate score after sentiment overlay={aggregate_score:.4f}.",
         f"Component scores by category: {component_summary}.",
         f"Confidence tier resolved deterministically as {confidence_tier}.",
+        (
+            "Action rules: blocking hard-gate failure -> ignore; negative expected value -> exit; "
+            f"qualified win_rate <= {ACTION_EXIT_WIN_RATE_MAX:.2f} -> exit; "
+            f"qualified win_rate >= {ACTION_ENTRY_WIN_RATE_MIN:.2f} with non-negative expected value -> entry; "
+            f"else ignore. Resolved action={action}."
+        ),
     ]
 
 
@@ -404,6 +507,9 @@ def _build_metadata(
     input_data: QualificationEngineInput,
     base_aggregate_score: float,
     sentiment_resolution: SentimentOverlayResolution,
+    win_rate: float,
+    expected_value: float,
+    action: DecisionAction,
 ) -> dict[str, object]:
     metadata = dict(input_data.metadata or {})
     metadata["base_aggregate_score"] = base_aggregate_score
@@ -415,6 +521,16 @@ def _build_metadata(
     metadata["sentiment_overlay_reason"] = sentiment_resolution.reason
     if sentiment_resolution.sentiment_score is not None:
         metadata["sentiment_overlay_score"] = sentiment_resolution.sentiment_score
+    metadata["win_rate"] = win_rate
+    metadata["expected_value"] = expected_value
+    metadata["decision_action"] = action
+    metadata["decision_action_policy_version"] = "paper-action.v1"
+    metadata["technical_implementation_status"] = metadata.get(
+        "technical_implementation_status", "technical_in_progress"
+    )
+    metadata["trader_validation_status"] = metadata.get(
+        "trader_validation_status", "trader_validation_not_started"
+    )
     return dict(sorted(metadata.items()))
 
 
@@ -430,7 +546,10 @@ __all__ = [
     "SENTIMENT_DEFAULT_STALE_AFTER_HOURS",
     "SENTIMENT_OVERLAY_MAX_POINTS",
     "assign_confidence_tier",
+    "compute_bounded_expected_value",
+    "compute_bounded_win_rate",
     "compute_aggregate_score",
     "evaluate_qualification",
+    "resolve_decision_action",
     "resolve_qualification_state",
 ]
