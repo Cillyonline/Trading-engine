@@ -30,6 +30,7 @@ def _signal(
         "score": 90.0,
         "timestamp": timestamp,
         "stage": "setup",  # type: ignore[typeddict-item]
+        "trade_risk_pct": 0.2,
         "signal_id": signal_id,
     }
 
@@ -41,7 +42,7 @@ def test_paper_execution_account_exposure_rejection_uses_canonical_reason(
         repository=repo,
         risk_profile=PaperExecutionRiskProfile(
             account_equity=Decimal("1000"),
-            max_position_pct=Decimal("0.20"),
+            max_risk_per_trade_pct=Decimal("0.02"),
             max_total_exposure_pct=Decimal("0.80"),
             max_strategy_exposure_pct=Decimal("1.00"),
             max_symbol_exposure_pct=Decimal("1.00"),
@@ -73,7 +74,7 @@ def test_paper_execution_strategy_exposure_rejection_uses_canonical_reason(
         repository=repo,
         risk_profile=PaperExecutionRiskProfile(
             account_equity=Decimal("1000"),
-            max_position_pct=Decimal("0.20"),
+            max_risk_per_trade_pct=Decimal("0.02"),
             max_total_exposure_pct=Decimal("1.00"),
             max_strategy_exposure_pct=Decimal("0.20"),
             max_symbol_exposure_pct=Decimal("1.00"),
@@ -98,7 +99,7 @@ def test_paper_execution_symbol_exposure_rejection_uses_canonical_reason(
         repository=repo,
         risk_profile=PaperExecutionRiskProfile(
             account_equity=Decimal("1000"),
-            max_position_pct=Decimal("0.20"),
+            max_risk_per_trade_pct=Decimal("0.02"),
             max_total_exposure_pct=Decimal("1.00"),
             max_strategy_exposure_pct=Decimal("1.00"),
             max_symbol_exposure_pct=Decimal("0.20"),

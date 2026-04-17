@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from cilly_trading.portfolio_framework.capital_allocation_policy import (
+    CapitalAllocationRules,
+    DeterministicTradeSizingInput,
     PrioritizedAllocationConfig,
     PrioritizedAllocationSignal,
-    CapitalAllocationRules,
     StrategyAllocationRule,
     allocate_prioritized_signals,
     assess_capital_allocation,
+    compute_deterministic_trade_notional,
 )
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
 
@@ -315,3 +319,66 @@ def test_regression_input_permutation_and_bounded_sizing_hook_remain_determinist
     assert result_a.accepted_signal_ids == ("sig-y", "sig-x")
     assert result_a.total_allocated_notional == 130.0
     assert result_a.remaining_capital_notional == 70.0
+
+
+def test_trade_sizing_computes_deterministic_notional_from_risk_budget() -> None:
+    decision = compute_deterministic_trade_notional(
+        DeterministicTradeSizingInput(
+            account_equity=Decimal("100000"),
+            max_risk_per_trade_pct=Decimal("0.01"),
+            trade_risk_pct=Decimal("0.02"),
+            min_trade_risk_pct=Decimal("0.005"),
+            max_trade_risk_pct=Decimal("0.20"),
+            notional_rounding_quantum=Decimal("0.01"),
+        )
+    )
+
+    assert decision.accepted is True
+    assert decision.reason_code == "sizing_accepted"
+    assert decision.risk_budget_notional == Decimal("1000.00")
+    assert decision.rounded_position_notional == Decimal("50000.00")
+
+
+def test_trade_sizing_rejects_zero_or_negative_inputs_fail_closed() -> None:
+    invalid_equity = compute_deterministic_trade_notional(
+        DeterministicTradeSizingInput(
+            account_equity=Decimal("0"),
+            max_risk_per_trade_pct=Decimal("0.01"),
+            trade_risk_pct=Decimal("0.02"),
+            min_trade_risk_pct=Decimal("0.005"),
+            max_trade_risk_pct=Decimal("0.20"),
+            notional_rounding_quantum=Decimal("0.01"),
+        )
+    )
+    invalid_trade_risk = compute_deterministic_trade_notional(
+        DeterministicTradeSizingInput(
+            account_equity=Decimal("100000"),
+            max_risk_per_trade_pct=Decimal("0.01"),
+            trade_risk_pct=Decimal("-0.02"),
+            min_trade_risk_pct=Decimal("0.005"),
+            max_trade_risk_pct=Decimal("0.20"),
+            notional_rounding_quantum=Decimal("0.01"),
+        )
+    )
+
+    assert invalid_equity.accepted is False
+    assert invalid_equity.reason_code == "sizing_rejected:invalid_account_equity"
+    assert invalid_trade_risk.accepted is False
+    assert invalid_trade_risk.reason_code == "sizing_rejected:invalid_trade_risk_pct"
+
+
+def test_trade_sizing_applies_deterministic_rounding() -> None:
+    decision = compute_deterministic_trade_notional(
+        DeterministicTradeSizingInput(
+            account_equity=Decimal("10000"),
+            max_risk_per_trade_pct=Decimal("0.01"),
+            trade_risk_pct=Decimal("0.03"),
+            min_trade_risk_pct=Decimal("0.005"),
+            max_trade_risk_pct=Decimal("0.20"),
+            notional_rounding_quantum=Decimal("0.01"),
+        )
+    )
+
+    assert decision.accepted is True
+    assert decision.proposed_position_notional == Decimal("3333.333333333333333333333333")
+    assert decision.rounded_position_notional == Decimal("3333.33")

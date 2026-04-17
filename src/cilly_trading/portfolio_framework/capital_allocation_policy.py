@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, Literal
 
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
@@ -208,6 +209,108 @@ class PortfolioDecisionResult:
 
 
 BoundedPositionSizingHook = Callable[[PrioritizedAllocationSignal, float], float]
+
+
+@dataclass(frozen=True)
+class DeterministicTradeSizingInput:
+    """Input contract for deterministic per-trade sizing."""
+
+    account_equity: Decimal
+    max_risk_per_trade_pct: Decimal
+    trade_risk_pct: Decimal
+    min_trade_risk_pct: Decimal
+    max_trade_risk_pct: Decimal
+    notional_rounding_quantum: Decimal = Decimal("0.01")
+
+
+@dataclass(frozen=True)
+class DeterministicTradeSizingDecision:
+    """Deterministic position-notional sizing decision."""
+
+    accepted: bool
+    reason_code: str
+    account_equity: Decimal
+    max_risk_per_trade_pct: Decimal
+    trade_risk_pct: Decimal
+    bounded_trade_risk_pct: Decimal
+    risk_budget_notional: Decimal
+    proposed_position_notional: Decimal
+    rounded_position_notional: Decimal
+
+
+def compute_deterministic_trade_notional(
+    sizing_input: DeterministicTradeSizingInput,
+) -> DeterministicTradeSizingDecision:
+    """Compute deterministic per-trade notional from equity and bounded trade risk.
+
+    The function is fail-closed:
+    - missing/invalid inputs return accepted=False with stable reason_code
+    - successful outputs are rounded deterministically using ROUND_HALF_UP
+    """
+
+    invalid_input = _validate_trade_sizing_input(sizing_input)
+    if invalid_input is not None:
+        return DeterministicTradeSizingDecision(
+            accepted=False,
+            reason_code=invalid_input,
+            account_equity=sizing_input.account_equity,
+            max_risk_per_trade_pct=sizing_input.max_risk_per_trade_pct,
+            trade_risk_pct=sizing_input.trade_risk_pct,
+            bounded_trade_risk_pct=Decimal("0"),
+            risk_budget_notional=Decimal("0"),
+            proposed_position_notional=Decimal("0"),
+            rounded_position_notional=Decimal("0"),
+        )
+
+    bounded_trade_risk_pct = min(
+        max(sizing_input.trade_risk_pct, sizing_input.min_trade_risk_pct),
+        sizing_input.max_trade_risk_pct,
+    )
+    risk_budget_notional = sizing_input.account_equity * sizing_input.max_risk_per_trade_pct
+    proposed_position_notional = risk_budget_notional / bounded_trade_risk_pct
+    rounded_position_notional = proposed_position_notional.quantize(
+        sizing_input.notional_rounding_quantum,
+        rounding=ROUND_HALF_UP,
+    )
+
+    if rounded_position_notional <= Decimal("0"):
+        return DeterministicTradeSizingDecision(
+            accepted=False,
+            reason_code="sizing_rejected:non_positive_notional",
+            account_equity=sizing_input.account_equity,
+            max_risk_per_trade_pct=sizing_input.max_risk_per_trade_pct,
+            trade_risk_pct=sizing_input.trade_risk_pct,
+            bounded_trade_risk_pct=bounded_trade_risk_pct,
+            risk_budget_notional=risk_budget_notional,
+            proposed_position_notional=proposed_position_notional,
+            rounded_position_notional=Decimal("0"),
+        )
+
+    realized_risk = rounded_position_notional * bounded_trade_risk_pct
+    if realized_risk > risk_budget_notional:
+        return DeterministicTradeSizingDecision(
+            accepted=False,
+            reason_code="sizing_rejected:max_risk_per_trade_exceeded",
+            account_equity=sizing_input.account_equity,
+            max_risk_per_trade_pct=sizing_input.max_risk_per_trade_pct,
+            trade_risk_pct=sizing_input.trade_risk_pct,
+            bounded_trade_risk_pct=bounded_trade_risk_pct,
+            risk_budget_notional=risk_budget_notional,
+            proposed_position_notional=proposed_position_notional,
+            rounded_position_notional=rounded_position_notional,
+        )
+
+    return DeterministicTradeSizingDecision(
+        accepted=True,
+        reason_code="sizing_accepted",
+        account_equity=sizing_input.account_equity,
+        max_risk_per_trade_pct=sizing_input.max_risk_per_trade_pct,
+        trade_risk_pct=sizing_input.trade_risk_pct,
+        bounded_trade_risk_pct=bounded_trade_risk_pct,
+        risk_budget_notional=risk_budget_notional,
+        proposed_position_notional=proposed_position_notional,
+        rounded_position_notional=rounded_position_notional,
+    )
 
 
 def assess_capital_allocation(
@@ -754,6 +857,29 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator == 0.0:
         return 0.0
     return numerator / denominator
+
+
+def _validate_trade_sizing_input(
+    sizing_input: DeterministicTradeSizingInput,
+) -> str | None:
+    if sizing_input.account_equity <= Decimal("0"):
+        return "sizing_rejected:invalid_account_equity"
+    if (
+        sizing_input.max_risk_per_trade_pct <= Decimal("0")
+        or sizing_input.max_risk_per_trade_pct > Decimal("1")
+    ):
+        return "sizing_rejected:invalid_max_risk_per_trade_pct"
+    if sizing_input.trade_risk_pct <= Decimal("0"):
+        return "sizing_rejected:invalid_trade_risk_pct"
+    if (
+        sizing_input.min_trade_risk_pct <= Decimal("0")
+        or sizing_input.max_trade_risk_pct <= Decimal("0")
+        or sizing_input.min_trade_risk_pct > sizing_input.max_trade_risk_pct
+    ):
+        return "sizing_rejected:invalid_trade_risk_bounds"
+    if sizing_input.notional_rounding_quantum <= Decimal("0"):
+        return "sizing_rejected:invalid_rounding_quantum"
+    return None
 
 
 def _append_allocated_position(
