@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from api.services.analysis_service import build_ranked_symbol_results
+from cilly_trading.engine.decision_card_contract import (
+    DECISION_CARD_CONTRACT_VERSION,
+    validate_decision_card,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -91,3 +98,96 @@ def test_p56_contract_doc_is_bounded_and_no_trader_readiness_claim() -> None:
     assert "Classification: technically good, traderically weak" in content
     assert "does not claim trader readiness" in content
     assert "no live-trading readiness, execution approval, or profitability guarantee" in content
+    assert "bounded win-rate formula" in content
+    assert "bounded expected-value formula" in content
+    assert "deterministic paper-evaluation action" in content
+
+
+def _decision_card_payload_with_confidence_reason(confidence_reason: str) -> dict[str, object]:
+    return {
+        "contract_version": DECISION_CARD_CONTRACT_VERSION,
+        "decision_card_id": "dc_20260417_AAPL_RSI2",
+        "generated_at_utc": "2026-04-17T10:00:00Z",
+        "symbol": "AAPL",
+        "strategy_id": "RSI2",
+        "hard_gates": {
+            "policy_version": "hard-gates.v1",
+            "gates": [
+                {
+                    "gate_id": "drawdown_safety",
+                    "status": "pass",
+                    "blocking": True,
+                    "reason": "Drawdown remains below configured threshold",
+                    "evidence": ["max_dd=0.08", "threshold=0.12"],
+                }
+            ],
+        },
+        "score": {
+            "component_scores": [
+                {
+                    "category": "signal_quality",
+                    "score": 84.0,
+                    "rationale": "Signal quality remains stable across deterministic windows",
+                    "evidence": ["hit_rate=0.62", "window_days=90"],
+                },
+                {
+                    "category": "backtest_quality",
+                    "score": 82.0,
+                    "rationale": "Backtest quality remains stable in deterministic replay",
+                    "evidence": ["sharpe=1.36", "profit_factor=1.58"],
+                },
+                {
+                    "category": "portfolio_fit",
+                    "score": 78.0,
+                    "rationale": "Portfolio fit remains bounded under concentration limits",
+                    "evidence": ["sector_weight=0.19", "corr_cluster=0.43"],
+                },
+                {
+                    "category": "risk_alignment",
+                    "score": 86.0,
+                    "rationale": "Risk alignment remains bounded under policy controls",
+                    "evidence": ["risk_trade=0.005", "max_dd=0.10"],
+                },
+                {
+                    "category": "execution_readiness",
+                    "score": 76.0,
+                    "rationale": "Execution readiness remains bounded with explicit assumptions",
+                    "evidence": ["slippage_bps=9", "commission=1.00"],
+                },
+            ],
+            "confidence_tier": "high",
+            "confidence_reason": confidence_reason,
+            "aggregate_score": 80.5,
+            "win_rate": 0.61,
+            "expected_value": 0.1281,
+        },
+        "action": "entry",
+        "qualification": {
+            "state": "paper_approved",
+            "color": "green",
+            "summary": "Opportunity is approved for bounded paper-trading only.",
+        },
+        "rationale": {
+            "summary": "Hard gates pass and bounded component evidence supports deterministic qualification",
+            "gate_explanations": ["Gate drawdown_safety passed with explicit bounded evidence."],
+            "score_explanations": ["Bounded deterministic score evidence is complete for this decision card."],
+            "final_explanation": (
+                "Decision action and qualification are deterministic technical implementation evidence "
+                "and do not imply live-trading approval."
+            ),
+        },
+        "metadata": {
+            "technical_implementation_status": "technical_in_progress",
+            "trader_validation_status": "trader_validation_not_started",
+        },
+    }
+
+
+@pytest.mark.parametrize("phrase", ["trader validation", "live approval", "production readiness"])
+def test_p56_contract_rejects_unsupported_claim_wording_in_decision_output(phrase: str) -> None:
+    payload = _decision_card_payload_with_confidence_reason(
+        f"Aggregate component threshold evidence is bounded and excludes {phrase}."
+    )
+
+    with pytest.raises(ValidationError, match="unsupported claim language"):
+        validate_decision_card(payload)

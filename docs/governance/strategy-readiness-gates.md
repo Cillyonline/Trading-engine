@@ -132,6 +132,16 @@ Bounded API/UI evidence semantics:
 - operational-readiness evidence state is surfaced separately and must remain independent from technical and trader-validation evidence
 - API/UI outputs must not collapse these states into a single inferred readiness claim
 
+Decision-evidence status boundary for qualification outputs:
+
+- qualification and action outputs may include `technical_implementation_status` as technical-only evidence metadata
+- qualification and action outputs may include `trader_validation_status` as independent trader-validation metadata
+- technical and trader-validation statuses must remain explicit, separate fields
+- default bounded interpretation for current paper-evaluation action evidence:
+  - technical implementation status may be `technical_in_progress`
+  - trader validation status may remain `trader_validation_not_started`
+- action outputs (`entry`, `exit`, `ignore`) are deterministic technical evidence and are not trader sign-off
+
 Non-live and governance boundary for this scope:
 
 - no live-trading readiness or authorization claim

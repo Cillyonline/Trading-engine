@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 DECISION_CARD_CONTRACT_VERSION = "2.0.0"
 QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
 QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
+ACTION_EXIT_WIN_RATE_MAX = 0.50
+ACTION_ENTRY_WIN_RATE_MIN = 0.55
 
 CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY = (
     "Decision-card scores are bounded to within-strategy evaluation for a single opportunity. "
@@ -41,6 +43,7 @@ DecisionConfidenceTier = Literal["low", "medium", "high"]
 HardGateStatus = Literal["pass", "fail"]
 QualificationState = Literal["reject", "watch", "paper_candidate", "paper_approved"]
 QualificationColor = Literal["green", "yellow", "red"]
+DecisionAction = Literal["entry", "exit", "ignore"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -74,6 +77,7 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
     "broker-ready",
     "trader validated",
     "trader-validated",
+    "trader validation",
     "guaranteed",
     "guarantee",
     "certain outcome",
@@ -81,6 +85,8 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
     "confirmed opportunity",
     "validated outcome",
     "strong certainty",
+    "live approval",
+    "production readiness",
 )
 
 
@@ -90,6 +96,71 @@ def _contains_forbidden_claim_phrase(value: str) -> str | None:
         if phrase in normalized:
             return phrase
     return None
+
+
+def _derive_bounded_win_rate_from_components(component_scores: list[dict[str, Any]]) -> float:
+    by_category: dict[str, float] = {}
+    for component in component_scores:
+        category = component.get("category")
+        score = component.get("score")
+        if isinstance(category, str):
+            try:
+                by_category[category] = float(score)
+            except (TypeError, ValueError):
+                continue
+    signal_quality = by_category.get("signal_quality", 0.0)
+    backtest_quality = by_category.get("backtest_quality", 0.0)
+    bounded = ((signal_quality * 0.60) + (backtest_quality * 0.40)) / 100.0
+    return max(0.0, min(1.0, round(bounded, 4)))
+
+
+def _derive_bounded_expected_value_from_components(
+    *,
+    component_scores: list[dict[str, Any]],
+    win_rate: float,
+) -> float:
+    by_category: dict[str, float] = {}
+    for component in component_scores:
+        category = component.get("category")
+        score = component.get("score")
+        if isinstance(category, str):
+            try:
+                by_category[category] = float(score)
+            except (TypeError, ValueError):
+                continue
+    risk_alignment = by_category.get("risk_alignment", 0.0)
+    execution_readiness = by_category.get("execution_readiness", 0.0)
+    reward_multiplier = (risk_alignment + execution_readiness) / 100.0
+    bounded_reward_multiplier = max(0.50, min(1.50, reward_multiplier))
+    expected_value = (win_rate * bounded_reward_multiplier) - (1.0 - win_rate)
+    return max(-1.0, min(1.0, round(expected_value, 4)))
+
+
+def _derive_decision_action_from_fields(
+    *,
+    has_blocking_failure: bool,
+    qualification_state: str | None,
+    confidence_tier: str | None,
+    aggregate_score: float | None,
+    win_rate: float,
+    expected_value: float,
+) -> DecisionAction:
+    if has_blocking_failure:
+        return "ignore"
+    if expected_value < 0.0:
+        return "exit"
+    if qualification_state in {"paper_candidate", "paper_approved"} and win_rate <= ACTION_EXIT_WIN_RATE_MAX:
+        return "exit"
+    if (
+        confidence_tier == "low"
+        or aggregate_score is None
+        or aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+        or qualification_state in {"reject", "watch"}
+    ):
+        return "ignore"
+    if qualification_state in {"paper_candidate", "paper_approved"} and win_rate >= ACTION_ENTRY_WIN_RATE_MIN:
+        return "entry"
+    return "ignore"
 
 
 class HardGateResult(BaseModel):
@@ -162,6 +233,8 @@ class ScoreEvaluation(BaseModel):
     confidence_tier: DecisionConfidenceTier
     confidence_reason: str = Field(min_length=8)
     aggregate_score: float = Field(ge=0.0, le=100.0)
+    win_rate: float = Field(ge=0.0, le=1.0)
+    expected_value: float = Field(ge=-1.0, le=1.0)
 
     @field_validator("component_scores")
     @classmethod
@@ -271,9 +344,67 @@ class DecisionCard(BaseModel):
     strategy_id: str = Field(min_length=1)
     hard_gates: HardGateEvaluation
     score: ScoreEvaluation
+    action: DecisionAction
     qualification: Qualification
     rationale: DecisionRationale
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _hydrate_compatibility_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        payload = dict(data)
+        score_payload = dict(payload.get("score") or {})
+        component_scores = score_payload.get("component_scores")
+        if not isinstance(component_scores, list):
+            component_scores = []
+
+        win_rate_value = score_payload.get("win_rate")
+        if win_rate_value is None:
+            win_rate = _derive_bounded_win_rate_from_components(component_scores)
+            score_payload["win_rate"] = win_rate
+        else:
+            win_rate = float(win_rate_value)
+
+        expected_value_value = score_payload.get("expected_value")
+        if expected_value_value is None:
+            expected_value = _derive_bounded_expected_value_from_components(
+                component_scores=component_scores,
+                win_rate=win_rate,
+            )
+            score_payload["expected_value"] = expected_value
+        else:
+            expected_value = float(expected_value_value)
+
+        payload["score"] = score_payload
+        if payload.get("action") is None:
+            hard_gates_payload = dict(payload.get("hard_gates") or {})
+            gate_items = hard_gates_payload.get("gates")
+            has_blocking_failure = False
+            if isinstance(gate_items, list):
+                has_blocking_failure = any(
+                    isinstance(gate, dict)
+                    and gate.get("status") == "fail"
+                    and gate.get("blocking", True) is True
+                    for gate in gate_items
+                )
+            qualification_payload = dict(payload.get("qualification") or {})
+            qualification_state = qualification_payload.get("state")
+            confidence_tier = score_payload.get("confidence_tier")
+            aggregate_score_value = score_payload.get("aggregate_score")
+            aggregate_score = (
+                float(aggregate_score_value) if aggregate_score_value is not None else None
+            )
+            payload["action"] = _derive_decision_action_from_fields(
+                has_blocking_failure=has_blocking_failure,
+                qualification_state=qualification_state,
+                confidence_tier=confidence_tier,
+                aggregate_score=aggregate_score,
+                win_rate=win_rate,
+                expected_value=expected_value,
+            )
+        return payload
 
     @field_validator("contract_version")
     @classmethod
@@ -317,6 +448,14 @@ class DecisionCard(BaseModel):
             )
         if self.hard_gates.has_blocking_failure and self.qualification.color != "red":
             raise ValueError("Blocking hard-gate failures require red qualification color")
+        if self.action == "entry" and self.score.expected_value < 0.0:
+            raise ValueError("Negative expected value must not resolve to entry action")
+        expected_action = self._expected_decision_action()
+        if self.action != expected_action:
+            raise ValueError(
+                "Decision action must match deterministic resolution "
+                f"(expected={expected_action}, actual={self.action})"
+            )
         return self
 
     def _expected_qualification_state(self) -> QualificationState:
@@ -333,6 +472,29 @@ class DecisionCard(BaseModel):
         ):
             return "paper_approved"
         return "paper_candidate"
+
+    def _expected_decision_action(self) -> DecisionAction:
+        if self.hard_gates.has_blocking_failure:
+            return "ignore"
+        if self.score.expected_value < 0.0:
+            return "exit"
+        if (
+            self.qualification.state in {"paper_candidate", "paper_approved"}
+            and self.score.win_rate <= ACTION_EXIT_WIN_RATE_MAX
+        ):
+            return "exit"
+        if (
+            self.score.confidence_tier == "low"
+            or self.score.aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+            or self.qualification.state in {"reject", "watch"}
+        ):
+            return "ignore"
+        if (
+            self.qualification.state in {"paper_candidate", "paper_approved"}
+            and self.score.win_rate >= ACTION_ENTRY_WIN_RATE_MIN
+        ):
+            return "entry"
+        return "ignore"
 
     def to_canonical_payload(self) -> dict[str, Any]:
         return self.model_dump(mode="python")
@@ -365,8 +527,11 @@ __all__ = [
     "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
     "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
     "REQUIRED_COMPONENT_CATEGORIES",
+    "ACTION_ENTRY_WIN_RATE_MIN",
+    "ACTION_EXIT_WIN_RATE_MAX",
     "QUALIFICATION_COLOR_BY_STATE",
     "ComponentScore",
+    "DecisionAction",
     "DecisionCard",
     "DecisionRationale",
     "HardGateEvaluation",

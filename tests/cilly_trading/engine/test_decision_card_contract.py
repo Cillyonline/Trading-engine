@@ -14,7 +14,12 @@ from cilly_trading.engine.decision_card_contract import (
 )
 
 
-def _valid_payload(*, qualification_state: str = "paper_candidate", qualification_color: str = "yellow") -> dict[str, Any]:
+def _valid_payload(
+    *,
+    qualification_state: str = "paper_candidate",
+    qualification_color: str = "yellow",
+    action: str = "entry",
+) -> dict[str, Any]:
     return {
         "contract_version": DECISION_CARD_CONTRACT_VERSION,
         "decision_card_id": "dc_20260324_AAPL_RSI2",
@@ -76,7 +81,10 @@ def _valid_payload(*, qualification_state: str = "paper_candidate", qualificatio
             "confidence_tier": "high",
             "confidence_reason": "Aggregate score and component thresholds support high confidence with explicit evidence.",
             "aggregate_score": 79.0,
+            "win_rate": 0.58,
+            "expected_value": 0.0564,
         },
+        "action": action,
         "qualification": {
             "state": qualification_state,
             "color": qualification_color,
@@ -110,6 +118,9 @@ def test_decision_card_model_validation_representative_payload() -> None:
     assert card.contract_version == DECISION_CARD_CONTRACT_VERSION
     assert card.hard_gates.has_blocking_failure is False
     assert card.score.aggregate_score == 79.0
+    assert card.score.win_rate == 0.58
+    assert card.score.expected_value == 0.0564
+    assert card.action == "entry"
     assert [component.category for component in card.score.component_scores] == [
         "backtest_quality",
         "execution_readiness",
@@ -158,16 +169,16 @@ def test_negative_validation_rejects_non_rejected_state_on_blocking_failure() ->
 
 
 @pytest.mark.parametrize(
-    ("state", "color"),
+    ("state", "color", "action"),
     [
-        ("paper_approved", "green"),
-        ("paper_candidate", "yellow"),
-        ("watch", "yellow"),
-        ("reject", "red"),
+        ("paper_approved", "green", "entry"),
+        ("paper_candidate", "yellow", "entry"),
+        ("watch", "yellow", "ignore"),
+        ("reject", "red", "ignore"),
     ],
 )
-def test_representative_qualification_payloads_validate(state: str, color: str) -> None:
-    payload = _valid_payload(qualification_state=state, qualification_color=color)
+def test_representative_qualification_payloads_validate(state: str, color: str, action: str) -> None:
+    payload = _valid_payload(qualification_state=state, qualification_color=color, action=action)
     if state == "reject":
         payload["hard_gates"]["gates"][0]["status"] = "fail"
         payload["hard_gates"]["gates"][0]["failure_reason"] = "Risk cap breach"
@@ -179,6 +190,7 @@ def test_representative_qualification_payloads_validate(state: str, color: str) 
         payload["score"]["confidence_reason"] = (
             "Aggregate score or component threshold evidence is below medium confidence."
         )
+        payload["score"]["aggregate_score"] = 58.0
         payload["qualification"]["summary"] = (
             "Opportunity requires further evidence before paper-trading qualification."
         )
@@ -216,6 +228,8 @@ def test_representative_qualification_payloads_validate(state: str, color: str) 
             },
         ]
         payload["score"]["aggregate_score"] = 86.2
+        payload["score"]["win_rate"] = 0.66
+        payload["score"]["expected_value"] = 0.2872
         payload["score"]["confidence_tier"] = "high"
         payload["score"]["confidence_reason"] = (
             "Aggregate score and component thresholds satisfy high confidence with explicit evidence."
@@ -297,3 +311,31 @@ def test_confidence_inflation_phrases_are_rejected() -> None:
         )
         with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
             validate_decision_card(payload)
+
+
+def test_negative_validation_rejects_negative_expected_value_entry_action() -> None:
+    payload = _valid_payload(action="entry")
+    payload["score"]["expected_value"] = -0.01
+
+    with pytest.raises(ValidationError, match="Negative expected value must not resolve to entry action"):
+        validate_decision_card(payload)
+
+
+def test_negative_validation_rejects_action_that_violates_deterministic_resolution() -> None:
+    payload = _valid_payload(qualification_state="watch", qualification_color="yellow", action="entry")
+    payload["score"]["confidence_tier"] = "low"
+    payload["score"]["aggregate_score"] = 55.0
+
+    with pytest.raises(ValidationError, match="Decision action must match deterministic resolution"):
+        validate_decision_card(payload)
+
+
+@pytest.mark.parametrize("forbidden_phrase", ["trader validation", "live approval", "production readiness"])
+def test_negative_validation_rejects_additional_forbidden_claim_phrases(forbidden_phrase: str) -> None:
+    payload = _valid_payload()
+    payload["score"]["confidence_reason"] = (
+        f"Aggregate component threshold evidence supports confidence without {forbidden_phrase}."
+    )
+
+    with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
+        validate_decision_card(payload)
