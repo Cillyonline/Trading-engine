@@ -67,19 +67,23 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "strategy_readiness_evidence" in response.text
     assert "inferred_readiness_claim" in response.text
     assert "Inferred readiness claim:" in response.text
-    assert "No Phase 39 or Phase 40 features" in response.text
+    assert "Bounded Phase 39 visual-analysis/charting markers coexist" in response.text
     assert "/alerts/history" in response.text
     assert 'id="alert-status"' in response.text
     assert 'id="alert-list"' in response.text
-    assert 'id="runtime-chart-panel"' not in response.text
-    assert "phase39-visual-analysis" not in response.text
+    assert 'id="runtime-chart-panel"' in response.text
+    assert "phase39-visual-analysis" in response.text
     assert "Strategies" in response.text
     assert "Strategy List Panel" in response.text
     assert "Signals Panel" in response.text
+    assert "Signal Decision Surface" in response.text
     assert "id=\"strategy-list\"" in response.text
     assert "id=\"signal-list\"" in response.text
     assert "/strategies" in response.text
-    assert "/signals?limit=20&sort=created_at_desc" in response.text
+    assert "/signals/decision-surface?limit=20&sort=created_at_desc" in response.text
+    assert "blocked" in response.text
+    assert "watch" in response.text
+    assert "paper_candidate" in response.text
     assert "Trade Lifecycle Panel" in response.text
     assert "id=\"lifecycle-order-list\"" in response.text
     assert "id=\"lifecycle-event-timeline\"" in response.text

@@ -53,6 +53,23 @@ Operational readiness status does not imply:
 - broker integration scope completion
 - production readiness declarations outside explicit governance contracts
 
+## Bounded Signal Decision Surface v1
+Canonical `/ui` includes one bounded technical signal decision surface for non-live review.
+
+Required bounded semantics:
+- technical decision states are explicit and easy to distinguish (`blocked`, `watch`, `paper_candidate`)
+- each decision state includes concise rationale including score contribution and stage assessment
+- missing criteria and blocking conditions are visible
+- technical decision state remains explicitly separate from trader validation and operational readiness
+
+## Coexistence With Bounded Phase 39 Visual Analysis
+Canonical `/ui` also retains bounded Phase 39 visual-analysis/charting markers as technical runtime context.
+
+Coexistence rule:
+- bounded signal decision-surface semantics and bounded Phase 39 visual-analysis semantics must coexist on `/ui`
+- neither surface implies trader validation or operational readiness
+- coexistence does not authorize live trading, broker execution, or production-readiness claims
+
 ## Language Discipline
 Documentation for `/ui` and related product-surface contracts must use strict wording that avoids readiness inference.
 

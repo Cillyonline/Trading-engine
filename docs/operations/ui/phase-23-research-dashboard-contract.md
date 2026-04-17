@@ -43,7 +43,8 @@ IA consolidation in `/ui` does not introduce:
 - technical signal visibility as a substitute for trader validation or operational readiness evidence
 - trader validation status as a substitute for operational readiness status
 
-`No Phase 39 or Phase 40 features` wording in the `/ui` shell remains an explicit non-inference marker.
+Bounded Phase 39 visual-analysis/charting markers coexist on `/ui` and remain technical-only runtime context.
+Their presence is an explicit non-inference marker and does not imply trader validation or operational readiness.
 
 ## Bounded Workflow Ownership
 The `/ui` shell consolidates bounded website-facing workflow entrypoints through existing backend routes:
@@ -53,6 +54,7 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 - `GET /system/state`
 - `GET /strategies`
 - `GET /signals`
+- `GET /signals/decision-surface`
 - `GET /backtest/artifacts`
 - `GET /backtest/artifacts/{run_id}/{artifact_name}`
 - `GET /alerts/history`
@@ -62,6 +64,7 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 
 Consolidation of IA does not widen route scope and does not imply trader validation or operational readiness.
 Technical signal visibility and ranked evaluation output are explicitly separated from trader validation and operational readiness claims.
+The bounded signal decision surface classifies reviewed signals into technical-only decision states (`blocked`, `watch`, `paper_candidate`) with concise rationale, missing criteria, and blocking conditions.
 
 ## Minimum Evidence Set
 1. Bounded contract documentation  

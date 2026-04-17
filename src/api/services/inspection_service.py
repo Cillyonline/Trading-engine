@@ -49,6 +49,9 @@ from ..models import (
     PaperTradesReadResponse,
     PortfolioPositionResponse,
     PortfolioPositionsResponse,
+    SignalDecisionSurfaceBoundaryResponse,
+    SignalDecisionSurfaceItemResponse,
+    SignalDecisionSurfaceResponse,
     ScreenerResultItem,
     ScreenerResultsQuery,
     ScreenerResultsResponse,
@@ -67,6 +70,9 @@ from .analysis_service import build_strategy_metadata_response
 
 
 BACKTEST_WORKFLOW_ID = "ui_bounded_backtest_entry_read"
+SIGNAL_DECISION_SURFACE_WORKFLOW_ID = "ui_signal_decision_surface_v1"
+SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD = 40.0
+SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD = 70.0
 GOVERNED_BACKTEST_ARTIFACT_NAMES = frozenset(
     {
         "backtest-result.json",
@@ -490,6 +496,167 @@ def read_signals_raw(
 
     return SignalReadResponseDTO(
         items=response_items,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryResponse:
+    return SignalDecisionSurfaceBoundaryResponse(
+        mode="non_live_signal_decision_surface",
+        technical_decision_state_statement=(
+            "This surface provides bounded technical decision-state visibility for non-live signal review only."
+        ),
+        trader_validation_statement=(
+            "Technical decision states are not trader validation and must not be interpreted as trader approval."
+        ),
+        operational_readiness_statement=(
+            "Technical decision states do not establish operational readiness, live trading readiness, or "
+            "broker execution readiness."
+        ),
+        strategy_readiness_evidence=StrategyReadinessEvidenceResponse(
+            bounded_scope=(
+                "One bounded API/UI evidence scope for non-live technical signal decision support on /ui."
+            ),
+            technical=StrategyReadinessEvidenceStateResponse(
+                gate="technical_implementation",
+                status="technical_in_progress",
+                evidence_scope=(
+                    "Technical decision-state classification and rationale surfacing for reviewed signals."
+                ),
+                non_inference_note=(
+                    "Technical decision-state evidence does not imply trader validation or operational readiness."
+                ),
+            ),
+            trader_validation=StrategyReadinessEvidenceStateResponse(
+                gate="trader_validation",
+                status="trader_validation_not_started",
+                evidence_scope=(
+                    "Trader validation evidence is outside this bounded technical decision-state contract."
+                ),
+                non_inference_note=(
+                    "Trader validation status cannot be inferred from technical decision-state output."
+                ),
+            ),
+            operational_readiness=StrategyReadinessEvidenceStateResponse(
+                gate="operational_readiness",
+                status="operational_not_started",
+                evidence_scope=(
+                    "Operational-readiness evidence is outside this bounded technical decision-state contract."
+                ),
+                non_inference_note=(
+                    "Operational-readiness status cannot be inferred from technical decision-state output."
+                ),
+            ),
+            inferred_readiness_claim="prohibited",
+        ),
+        in_scope=[
+            "bounded technical decision-state classification for reviewed signals",
+            "concise rationale with score contribution and stage assessment",
+            "explicit missing criteria and blocking-condition visibility",
+        ],
+        out_of_scope=[
+            "trader validation outcomes",
+            "operational readiness outcomes",
+            "live trading and broker execution decisions",
+        ],
+    )
+
+
+def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisionSurfaceItemResponse:
+    score = float(signal.get("score") or 0.0)
+    stage = str(signal.get("stage") or "")
+    missing_criteria: List[str] = []
+    blocking_conditions: List[str] = []
+
+    if stage != "entry_confirmed":
+        missing_criteria.append(
+            f"Missing stage evidence: stage={stage or 'unknown'}; requires entry_confirmed."
+        )
+    if score < SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:
+        missing_criteria.append(
+            f"Missing score evidence: score={score:.2f} below candidate threshold "
+            f"{SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:.2f}."
+        )
+    if score < SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD:
+        blocking_conditions.append(
+            f"Blocking score condition: score={score:.2f} below blocking threshold "
+            f"{SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD:.2f}."
+        )
+
+    if blocking_conditions:
+        decision_state: Literal["blocked", "watch", "paper_candidate"] = "blocked"
+        rationale_summary = (
+            "Blocked: one or more technical blocking conditions failed in this non-live decision surface."
+        )
+        score_contribution = (
+            f"Score {score:.2f} contributes blocking evidence against further technical progression."
+        )
+    elif missing_criteria:
+        decision_state = "watch"
+        rationale_summary = (
+            "Watch: partial technical evidence is present, but required criteria are still missing."
+        )
+        score_contribution = (
+            f"Score {score:.2f} contributes partial evidence and keeps this signal in watch state."
+        )
+    else:
+        decision_state = "paper_candidate"
+        rationale_summary = (
+            "Paper candidate: technical criteria are satisfied for bounded non-live review progression."
+        )
+        score_contribution = (
+            f"Score {score:.2f} contributes positive evidence for paper_candidate technical state."
+        )
+
+    stage_assessment = (
+        "Stage entry_confirmed satisfies the technical stage criterion."
+        if stage == "entry_confirmed"
+        else f"Stage {stage or 'unknown'} does not satisfy required entry_confirmed stage criterion."
+    )
+
+    return SignalDecisionSurfaceItemResponse(
+        symbol=str(signal.get("symbol") or ""),
+        strategy=str(signal.get("strategy") or ""),
+        direction=str(signal.get("direction") or ""),
+        score=score,
+        created_at=str(signal.get("timestamp") or ""),
+        stage=stage,
+        timeframe=str(signal.get("timeframe") or ""),
+        market_type=str(signal.get("market_type") or ""),
+        data_source=str(signal.get("data_source") or ""),
+        decision_state=decision_state,
+        rationale_summary=rationale_summary,
+        score_contribution=score_contribution,
+        stage_assessment=stage_assessment,
+        missing_criteria=missing_criteria,
+        blocking_conditions=blocking_conditions,
+    )
+
+
+def read_signal_decision_surface(
+    *,
+    params: SignalsReadQuery,
+    deps: InspectionServiceDependencies,
+) -> SignalDecisionSurfaceResponse:
+    items, total = deps.signal_repo.read_signals(
+        symbol=params.symbol,
+        strategy=params.strategy,
+        timeframe=params.timeframe,
+        ingestion_run_id=params.ingestion_run_id,
+        from_=params.from_,
+        to=params.to,
+        sort=params.sort,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+    decision_items = [_build_signal_decision_surface_item(signal) for signal in items]
+    return SignalDecisionSurfaceResponse(
+        workflow_id=SIGNAL_DECISION_SURFACE_WORKFLOW_ID,
+        boundary=_build_signal_decision_surface_boundary(),
+        items=decision_items,
         limit=params.limit,
         offset=params.offset,
         total=total,
