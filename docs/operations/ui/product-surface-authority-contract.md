@@ -59,6 +59,8 @@ Canonical `/ui` includes one bounded technical signal decision surface for non-l
 Required bounded semantics:
 - technical decision states are explicit and easy to distinguish (`blocked`, `watch`, `paper_candidate`)
 - each decision state includes concise rationale including score contribution and stage assessment
+- qualification policy version and explicit qualification evidence fields are surfaced for each reviewed signal
+- professional non-live qualification criteria remain bounded to `stage`, `score`, `confirmation_rule`, and `entry_zone` evidence only
 - missing criteria and blocking conditions are visible
 - technical decision state remains explicitly separate from trader validation and operational readiness
 
