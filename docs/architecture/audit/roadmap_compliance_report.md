@@ -6,6 +6,9 @@ This audit is based only on repository-verifiable evidence (code, tests, endpoin
 
 The authoritative in-repo source for audited phase taxonomy is `docs/architecture/roadmap/execution_roadmap.md`. This report now defers to that roadmap for phase-number meanings and uses this document only for audit findings and traceability.
 Canonical phase maturity/status labels are governed only by `ROADMAP_MASTER.md`.
+Canonical capability-priority steering is governed by `docs/governance/professional-trading-capability-target.md`.
+
+This report is a secondary/derived audit surface. It is not a primary issue-derivation authority by itself.
 
 Owner Dashboard is verifiably backend-served at `/ui` via FastAPI `app.mount("/ui", StaticFiles(..., html=True), ...)` and HTML marker `<title>Owner Dashboard</title>`.
 
@@ -45,7 +48,7 @@ Documentation and implementation are aligned for the audited paper-trading and o
 | Phase 17b - Owner Dashboard | Implemented | Backend UI mount in `src/api/main.py` (`app.mount("/ui", StaticFiles(..., html=True), name="ui")`); HTML marker in `src/ui/index.html` (`<title>Owner Dashboard</title>`); tests in `tests/health_endpoint.py`; manual trigger endpoint `POST /analysis/run` in `src/api/main.py`; test in `tests/test_api_manual_analysis_trigger.py`; documentation in `docs/operations/ui/owner_dashboard.md` and `docs/index.md`. | `/ui` is confirmed backend-served. `/owner` is documented only as a frontend development route and not as a runtime backend route. |
 | Hourly Snapshot Runtime | Partially Implemented | `docs/operations/runtime/snapshot_runtime.md` declares in-repo execution capability and external scheduling boundary; `docs/operations/interfaces/batch_execution.md` states no scheduler implementation; no scheduler/cron endpoint verified in `src/api/main.py`. | Runtime execution capability exists in-repo; hourly scheduling is external and not provided by this repository. |
 | Phase 24 - Paper Trading Runtime | Implemented | Simulator in `src/cilly_trading/engine/paper_trading.py`; tests in `tests/test_paper_trading_simulator.py`; documentation in `docs/operations/paper-trading.md`, `docs/operations/runbook.md`, `docs/architecture/phase-9-exit.md`, and `docs/getting-started/repo-snapshot.md`. | Engine-level simulation exists and is now documented consistently as non-live and non-broker-integrated. |
-| Phase 23 - Research Dashboard | Not Implemented | No repository-verifiable code, tests, or runtime docs were confirmed beyond roadmap/status tracking references. | No direct implementation artifact was found for the audited phase. |
+| Phase 23 - Research Dashboard | Capability-evidence review snapshot only (non-canonical) | Current evidence remains bounded and must defer to `ROADMAP_MASTER.md` for canonical maturity/status and to `docs/governance/professional-trading-capability-target.md` for capability-priority steering. | This row must not be used as a standalone status authority or as phase-first issue derivation logic. |
 | Phase 25 - Strategy Lifecycle Management | Implemented In Repository | Lifecycle state model in `src/cilly_trading/engine/strategy_lifecycle/model.py`; transition rules in `src/cilly_trading/engine/strategy_lifecycle/transitions.py`; promotion service in `src/cilly_trading/engine/strategy_lifecycle/service.py`; production-only enforcement in `src/cilly_trading/engine/pipeline/orchestrator.py`; tests in `tests/strategy_lifecycle/` and `tests/cilly_trading/engine/test_orchestrator_lifecycle_enforcement.py`. | Earlier "pending PR merge + CI" wording was stale relative to current repo contents. |
 | Phase 27 - Risk Framework | Implementation Artifacts Verified | Risk contracts in `src/risk/contracts.py`; concrete gate implementation in `src/cilly_trading/engine/risk/gate.py`; pipeline integration in `src/cilly_trading/engine/pipeline/orchestrator.py`; architecture/runtime docs in `docs/architecture/risk_framework.md` and `docs/architecture/risk/risk_framework.md`; tests in `tests/cilly_trading/engine/test_risk_gate.py` and related pipeline enforcement tests. | Audited status documents should not claim the framework is absent where these standalone artifacts exist. |
 
@@ -106,13 +109,16 @@ Documentation and implementation are aligned for the audited paper-trading and o
 
 ## 6. Identified Gaps
 
-1. **Proposed Issue:** `Hourly Snapshot Runtime status declaration`  
-   - Formally declare the operational boundary: in-repo runtime execution capability with external scheduling ownership.  
-   - **Phase classification:** Snapshot Runtime  
+Issue derivation from this audit must follow capability-first steering:
 
-2. **Proposed Issue:** `Phase 23 evidence artifact alignment`  
-   - Keep Phase 23 evidence wording aligned to current repo evidence until additional implementation artifacts exist.  
-   - **Phase classification:** Phase 23  
+1. Start with `docs/governance/professional-trading-capability-target.md` to
+   confirm direct professional-capability impact.
+2. Use `ROADMAP_MASTER.md` only for canonical phase maturity/status
+   interpretation.
+3. Use `docs/architecture/roadmap/execution_roadmap.md` only for audited phase
+   taxonomy interpretation.
+4. Do not derive follow-up issues from this report by phase-label movement
+   alone or from boundary wording alone.
 
 ---
 

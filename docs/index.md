@@ -75,8 +75,11 @@ Roadmap track alignment:
 
 - [Execution roadmap](architecture/roadmap/execution_roadmap.md)
 - [ROADMAP_MASTER.md](../ROADMAP_MASTER.md)
+- [Professional trading capability target (canonical)](governance/professional-trading-capability-target.md)
+- Leading steering for issue derivation: capability target first, then canonical status/taxonomy authorities.
 - Canonical phase maturity/status source: `ROADMAP_MASTER.md`
 - Canonical audited phase taxonomy source: `docs/architecture/roadmap/execution_roadmap.md`
+- Secondary/derived only: audit reports, per-phase artifacts, and roadmap snapshot copies.
 
 ## Phase Reference Navigation
 
