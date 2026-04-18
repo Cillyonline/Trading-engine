@@ -34,6 +34,7 @@ documents.
 ## Governance And Roadmap
 
 - Documentation ownership model: [docs/architecture/documentation_structure.md](docs/architecture/documentation_structure.md)
+- Canonical professional-trading capability target: [docs/governance/professional-trading-capability-target.md](docs/governance/professional-trading-capability-target.md)
 - Stop conditions and merge authority: [docs/architecture/governance/stop-conditions-and-merge-authority.md](docs/architecture/governance/stop-conditions-and-merge-authority.md)
 - Canonical roadmap status source: [ROADMAP_MASTER.md](ROADMAP_MASTER.md)
 - Audited phase taxonomy: [docs/architecture/roadmap/execution_roadmap.md](docs/architecture/roadmap/execution_roadmap.md)
