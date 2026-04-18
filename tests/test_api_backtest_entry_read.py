@@ -8,6 +8,10 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from api.services import inspection_service
+from cilly_trading.engine.backtest_handoff_contract import (
+    build_professional_review_contract,
+)
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
 
@@ -60,8 +64,18 @@ def test_backtest_entry_read_route_exposes_bounded_non_live_contract(
 
         assert response.status_code == 200
         payload = response.json()
+        review_contract = build_professional_review_contract()
         assert payload["workflow_id"] == "ui_bounded_backtest_entry_read"
         assert payload["boundary"]["mode"] == "non_live_backtest_read_only"
+        assert payload["boundary"]["review_contract_id"] == review_contract["contract_id"]
+        assert payload["boundary"]["review_contract_version"] == review_contract["contract_version"]
+        assert payload["boundary"]["review_required_evidence"] == review_contract["required_visible_evidence"]
+        assert payload["boundary"]["review_comparison_axes"] == review_contract["comparison_axes"]
+        assert payload["boundary"]["decision_relevance_statement"] == review_contract["decision_relevance_statement"]
+        assert (
+            payload["boundary"]["readiness_non_inference_statement"]
+            == review_contract["readiness_non_inference_statement"]
+        )
         assert "technical availability" in payload["boundary"]["technical_availability_statement"]
         assert "not trader validation" in payload["boundary"]["trader_validation_statement"]
         assert "not operational readiness" in payload["boundary"]["operational_readiness_statement"]
@@ -79,6 +93,66 @@ def test_backtest_entry_read_route_exposes_bounded_non_live_contract(
         assert payload["items"][0]["artifact_name"] == "backtest-result.json"
         assert "/backtest/artifacts" in openapi["paths"]
         assert "/backtest/artifacts/{run_id}/{artifact_name}" in openapi["paths"]
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_backtest_entry_read_route_derives_review_boundary_from_canonical_constructor(
+    monkeypatch,
+) -> None:
+    tmp_path = _make_isolated_tmp_path()
+    try:
+        artifacts_root = tmp_path / "runs" / "phase6"
+        _write_json_artifact(
+            artifacts_root,
+            run_id="bt-run-sentinel",
+            artifact_name="backtest-result.json",
+            payload={"run": {"run_id": "bt-run-sentinel"}},
+        )
+
+        canonical_contract = build_professional_review_contract()
+        sentinel_contract = {
+            "contract_id": canonical_contract["contract_id"],
+            "contract_version": canonical_contract["contract_version"],
+            "review_context": "sentinel.review.context",
+            "required_visible_evidence": ["sentinel.required.field"],
+            "comparison_axes": ["sentinel axis"],
+            "decision_relevance_statement": "sentinel decision relevance",
+            "readiness_non_inference_statement": "sentinel non inference",
+            "unsupported_inference_claims": ["sentinel unsupported claim"],
+        }
+        call_count = {"count": 0}
+
+        def _build_sentinel_contract() -> dict[str, object]:
+            call_count["count"] += 1
+            return sentinel_contract
+
+        monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+        monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", artifacts_root)
+        monkeypatch.setattr(
+            inspection_service,
+            "build_professional_review_contract",
+            _build_sentinel_contract,
+        )
+
+        with TestClient(api_main.app) as client:
+            response = client.get("/backtest/artifacts", headers=READ_ONLY_HEADERS)
+
+        assert response.status_code == 200
+        assert call_count["count"] >= 1
+        boundary = response.json()["boundary"]
+        assert boundary["review_contract_id"] == sentinel_contract["contract_id"]
+        assert boundary["review_contract_version"] == sentinel_contract["contract_version"]
+        assert boundary["review_required_evidence"] == sentinel_contract["required_visible_evidence"]
+        assert boundary["review_comparison_axes"] == sentinel_contract["comparison_axes"]
+        assert (
+            boundary["decision_relevance_statement"]
+            == sentinel_contract["decision_relevance_statement"]
+        )
+        assert (
+            boundary["readiness_non_inference_statement"]
+            == sentinel_contract["readiness_non_inference_statement"]
+        )
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
 
