@@ -10,6 +10,7 @@ This file is the single authoritative in-repo source for audited phase-number me
 ## Authority Relationship
 - This file governs the meaning of the audited phase numbers listed below.
 - `ROADMAP_MASTER.md` is the single authoritative in-repo source for phase maturity/status labels and status-change decisions.
+- `docs/governance/professional-trading-capability-target.md` is the canonical capability-direction anchor for issue prioritization and steering.
 - This file does not authoritatively set phase maturity/status labels. Any status wording here, in a per-phase artifact, or in an index must defer to the master roadmap for canonical maturity/status.
 - The master roadmap may summarize broader sequencing and implementation-status context, but it must defer to this file for audited phase meaning.
 - If wording in a secondary roadmap, index, or audit artifact conflicts with the audited phase meanings defined here, this file controls the taxonomy interpretation.
@@ -22,6 +23,8 @@ This file is the single authoritative in-repo source for audited phase-number me
 
 ## How to Use
 - Use this file to resolve the meaning of an audited phase number before relying on any secondary roadmap, index, or audit artifact.
+- Use `docs/governance/professional-trading-capability-target.md` as the primary steering input for capability-priority issue derivation.
+- Do not use this taxonomy file by itself as a primary issue-priority mechanism.
 - Treat secondary documents as navigation or status evidence only unless they explicitly defer to this file for taxonomy and to the master roadmap for phase maturity/status.
 - If a phase is marked here as "no authoritative in-repo meaning located", do not infer a meaning from neighboring phases or legacy headings.
 
@@ -75,50 +78,50 @@ Define and track the Owner Dashboard sub-phase based on repository-verified arti
 ## Phase 23
 
 ### Goal
-Define Phase 23 status using only repository-verified evidence.
+Define the authoritative audited taxonomy meaning of Phase 23 as
+`Research Dashboard`.
 
 > Governance Note  
-> The implementation status of Phase 23 is explicitly documented in:  
-> `docs/architecture/phases/phase-23-status.md`
+> Canonical phase maturity/status for Phase 23 is governed only by
+> `ROADMAP_MASTER.md`.  
+> `docs/architecture/phases/phase-23-status.md` is a derived evidence artifact.
 
 ### Explicit Deliverables
-- Explicit status declaration: Research Dashboard implementation artifact not confirmed in repository.
-- Phase 23 tracking issue/PR references this canonical roadmap entry when changing status.
+- Phase 23 references use the canonical meaning `Research Dashboard`.
+- Issues and PRs that mention Phase 23 map scope wording to this taxonomy.
 
 ### Explicitly Out of Scope
-- Claiming a Research Dashboard implementation without verified code, docs, or tests.
-- Inferring hidden or external artifacts as in-repo completion evidence.
+- Setting canonical phase maturity/status inside this taxonomy file.
+- Using phase-number progression as a substitute for capability-impact steering.
 
 ### Acceptance Evidence Requirements
-- Any status change from "Not Implemented" is backed by repository-verifiable code/docs/tests.
-- PR/issue history explicitly maps new artifacts to Phase 23.
+- Secondary artifacts that mention Phase 23 defer status to
+  `ROADMAP_MASTER.md`.
+- Issue and PR history keeps `Research Dashboard` wording aligned to this
+  taxonomy entry.
 
 ---
 
 ## Phase 27
 
 ### Goal
-Explicitly distinguish risk-related artifacts from a standalone Risk Framework implementation.
+Define the authoritative audited taxonomy meaning of Phase 27 as
+`Risk Framework`.
 
 > Governance Note  
-> The implementation status of Phase 27 is explicitly documented in:  
-> `docs/architecture/phases/phase-27-status.md`
-
-### Verified Existing Artifacts
-- Risk-related configuration fields exist.
-- Risk-related metrics and tests exist.
-
-### Framework Status
-No standalone Phase 27 Risk Framework module was verified.
+> Canonical phase maturity/status for Phase 27 is governed only by
+> `ROADMAP_MASTER.md`.  
+> `docs/architecture/phases/phase-27-status.md` is a derived evidence artifact.
 
 ### Explicitly Out of Scope
-- Treating config fields or metrics as proof of a completed framework.
-- Declaring framework completion without standalone artifact evidence.
+- Setting canonical phase maturity/status inside this taxonomy file.
+- Collapsing Phase 27 taxonomy into Phase 27b or other risk-adjacent artifacts.
 
 ### Acceptance Evidence Requirements
-- Standalone repository-verifiable framework module(s).
-- Explicit policy logic definition.
-- Documentation and tests mapped directly to Phase 27 framework scope.
+- Secondary artifacts that mention Phase 27 defer status to
+  `ROADMAP_MASTER.md`.
+- Issue and PR wording preserves the taxonomy distinction between Phase 27
+  (`Risk Framework`) and Phase 27b (Pipeline Enforcement Layer).
 
 ---
 

@@ -19,6 +19,34 @@ vision statement.
 - It does not authorize live trading, broker integration, or production
   readiness claims.
 
+## Steering Precedence and Issue-Derivation Rules
+
+### Leading (Primary Steering Inputs)
+
+1. This document:
+   capability-direction and prioritization anchor for follow-up issue
+   derivation.
+2. `ROADMAP_MASTER.md`:
+   canonical phase maturity/status authority only.
+3. `docs/architecture/roadmap/execution_roadmap.md`:
+   canonical audited phase taxonomy authority only.
+
+### Secondary (Derived, Explanatory, or Evidence-Bearing Inputs)
+
+- `docs/architecture/audit/roadmap_compliance_report.md`
+- per-phase status artifacts under `docs/architecture/phases/**`
+- documentation index/navigation surfaces (for example `docs/index.md`)
+- derived roadmap snapshots and compatibility copies
+
+Secondary artifacts may support evidence and traceability, but they must not
+override the leading steering inputs above.
+
+### No Longer Valid as Primary Steering Logic
+
+- phase-number-first progression logic by itself
+- boundary-only governance wording by itself (without direct capability impact)
+- stale status wording from derived/secondary roadmap artifacts
+
 ## Canonical Direction Statement
 
 For this repository revision, "mehr Trading Profi" means:
