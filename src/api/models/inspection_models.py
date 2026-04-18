@@ -423,7 +423,9 @@ class SignalDecisionSurfaceItemResponse(BaseModel):
     market_type: str
     data_source: str
     decision_state: Literal["blocked", "watch", "paper_candidate"]
+    qualification_policy_version: str
     rationale_summary: str
+    qualification_evidence: List[str]
     score_contribution: str
     stage_assessment: str
     missing_criteria: List[str]

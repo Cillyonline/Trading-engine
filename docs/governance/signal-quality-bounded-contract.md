@@ -98,6 +98,20 @@ Current bounded behavior for weak or low-information signals:
 
 These are implementation boundaries, not trader-value guarantees.
 
+## Professional Non-Live Qualification Criteria Boundary
+
+The bounded signal decision surface applies explicit non-live professional qualification criteria to reviewed signals:
+
+- stage criterion: `stage` must be `entry_confirmed`
+- score criterion: score must satisfy bounded decision thresholds (blocking and candidate levels)
+- confirmation criterion: `confirmation_rule` must be present as explicit signal evidence
+- entry-zone criterion: `entry_zone.from_` and `entry_zone.to` must be present and ordered (`from_ < to`)
+
+Qualification output remains technical-only and must expose:
+- explicit qualification evidence fields
+- explicit missing criteria fields
+- explicit blocking-condition fields
+
 ## Stability Boundary
 
 Given equivalent fixture content, ranked output remains stable independent of input list order.

@@ -73,6 +73,7 @@ BACKTEST_WORKFLOW_ID = "ui_bounded_backtest_entry_read"
 SIGNAL_DECISION_SURFACE_WORKFLOW_ID = "ui_signal_decision_surface_v1"
 SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD = 40.0
 SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD = 70.0
+SIGNAL_DECISION_QUALIFICATION_POLICY_VERSION = "professional_non_live_signal_qualification.v1"
 GOVERNED_BACKTEST_ARTIFACT_NAMES = frozenset(
     {
         "backtest-result.json",
@@ -523,7 +524,7 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
                 gate="technical_implementation",
                 status="technical_in_progress",
                 evidence_scope=(
-                    "Technical decision-state classification and rationale surfacing for reviewed signals."
+                    "Technical decision-state classification and professional qualification-evidence surfacing for reviewed signals."
                 ),
                 non_inference_note=(
                     "Technical decision-state evidence does not imply trader validation or operational readiness."
@@ -553,7 +554,8 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
         ),
         in_scope=[
             "bounded technical decision-state classification for reviewed signals",
-            "concise rationale with score contribution and stage assessment",
+            "professional non-live qualification criteria over stage, score, confirmation-rule, and entry-zone evidence",
+            "explicit qualification evidence with rationale including score contribution and stage assessment",
             "explicit missing criteria and blocking-condition visibility",
         ],
         out_of_scope=[
@@ -567,28 +569,78 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
 def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisionSurfaceItemResponse:
     score = float(signal.get("score") or 0.0)
     stage = str(signal.get("stage") or "")
+    confirmation_rule = str(signal.get("confirmation_rule") or "").strip()
+    entry_zone_raw = signal.get("entry_zone")
+    entry_zone = entry_zone_raw if isinstance(entry_zone_raw, dict) else None
+
+    qualification_evidence: List[str] = []
     missing_criteria: List[str] = []
     blocking_conditions: List[str] = []
 
-    if stage != "entry_confirmed":
-        missing_criteria.append(
-            f"Missing stage evidence: stage={stage or 'unknown'}; requires entry_confirmed."
-        )
-    if score < SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:
-        missing_criteria.append(
-            f"Missing score evidence: score={score:.2f} below candidate threshold "
-            f"{SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:.2f}."
-        )
     if score < SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD:
         blocking_conditions.append(
             f"Blocking score condition: score={score:.2f} below blocking threshold "
             f"{SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD:.2f}."
         )
+    else:
+        qualification_evidence.append(
+            f"Score hard-floor evidence: score={score:.2f} meets blocking threshold "
+            f"{SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD:.2f}."
+        )
+
+    if stage == "entry_confirmed":
+        qualification_evidence.append("Stage evidence: stage=entry_confirmed satisfies progression stage criterion.")
+    else:
+        missing_criteria.append(
+            f"Missing stage evidence: stage={stage or 'unknown'}; requires entry_confirmed."
+        )
+
+    if score < SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:
+        missing_criteria.append(
+            f"Missing score evidence: score={score:.2f} below candidate threshold "
+            f"{SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:.2f}."
+        )
+    else:
+        qualification_evidence.append(
+            f"Score quality evidence: score={score:.2f} meets candidate threshold "
+            f"{SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD:.2f}."
+        )
+
+    if confirmation_rule:
+        qualification_evidence.append(
+            f"Confirmation-rule evidence: confirmation_rule={confirmation_rule} is explicitly available."
+        )
+    else:
+        missing_criteria.append(
+            "Missing confirmation-rule evidence: confirmation_rule must be present for professional qualification."
+        )
+
+    entry_zone_from_raw = entry_zone.get("from_") if entry_zone is not None else None
+    entry_zone_to_raw = entry_zone.get("to") if entry_zone is not None else None
+    try:
+        entry_zone_from = float(entry_zone_from_raw) if entry_zone_from_raw is not None else None
+        entry_zone_to = float(entry_zone_to_raw) if entry_zone_to_raw is not None else None
+    except (TypeError, ValueError):
+        entry_zone_from = None
+        entry_zone_to = None
+
+    if entry_zone_from is None or entry_zone_to is None:
+        missing_criteria.append(
+            "Missing entry-zone evidence: entry_zone.from_ and entry_zone.to must be present."
+        )
+    elif entry_zone_from >= entry_zone_to:
+        blocking_conditions.append(
+            "Blocking entry-zone condition: entry_zone.from_ must be lower than entry_zone.to."
+        )
+    else:
+        qualification_evidence.append(
+            f"Entry-zone evidence: entry_zone.from_={entry_zone_from:.4f} and entry_zone.to={entry_zone_to:.4f} are valid."
+        )
 
     if blocking_conditions:
         decision_state: Literal["blocked", "watch", "paper_candidate"] = "blocked"
         rationale_summary = (
-            "Blocked: one or more technical blocking conditions failed in this non-live decision surface."
+            "Blocked: one or more professional technical qualification blocking conditions failed for this non-live surface."
         )
         score_contribution = (
             f"Score {score:.2f} contributes blocking evidence against further technical progression."
@@ -596,7 +648,7 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
     elif missing_criteria:
         decision_state = "watch"
         rationale_summary = (
-            "Watch: partial technical evidence is present, but required criteria are still missing."
+            "Watch: partial professional technical qualification evidence is present, but required criteria are still missing."
         )
         score_contribution = (
             f"Score {score:.2f} contributes partial evidence and keeps this signal in watch state."
@@ -604,7 +656,7 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
     else:
         decision_state = "paper_candidate"
         rationale_summary = (
-            "Paper candidate: technical criteria are satisfied for bounded non-live review progression."
+            "Paper candidate: professional non-live technical qualification criteria are satisfied for bounded review progression."
         )
         score_contribution = (
             f"Score {score:.2f} contributes positive evidence for paper_candidate technical state."
@@ -627,7 +679,9 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         market_type=str(signal.get("market_type") or ""),
         data_source=str(signal.get("data_source") or ""),
         decision_state=decision_state,
+        qualification_policy_version=SIGNAL_DECISION_QUALIFICATION_POLICY_VERSION,
         rationale_summary=rationale_summary,
+        qualification_evidence=qualification_evidence,
         score_contribution=score_contribution,
         stage_assessment=stage_assessment,
         missing_criteria=missing_criteria,

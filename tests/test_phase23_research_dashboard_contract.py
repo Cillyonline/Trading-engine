@@ -50,6 +50,9 @@ def test_phase23_contract_defines_navigation_and_non_live_boundaries() -> None:
     assert "production-readiness claims" in content
     assert "technical backtest availability" in content
     assert "technical signal visibility" in content
+    assert "explicit qualification evidence" in content
+    assert "confirmation_rule" in content
+    assert "entry_zone" in content
     assert "missing criteria" in content
     assert "blocking conditions" in content
     assert "trader validation status as a substitute for operational readiness status" in content
@@ -130,6 +133,7 @@ def test_product_surface_contract_defines_canonical_authority_and_non_inference(
     assert "Operational Readiness Status" in content
     assert "Bounded Signal Decision Surface v1" in content
     assert "technical decision states are explicit and easy to distinguish" in content
+    assert "qualification policy version and explicit qualification evidence fields are surfaced" in content
     assert "missing criteria and blocking conditions are visible" in content
     assert "Coexistence With Bounded Phase 39 Visual Analysis" in content
     assert "must coexist on `/ui`" in content

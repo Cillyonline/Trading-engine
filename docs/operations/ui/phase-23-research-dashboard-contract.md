@@ -64,7 +64,12 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 
 Consolidation of IA does not widen route scope and does not imply trader validation or operational readiness.
 Technical signal visibility and ranked evaluation output are explicitly separated from trader validation and operational readiness claims.
-The bounded signal decision surface classifies reviewed signals into technical-only decision states (`blocked`, `watch`, `paper_candidate`) with concise rationale, missing criteria, and blocking conditions.
+The bounded signal decision surface classifies reviewed signals into technical-only decision states (`blocked`, `watch`, `paper_candidate`) with concise rationale, explicit qualification evidence, missing criteria, and blocking conditions.
+Professional non-live qualification criteria remain bounded to explicit signal evidence:
+- `stage` must satisfy `entry_confirmed`
+- `score` must satisfy configured technical thresholds
+- `confirmation_rule` must be explicitly present
+- `entry_zone` structure and ordering must be valid (`from_ < to`)
 
 ## Minimum Evidence Set
 1. Bounded contract documentation  

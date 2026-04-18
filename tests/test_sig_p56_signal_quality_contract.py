@@ -101,6 +101,10 @@ def test_p56_contract_doc_is_bounded_and_no_trader_readiness_claim() -> None:
     assert "bounded win-rate formula" in content
     assert "bounded expected-value formula" in content
     assert "deterministic paper-evaluation action" in content
+    assert "Professional Non-Live Qualification Criteria Boundary" in content
+    assert "confirmation_rule" in content
+    assert "entry_zone.from_" in content
+    assert "explicit qualification evidence fields" in content
 
 
 def _decision_card_payload_with_confidence_reason(confidence_reason: str) -> dict[str, object]:
