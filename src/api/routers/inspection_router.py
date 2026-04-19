@@ -486,9 +486,10 @@ def build_inspection_router(
         summary="Read Signal Decision Surface",
         description=(
             "Read bounded non-live technical decision states for reviewed signals with explicit "
-            "professional qualification evidence (stage, score, confirmation-rule, entry-zone), concise rationale, "
-            "missing criteria visibility, and blocking-condition visibility. This route is explicitly "
-            "technical-only and does not imply trader validation or operational readiness."
+            "professional qualification evidence (stage, score, confirmation-rule, entry-zone), canonical "
+            "decision-card evidence fields (qualification_state, action, win_rate, expected_value), concise "
+            "rationale, missing criteria visibility, and blocking-condition visibility. This route is "
+            "explicitly technical-only and does not imply trader validation or operational readiness."
         ),
     )
     def read_signal_decision_surface_handler(

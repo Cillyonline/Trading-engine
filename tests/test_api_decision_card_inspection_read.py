@@ -184,6 +184,9 @@ def test_decision_card_inspection_endpoint_is_exposed_and_schema_valid(
     payload = response.json()
     assert payload["total"] == 1
     assert payload["items"][0]["decision_card_id"] == "dc-001"
+    assert payload["items"][0]["action"] == "entry"
+    assert payload["items"][0]["win_rate"] == 0.864
+    assert payload["items"][0]["expected_value"] == 1.0
     assert payload["items"][0]["hard_gates"]
     assert payload["items"][0]["component_scores"]
     assert {item["category"] for item in payload["items"][0]["component_scores"]} == set(

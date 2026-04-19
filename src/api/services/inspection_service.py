@@ -10,7 +10,13 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from cilly_trading.engine.backtest_handoff_contract import build_professional_review_contract
-from cilly_trading.engine.decision_card_contract import validate_decision_card
+from cilly_trading.engine.decision_card_contract import (
+    ACTION_ENTRY_WIN_RATE_MIN,
+    ACTION_EXIT_WIN_RATE_MAX,
+    QUALIFICATION_HIGH_AGGREGATE_THRESHOLD,
+    QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD,
+    validate_decision_card,
+)
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
 from cilly_trading.non_live_evaluation_contract import normalize_risk_rejection_reason_code
 
@@ -670,6 +676,45 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         else f"Stage {stage or 'unknown'} does not satisfy required entry_confirmed stage criterion."
     )
 
+    aggregate_score = score
+    if aggregate_score >= QUALIFICATION_HIGH_AGGREGATE_THRESHOLD:
+        confidence_tier = "high"
+    elif aggregate_score >= QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD:
+        confidence_tier = "medium"
+    else:
+        confidence_tier = "low"
+
+    has_blocking_failure = bool(blocking_conditions)
+    if has_blocking_failure:
+        qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"] = "reject"
+    elif missing_criteria:
+        qualification_state = "watch"
+    elif confidence_tier == "high" and aggregate_score >= QUALIFICATION_HIGH_AGGREGATE_THRESHOLD:
+        qualification_state = "paper_approved"
+    else:
+        qualification_state = "paper_candidate"
+
+    win_rate = max(0.0, min(1.0, round(score / 100.0, 4)))
+    reward_multiplier = max(0.50, min(1.50, (score + score) / 100.0))
+    expected_value = max(-1.0, min(1.0, round((win_rate * reward_multiplier) - (1.0 - win_rate), 4)))
+
+    if has_blocking_failure:
+        action: Literal["entry", "exit", "ignore"] = "ignore"
+    elif expected_value < 0.0:
+        action = "exit"
+    elif qualification_state in {"paper_candidate", "paper_approved"} and win_rate <= ACTION_EXIT_WIN_RATE_MAX:
+        action = "exit"
+    elif (
+        confidence_tier == "low"
+        or aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+        or qualification_state in {"reject", "watch"}
+    ):
+        action = "ignore"
+    elif qualification_state in {"paper_candidate", "paper_approved"} and win_rate >= ACTION_ENTRY_WIN_RATE_MIN:
+        action = "entry"
+    else:
+        action = "ignore"
+
     return SignalDecisionSurfaceItemResponse(
         symbol=str(signal.get("symbol") or ""),
         strategy=str(signal.get("strategy") or ""),
@@ -681,6 +726,10 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         market_type=str(signal.get("market_type") or ""),
         data_source=str(signal.get("data_source") or ""),
         decision_state=decision_state,
+        qualification_state=qualification_state,
+        action=action,
+        win_rate=win_rate,
+        expected_value=expected_value,
         qualification_policy_version=SIGNAL_DECISION_QUALIFICATION_POLICY_VERSION,
         rationale_summary=rationale_summary,
         qualification_evidence=qualification_evidence,
@@ -1100,6 +1149,9 @@ def build_decision_card_inspection_items(
                     symbol=card.symbol,
                     strategy_id=card.strategy_id,
                     qualification_state=card.qualification.state,
+                    action=card.action,
+                    win_rate=card.score.win_rate,
+                    expected_value=card.score.expected_value,
                     qualification_color=card.qualification.color,
                     qualification_summary=card.qualification.summary,
                     aggregate_score=card.score.aggregate_score,

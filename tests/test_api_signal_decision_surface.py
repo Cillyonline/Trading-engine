@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
 
@@ -32,6 +34,123 @@ def _base_signal(**overrides):
     }
     base.update(overrides)
     return base
+
+
+def _write_artifact(root: Path, run_id: str, artifact_name: str, payload: Any) -> None:
+    run_dir = root / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / artifact_name).write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _tier_for_score(score: float) -> str:
+    if score >= 80.0:
+        return "high"
+    if score >= 60.0:
+        return "medium"
+    return "low"
+
+
+def _decision_card_payload_for_parity(
+    *,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    score: float,
+    qualification_state: str,
+    has_blocking_failure: bool,
+) -> dict[str, Any]:
+    gate_status = "fail" if has_blocking_failure else "pass"
+    gates = [
+        {
+            "gate_id": "drawdown_safety",
+            "status": gate_status,
+            "blocking": True,
+            "reason": "Drawdown gate result for deterministic parity check.",
+            "evidence": ["max_dd=0.10", "threshold=0.12"],
+            "failure_reason": "Drawdown breached threshold." if has_blocking_failure else None,
+        },
+        {
+            "gate_id": "portfolio_exposure_cap",
+            "status": "pass",
+            "blocking": True,
+            "reason": "Exposure remains within policy bounds",
+            "evidence": ["gross_exposure=0.41", "cap=0.60"],
+            "failure_reason": None,
+        },
+    ]
+    color_by_state = {
+        "reject": "red",
+        "watch": "yellow",
+        "paper_candidate": "yellow",
+        "paper_approved": "green",
+    }
+    component_scores = [
+        {
+            "category": "signal_quality",
+            "score": score,
+            "rationale": "Signal-quality score for parity.",
+            "evidence": [f"score={score:.2f}"],
+        },
+        {
+            "category": "backtest_quality",
+            "score": score,
+            "rationale": "Backtest-quality score for parity.",
+            "evidence": [f"score={score:.2f}"],
+        },
+        {
+            "category": "portfolio_fit",
+            "score": score,
+            "rationale": "Portfolio-fit score for parity.",
+            "evidence": [f"score={score:.2f}"],
+        },
+        {
+            "category": "risk_alignment",
+            "score": score,
+            "rationale": "Risk-alignment score for parity.",
+            "evidence": [f"score={score:.2f}"],
+        },
+        {
+            "category": "execution_readiness",
+            "score": score,
+            "rationale": "Execution-readiness score for parity.",
+            "evidence": [f"score={score:.2f}"],
+        },
+    ]
+    return {
+        "contract_version": "2.0.0",
+        "decision_card_id": decision_card_id,
+        "generated_at_utc": generated_at_utc,
+        "symbol": symbol,
+        "strategy_id": strategy_id,
+        "hard_gates": {
+            "policy_version": "hard-gates.v1",
+            "gates": gates,
+        },
+        "score": {
+            "component_scores": component_scores,
+            "confidence_tier": _tier_for_score(score),
+            "confidence_reason": (
+                "Aggregate/component/threshold evidence is bounded and deterministic for parity."
+            ),
+            "aggregate_score": score,
+        },
+        "qualification": {
+            "state": qualification_state,
+            "color": color_by_state[qualification_state],
+            "summary": "Qualification output remains bounded to paper-trading scope.",
+        },
+        "rationale": {
+            "summary": "Qualification is resolved from deterministic bounded evidence.",
+            "gate_explanations": ["Hard-gate outcome is explicit and deterministic."],
+            "score_explanations": ["Score evidence is explicit and deterministic."],
+            "final_explanation": "Action state is deterministic and does not imply live-trading approval.",
+        },
+        "metadata": {
+            "analysis_run_id": "parity-run",
+            "source": "parity-test",
+        },
+    }
 
 
 def test_signal_decision_surface_returns_bounded_technical_states(tmp_path: Path, monkeypatch) -> None:
@@ -72,6 +191,16 @@ def test_signal_decision_surface_returns_bounded_technical_states(tmp_path: Path
     assert payload["items"][1]["missing_criteria"]
     assert payload["items"][2]["missing_criteria"] == []
     assert payload["items"][2]["qualification_evidence"]
+    assert payload["items"][0]["qualification_state"] == "reject"
+    assert payload["items"][1]["qualification_state"] == "watch"
+    assert payload["items"][2]["qualification_state"] == "paper_approved"
+    assert payload["items"][0]["action"] == "ignore"
+    assert payload["items"][1]["action"] == "ignore"
+    assert payload["items"][2]["action"] == "entry"
+    assert payload["items"][0]["win_rate"] == 0.2
+    assert payload["items"][2]["win_rate"] == 0.88
+    assert payload["items"][0]["expected_value"] == -0.7
+    assert payload["items"][2]["expected_value"] == 1.0
     assert "score" in payload["items"][2]["score_contribution"].lower()
     assert "stage" in payload["items"][1]["stage_assessment"].lower()
 
@@ -114,15 +243,21 @@ def test_signal_decision_surface_covers_threshold_and_entry_zone_edge_cases(
     by_symbol = {item["symbol"]: item for item in payload["items"]}
 
     assert by_symbol["EDGE_CANDIDATE"]["decision_state"] == "paper_candidate"
+    assert by_symbol["EDGE_CANDIDATE"]["qualification_state"] == "paper_candidate"
+    assert by_symbol["EDGE_CANDIDATE"]["action"] == "entry"
     assert by_symbol["EDGE_CANDIDATE"]["missing_criteria"] == []
     assert by_symbol["EDGE_CANDIDATE"]["blocking_conditions"] == []
     assert by_symbol["EDGE_CANDIDATE"]["qualification_evidence"]
 
     assert by_symbol["EDGE_BLOCK"]["decision_state"] == "watch"
+    assert by_symbol["EDGE_BLOCK"]["qualification_state"] == "watch"
+    assert by_symbol["EDGE_BLOCK"]["action"] == "exit"
     assert by_symbol["EDGE_BLOCK"]["blocking_conditions"] == []
     assert any("confirmation-rule" in entry.lower() for entry in by_symbol["EDGE_BLOCK"]["missing_criteria"])
 
     assert by_symbol["INVALID_ZONE"]["decision_state"] == "blocked"
+    assert by_symbol["INVALID_ZONE"]["qualification_state"] == "reject"
+    assert by_symbol["INVALID_ZONE"]["action"] == "ignore"
     assert any("entry_zone" in entry.lower() for entry in by_symbol["INVALID_ZONE"]["blocking_conditions"])
 
 
@@ -138,6 +273,7 @@ def test_signal_decision_surface_openapi_contract_is_explicit(monkeypatch, tmp_p
     assert "/signals/decision-surface" in openapi["paths"]
     get_spec = openapi["paths"]["/signals/decision-surface"]["get"]
     assert "bounded non-live technical decision states" in get_spec["description"]
+    assert "qualification_state, action, win_rate, expected_value" in get_spec["description"]
     assert "does not imply trader validation or operational readiness" in get_spec["description"]
 
 
@@ -149,3 +285,87 @@ def test_signal_decision_surface_requires_read_only_role(monkeypatch, tmp_path: 
     response = client.get("/signals/decision-surface")
     assert response.status_code == 401
     assert response.json() == {"detail": "unauthorized"}
+
+
+def test_signal_decision_surface_parity_with_decision_card_read_output(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _make_repo(tmp_path)
+    repo.save_signals(
+        [
+            _base_signal(symbol="PARITY_BLOCK", score=20.0, stage="setup", timestamp="2026-01-03T00:00:00+00:00"),
+            _base_signal(symbol="PARITY_WATCH", score=55.0, stage="entry_confirmed", timestamp="2026-01-02T00:00:00+00:00"),
+            _base_signal(
+                symbol="PARITY_APPROVED",
+                score=88.0,
+                stage="entry_confirmed",
+                timestamp="2026-01-01T00:00:00+00:00",
+            ),
+        ]
+    )
+    artifacts_root = tmp_path / "runs" / "phase6"
+    _write_artifact(
+        artifacts_root,
+        run_id="parity-1",
+        artifact_name="dc-block.json",
+        payload=_decision_card_payload_for_parity(
+            decision_card_id="dc-parity-block",
+            generated_at_utc="2026-01-03T00:00:00Z",
+            symbol="PARITY_BLOCK",
+            strategy_id="RSI2",
+            score=20.0,
+            qualification_state="reject",
+            has_blocking_failure=True,
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="parity-1",
+        artifact_name="dc-watch.json",
+        payload=_decision_card_payload_for_parity(
+            decision_card_id="dc-parity-watch",
+            generated_at_utc="2026-01-02T00:00:00Z",
+            symbol="PARITY_WATCH",
+            strategy_id="RSI2",
+            score=55.0,
+            qualification_state="watch",
+            has_blocking_failure=False,
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="parity-1",
+        artifact_name="dc-approved.json",
+        payload=_decision_card_payload_for_parity(
+            decision_card_id="dc-parity-approved",
+            generated_at_utc="2026-01-01T00:00:00Z",
+            symbol="PARITY_APPROVED",
+            strategy_id="RSI2",
+            score=88.0,
+            qualification_state="paper_approved",
+            has_blocking_failure=False,
+        ),
+    )
+
+    monkeypatch.setattr(api_main, "signal_repo", repo)
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", artifacts_root)
+
+    with TestClient(api_main.app) as client:
+        decision_surface_response = client.get("/signals/decision-surface", headers=READ_ONLY_HEADERS)
+        decision_cards_response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert decision_surface_response.status_code == 200
+    assert decision_cards_response.status_code == 200
+
+    decision_surface_by_symbol = {
+        item["symbol"]: item for item in decision_surface_response.json()["items"]
+    }
+    decision_cards_by_symbol = {
+        item["symbol"]: item for item in decision_cards_response.json()["items"]
+    }
+    for symbol in ("PARITY_BLOCK", "PARITY_WATCH", "PARITY_APPROVED"):
+        assert decision_surface_by_symbol[symbol]["qualification_state"] == decision_cards_by_symbol[symbol]["qualification_state"]
+        assert decision_surface_by_symbol[symbol]["action"] == decision_cards_by_symbol[symbol]["action"]
+        assert decision_surface_by_symbol[symbol]["win_rate"] == decision_cards_by_symbol[symbol]["win_rate"]
+        assert decision_surface_by_symbol[symbol]["expected_value"] == decision_cards_by_symbol[symbol]["expected_value"]

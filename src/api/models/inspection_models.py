@@ -423,6 +423,10 @@ class SignalDecisionSurfaceItemResponse(BaseModel):
     market_type: str
     data_source: str
     decision_state: Literal["blocked", "watch", "paper_candidate"]
+    qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    action: Literal["entry", "exit", "ignore"]
+    win_rate: float = Field(ge=0.0, le=1.0)
+    expected_value: float = Field(ge=-1.0, le=1.0)
     qualification_policy_version: str
     rationale_summary: str
     qualification_evidence: List[str]
@@ -538,6 +542,9 @@ class DecisionCardInspectionItemResponse(BaseModel):
     symbol: str
     strategy_id: str
     qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    action: Literal["entry", "exit", "ignore"]
+    win_rate: float = Field(ge=0.0, le=1.0)
+    expected_value: float = Field(ge=-1.0, le=1.0)
     qualification_color: Literal["green", "yellow", "red"]
     qualification_summary: str
     aggregate_score: float
