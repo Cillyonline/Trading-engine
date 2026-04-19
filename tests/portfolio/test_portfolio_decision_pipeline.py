@@ -79,6 +79,7 @@ def test_pipeline_approves_signal_and_persists_it_in_final_state() -> None:
     assert result.decisions[0].guardrail_assessment is not None
     assert result.decisions[0].intent.higher_priority_approved_signal_ids == ()
     assert result.decisions[0].intent.capital_after_signal == 50.0
+    assert result.decisions[0].policy_evidence == ()
 
 
 def test_pipeline_rejects_signal_before_exposure_checks_when_intent_is_below_minimum() -> None:
@@ -114,6 +115,7 @@ def test_pipeline_rejects_signal_before_exposure_checks_when_intent_is_below_min
     assert result.decisions[0].outcome_reasons == ("below_min_allocation",)
     assert result.decisions[0].allocation_assessment is None
     assert result.decisions[0].guardrail_assessment is None
+    assert result.decisions[0].policy_evidence == ()
 
 
 def test_pipeline_resolves_prioritization_conflicts_deterministically() -> None:
@@ -155,6 +157,7 @@ def test_pipeline_resolves_prioritization_conflicts_deterministically() -> None:
     assert result.decisions[1].constraint_categories == ("capacity",)
     assert result.decisions[1].intent.higher_priority_approved_signal_ids == ("sig-a",)
     assert result.decisions[1].outcome_reasons == ("position_limit_reached",)
+    assert result.decisions[1].policy_evidence == ()
 
 
 def test_pipeline_marks_exposure_guardrail_constraint_hits_without_mutating_state() -> None:
@@ -225,6 +228,10 @@ def test_pipeline_marks_exposure_guardrail_constraint_hits_without_mutating_stat
     )
     assert result.decisions[0].allocation_assessment is not None
     assert result.decisions[0].guardrail_assessment is not None
+    assert len(result.decisions[0].policy_evidence) == 1
+    assert result.decisions[0].policy_evidence[0].semantic == "boundary"
+    assert result.decisions[0].policy_evidence[0].scope == "portfolio"
+    assert result.decisions[0].policy_evidence[0].rule_code == "gross_exposure_pct"
 
 
 def test_pipeline_marks_concentration_constraint_hits_with_explicit_categories() -> None:
@@ -279,3 +286,8 @@ def test_pipeline_marks_concentration_constraint_hits_with_explicit_categories()
         "guardrail_exceeded: type=symbol_concentration_pct observed=1.0 limit=0.9",
         "guardrail_exceeded: type=position_concentration_pct observed=1.0 limit=0.9",
     )
+    assert [item.scope for item in result.decisions[0].policy_evidence] == [
+        "strategy",
+        "symbol",
+        "trade",
+    ]

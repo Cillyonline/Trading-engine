@@ -72,6 +72,26 @@ Adapter scope is bounded to non-live operation and maps canonical outcomes for:
 The adapter does not alter risk rules. It only translates deterministic
 risk-framework outcomes into deterministic execution decision codes.
 
+## 8.1) Professional Non-Live Evaluation Contract
+Risk evaluation outputs also emit structured non-live evidence rows for
+reviewable reject/cap/boundary semantics through:
+
+- `src/cilly_trading/non_live_evaluation_contract.py`
+- `RiskEvaluationResponse.policy_evidence` in
+  `src/cilly_trading/risk_framework/risk_evaluator.py`
+- propagated execution evidence in `RiskDecision.policy_evidence` via
+  `src/cilly_trading/engine/risk/gate.py`
+
+The canonical cross-framework contract is:
+
+- `docs/architecture/risk/non_live_evaluation_contract.md`
+
+Evidence discipline for this bounded contract:
+
+- risk evaluator outcomes are `approved` or `rejected`
+- evidence rows are emitted only when a cap/boundary is violated (`rejected`)
+- approved outcomes emit an empty evidence tuple
+
 ## 9) MVP Guardrails
 For MVP scope control, the Risk Framework shall exclude the following:
 

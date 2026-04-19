@@ -245,6 +245,27 @@ Risk decision reason codes are deterministic and adapter-driven (for example
 bounded inputs produce equivalent approve/reject reasons across covered
 non-live execution paths.
 
+Additionally, the underlying framework and portfolio evaluators emit structured
+reject/cap/boundary evidence rows via:
+
+- `src/cilly_trading/non_live_evaluation_contract.py`
+- `RiskEvaluationResponse.policy_evidence`
+- `CapitalAllocationAssessment.policy_evidence`
+- `PortfolioGuardrailAssessment.policy_evidence`
+
+Canonical contract reference:
+
+- `docs/architecture/risk/non_live_evaluation_contract.md`
+
+For this non-live contract, evidence rows are emitted only for violated
+cap/boundary outcomes:
+
+- risk evaluator outcomes are `approved` or `rejected`, and evidence is emitted
+  on `rejected` outcomes only
+- portfolio pipeline outcomes are `approved`, `rejected`, or `constraint_hit`,
+  and evidence is emitted on cap/boundary `constraint_hit` outcomes
+- approved outcomes emit an empty evidence tuple
+
 Issue #981 completion is technical implementation evidence only. It does not
 claim trader validation, trader approval of thresholds, live readiness, or
 broker readiness.
