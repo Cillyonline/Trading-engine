@@ -212,6 +212,35 @@ curl -sS -H "X-Cilly-Role: read_only" http://127.0.0.1:18000/paper/reconciliatio
   > "runs/daily-runtime/${RUN_DATE}/paper-reconciliation.json"
 ```
 
+### Deterministic Run-Quality Classification (Daily Summary)
+
+The daily summary artifact includes explicit bounded run-quality fields:
+
+- `run_quality_status`
+- `run_quality_classification_version`
+- `run_quality_inputs`
+
+Deterministic classification rules use existing runtime summary inputs only:
+
+1. `degraded`
+   - reconciliation shows `ok: false`, or
+   - reconciliation `mismatches > 0`, or
+   - inputs do not match `healthy` or `no_eligible`
+2. `no_eligible`
+   - execution step indicates bounded no-eligible completion
+     (`returncode == 1` or execution `status == "no_eligible"`), and
+   - reconciliation is clean (`ok: true` and `mismatches == 0` or omitted)
+3. `healthy`
+   - execution shows pass/ok completion with eligible executions
+     (`returncode == 0`, execution `status in {"pass","ok"}`, `eligible > 0`), and
+   - reconciliation is clean (`ok: true` and `mismatches == 0` or omitted)
+
+Bounded interpretation:
+
+- `no_eligible` is valid non-error completion in bounded runtime evidence
+- `run_quality_status` is operator-facing evidence quality only
+- classification does not widen runtime scope and does not imply live readiness
+
 ## Daily Sequential Command Sequence (Bounded Staging)
 
 The full workflow is runnable sequentially in this order:
@@ -297,6 +326,7 @@ docker compose --env-file /root/Trading-engine/.env \
 Recorded summary evidence:
 
 - `status: ok`
+- `run_quality_status: no_eligible`
 - `ingestion_run_id: 813b4a13-de3d-4633-8968-1a7fbc0af2f3`
 - `analysis_run_id: 89cec8c4d8a92bbecb2c4f6d59eb9d06972b1c4b4f1ed59ee686bca1816787a0`
 - ordered steps completed:

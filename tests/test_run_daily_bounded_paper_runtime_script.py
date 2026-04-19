@@ -142,6 +142,15 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert exit_code == module.EXIT_CODE_SUCCESS
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
+    assert payload["run_quality_status"] == "no_eligible"
+    assert payload["run_quality_classification_version"] == 1
+    assert payload["run_quality_inputs"] == {
+        "execution_eligible": 0,
+        "execution_returncode": 1,
+        "execution_status": "no_eligible",
+        "reconciliation_mismatches": None,
+        "reconciliation_ok": True,
+    }
     assert payload["step_order"] == list(module.STEP_ORDER)
     assert payload["steps_completed"] == list(module.STEP_ORDER)
     assert payload["analysis_run_id"] == "analysis-123"
@@ -164,6 +173,36 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
         ("GET", "http://127.0.0.1:18000/paper/positions"),
         ("GET", "http://127.0.0.1:18000/paper/reconciliation"),
     ]
+    summary_file_payload = json.loads(Path(payload["summary_file"]).read_text(encoding="utf-8"))
+    assert summary_file_payload["run_quality_status"] == payload["run_quality_status"]
+    assert summary_file_payload["run_quality_classification_version"] == payload["run_quality_classification_version"]
+    assert summary_file_payload["run_quality_inputs"] == payload["run_quality_inputs"]
+
+
+def test_run_quality_classification_state_transitions_are_deterministic() -> None:
+    module = _load_script_module()
+
+    healthy = module._classify_run_quality(
+        execution_step={"returncode": 0, "payload": {"status": "pass", "eligible": 3}},
+        reconciliation_step={"payload": {"ok": True, "mismatches": 0}},
+    )
+    no_eligible = module._classify_run_quality(
+        execution_step={"returncode": 1, "payload": {"status": "no_eligible", "eligible": 0}},
+        reconciliation_step={"payload": {"ok": True, "mismatches": 0}},
+    )
+    degraded = module._classify_run_quality(
+        execution_step={"returncode": 0, "payload": {"status": "pass", "eligible": 3}},
+        reconciliation_step={"payload": {"ok": False, "mismatches": 2}},
+    )
+    degraded_repeat = module._classify_run_quality(
+        execution_step={"returncode": 0, "payload": {"status": "pass", "eligible": 3}},
+        reconciliation_step={"payload": {"ok": False, "mismatches": 2}},
+    )
+
+    assert healthy["run_quality_status"] == "healthy"
+    assert no_eligible["run_quality_status"] == "no_eligible"
+    assert degraded["run_quality_status"] == "degraded"
+    assert degraded == degraded_repeat
 
 
 def test_daily_runner_stops_after_analysis_failure(

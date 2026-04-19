@@ -100,9 +100,30 @@ On success, the runner emits bounded JSON summary output to stdout with:
 
 - `ingestion_run_id`
 - `analysis_run_id`
+- `run_quality_status`
+- `run_quality_classification_version`
+- `run_quality_inputs`
 - `steps_completed`
 - `verification_surfaces` evidence file paths
 - `summary_file` path
+
+Deterministic run-quality interpretation:
+
+1. `healthy`
+   - execution pass/ok with `eligible > 0`
+   - clean reconciliation (`ok: true`, `mismatches == 0` or omitted)
+2. `no_eligible`
+   - bounded non-error execution no-eligible state (`returncode == 1` or
+     execution `status == "no_eligible"`)
+   - clean reconciliation (`ok: true`, `mismatches == 0` or omitted)
+3. `degraded`
+   - reconciliation `ok: false`, or `mismatches > 0`, or
+   - inputs do not match healthy/no_eligible conditions
+
+Determinism contract:
+
+- same run summary inputs always produce the same `run_quality_status`
+- classification is bounded evidence quality only and remains non-live
 
 ## Verification Surfaces Remain Usable
 
@@ -146,6 +167,7 @@ docker compose --env-file /root/Trading-engine/.env \
 Recorded bounded success evidence:
 
 - `status: ok`
+- `run_quality_status: no_eligible`
 - `ingestion_run_id: 813b4a13-de3d-4633-8968-1a7fbc0af2f3`
 - `analysis_run_id: 89cec8c4d8a92bbecb2c4f6d59eb9d06972b1c4b4f1ed59ee686bca1816787a0`
 - `step_order`:

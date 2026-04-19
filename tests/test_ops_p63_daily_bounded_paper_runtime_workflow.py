@@ -95,10 +95,18 @@ def test_p63_doc_contains_explicit_non_live_claim_boundary() -> None:
     assert "no live orders are placed" in content
     assert "no broker APIs are called" in content
     assert "no production-readiness claim is made" in content
+    assert "non-error completion" in content
 
 
-def test_docs_index_links_p63_reference() -> None:
-    content = _read("docs/index.md")
+def test_p63_doc_defines_deterministic_run_quality_classification() -> None:
+    content = _read(P63_DOC)
 
-    assert "### OPS-P63 Reference Materials" in content
-    assert "operations/runtime/p63-daily-bounded-paper-runtime-workflow.md" in content
+    assert "Deterministic Run-Quality Classification (Daily Summary)" in content
+    assert "run_quality_status" in content
+    assert "run_quality_classification_version" in content
+    assert "run_quality_inputs" in content
+    assert "`healthy`" in content
+    assert "`no_eligible`" in content
+    assert "`degraded`" in content
+    assert "Deterministic classification rules use existing runtime summary inputs only" in content
+
