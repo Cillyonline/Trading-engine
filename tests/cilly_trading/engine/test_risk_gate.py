@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import pytest
@@ -22,6 +23,14 @@ from cilly_trading.risk_framework.contract import (
     RiskEvaluationRequest as FrameworkRiskEvaluationRequest,
     RiskEvaluationResponse as FrameworkRiskEvaluationResponse,
 )
+
+
+@dataclass(frozen=True)
+class _LegacyRuntimeRiskResponse:
+    approved: bool
+    reason: str
+    adjusted_position_size: float
+    risk_score: float
 
 
 def test_threshold_risk_gate_returns_approved_for_within_threshold() -> None:
@@ -199,6 +208,27 @@ def test_adapter_rejects_unknown_reason_code() -> None:
             rule_version="adapter-v1",
             evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+
+
+def test_adapter_handles_runtime_response_without_policy_evidence() -> None:
+    decision = adapt_risk_framework_response_to_risk_decision(
+        framework_request=_framework_request(),
+        framework_response=_LegacyRuntimeRiskResponse(
+            approved=False,
+            reason="rejected: max_account_exposure_pct_exceeded",
+            adjusted_position_size=0.0,
+            risk_score=0.9,
+        ),
+        limits=_framework_limits(),
+        strategy_exposure=0.0,
+        symbol_exposure=0.0,
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.reason == "rejected:risk_framework_max_account_exposure_pct_exceeded"
+    assert decision.policy_evidence == ()
 
 
 def test_canonical_rejection_reason_vocabulary_is_exposed_in_gate_map() -> None:

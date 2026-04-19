@@ -60,6 +60,21 @@ def _safe_pct(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _extract_policy_evidence(
+    framework_response: FrameworkRiskEvaluationResponse,
+) -> tuple[Any, ...]:
+    """Return policy evidence when present; default to empty evidence tuple."""
+
+    evidence = getattr(framework_response, "policy_evidence", ())
+    if evidence is None:
+        return ()
+    if isinstance(evidence, tuple):
+        return evidence
+    if isinstance(evidence, list):
+        return tuple(evidence)
+    return ()
+
+
 def adapt_risk_framework_response_to_risk_decision(
     *,
     framework_request: FrameworkRiskEvaluationRequest,
@@ -76,6 +91,7 @@ def adapt_risk_framework_response_to_risk_decision(
     normalized_proposed = abs(framework_request.proposed_position_size)
     normalized_strategy = abs(strategy_exposure)
     normalized_symbol = abs(symbol_exposure)
+    policy_evidence = _extract_policy_evidence(framework_response)
 
     reason = framework_response.reason
     if reason == "approved: within_risk_limits":
@@ -87,7 +103,7 @@ def adapt_risk_framework_response_to_risk_decision(
         decision = "REJECTED"
         precedence_candidates = [framework_response.reason]
         precedence_candidates.extend(
-            evidence.reason_code for evidence in framework_response.policy_evidence
+            evidence.reason_code for evidence in policy_evidence
         )
         try:
             decision_reason = resolve_risk_rejection_reason_precedence(precedence_candidates)
@@ -127,7 +143,7 @@ def adapt_risk_framework_response_to_risk_decision(
         reason=decision_reason,
         timestamp=timestamp,
         rule_version=rule_version,
-        policy_evidence=framework_response.policy_evidence,
+        policy_evidence=policy_evidence,
     )
 
 
