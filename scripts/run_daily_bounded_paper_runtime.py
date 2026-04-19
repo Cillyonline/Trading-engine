@@ -53,6 +53,8 @@ EXIT_CODE_EXECUTION_FAILED = 12
 EXIT_CODE_RECONCILIATION_FAILED = 13
 EXIT_CODE_EVIDENCE_FAILED = 14
 
+RUN_QUALITY_CLASSIFICATION_VERSION = 1
+
 
 class DailyRuntimeStepError(RuntimeError):
     def __init__(
@@ -254,6 +256,7 @@ def _build_error_payload(
         "detail": detail,
         "failed_at": failed_at.isoformat(),
         "failed_step": step,
+        "run_quality_status": "degraded",
         "started_at": started_at.isoformat(),
         "status": "failed",
         "step_order": list(STEP_ORDER),
@@ -264,6 +267,93 @@ def _build_error_payload(
     if context:
         payload["context"] = context
     return payload
+
+
+def _to_int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _classify_run_quality(
+    *,
+    execution_step: dict[str, Any] | None,
+    reconciliation_step: dict[str, Any] | None,
+) -> dict[str, Any]:
+    execution_returncode: int | None = None
+    execution_status: str | None = None
+    execution_eligible: int | None = None
+    reconciliation_ok: bool | None = None
+    reconciliation_mismatches: int | None = None
+
+    execution_payload: dict[str, Any] | None = None
+    if isinstance(execution_step, dict):
+        raw_returncode = execution_step.get("returncode")
+        if isinstance(raw_returncode, int):
+            execution_returncode = raw_returncode
+        raw_payload = execution_step.get("payload")
+        if isinstance(raw_payload, dict):
+            execution_payload = raw_payload
+
+    if execution_payload is not None:
+        raw_status = execution_payload.get("status")
+        if isinstance(raw_status, str):
+            execution_status = raw_status
+        execution_eligible = _to_int_or_none(execution_payload.get("eligible"))
+
+    reconciliation_payload: dict[str, Any] | None = None
+    if isinstance(reconciliation_step, dict):
+        raw_payload = reconciliation_step.get("payload")
+        if isinstance(raw_payload, dict):
+            reconciliation_payload = raw_payload
+
+    if reconciliation_payload is not None:
+        raw_ok = reconciliation_payload.get("ok")
+        if isinstance(raw_ok, bool):
+            reconciliation_ok = raw_ok
+        reconciliation_mismatches = _to_int_or_none(reconciliation_payload.get("mismatches"))
+
+    reconciliation_degraded = (reconciliation_ok is False) or (
+        reconciliation_mismatches is not None and reconciliation_mismatches > 0
+    )
+    execution_no_eligible = (execution_returncode == 1) or (execution_status == "no_eligible")
+    execution_healthy = (
+        execution_returncode == 0
+        and execution_status in {"pass", "ok"}
+        and execution_eligible is not None
+        and execution_eligible > 0
+    )
+    reconciliation_clean = (
+        reconciliation_ok is True and (reconciliation_mismatches is None or reconciliation_mismatches == 0)
+    )
+
+    if reconciliation_degraded:
+        run_quality_status = "degraded"
+    elif execution_no_eligible and reconciliation_clean:
+        run_quality_status = "no_eligible"
+    elif execution_healthy and reconciliation_clean:
+        run_quality_status = "healthy"
+    else:
+        run_quality_status = "degraded"
+
+    return {
+        "run_quality_classification_version": RUN_QUALITY_CLASSIFICATION_VERSION,
+        "run_quality_status": run_quality_status,
+        "run_quality_inputs": {
+            "execution_eligible": execution_eligible,
+            "execution_returncode": execution_returncode,
+            "execution_status": execution_status,
+            "reconciliation_mismatches": reconciliation_mismatches,
+            "reconciliation_ok": reconciliation_ok,
+        },
+    }
 
 
 def run_daily_bounded_paper_runtime(
@@ -521,10 +611,15 @@ def run_daily_bounded_paper_runtime(
         steps_completed.append("evidence_capture")
 
         completed_at = now_fn()
+        run_quality = _classify_run_quality(
+            execution_step=script_outputs["bounded_paper_execution_cycle"],
+            reconciliation_step=script_outputs["reconciliation"],
+        )
         summary_payload: dict[str, Any] = {
             "analysis_run_id": str(analysis_payload.get("analysis_run_id", "")),
             "completed_at": completed_at.isoformat(),
             "ingestion_run_id": ingestion_run_id,
+            **run_quality,
             "run_record_dir": str(run_record_path),
             "status": "ok",
             "step_order": list(STEP_ORDER),

@@ -58,6 +58,18 @@ def test_p64_doc_defines_bounded_failure_behavior() -> None:
     assert "step_order" in content
 
 
+def test_p64_doc_defines_deterministic_run_quality_contract() -> None:
+    content = _read(P64_DOC)
+
+    assert "run_quality_status" in content
+    assert "run_quality_classification_version" in content
+    assert "run_quality_inputs" in content
+    assert "`healthy`" in content
+    assert "`no_eligible`" in content
+    assert "`degraded`" in content
+    assert "same run summary inputs always produce the same `run_quality_status`" in content
+
+
 def test_p64_doc_preserves_read_only_verification_surfaces() -> None:
     content = _read(P64_DOC)
 
