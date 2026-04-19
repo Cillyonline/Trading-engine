@@ -9,6 +9,9 @@ evaluation evidence across:
 - symbol-level exposure checks
 - strategy-level exposure checks
 - portfolio-level cap and guardrail checks
+- risk gate decision emission
+- paper execution worker outcomes
+- inspection/read normalization surfaces
 
 This contract hardens repository direction from:
 
@@ -129,8 +132,21 @@ state.
 Inspection/read normalization:
 
 - `src/api/services/inspection_service.py` read surfaces normalize compatible
-  risk reject reason-code variants to the canonical vocabulary above for
-  deterministic cross-surface comparison in bounded non-live inspection flows.
+  risk reject reason-code variants to `normalized_reason_code` on a best-effort
+  basis for bounded non-live cross-surface comparison in bounded non-live
+  inspection flows.
+- inspection/read normalization does not aggregate multiple compatible reason
+  codes from one entry and does not emit a `normalized_reason_codes` contract
+  field.
+
+Cross-surface deterministic contract:
+
+- equivalent bounded non-live input state must emit the same canonical reject
+  reason code across risk gate and paper execution worker surfaces.
+- deterministic precedence is mandatory when multiple constraints are violated.
+- inspection/read surfaces provide best-effort single-field normalization to
+  `normalized_reason_code` without multi-reason precedence selection.
+- this contract is technical non-live evidence only and is not live-trading or broker-readiness evidence.
 
 ## Non-Live Readiness Discipline
 
