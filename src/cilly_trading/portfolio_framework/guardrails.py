@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from cilly_trading.non_live_evaluation_contract import (
+    NonLiveEvaluationEvidence,
+    NonLiveScope,
+)
 from cilly_trading.portfolio_framework.contract import PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import PortfolioExposureSummary, aggregate_portfolio_exposure
 
@@ -42,6 +46,7 @@ class PortfolioGuardrailAssessment:
         max_strategy_concentration_pct_observed: Largest observed strategy concentration.
         max_symbol_concentration_pct_observed: Largest observed symbol concentration.
         max_position_concentration_pct_observed: Largest observed position concentration.
+        policy_evidence: Structured non-live reject/cap/boundary evidence rows.
     """
 
     approved: bool
@@ -52,6 +57,7 @@ class PortfolioGuardrailAssessment:
     max_strategy_concentration_pct_observed: float
     max_symbol_concentration_pct_observed: float
     max_position_concentration_pct_observed: float
+    policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()
 
 
 def assess_portfolio_guardrails(
@@ -81,7 +87,7 @@ def assess_portfolio_guardrails(
         default=0.0,
     )
 
-    reasons = _build_violation_reasons(
+    reasons, policy_evidence = _build_violation_assessment(
         exposure_summary=exposure_summary,
         absolute_net_exposure_pct=absolute_net_exposure_pct,
         offset_exposure_pct=offset_exposure_pct,
@@ -100,10 +106,11 @@ def assess_portfolio_guardrails(
         max_strategy_concentration_pct_observed=max_strategy_concentration_pct_observed,
         max_symbol_concentration_pct_observed=max_symbol_concentration_pct_observed,
         max_position_concentration_pct_observed=max_position_concentration_pct_observed,
+        policy_evidence=policy_evidence,
     )
 
 
-def _build_violation_reasons(
+def _build_violation_assessment(
     *,
     exposure_summary: PortfolioExposureSummary,
     absolute_net_exposure_pct: float,
@@ -112,52 +119,133 @@ def _build_violation_reasons(
     max_symbol_concentration_pct_observed: float,
     max_position_concentration_pct_observed: float,
     limits: PortfolioGuardrailLimits,
-) -> tuple[str, ...]:
+) -> tuple[tuple[str, ...], tuple[NonLiveEvaluationEvidence, ...]]:
     reasons: list[str] = []
+    policy_evidence: list[NonLiveEvaluationEvidence] = []
 
     if exposure_summary.gross_exposure_pct > limits.max_gross_exposure_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=gross_exposure_pct observed={exposure_summary.gross_exposure_pct} "
-            f"limit={limits.max_gross_exposure_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="gross_exposure_pct",
+            observed_value=exposure_summary.gross_exposure_pct,
+            limit_value=limits.max_gross_exposure_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="portfolio",
+                rule_code="gross_exposure_pct",
+                reason_code=reasons[-1],
+                observed_value=exposure_summary.gross_exposure_pct,
+                limit_value=limits.max_gross_exposure_pct,
+            )
         )
 
     if absolute_net_exposure_pct > limits.max_abs_net_exposure_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=abs_net_exposure_pct observed={absolute_net_exposure_pct} "
-            f"limit={limits.max_abs_net_exposure_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="abs_net_exposure_pct",
+            observed_value=absolute_net_exposure_pct,
+            limit_value=limits.max_abs_net_exposure_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="portfolio",
+                rule_code="abs_net_exposure_pct",
+                reason_code=reasons[-1],
+                observed_value=absolute_net_exposure_pct,
+                limit_value=limits.max_abs_net_exposure_pct,
+            )
         )
 
     if offset_exposure_pct > limits.max_offset_exposure_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=offset_exposure_pct observed={offset_exposure_pct} "
-            f"limit={limits.max_offset_exposure_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="offset_exposure_pct",
+            observed_value=offset_exposure_pct,
+            limit_value=limits.max_offset_exposure_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="portfolio",
+                rule_code="offset_exposure_pct",
+                reason_code=reasons[-1],
+                observed_value=offset_exposure_pct,
+                limit_value=limits.max_offset_exposure_pct,
+            )
         )
 
     if max_strategy_concentration_pct_observed > limits.max_strategy_concentration_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=strategy_concentration_pct observed={max_strategy_concentration_pct_observed} "
-            f"limit={limits.max_strategy_concentration_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="strategy_concentration_pct",
+            observed_value=max_strategy_concentration_pct_observed,
+            limit_value=limits.max_strategy_concentration_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="strategy",
+                rule_code="strategy_concentration_pct",
+                reason_code=reasons[-1],
+                observed_value=max_strategy_concentration_pct_observed,
+                limit_value=limits.max_strategy_concentration_pct,
+            )
         )
 
     if max_symbol_concentration_pct_observed > limits.max_symbol_concentration_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=symbol_concentration_pct observed={max_symbol_concentration_pct_observed} "
-            f"limit={limits.max_symbol_concentration_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="symbol_concentration_pct",
+            observed_value=max_symbol_concentration_pct_observed,
+            limit_value=limits.max_symbol_concentration_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="symbol",
+                rule_code="symbol_concentration_pct",
+                reason_code=reasons[-1],
+                observed_value=max_symbol_concentration_pct_observed,
+                limit_value=limits.max_symbol_concentration_pct,
+            )
         )
 
     if max_position_concentration_pct_observed > limits.max_position_concentration_pct:
-        reasons.append(
-            "guardrail_exceeded: "
-            f"type=position_concentration_pct observed={max_position_concentration_pct_observed} "
-            f"limit={limits.max_position_concentration_pct}"
+        reasons.append(_guardrail_reason(
+            rule_code="position_concentration_pct",
+            observed_value=max_position_concentration_pct_observed,
+            limit_value=limits.max_position_concentration_pct,
+        ))
+        policy_evidence.append(
+            _guardrail_evidence(
+                scope="trade",
+                rule_code="position_concentration_pct",
+                reason_code=reasons[-1],
+                observed_value=max_position_concentration_pct_observed,
+                limit_value=limits.max_position_concentration_pct,
+            )
         )
 
-    return tuple(reasons)
+    return tuple(reasons), tuple(policy_evidence)
+
+
+def _guardrail_reason(*, rule_code: str, observed_value: float, limit_value: float) -> str:
+    return (
+        "guardrail_exceeded: "
+        f"type={rule_code} observed={observed_value} limit={limit_value}"
+    )
+
+
+def _guardrail_evidence(
+    *,
+    scope: NonLiveScope,
+    rule_code: str,
+    reason_code: str,
+    observed_value: float,
+    limit_value: float,
+) -> NonLiveEvaluationEvidence:
+    return NonLiveEvaluationEvidence(
+        decision="reject",
+        semantic="boundary",
+        scope=scope,
+        rule_code=rule_code,
+        reason_code=reason_code,
+        observed_value=observed_value,
+        limit_value=limit_value,
+    )
 
 
 def _concentration_ratio(absolute_notional: float, total_absolute_notional: float) -> float:

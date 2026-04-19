@@ -302,3 +302,26 @@ deterministic inspection.
 Implementation scope note: this issue provides technical implementation
 evidence only. It does not imply trader validation, trader-approved thresholds,
 live readiness, or broker readiness.
+
+## 13. Professional Non-Live Evaluation Contract (Issue #993)
+
+Portfolio enforcement emits structured cap/boundary violation evidence rows
+through
+the canonical non-live evaluation contract:
+
+- `src/cilly_trading/non_live_evaluation_contract.py`
+- `CapitalAllocationAssessment.policy_evidence`
+- `PortfolioGuardrailAssessment.policy_evidence`
+- `PortfolioDecisionRecord.policy_evidence`
+
+This aligns strategy/symbol/portfolio cap and boundary outcomes with one
+reviewable evidence model while preserving deterministic non-live behavior.
+
+Portfolio pipeline outcomes are `approved`, `rejected`, or `constraint_hit`.
+Evidence rows are emitted only for violated cap/boundary outcomes (for example,
+`constraint_hit` outcomes from allocation/guardrail enforcement). Fully
+approved portfolio outcomes carry an empty evidence tuple.
+
+Canonical contract reference:
+
+- `docs/architecture/risk/non_live_evaluation_contract.md`

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, Literal
 
+from cilly_trading.non_live_evaluation_contract import NonLiveEvaluationEvidence
 from cilly_trading.portfolio_framework.contract import PortfolioPosition, PortfolioState
 from cilly_trading.portfolio_framework.exposure_aggregator import aggregate_portfolio_exposure
 from cilly_trading.portfolio_framework.guardrails import (
@@ -79,6 +80,7 @@ class CapitalAllocationAssessment:
         global_cap_notional: Global cap converted to notional limit.
         global_within_cap: Whether global exposure is within global cap.
         strategy_assessments: Per-strategy deterministic assessments.
+        policy_evidence: Structured non-live reject/cap/boundary evidence rows.
     """
 
     approved: bool
@@ -87,6 +89,7 @@ class CapitalAllocationAssessment:
     global_cap_notional: float
     global_within_cap: bool
     strategy_assessments: tuple[StrategyAllocationAssessment, ...]
+    policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -194,6 +197,7 @@ class PortfolioDecisionRecord:
     proposed_state: PortfolioState | None
     allocation_assessment: CapitalAllocationAssessment | None
     guardrail_assessment: PortfolioGuardrailAssessment | None
+    policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -353,24 +357,21 @@ def assess_capital_allocation(
         for rule in ordered_rules
     )
 
-    violated_strategy_ids = tuple(
-        item.strategy_id for item in strategy_assessments if not item.within_cap
-    )
-
-    reasons = _build_reasons(
+    reasons, policy_evidence = _build_reasons_and_policy_evidence(
         global_within_cap=global_within_cap,
         total_absolute_notional=total_absolute_notional,
         global_cap_notional=global_cap_notional,
-        violated_strategy_ids=violated_strategy_ids,
+        strategy_assessments=strategy_assessments,
     )
 
     return CapitalAllocationAssessment(
-        approved=global_within_cap and not violated_strategy_ids,
+        approved=not reasons,
         reasons=reasons,
         total_absolute_notional=total_absolute_notional,
         global_cap_notional=global_cap_notional,
         global_within_cap=global_within_cap,
         strategy_assessments=strategy_assessments,
+        policy_evidence=policy_evidence,
     )
 
 
@@ -546,6 +547,7 @@ def run_portfolio_decision_pipeline(
                     proposed_state=None,
                     allocation_assessment=None,
                     guardrail_assessment=None,
+                    policy_evidence=(),
                 )
             )
             continue
@@ -588,6 +590,7 @@ def run_portfolio_decision_pipeline(
                     proposed_state=None,
                     allocation_assessment=None,
                     guardrail_assessment=None,
+                    policy_evidence=(),
                 )
             )
             continue
@@ -600,6 +603,10 @@ def run_portfolio_decision_pipeline(
         allocation_assessment = assess_capital_allocation(proposed_state, allocation_rules)
         guardrail_assessment = assess_portfolio_guardrails(proposed_state, guardrail_limits)
         constraint_reasons = allocation_assessment.reasons + guardrail_assessment.reasons
+        policy_evidence = (
+            allocation_assessment.policy_evidence
+            + guardrail_assessment.policy_evidence
+        )
 
         if constraint_reasons:
             intent = PortfolioDecisionIntent(
@@ -630,6 +637,7 @@ def run_portfolio_decision_pipeline(
                     proposed_state=proposed_state,
                     allocation_assessment=allocation_assessment,
                     guardrail_assessment=guardrail_assessment,
+                    policy_evidence=policy_evidence,
                 )
             )
             continue
@@ -666,6 +674,7 @@ def run_portfolio_decision_pipeline(
                 proposed_state=proposed_state,
                 allocation_assessment=allocation_assessment,
                 guardrail_assessment=guardrail_assessment,
+                policy_evidence=(),
             )
         )
 
@@ -807,40 +816,66 @@ def _constraint_category(
     raise ValueError(f"unsupported portfolio decision reason: {reason}")
 
 
-def _build_reasons(
+def _build_reasons_and_policy_evidence(
     *,
     global_within_cap: bool,
     total_absolute_notional: float,
     global_cap_notional: float,
-    violated_strategy_ids: tuple[str, ...],
-) -> tuple[str, ...]:
+    strategy_assessments: tuple[StrategyAllocationAssessment, ...],
+) -> tuple[tuple[str, ...], tuple[NonLiveEvaluationEvidence, ...]]:
     """Return deterministically ordered violation reasons.
 
     Args:
         global_within_cap: Whether global exposure is within cap.
         total_absolute_notional: Current total absolute notional.
         global_cap_notional: Allowed global cap notional.
-        violated_strategy_ids: Strategy identifiers that violated strategy limits.
+        strategy_assessments: Deterministic per-strategy cap assessments.
 
     Returns:
-        tuple[str, ...]: Deterministically ordered violation reasons.
+        tuple[tuple[str, ...], tuple[NonLiveEvaluationEvidence, ...]]:
+            Deterministically ordered violation reasons and structured evidence.
     """
 
     reasons: list[str] = []
+    policy_evidence: list[NonLiveEvaluationEvidence] = []
 
     if not global_within_cap:
-        reasons.append(
+        reason = (
             "global_cap_exceeded: "
             f"total_absolute_notional={total_absolute_notional} "
             f"global_cap_notional={global_cap_notional}"
         )
+        reasons.append(reason)
+        policy_evidence.append(
+            NonLiveEvaluationEvidence(
+                decision="reject",
+                semantic="cap",
+                scope="portfolio",
+                rule_code="global_cap_notional",
+                reason_code=reason,
+                observed_value=total_absolute_notional,
+                limit_value=global_cap_notional,
+            )
+        )
 
-    reasons.extend(
-        f"strategy_cap_exceeded: strategy_id={strategy_id}"
-        for strategy_id in sorted(violated_strategy_ids)
-    )
+    for assessment in strategy_assessments:
+        if assessment.within_cap:
+            continue
+        reason = f"strategy_cap_exceeded: strategy_id={assessment.strategy_id}"
+        reasons.append(reason)
+        policy_evidence.append(
+            NonLiveEvaluationEvidence(
+                decision="reject",
+                semantic="cap",
+                scope="strategy",
+                rule_code="strategy_cap_notional",
+                reason_code=reason,
+                observed_value=assessment.current_absolute_notional,
+                limit_value=assessment.effective_allowed_notional,
+            )
+        )
 
-    return tuple(reasons)
+    return tuple(reasons), tuple(policy_evidence)
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
