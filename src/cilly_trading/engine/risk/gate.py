@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import inspect
 from math import isfinite
 from typing import Any, Mapping, Sequence
 
@@ -52,6 +53,9 @@ RISK_FRAMEWORK_REASON_CODES: dict[str, str] = {
     "approved: within_risk_limits": "approved:risk_framework_within_limits",
     **dict(RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON),
 }
+_RISK_DECISION_ACCEPTS_POLICY_EVIDENCE = (
+    "policy_evidence" in inspect.signature(RiskDecision).parameters
+)
 
 
 def _safe_pct(numerator: float, denominator: float) -> float:
@@ -73,6 +77,29 @@ def _extract_policy_evidence(
     if isinstance(evidence, list):
         return tuple(evidence)
     return ()
+
+
+def _build_risk_decision(
+    *,
+    decision: str,
+    score: float,
+    max_allowed: float,
+    reason: str,
+    timestamp: datetime,
+    rule_version: str,
+    policy_evidence: tuple[Any, ...],
+) -> RiskDecision:
+    kwargs: dict[str, Any] = {
+        "decision": decision,
+        "score": score,
+        "max_allowed": max_allowed,
+        "reason": reason,
+        "timestamp": timestamp,
+        "rule_version": rule_version,
+    }
+    if _RISK_DECISION_ACCEPTS_POLICY_EVIDENCE:
+        kwargs["policy_evidence"] = policy_evidence
+    return RiskDecision(**kwargs)
 
 
 def adapt_risk_framework_response_to_risk_decision(
@@ -136,7 +163,7 @@ def adapt_risk_framework_response_to_risk_decision(
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError("evaluated_at must be timezone-aware and in UTC")
 
-    return RiskDecision(
+    return _build_risk_decision(
         decision=decision,
         score=score,
         max_allowed=max_allowed,

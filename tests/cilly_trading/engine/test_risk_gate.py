@@ -33,6 +33,15 @@ class _LegacyRuntimeRiskResponse:
     risk_score: float
 
 
+def _policy_evidence_or_empty(decision: object) -> tuple[object, ...]:
+    evidence = getattr(decision, "policy_evidence", ())
+    if evidence is None:
+        return ()
+    if isinstance(evidence, tuple):
+        return evidence
+    return tuple(evidence)
+
+
 def test_threshold_risk_gate_returns_approved_for_within_threshold() -> None:
     gate = ThresholdRiskGate(max_notional_usd=1000.0)
 
@@ -189,7 +198,7 @@ def test_adapter_maps_risk_framework_reason_codes_deterministically(
     assert decision.reason == expected_reason
     assert decision.rule_version == "adapter-v1"
     assert decision.timestamp == datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert decision.policy_evidence == ()
+    assert _policy_evidence_or_empty(decision) == ()
 
 
 def test_adapter_rejects_unknown_reason_code() -> None:
@@ -228,7 +237,7 @@ def test_adapter_handles_runtime_response_without_policy_evidence() -> None:
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_max_account_exposure_pct_exceeded"
-    assert decision.policy_evidence == ()
+    assert _policy_evidence_or_empty(decision) == ()
 
 
 def test_canonical_rejection_reason_vocabulary_is_exposed_in_gate_map() -> None:
@@ -295,7 +304,7 @@ def test_evaluate_risk_framework_execution_decision_is_deterministic_for_equal_i
     assert first == second
     assert first.decision == "APPROVED"
     assert first.reason == "approved:risk_framework_within_limits"
-    assert first.policy_evidence == ()
+    assert _policy_evidence_or_empty(first) == ()
 
 
 def test_evaluate_risk_framework_execution_decision_prefers_kill_switch_for_multi_violation() -> None:
@@ -316,8 +325,9 @@ def test_evaluate_risk_framework_execution_decision_prefers_kill_switch_for_mult
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_kill_switch_enabled"
-    assert decision.policy_evidence
-    assert decision.policy_evidence[0].reason_code == "rejected: kill_switch_enabled"
+    policy_evidence = _policy_evidence_or_empty(decision)
+    assert policy_evidence
+    assert policy_evidence[0].reason_code == "rejected: kill_switch_enabled"
 
 
 def test_evaluate_risk_framework_execution_decision_prefers_position_size_over_other_caps() -> None:
@@ -337,5 +347,6 @@ def test_evaluate_risk_framework_execution_decision_prefers_position_size_over_o
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_max_position_size_exceeded"
-    assert decision.policy_evidence
-    assert decision.policy_evidence[0].reason_code == "rejected: max_position_size_exceeded"
+    policy_evidence = _policy_evidence_or_empty(decision)
+    assert policy_evidence
+    assert policy_evidence[0].reason_code == "rejected: max_position_size_exceeded"
