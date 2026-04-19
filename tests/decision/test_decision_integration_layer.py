@@ -130,6 +130,8 @@ def test_evidence_semantics_and_contract_boundary_remain_explicit() -> None:
 
     confidence_reason = card.score.confidence_reason.casefold()
     assert any(term in confidence_reason for term in ("aggregate", "component", "threshold", "evidence"))
+    assert card.metadata["qualification_threshold_profile_id"] == "qualification-threshold.mean-reversion.v1"
+    assert "Qualification threshold profile applied:" in " ".join(card.rationale.score_explanations)
     assert "does not imply live-trading approval" in card.rationale.final_explanation.casefold()
     assert [component.category for component in card.score.component_scores] == [
         "backtest_quality",

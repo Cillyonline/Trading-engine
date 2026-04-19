@@ -66,6 +66,18 @@ win-rate, and expected-value evidence:
 These action semantics are bounded to paper evaluation and must not be interpreted as
 live-trading authorization.
 
+## Comparison-Group Threshold Profile Boundary
+
+Qualification calibration is deterministic and bounded by strategy `comparison_group`
+threshold profiles.
+
+- threshold profiles are resolved from governed strategy metadata comparison groups
+- the applied profile identifier is emitted in qualification evidence output
+- calibrated thresholds remain bounded implementation semantics, not probability claims
+
+Cross-group non-comparability remains explicit: threshold profile calibration does not
+make decision-card scores directly comparable across different comparison groups.
+
 ## Deterministic Ranking Boundary
 
 For setup-stage candidates that meet the configured score floor, ranking is deterministic:

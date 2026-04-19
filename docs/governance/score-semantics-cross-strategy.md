@@ -62,12 +62,28 @@ The confidence tier is the primary bounded interpretation:
 
 No stronger claim than these bounded tier definitions is supported.
 
+## 4.1 Comparison-Group Threshold Profile Calibration
+
+Qualification thresholds are calibrated through deterministic threshold profiles keyed
+by strategy `comparison_group`.
+
+- Each strategy resolves one bounded threshold profile identifier from registry metadata.
+- The applied profile governs confidence/qualification aggregate and minimum-component
+  threshold checks for that strategy evaluation.
+- Profile calibration does not change cross-group score meaning: strategies in different
+  comparison groups remain not directly comparable by score.
+
+Threshold-profile calibration is bounded contract behavior for within-group qualification
+consistency only and does not create cross-group ranking authority.
+
 ## 5. Runtime and Documentation Alignment Rule
 
 All runtime wording and documentation must remain consistent with this governance contract:
 
 - `confidence_reason` text must reference bounded evidence semantics and must not
   claim precise probability, cross-strategy equality, or live-trading readiness.
+- qualification evidence must include the applied threshold profile identifier used
+  for deterministic confidence and qualification resolution.
 - `qualification.summary` text must stay within paper-trading scope.
 - `rationale.final_explanation` must explicitly deny live-trading approval implication.
 
