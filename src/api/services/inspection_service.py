@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from cilly_trading.engine.backtest_handoff_contract import build_professional_review_contract
 from cilly_trading.engine.decision_card_contract import validate_decision_card
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
+from cilly_trading.non_live_evaluation_contract import normalize_risk_rejection_reason_code
 
 from ..models import (
     BacktestArtifactContentResponse,
@@ -951,6 +952,38 @@ def extract_trace_entries(content: Any) -> tuple[Optional[str], List[Dict[str, A
     return trace_id, normalized_entries
 
 
+def _normalize_trace_reason_codes(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized_entries: List[Dict[str, Any]] = []
+    candidate_fields = (
+        "normalized_reason_code",
+        "reason_code",
+        "reason",
+        "failure_reason",
+        "rejection_reason",
+        "risk_reason",
+        "risk_reason_code",
+    )
+
+    for entry in entries:
+        normalized_entry = dict(entry)
+        candidate: str | None = None
+        for field in candidate_fields:
+            value = normalized_entry.get(field)
+            if isinstance(value, str) and value.strip():
+                candidate = value.strip()
+                break
+        if candidate is not None:
+            try:
+                normalized_entry["normalized_reason_code"] = (
+                    normalize_risk_rejection_reason_code(candidate)
+                )
+            except ValueError:
+                pass
+        normalized_entries.append(normalized_entry)
+
+    return normalized_entries
+
+
 def extract_decision_card_candidates(content: Any) -> List[Dict[str, Any]]:
     candidates: List[Dict[str, Any]] = []
 
@@ -1299,6 +1332,7 @@ def read_decision_trace(
     )
     _, content = read_journal_artifact_content(path)
     trace_id, entries = extract_trace_entries(content)
+    entries = _normalize_trace_reason_codes(entries)
     return DecisionTraceResponse(
         run_id=run_id,
         artifact_name=artifact_name,

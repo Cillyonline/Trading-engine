@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import inspect
 from math import isfinite
 from typing import Any, Mapping, Sequence
 
@@ -18,6 +19,10 @@ from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.telemetry.schema import (
     TelemetryEvent,
     build_telemetry_event,
+)
+from cilly_trading.non_live_evaluation_contract import (
+    RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON,
+    resolve_risk_rejection_reason_precedence,
 )
 from cilly_trading.risk_framework.allocation_rules import RiskLimits as FrameworkRiskLimits
 from cilly_trading.risk_framework.contract import (
@@ -46,26 +51,55 @@ _GUARD_EMISSION_ORDER: tuple[str, ...] = (
 
 RISK_FRAMEWORK_REASON_CODES: dict[str, str] = {
     "approved: within_risk_limits": "approved:risk_framework_within_limits",
-    "rejected: kill_switch_enabled": "rejected:risk_framework_kill_switch_enabled",
-    "rejected: max_position_size_exceeded": (
-        "rejected:risk_framework_max_position_size_exceeded"
-    ),
-    "rejected: max_account_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_account_exposure_pct_exceeded"
-    ),
-    "rejected: max_strategy_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_strategy_exposure_pct_exceeded"
-    ),
-    "rejected: max_symbol_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_symbol_exposure_pct_exceeded"
-    ),
+    **dict(RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON),
 }
+_RISK_DECISION_ACCEPTS_POLICY_EVIDENCE = (
+    "policy_evidence" in inspect.signature(RiskDecision).parameters
+)
 
 
 def _safe_pct(numerator: float, denominator: float) -> float:
     if denominator == 0.0:
         return float("inf")
     return numerator / denominator
+
+
+def _extract_policy_evidence(
+    framework_response: FrameworkRiskEvaluationResponse,
+) -> tuple[Any, ...]:
+    """Return policy evidence when present; default to empty evidence tuple."""
+
+    evidence = getattr(framework_response, "policy_evidence", ())
+    if evidence is None:
+        return ()
+    if isinstance(evidence, tuple):
+        return evidence
+    if isinstance(evidence, list):
+        return tuple(evidence)
+    return ()
+
+
+def _build_risk_decision(
+    *,
+    decision: str,
+    score: float,
+    max_allowed: float,
+    reason: str,
+    timestamp: datetime,
+    rule_version: str,
+    policy_evidence: tuple[Any, ...],
+) -> RiskDecision:
+    kwargs: dict[str, Any] = {
+        "decision": decision,
+        "score": score,
+        "max_allowed": max_allowed,
+        "reason": reason,
+        "timestamp": timestamp,
+        "rule_version": rule_version,
+    }
+    if _RISK_DECISION_ACCEPTS_POLICY_EVIDENCE:
+        kwargs["policy_evidence"] = policy_evidence
+    return RiskDecision(**kwargs)
 
 
 def adapt_risk_framework_response_to_risk_decision(
@@ -80,24 +114,30 @@ def adapt_risk_framework_response_to_risk_decision(
 ) -> RiskDecision:
     """Map deterministic risk-framework outcomes into execution risk decisions."""
 
-    decision_reason = RISK_FRAMEWORK_REASON_CODES.get(framework_response.reason)
-    if decision_reason is None:
-        raise ValueError(
-            f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
-        )
-
     normalized_equity = abs(framework_request.account_equity)
     normalized_proposed = abs(framework_request.proposed_position_size)
     normalized_strategy = abs(strategy_exposure)
     normalized_symbol = abs(symbol_exposure)
+    policy_evidence = _extract_policy_evidence(framework_response)
 
     reason = framework_response.reason
     if reason == "approved: within_risk_limits":
         decision = "APPROVED"
         score = float(framework_response.risk_score)
         max_allowed = float(limits.max_account_exposure_pct)
+        decision_reason = RISK_FRAMEWORK_REASON_CODES[reason]
     else:
         decision = "REJECTED"
+        precedence_candidates = [framework_response.reason]
+        precedence_candidates.extend(
+            evidence.reason_code for evidence in policy_evidence
+        )
+        try:
+            decision_reason = resolve_risk_rejection_reason_precedence(precedence_candidates)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
+            ) from exc
         if reason == "rejected: kill_switch_enabled":
             score = float("inf")
             max_allowed = 0.0
@@ -123,13 +163,14 @@ def adapt_risk_framework_response_to_risk_decision(
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError("evaluated_at must be timezone-aware and in UTC")
 
-    return RiskDecision(
+    return _build_risk_decision(
         decision=decision,
         score=score,
         max_allowed=max_allowed,
         reason=decision_reason,
         timestamp=timestamp,
         rule_version=rule_version,
+        policy_evidence=policy_evidence,
     )
 
 

@@ -22,6 +22,12 @@ def test_non_live_evaluation_contract_doc_defines_canonical_semantics() -> None:
     assert "semantic" in content
     assert "scope" in content
     assert "reject/cap/boundary semantics" in content
+    assert "Canonical risk rejection reason-code vocabulary (normalized):" in content
+    assert "rejected:risk_framework_kill_switch_enabled" in content
+    assert "rejected:risk_framework_max_position_size_exceeded" in content
+    assert "rejected:risk_framework_max_account_exposure_pct_exceeded" in content
+    assert "rejected:risk_framework_max_strategy_exposure_pct_exceeded" in content
+    assert "rejected:risk_framework_max_symbol_exposure_pct_exceeded" in content
 
 
 def test_non_live_contract_doc_locks_portfolio_constraint_hit_terminology() -> None:
@@ -40,6 +46,19 @@ def test_non_live_evaluation_contract_doc_keeps_non_live_boundaries_explicit() -
     assert "live trading enablement" in content
     assert "broker execution integration" in content
     assert "external portfolio optimization subsystems" in content
+
+
+def test_non_live_evaluation_contract_doc_defines_reason_precedence_and_inspection_normalization() -> None:
+    content = _read(CONTRACT_DOC)
+
+    assert "Normalized precedence order (canonical reason codes):" in content
+    assert "rejected:risk_framework_kill_switch_enabled" in content
+    assert "rejected:risk_framework_max_position_size_exceeded" in content
+    assert "rejected:risk_framework_max_account_exposure_pct_exceeded" in content
+    assert "rejected:risk_framework_max_strategy_exposure_pct_exceeded" in content
+    assert "rejected:risk_framework_max_symbol_exposure_pct_exceeded" in content
+    assert "Inspection/read normalization:" in content
+    assert "bounded non-live inspection flows" in content
 
 
 def test_risk_and_portfolio_docs_reference_canonical_non_live_contract() -> None:
