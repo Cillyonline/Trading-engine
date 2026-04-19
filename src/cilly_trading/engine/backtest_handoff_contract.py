@@ -7,6 +7,17 @@ from typing import Any, Iterable, Mapping
 
 
 HANDOFF_CONTRACT_VERSION = "1.0.0"
+PROFESSIONAL_REVIEW_CONTRACT_ID = "bounded_backtest_evidence_professional_review.v1"
+PROFESSIONAL_REVIEW_CONTRACT_VERSION = "1.0.0"
+PROFESSIONAL_REVIEW_CONTEXT = "professional_non_live_evidence_review"
+PROFESSIONAL_REVIEW_DECISION_RELEVANCE_STATEMENT = (
+    "Backtest evidence is exposed for bounded professional non-live review where explicit "
+    "comparability is required for decision support."
+)
+PROFESSIONAL_REVIEW_READINESS_NON_INFERENCE_STATEMENT = (
+    "Technical implementation evidence must remain separated from trader validation and "
+    "operational readiness."
+)
 
 PHASE_43_REQUIRED_FIELDS: tuple[str, ...] = (
     "artifact_version",
@@ -45,6 +56,42 @@ PHASE_44_REQUIRED_FIELDS: tuple[str, ...] = (
 PORTFOLIO_TO_PAPER_REQUIRED_INPUTS: tuple[str, ...] = (
     *PHASE_43_REQUIRED_FIELDS,
     *PHASE_44_REQUIRED_FIELDS,
+)
+
+PROFESSIONAL_REVIEW_REQUIRED_VISIBLE_FIELDS: tuple[str, ...] = (
+    "run.run_id",
+    "snapshot_linkage.mode",
+    "snapshot_linkage.start",
+    "snapshot_linkage.end",
+    "snapshot_linkage.count",
+    "strategy.name",
+    "strategy.params",
+    "run_config.execution_assumptions",
+    "realism_boundary.modeled_assumptions",
+    "realism_boundary.unmodeled_assumptions",
+    "realism_boundary.evidence_boundary.unsupported_claims",
+    "summary.start_equity",
+    "summary.end_equity",
+    "metrics_baseline.summary",
+    "metrics_baseline.metrics.cost_aware",
+    "phase_handoff.acceptance_gates.technically_valid_backtest_artifact",
+    "phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready",
+    "phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready",
+)
+
+PROFESSIONAL_REVIEW_COMPARISON_AXES: tuple[str, ...] = (
+    "snapshot window and count",
+    "strategy identity and params",
+    "execution assumptions and baseline assumption alignment",
+    "modeled vs unmodeled realism boundary",
+    "cost-aware outcome summary and deltas",
+    "phase handoff gate outcomes",
+)
+
+PROFESSIONAL_REVIEW_UNSUPPORTED_INFERENCE_CLAIMS: tuple[str, ...] = (
+    "trader validation inferred from technical artifact availability",
+    "operational readiness inferred from backtest evidence alone",
+    "live-trading readiness or broker execution approval",
 )
 
 TRADER_AUTHORITATIVE_FIELDS: tuple[str, ...] = (
@@ -127,6 +174,7 @@ def build_phase_handoff_contract(payload: Mapping[str, Any]) -> dict[str, Any]:
         "contract_version": HANDOFF_CONTRACT_VERSION,
         "source_phase": "42b",
         "target_phases": ["43", "44"],
+        "review_contract": build_professional_review_contract(),
         "required_evidence": {
             "phase_43_portfolio_simulation": list(PHASE_43_REQUIRED_FIELDS),
             "phase_44_paper_trading_readiness": list(PHASE_44_REQUIRED_FIELDS),
@@ -169,6 +217,19 @@ def build_phase_handoff_contract(payload: Mapping[str, Any]) -> dict[str, Any]:
             "phase_43_portfolio_simulation_ready": phase_43_gate.to_payload(),
             "phase_44_paper_trading_readiness_evidence_ready": phase_44_gate.to_payload(),
         },
+    }
+
+
+def build_professional_review_contract() -> dict[str, Any]:
+    return {
+        "contract_id": PROFESSIONAL_REVIEW_CONTRACT_ID,
+        "contract_version": PROFESSIONAL_REVIEW_CONTRACT_VERSION,
+        "review_context": PROFESSIONAL_REVIEW_CONTEXT,
+        "required_visible_evidence": list(PROFESSIONAL_REVIEW_REQUIRED_VISIBLE_FIELDS),
+        "comparison_axes": list(PROFESSIONAL_REVIEW_COMPARISON_AXES),
+        "decision_relevance_statement": PROFESSIONAL_REVIEW_DECISION_RELEVANCE_STATEMENT,
+        "readiness_non_inference_statement": PROFESSIONAL_REVIEW_READINESS_NON_INFERENCE_STATEMENT,
+        "unsupported_inference_claims": list(PROFESSIONAL_REVIEW_UNSUPPORTED_INFERENCE_CLAIMS),
     }
 
 
