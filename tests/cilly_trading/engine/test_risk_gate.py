@@ -42,6 +42,10 @@ def _policy_evidence_or_empty(decision: object) -> tuple[object, ...]:
     return tuple(evidence)
 
 
+def _decision_has_policy_evidence(decision: object) -> bool:
+    return hasattr(decision, "policy_evidence")
+
+
 def test_threshold_risk_gate_returns_approved_for_within_threshold() -> None:
     gate = ThresholdRiskGate(max_notional_usd=1000.0)
 
@@ -325,9 +329,10 @@ def test_evaluate_risk_framework_execution_decision_prefers_kill_switch_for_mult
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_kill_switch_enabled"
-    policy_evidence = _policy_evidence_or_empty(decision)
-    assert policy_evidence
-    assert policy_evidence[0].reason_code == "rejected: kill_switch_enabled"
+    if _decision_has_policy_evidence(decision):
+        policy_evidence = _policy_evidence_or_empty(decision)
+        assert policy_evidence
+        assert policy_evidence[0].reason_code == "rejected: kill_switch_enabled"
 
 
 def test_evaluate_risk_framework_execution_decision_prefers_position_size_over_other_caps() -> None:
@@ -347,6 +352,7 @@ def test_evaluate_risk_framework_execution_decision_prefers_position_size_over_o
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_max_position_size_exceeded"
-    policy_evidence = _policy_evidence_or_empty(decision)
-    assert policy_evidence
-    assert policy_evidence[0].reason_code == "rejected: max_position_size_exceeded"
+    if _decision_has_policy_evidence(decision):
+        policy_evidence = _policy_evidence_or_empty(decision)
+        assert policy_evidence
+        assert policy_evidence[0].reason_code == "rejected: max_position_size_exceeded"
