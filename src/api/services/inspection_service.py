@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from cilly_trading.engine.backtest_handoff_contract import build_professional_review_contract
 from cilly_trading.engine.decision_card_contract import validate_decision_card
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
 
@@ -1141,8 +1142,15 @@ def read_journal_artifact_file_content(
 
 
 def _build_backtest_read_boundary() -> BacktestReadBoundaryResponse:
+    review_contract = build_professional_review_contract()
     return BacktestReadBoundaryResponse(
         mode="non_live_backtest_read_only",
+        review_contract_id=review_contract["contract_id"],
+        review_contract_version=review_contract["contract_version"],
+        review_required_evidence=list(review_contract["required_visible_evidence"]),
+        review_comparison_axes=list(review_contract["comparison_axes"]),
+        decision_relevance_statement=review_contract["decision_relevance_statement"],
+        readiness_non_inference_statement=review_contract["readiness_non_inference_statement"],
         technical_availability_statement=(
             "This flow only confirms technical availability of governed backtest artifacts."
         ),
