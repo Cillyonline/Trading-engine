@@ -3,7 +3,10 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from cilly_trading.engine.backtest_handoff_contract import build_phase_handoff_contract
+from cilly_trading.engine.backtest_handoff_contract import (
+    build_professional_review_contract,
+    build_phase_handoff_contract,
+)
 
 
 def _base_payload() -> dict[str, Any]:
@@ -95,15 +98,80 @@ def _base_payload() -> dict[str, Any]:
     }
 
 
+def test_build_professional_review_contract_returns_canonical_payload() -> None:
+    review_contract = build_professional_review_contract()
+
+    assert review_contract == {
+        "contract_id": "bounded_backtest_evidence_professional_review.v1",
+        "contract_version": "1.0.0",
+        "review_context": "professional_non_live_evidence_review",
+        "required_visible_evidence": [
+            "run.run_id",
+            "snapshot_linkage.mode",
+            "snapshot_linkage.start",
+            "snapshot_linkage.end",
+            "snapshot_linkage.count",
+            "strategy.name",
+            "strategy.params",
+            "run_config.execution_assumptions",
+            "realism_boundary.modeled_assumptions",
+            "realism_boundary.unmodeled_assumptions",
+            "realism_boundary.evidence_boundary.unsupported_claims",
+            "summary.start_equity",
+            "summary.end_equity",
+            "metrics_baseline.summary",
+            "metrics_baseline.metrics.cost_aware",
+            "phase_handoff.acceptance_gates.technically_valid_backtest_artifact",
+            "phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready",
+            "phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready",
+        ],
+        "comparison_axes": [
+            "snapshot window and count",
+            "strategy identity and params",
+            "execution assumptions and baseline assumption alignment",
+            "modeled vs unmodeled realism boundary",
+            "cost-aware outcome summary and deltas",
+            "phase handoff gate outcomes",
+        ],
+        "decision_relevance_statement": (
+            "Backtest evidence is exposed for bounded professional non-live review where explicit "
+            "comparability is required for decision support."
+        ),
+        "readiness_non_inference_statement": (
+            "Technical implementation evidence must remain separated from trader validation and "
+            "operational readiness."
+        ),
+        "unsupported_inference_claims": [
+            "trader validation inferred from technical artifact availability",
+            "operational readiness inferred from backtest evidence alone",
+            "live-trading readiness or broker execution approval",
+        ],
+    }
+
+
 def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> None:
     handoff = build_phase_handoff_contract(_base_payload())
     gates = handoff["acceptance_gates"]
     artifact_lineage = handoff["artifact_lineage"]
+    review_contract = handoff["review_contract"]
+    canonical_review_contract = build_professional_review_contract()
     backtest_to_portfolio = handoff["canonical_handoffs"]["backtest_to_portfolio"]
     portfolio_to_paper = handoff["canonical_handoffs"]["portfolio_to_paper"]
 
     assert handoff["source_phase"] == "42b"
     assert handoff["target_phases"] == ["43", "44"]
+    assert review_contract["contract_id"] == "bounded_backtest_evidence_professional_review.v1"
+    assert review_contract["contract_version"] == "1.0.0"
+    assert review_contract["review_context"] == "professional_non_live_evidence_review"
+    assert review_contract == canonical_review_contract
+    assert "run.run_id" in review_contract["required_visible_evidence"]
+    assert "metrics_baseline.metrics.cost_aware" in review_contract["required_visible_evidence"]
+    assert "phase handoff gate outcomes" in review_contract["comparison_axes"]
+    assert "must remain separated" in review_contract["readiness_non_inference_statement"]
+    assert (
+        "live-trading readiness or broker execution approval"
+        in review_contract["unsupported_inference_claims"]
+    )
     assert "realism_boundary" in handoff["authoritative_outputs"]["trader_interpretation"]
     assert artifact_lineage["complete"] is True
     assert "run.run_id" in artifact_lineage["required_fields"]

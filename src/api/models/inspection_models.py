@@ -447,6 +447,12 @@ class BacktestReadBoundaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["non_live_backtest_read_only"]
+    review_contract_id: str
+    review_contract_version: str
+    review_required_evidence: List[str]
+    review_comparison_axes: List[str]
+    decision_relevance_statement: str
+    readiness_non_inference_statement: str
     technical_availability_statement: str
     trader_validation_statement: str
     operational_readiness_statement: str
