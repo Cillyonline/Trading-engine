@@ -50,6 +50,18 @@ Mandatory fields:
 - `observed_value`
 - `limit_value`
 
+Canonical risk rejection reason-code vocabulary (normalized):
+
+- `rejected:risk_framework_kill_switch_enabled`
+- `rejected:risk_framework_max_position_size_exceeded`
+- `rejected:risk_framework_max_account_exposure_pct_exceeded`
+- `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
+- `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
+
+Framework reason-code variants (for example `rejected: kill_switch_enabled`)
+must be normalized to the canonical vocabulary above before cross-surface
+inspection/read comparison.
+
 For issue #993 producer paths, evidence rows are emitted only when a cap or
 boundary is violated. Approved outcomes remain deterministic and carry an empty
 evidence tuple.
@@ -69,7 +81,9 @@ Approval discipline:
 Execution adapter propagation:
 
 - `src/cilly_trading/engine/risk/gate.py`
-- maps framework decision and propagates `policy_evidence` into `RiskDecision`
+- normalizes reason codes to canonical vocabulary
+- enforces deterministic precedence for multi-violation candidates
+- propagates `policy_evidence` into `RiskDecision`
 
 Portfolio producers:
 
@@ -95,6 +109,14 @@ Deterministic ordering for per-request risk evaluation:
 4. strategy cap (`max_strategy_exposure_pct`)
 5. symbol cap (`max_symbol_exposure_pct`)
 
+Normalized precedence order (canonical reason codes):
+
+1. `rejected:risk_framework_kill_switch_enabled`
+2. `rejected:risk_framework_max_position_size_exceeded`
+3. `rejected:risk_framework_max_account_exposure_pct_exceeded`
+4. `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
+5. `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
+
 Deterministic ordering for portfolio decision pipeline:
 
 1. allocation intent feasibility
@@ -103,6 +125,12 @@ Deterministic ordering for portfolio decision pipeline:
 
 If any cap/boundary rejects the candidate, the signal is not applied to final
 state.
+
+Inspection/read normalization:
+
+- `src/api/services/inspection_service.py` read surfaces normalize compatible
+  risk reject reason-code variants to the canonical vocabulary above for
+  deterministic cross-surface comparison in bounded non-live inspection flows.
 
 ## Non-Live Readiness Discipline
 

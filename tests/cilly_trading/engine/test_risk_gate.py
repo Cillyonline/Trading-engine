@@ -7,9 +7,15 @@ import pytest
 from risk.contracts import RiskEvaluationRequest
 
 from cilly_trading.engine.risk import (
+    RISK_FRAMEWORK_REASON_CODES,
     ThresholdRiskGate,
     adapt_risk_framework_response_to_risk_decision,
     evaluate_risk_framework_execution_decision,
+)
+from cilly_trading.non_live_evaluation_contract import (
+    CANONICAL_RISK_REJECTION_REASON_CODES,
+    normalize_risk_rejection_reason_code,
+    resolve_risk_rejection_reason_precedence,
 )
 from cilly_trading.risk_framework.allocation_rules import RiskLimits
 from cilly_trading.risk_framework.contract import (
@@ -174,6 +180,7 @@ def test_adapter_maps_risk_framework_reason_codes_deterministically(
     assert decision.reason == expected_reason
     assert decision.rule_version == "adapter-v1"
     assert decision.timestamp == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert decision.policy_evidence == ()
 
 
 def test_adapter_rejects_unknown_reason_code() -> None:
@@ -192,6 +199,39 @@ def test_adapter_rejects_unknown_reason_code() -> None:
             rule_version="adapter-v1",
             evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         )
+
+
+def test_canonical_rejection_reason_vocabulary_is_exposed_in_gate_map() -> None:
+    mapped_rejections = tuple(
+        code
+        for framework_reason, code in RISK_FRAMEWORK_REASON_CODES.items()
+        if framework_reason.startswith("rejected: ")
+    )
+    assert mapped_rejections == CANONICAL_RISK_REJECTION_REASON_CODES
+
+
+def test_normalize_risk_rejection_reason_code_accepts_framework_and_canonical_values() -> None:
+    assert (
+        normalize_risk_rejection_reason_code("rejected: max_account_exposure_pct_exceeded")
+        == "rejected:risk_framework_max_account_exposure_pct_exceeded"
+    )
+    assert (
+        normalize_risk_rejection_reason_code(
+            "rejected:risk_framework_max_account_exposure_pct_exceeded"
+        )
+        == "rejected:risk_framework_max_account_exposure_pct_exceeded"
+    )
+
+
+def test_resolve_risk_rejection_reason_precedence_is_deterministic() -> None:
+    reason = resolve_risk_rejection_reason_precedence(
+        [
+            "rejected:risk_framework_max_symbol_exposure_pct_exceeded",
+            "rejected: max_position_size_exceeded",
+            "rejected:risk_framework_max_account_exposure_pct_exceeded",
+        ]
+    )
+    assert reason == "rejected:risk_framework_max_position_size_exceeded"
 
 
 def test_evaluate_risk_framework_execution_decision_is_deterministic_for_equal_inputs() -> None:
@@ -225,3 +265,47 @@ def test_evaluate_risk_framework_execution_decision_is_deterministic_for_equal_i
     assert first == second
     assert first.decision == "APPROVED"
     assert first.reason == "approved:risk_framework_within_limits"
+    assert first.policy_evidence == ()
+
+
+def test_evaluate_risk_framework_execution_decision_prefers_kill_switch_for_multi_violation() -> None:
+    decision = evaluate_risk_framework_execution_decision(
+        request_id="req-multi-kill-switch",
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=1000.0,
+        account_equity=1000.0,
+        current_exposure=900.0,
+        strategy_exposure=900.0,
+        symbol_exposure=900.0,
+        limits=_framework_limits(),
+        rule_version="adapter-v1",
+        config={"risk.kill_switch.enabled": True},
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.reason == "rejected:risk_framework_kill_switch_enabled"
+    assert decision.policy_evidence
+    assert decision.policy_evidence[0].reason_code == "rejected: kill_switch_enabled"
+
+
+def test_evaluate_risk_framework_execution_decision_prefers_position_size_over_other_caps() -> None:
+    decision = evaluate_risk_framework_execution_decision(
+        request_id="req-multi-cap",
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=1000.0,
+        account_equity=1000.0,
+        current_exposure=900.0,
+        strategy_exposure=900.0,
+        symbol_exposure=900.0,
+        limits=_framework_limits(),
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.reason == "rejected:risk_framework_max_position_size_exceeded"
+    assert decision.policy_evidence
+    assert decision.policy_evidence[0].reason_code == "rejected: max_position_size_exceeded"

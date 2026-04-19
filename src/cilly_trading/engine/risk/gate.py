@@ -19,6 +19,10 @@ from cilly_trading.engine.telemetry.schema import (
     TelemetryEvent,
     build_telemetry_event,
 )
+from cilly_trading.non_live_evaluation_contract import (
+    RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON,
+    resolve_risk_rejection_reason_precedence,
+)
 from cilly_trading.risk_framework.allocation_rules import RiskLimits as FrameworkRiskLimits
 from cilly_trading.risk_framework.contract import (
     RiskEvaluationRequest as FrameworkRiskEvaluationRequest,
@@ -46,19 +50,7 @@ _GUARD_EMISSION_ORDER: tuple[str, ...] = (
 
 RISK_FRAMEWORK_REASON_CODES: dict[str, str] = {
     "approved: within_risk_limits": "approved:risk_framework_within_limits",
-    "rejected: kill_switch_enabled": "rejected:risk_framework_kill_switch_enabled",
-    "rejected: max_position_size_exceeded": (
-        "rejected:risk_framework_max_position_size_exceeded"
-    ),
-    "rejected: max_account_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_account_exposure_pct_exceeded"
-    ),
-    "rejected: max_strategy_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_strategy_exposure_pct_exceeded"
-    ),
-    "rejected: max_symbol_exposure_pct_exceeded": (
-        "rejected:risk_framework_max_symbol_exposure_pct_exceeded"
-    ),
+    **dict(RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON),
 }
 
 
@@ -80,12 +72,6 @@ def adapt_risk_framework_response_to_risk_decision(
 ) -> RiskDecision:
     """Map deterministic risk-framework outcomes into execution risk decisions."""
 
-    decision_reason = RISK_FRAMEWORK_REASON_CODES.get(framework_response.reason)
-    if decision_reason is None:
-        raise ValueError(
-            f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
-        )
-
     normalized_equity = abs(framework_request.account_equity)
     normalized_proposed = abs(framework_request.proposed_position_size)
     normalized_strategy = abs(strategy_exposure)
@@ -96,8 +82,19 @@ def adapt_risk_framework_response_to_risk_decision(
         decision = "APPROVED"
         score = float(framework_response.risk_score)
         max_allowed = float(limits.max_account_exposure_pct)
+        decision_reason = RISK_FRAMEWORK_REASON_CODES[reason]
     else:
         decision = "REJECTED"
+        precedence_candidates = [framework_response.reason]
+        precedence_candidates.extend(
+            evidence.reason_code for evidence in framework_response.policy_evidence
+        )
+        try:
+            decision_reason = resolve_risk_rejection_reason_precedence(precedence_candidates)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
+            ) from exc
         if reason == "rejected: kill_switch_enabled":
             score = float("inf")
             max_allowed = 0.0
@@ -130,6 +127,7 @@ def adapt_risk_framework_response_to_risk_decision(
         reason=decision_reason,
         timestamp=timestamp,
         rule_version=rule_version,
+        policy_evidence=framework_response.policy_evidence,
     )
 
 

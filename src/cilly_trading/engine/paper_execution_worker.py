@@ -37,6 +37,10 @@ from cilly_trading.engine.paper_execution_risk_profile import (
     PaperExecutionRiskProfile,
 )
 from cilly_trading.engine.risk import evaluate_risk_framework_execution_decision
+from cilly_trading.non_live_evaluation_contract import (
+    CanonicalRiskRejectionReasonCode,
+    normalize_risk_rejection_reason_code,
+)
 from cilly_trading.models import (
     ExecutionEvent,
     Order,
@@ -139,7 +143,7 @@ OutcomeCode = Literal[
     "reject:risk_kill_switch_enabled",
 ]
 
-_RISK_REASON_TO_OUTCOME: dict[str, OutcomeCode] = {
+_RISK_REASON_TO_OUTCOME: dict[CanonicalRiskRejectionReasonCode, OutcomeCode] = {
     "rejected:risk_framework_max_position_size_exceeded": (
         "reject:position_size_exceeds_limit"
     ),
@@ -273,9 +277,10 @@ def _validate_signal_fields(signal: Signal) -> Optional[str]:
 
 
 def _risk_rejection_outcome(reason: str) -> OutcomeCode:
-    outcome = _RISK_REASON_TO_OUTCOME.get(reason)
+    normalized_reason = normalize_risk_rejection_reason_code(reason)
+    outcome = _RISK_REASON_TO_OUTCOME.get(normalized_reason)
     if outcome is None:
-        raise ValueError(f"unsupported risk rejection reason: {reason}")
+        raise ValueError(f"unsupported risk rejection reason: {normalized_reason}")
     return outcome
 
 
@@ -598,9 +603,10 @@ class BoundedPaperExecutionWorker:
         )
 
         if risk_decision.decision == "REJECTED":
+            normalized_reason = normalize_risk_rejection_reason_code(risk_decision.reason)
             return SignalEvaluationResult(
-                outcome=_risk_rejection_outcome(risk_decision.reason),
-                reason=risk_decision.reason,
+                outcome=_risk_rejection_outcome(normalized_reason),
+                reason=normalized_reason,
                 decision_inputs=decision_inputs,
             )
 
