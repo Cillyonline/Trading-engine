@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cilly_trading.non_live_evaluation_contract import (
+    CANONICAL_RISK_REJECTION_REASON_CODES,
+    RISK_REJECTION_REASON_PRECEDENCE,
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_DOC = (
@@ -11,6 +16,36 @@ CONTRACT_DOC = (
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _extract_bullet_codes_after_heading(content: str, heading: str) -> list[str]:
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != heading:
+            continue
+        codes: list[str] = []
+        for candidate in lines[index + 1 :]:
+            stripped = candidate.strip()
+            if not stripped:
+                if codes:
+                    break
+                continue
+            code: str | None = None
+            if stripped.startswith("- `") and stripped.endswith("`"):
+                code = stripped[3:-1]
+            else:
+                for index in range(1, 10):
+                    prefix = f"{index}. `"
+                    if stripped.startswith(prefix) and stripped.endswith("`"):
+                        code = stripped[len(prefix) : -1]
+                        break
+            if code is None:
+                if codes:
+                    break
+                continue
+            codes.append(code)
+        return codes
+    return []
 
 
 def test_non_live_evaluation_contract_doc_defines_canonical_semantics() -> None:
@@ -58,7 +93,45 @@ def test_non_live_evaluation_contract_doc_defines_reason_precedence_and_inspecti
     assert "rejected:risk_framework_max_strategy_exposure_pct_exceeded" in content
     assert "rejected:risk_framework_max_symbol_exposure_pct_exceeded" in content
     assert "Inspection/read normalization:" in content
-    assert "bounded non-live inspection flows" in content
+    assert "inspection flows" in content
+    assert "best-effort" in content
+
+
+def test_non_live_contract_doc_reason_vocabulary_matches_runtime_contract_constants() -> None:
+    content = _read(CONTRACT_DOC)
+
+    documented_codes = _extract_bullet_codes_after_heading(
+        content,
+        "Canonical risk rejection reason-code vocabulary (normalized):",
+    )
+    assert tuple(documented_codes) == CANONICAL_RISK_REJECTION_REASON_CODES
+
+
+def test_non_live_contract_doc_precedence_order_matches_runtime_contract_constants() -> None:
+    content = _read(CONTRACT_DOC)
+
+    documented_precedence = _extract_bullet_codes_after_heading(
+        content,
+        "Normalized precedence order (canonical reason codes):",
+    )
+    expected_precedence = [
+        code
+        for code, _ in sorted(RISK_REJECTION_REASON_PRECEDENCE.items(), key=lambda item: item[1])
+    ]
+    assert documented_precedence == expected_precedence
+
+
+def test_non_live_contract_doc_explicitly_locks_cross_surface_determinism_boundary() -> None:
+    content = _read(CONTRACT_DOC)
+
+    assert "risk gate and paper execution worker surfaces" in content
+    assert "equivalent bounded non-live input state must emit the same canonical reject" in content
+    assert "deterministic precedence is mandatory when multiple constraints are violated" in content
+    assert "best-effort single-field normalization to" in content
+    assert "`normalized_reason_code` without multi-reason precedence selection" in content
+    assert "not live-trading or broker-readiness evidence" in content
+    assert "normalized_reason_codes" in content
+    assert "does not aggregate multiple compatible reason" in content
 
 
 def test_risk_and_portfolio_docs_reference_canonical_non_live_contract() -> None:
