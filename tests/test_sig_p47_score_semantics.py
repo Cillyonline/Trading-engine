@@ -21,8 +21,10 @@ from cilly_trading.engine.qualification_engine import (
 )
 from cilly_trading.strategies.registry import (
     CROSS_STRATEGY_SCORE_NON_COMPARABILITY_NOTE,
+    QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP,
     get_registered_strategy_metadata,
     reset_registry,
+    resolve_qualification_threshold_profile,
 )
 
 
@@ -99,6 +101,19 @@ def test_rsi2_is_in_mean_reversion_group() -> None:
 def test_turtle_is_in_trend_following_group() -> None:
     metadata = get_registered_strategy_metadata()
     assert metadata["TURTLE"]["comparison_group"] == "trend-following"
+
+
+def test_comparison_group_threshold_profiles_are_defined_and_deterministic() -> None:
+    assert "mean-reversion" in QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP
+    assert "trend-following" in QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP
+    assert "reference-control" in QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP
+
+    first = resolve_qualification_threshold_profile(comparison_group="mean-reversion")
+    second = resolve_qualification_threshold_profile(comparison_group="mean-reversion")
+    assert first == second
+    assert first["profile_id"] == "qualification-threshold.mean-reversion.v1"
+    assert first["high_aggregate"] >= first["medium_aggregate"]
+    assert first["high_min_component"] >= first["medium_min_component"]
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +267,14 @@ def test_score_semantics_governance_doc_defines_precision_boundaries() -> None:
     assert "CONFIDENCE_TIER_PRECISION_DISCLAIMER" in content
 
 
+def test_score_semantics_governance_doc_mentions_calibrated_threshold_profiles() -> None:
+    content = GOVERNANCE_DOC.read_text(encoding="utf-8")
+
+    assert "threshold profile" in content.casefold()
+    assert "comparison_group" in content
+    assert "not directly comparable" in content
+
+
 def test_score_semantics_governance_doc_defines_non_goals() -> None:
     content = GOVERNANCE_DOC.read_text(encoding="utf-8")
 
@@ -284,3 +307,12 @@ def test_sig_p47_phase_doc_lists_out_of_scope_reminders() -> None:
     assert "Out-of-Scope" in content
     assert "live trading" in content
     assert "new strategies" in content
+
+
+def test_signal_quality_contract_doc_mentions_calibrated_threshold_profiles() -> None:
+    content = (REPO_ROOT / "docs" / "governance" / "signal-quality-bounded-contract.md").read_text(
+        encoding="utf-8"
+    )
+    assert "threshold profile" in content.casefold()
+    assert "comparison_group" in content
+    assert "non-comparability" in content.casefold()

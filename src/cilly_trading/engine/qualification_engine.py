@@ -23,6 +23,10 @@ from cilly_trading.engine.decision_card_contract import (
     QualificationState,
     validate_decision_card,
 )
+from cilly_trading.strategies.registry import (
+    get_registered_strategy_metadata,
+    resolve_qualification_threshold_profile,
+)
 
 DecisionActionState = QualificationState
 
@@ -100,6 +104,7 @@ class QualificationEngineInput:
 
 def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard:
     """Evaluate hard gates, component scores, and output a deterministic decision card."""
+    threshold_profile = _resolve_threshold_profile(strategy_id=input_data.strategy_id)
     hard_gate_evaluation = HardGateEvaluation(
         policy_version=input_data.hard_gate_policy_version,
         gates=list(input_data.hard_gates),
@@ -118,6 +123,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
     confidence_tier = assign_confidence_tier(
         aggregate_score=aggregate_score,
         component_scores=integrated_component_scores,
+        confidence_thresholds=threshold_profile["thresholds"],
     )
     confidence_reason = _confidence_reason(confidence_tier=confidence_tier, aggregate_score=aggregate_score)
     win_rate = compute_bounded_win_rate(component_scores=integrated_component_scores)
@@ -129,6 +135,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         hard_gate_evaluation=hard_gate_evaluation,
         aggregate_score=aggregate_score,
         confidence_tier=confidence_tier,
+        confidence_thresholds=threshold_profile["thresholds"],
     )
     action = resolve_decision_action(
         hard_gate_evaluation=hard_gate_evaluation,
@@ -137,6 +144,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         qualification_state=state,
         win_rate=win_rate,
         expected_value=expected_value,
+        confidence_thresholds=threshold_profile["thresholds"],
     )
     payload = {
         "contract_version": DECISION_CARD_CONTRACT_VERSION,
@@ -176,6 +184,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
                 base_aggregate_score=base_aggregate_score,
                 aggregate_score=aggregate_score,
                 confidence_tier=confidence_tier,
+                threshold_profile=threshold_profile,
                 win_rate=win_rate,
                 expected_value=expected_value,
                 action=action,
@@ -193,12 +202,30 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
             input_data=input_data,
             base_aggregate_score=base_aggregate_score,
             sentiment_resolution=sentiment_resolution,
+            threshold_profile=threshold_profile,
             win_rate=win_rate,
             expected_value=expected_value,
             action=action,
         ),
     }
     return validate_decision_card(payload)
+
+
+def _resolve_threshold_profile(*, strategy_id: str) -> dict[str, object]:
+    metadata_by_strategy = get_registered_strategy_metadata()
+    strategy_metadata = metadata_by_strategy.get(strategy_id, {})
+    comparison_group = strategy_metadata.get("comparison_group")
+    profile = resolve_qualification_threshold_profile(comparison_group=comparison_group)
+    return {
+        "comparison_group": comparison_group if isinstance(comparison_group, str) else "default",
+        "profile_id": str(profile["profile_id"]),
+        "thresholds": {
+            "high_aggregate": float(profile["high_aggregate"]),
+            "high_min_component": float(profile["high_min_component"]),
+            "medium_aggregate": float(profile["medium_aggregate"]),
+            "medium_min_component": float(profile["medium_min_component"]),
+        },
+    }
 
 
 def compute_aggregate_score(*, component_scores: list[ComponentScore]) -> float:
@@ -321,17 +348,19 @@ def assign_confidence_tier(
     *,
     aggregate_score: float,
     component_scores: list[ComponentScore],
+    confidence_thresholds: dict[str, float] | None = None,
 ) -> DecisionConfidenceTier:
     """Assign deterministic confidence tier from bounded aggregate and minimum component score."""
+    thresholds = confidence_thresholds or CONFIDENCE_THRESHOLDS
     min_component = min(float(component.score) for component in component_scores)
     if (
-        aggregate_score >= CONFIDENCE_THRESHOLDS["high_aggregate"]
-        and min_component >= CONFIDENCE_THRESHOLDS["high_min_component"]
+        aggregate_score >= thresholds["high_aggregate"]
+        and min_component >= thresholds["high_min_component"]
     ):
         return "high"
     if (
-        aggregate_score >= CONFIDENCE_THRESHOLDS["medium_aggregate"]
-        and min_component >= CONFIDENCE_THRESHOLDS["medium_min_component"]
+        aggregate_score >= thresholds["medium_aggregate"]
+        and min_component >= thresholds["medium_min_component"]
     ):
         return "medium"
     return "low"
@@ -370,21 +399,23 @@ def resolve_qualification_state(
     hard_gate_evaluation: HardGateEvaluation,
     aggregate_score: float,
     confidence_tier: DecisionConfidenceTier,
+    confidence_thresholds: dict[str, float] | None = None,
 ) -> tuple[DecisionActionState, QualificationColor, str]:
     """Resolve action-state and traffic-light output deterministically."""
+    thresholds = confidence_thresholds or CONFIDENCE_THRESHOLDS
     if hard_gate_evaluation.has_blocking_failure:
         return (
             "reject",
             "red",
             "Blocking hard gate failed; opportunity is rejected for paper-trading qualification.",
         )
-    if confidence_tier == "low" or aggregate_score < CONFIDENCE_THRESHOLDS["medium_aggregate"]:
+    if confidence_tier == "low" or aggregate_score < thresholds["medium_aggregate"]:
         return (
             "watch",
             "yellow",
             "Opportunity remains on watch for paper-trading pending stronger confidence or score.",
         )
-    if confidence_tier == "high" and aggregate_score >= CONFIDENCE_THRESHOLDS["high_aggregate"]:
+    if confidence_tier == "high" and aggregate_score >= thresholds["high_aggregate"]:
         return (
             "paper_approved",
             "green",
@@ -405,15 +436,17 @@ def resolve_decision_action(
     qualification_state: DecisionActionState,
     win_rate: float,
     expected_value: float,
+    confidence_thresholds: dict[str, float] | None = None,
 ) -> DecisionAction:
     """Resolve deterministic paper-evaluation action from bounded evidence fields."""
+    thresholds = confidence_thresholds or CONFIDENCE_THRESHOLDS
     if hard_gate_evaluation.has_blocking_failure:
         return "ignore"
     if expected_value < 0.0:
         return "exit"
     if qualification_state in {"paper_candidate", "paper_approved"} and win_rate <= ACTION_EXIT_WIN_RATE_MAX:
         return "exit"
-    if confidence_tier == "low" or aggregate_score < CONFIDENCE_THRESHOLDS["medium_aggregate"]:
+    if confidence_tier == "low" or aggregate_score < thresholds["medium_aggregate"]:
         return "ignore"
     if qualification_state in {"paper_candidate", "paper_approved"} and win_rate >= ACTION_ENTRY_WIN_RATE_MIN:
         return "entry"
@@ -460,6 +493,7 @@ def _score_explanations(
     base_aggregate_score: float,
     aggregate_score: float,
     confidence_tier: DecisionConfidenceTier,
+    threshold_profile: dict[str, object],
     win_rate: float,
     expected_value: float,
     action: DecisionAction,
@@ -474,6 +508,15 @@ def _score_explanations(
     return [
         f"Backtest input path is {'explicitly integrated' if backtest_input_applied else 'not provided; component value is used as-is'}.",
         f"Portfolio-fit input path is {'explicitly integrated' if portfolio_fit_input_applied else 'not provided; component value is used as-is'}.",
+        (
+            "Qualification threshold profile applied: "
+            f"{threshold_profile['profile_id']} "
+            f"(comparison_group={threshold_profile['comparison_group']}, "
+            f"high_aggregate={threshold_profile['thresholds']['high_aggregate']:.4f}, "
+            f"high_min_component={threshold_profile['thresholds']['high_min_component']:.4f}, "
+            f"medium_aggregate={threshold_profile['thresholds']['medium_aggregate']:.4f}, "
+            f"medium_min_component={threshold_profile['thresholds']['medium_min_component']:.4f})."
+        ),
         f"Bounded weighted aggregate score={base_aggregate_score:.4f} using fixed category weights.",
         (
             "Bounded win-rate formula: "
@@ -507,6 +550,7 @@ def _build_metadata(
     input_data: QualificationEngineInput,
     base_aggregate_score: float,
     sentiment_resolution: SentimentOverlayResolution,
+    threshold_profile: dict[str, object],
     win_rate: float,
     expected_value: float,
     action: DecisionAction,
@@ -515,6 +559,9 @@ def _build_metadata(
     metadata["base_aggregate_score"] = base_aggregate_score
     metadata["backtest_input_applied"] = input_data.backtest_evidence is not None
     metadata["portfolio_fit_input_applied"] = input_data.portfolio_fit_input is not None
+    metadata["comparison_group"] = threshold_profile["comparison_group"]
+    metadata["qualification_threshold_profile_id"] = threshold_profile["profile_id"]
+    metadata["qualification_thresholds"] = dict(threshold_profile["thresholds"])
     metadata["sentiment_overlay_status"] = sentiment_resolution.status
     metadata["sentiment_overlay_points"] = sentiment_resolution.points
     metadata["sentiment_overlay_cap_points"] = sentiment_resolution.cap_points
@@ -550,6 +597,7 @@ __all__ = [
     "compute_bounded_win_rate",
     "compute_aggregate_score",
     "evaluate_qualification",
+    "resolve_qualification_threshold_profile",
     "resolve_decision_action",
     "resolve_qualification_state",
 ]

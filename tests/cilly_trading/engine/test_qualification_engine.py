@@ -17,6 +17,7 @@ from cilly_trading.engine.qualification_engine import (
     compute_aggregate_score,
     evaluate_qualification,
 )
+from cilly_trading.strategies.registry import get_registered_strategy_metadata
 
 
 def _base_component_scores() -> list[ComponentScore]:
@@ -80,12 +81,13 @@ def _engine_input(
     backtest_evidence: BacktestEvidenceInput | None = None,
     portfolio_fit_input: PortfolioFitInput | None = None,
     sentiment_overlay: SentimentOverlayInput | None = None,
+    strategy_id: str = "RSI2",
 ) -> QualificationEngineInput:
     return QualificationEngineInput(
         decision_card_id="dc_20260324_AAPL_RSI2",
         generated_at_utc="2026-03-24T08:10:00Z",
         symbol="AAPL",
-        strategy_id="RSI2",
+        strategy_id=strategy_id,
         hard_gates=list(hard_gates or _base_hard_gates()),
         component_scores=list(component_scores or _base_component_scores()),
         backtest_evidence=backtest_evidence,
@@ -327,3 +329,40 @@ def test_low_confidence_reason_references_upstream_evidence_quality() -> None:
     confidence_reason = card.score.confidence_reason.casefold()
     assert "upstream evidence quality" in confidence_reason
     assert "limited" in confidence_reason
+
+
+def test_qualification_profile_resolution_by_strategy_comparison_group() -> None:
+    metadata_by_strategy = get_registered_strategy_metadata()
+
+    reference = evaluate_qualification(_engine_input(strategy_id="REFERENCE"))
+    assert reference.metadata["comparison_group"] == metadata_by_strategy["REFERENCE"]["comparison_group"]
+    assert reference.metadata["qualification_threshold_profile_id"] == (
+        "qualification-threshold.reference-control.v1"
+    )
+    assert "Qualification threshold profile applied:" in " ".join(reference.rationale.score_explanations)
+
+    turtle = evaluate_qualification(_engine_input(strategy_id="TURTLE"))
+    assert turtle.metadata["comparison_group"] == metadata_by_strategy["TURTLE"]["comparison_group"]
+    assert turtle.metadata["qualification_threshold_profile_id"] == (
+        "qualification-threshold.trend-following.v1"
+    )
+
+
+def test_regression_identical_inputs_are_deterministic_across_groups() -> None:
+    reference_input = _engine_input(strategy_id="REFERENCE")
+    first_reference = evaluate_qualification(reference_input)
+    second_reference = evaluate_qualification(reference_input)
+    assert first_reference.action == second_reference.action
+    assert first_reference.score.aggregate_score == second_reference.score.aggregate_score
+    assert first_reference.metadata["qualification_threshold_profile_id"] == (
+        second_reference.metadata["qualification_threshold_profile_id"]
+    )
+
+    turtle_input = _engine_input(strategy_id="TURTLE")
+    first_turtle = evaluate_qualification(turtle_input)
+    second_turtle = evaluate_qualification(turtle_input)
+    assert first_turtle.action == second_turtle.action
+    assert first_turtle.score.aggregate_score == second_turtle.score.aggregate_score
+    assert first_turtle.metadata["qualification_threshold_profile_id"] == (
+        second_turtle.metadata["qualification_threshold_profile_id"]
+    )

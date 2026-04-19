@@ -37,6 +37,40 @@ CROSS_STRATEGY_SCORE_NON_COMPARABILITY_NOTE = (
     "only strategies within the same comparison group may be meaningfully compared by score."
 )
 
+DEFAULT_COMPARISON_GROUP = "default"
+QUALIFICATION_THRESHOLD_PROFILE_DEFAULT_ID = "qualification-threshold.default.v1"
+
+QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP: dict[str, dict[str, float | str]] = {
+    "default": {
+        "profile_id": QUALIFICATION_THRESHOLD_PROFILE_DEFAULT_ID,
+        "high_aggregate": 80.0,
+        "high_min_component": 70.0,
+        "medium_aggregate": 60.0,
+        "medium_min_component": 50.0,
+    },
+    "mean-reversion": {
+        "profile_id": "qualification-threshold.mean-reversion.v1",
+        "high_aggregate": 80.0,
+        "high_min_component": 70.0,
+        "medium_aggregate": 60.0,
+        "medium_min_component": 50.0,
+    },
+    "reference-control": {
+        "profile_id": "qualification-threshold.reference-control.v1",
+        "high_aggregate": 79.0,
+        "high_min_component": 69.0,
+        "medium_aggregate": 59.0,
+        "medium_min_component": 49.0,
+    },
+    "trend-following": {
+        "profile_id": "qualification-threshold.trend-following.v1",
+        "high_aggregate": 82.0,
+        "high_min_component": 68.0,
+        "medium_aggregate": 62.0,
+        "medium_min_component": 52.0,
+    },
+}
+
 
 class StrategyNotRegisteredError(KeyError):
     """Raised when an unknown strategy key is requested."""
@@ -219,3 +253,17 @@ def run_registry_smoke() -> list[str]:
 
     initialize_default_registry()
     return [entry.key for entry in get_registered_strategies()]
+
+
+def resolve_qualification_threshold_profile(
+    *, comparison_group: str | None
+) -> dict[str, float | str]:
+    """Resolve deterministic threshold profile for a comparison group."""
+
+    normalized_group = (
+        comparison_group.strip() if isinstance(comparison_group, str) and comparison_group.strip() else DEFAULT_COMPARISON_GROUP
+    )
+    profile = QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP.get(normalized_group)
+    if profile is None:
+        profile = QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP[DEFAULT_COMPARISON_GROUP]
+    return dict(profile)

@@ -90,6 +90,21 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
 )
 
 
+def _qualification_thresholds_from_metadata(metadata: dict[str, Any]) -> tuple[float, float]:
+    """Resolve qualification aggregate thresholds from metadata fallback to contract defaults."""
+    thresholds = metadata.get("qualification_thresholds")
+    if not isinstance(thresholds, dict):
+        return QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD, QUALIFICATION_HIGH_AGGREGATE_THRESHOLD
+    medium = thresholds.get("medium_aggregate")
+    high = thresholds.get("high_aggregate")
+    try:
+        medium_value = float(medium)
+        high_value = float(high)
+    except (TypeError, ValueError):
+        return QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD, QUALIFICATION_HIGH_AGGREGATE_THRESHOLD
+    return medium_value, high_value
+
+
 def _contains_forbidden_claim_phrase(value: str) -> str | None:
     normalized = value.casefold()
     for phrase in CLAIM_BOUNDARY_FORBIDDEN_PHRASES:
@@ -459,21 +474,23 @@ class DecisionCard(BaseModel):
         return self
 
     def _expected_qualification_state(self) -> QualificationState:
+        medium_threshold, high_threshold = _qualification_thresholds_from_metadata(self.metadata)
         if self.hard_gates.has_blocking_failure:
             return "reject"
         if (
             self.score.confidence_tier == "low"
-            or self.score.aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+            or self.score.aggregate_score < medium_threshold
         ):
             return "watch"
         if (
             self.score.confidence_tier == "high"
-            and self.score.aggregate_score >= QUALIFICATION_HIGH_AGGREGATE_THRESHOLD
+            and self.score.aggregate_score >= high_threshold
         ):
             return "paper_approved"
         return "paper_candidate"
 
     def _expected_decision_action(self) -> DecisionAction:
+        medium_threshold, _ = _qualification_thresholds_from_metadata(self.metadata)
         if self.hard_gates.has_blocking_failure:
             return "ignore"
         if self.score.expected_value < 0.0:
@@ -485,7 +502,7 @@ class DecisionCard(BaseModel):
             return "exit"
         if (
             self.score.confidence_tier == "low"
-            or self.score.aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD
+            or self.score.aggregate_score < medium_threshold
             or self.qualification.state in {"reject", "watch"}
         ):
             return "ignore"
