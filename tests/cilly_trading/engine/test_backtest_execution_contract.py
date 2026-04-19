@@ -12,6 +12,7 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestSignalTranslationConfig,
     build_backtest_realism_boundary,
     build_cost_slippage_metrics_baseline,
+    build_realism_sensitivity_matrix,
     serialize_fills,
     serialize_orders,
     serialize_positions,
@@ -332,3 +333,92 @@ def test_negative_configuration_invalid_signal_payload_fails(tmp_path: Path) -> 
             strategy_factory=lambda: _NoopStrategy(),
             config=BacktestRunnerConfig(output_dir=tmp_path / "out"),
         )
+
+
+def test_realism_sensitivity_matrix_contract_schema_contains_profiles_metrics_and_deltas() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+
+    matrix = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="run-matrix",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    assert matrix["matrix_version"] == "1.0.0"
+    assert matrix["deterministic"] is True
+    assert matrix["baseline_profile_id"] == "configured_baseline"
+    assert matrix["profile_order"] == [
+        "configured_baseline",
+        "cost_free_reference",
+        "bounded_cost_stress",
+    ]
+    assert len(matrix["profiles"]) == 3
+
+    for profile in matrix["profiles"]:
+        assert "profile_id" in profile
+        assert "assumptions" in profile
+        assert "summary" in profile
+        assert "metrics" in profile
+        assert "delta_vs_baseline" in profile
+        assert "summary" in profile["delta_vs_baseline"]
+        assert "metrics" in profile["delta_vs_baseline"]
+
+
+def test_realism_sensitivity_matrix_is_deterministic_for_identical_inputs() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+
+    first = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="run-matrix-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+    second = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="run-matrix-repro",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    assert first == second
+
+
+def test_realism_sensitivity_matrix_delta_calculation_consistency() -> None:
+    snapshots = sort_snapshots(_sample_flow_snapshots())
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.00"),
+            fill_timing="next_snapshot",
+        )
+    )
+    matrix = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="run-matrix-deltas",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    profiles = {profile["profile_id"]: profile for profile in matrix["profiles"]}
+    baseline = profiles["configured_baseline"]
+    no_cost = profiles["cost_free_reference"]
+
+    assert baseline["delta_vs_baseline"]["summary"]["ending_equity_cost_aware"] == 0.0
+    assert baseline["delta_vs_baseline"]["metrics"]["total_return"] == 0.0
+    assert no_cost["delta_vs_baseline"]["summary"]["ending_equity_cost_aware"] == pytest.approx(2.33)
+    assert no_cost["delta_vs_baseline"]["summary"]["total_transaction_cost"] == pytest.approx(-2.33)

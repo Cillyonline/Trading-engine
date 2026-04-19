@@ -6,6 +6,7 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestExecutionAssumptions,
     BacktestRunContract,
     build_cost_slippage_metrics_baseline,
+    build_realism_sensitivity_matrix,
     simulate_execution_flow,
     sort_snapshots,
 )
@@ -168,4 +169,59 @@ def test_p56_bt_replay_is_deterministic_and_cost_sensitive_to_assumptions() -> N
     assert (
         higher_cost_baseline["summary"]["ending_equity_cost_aware"]
         < baseline_first["summary"]["ending_equity_cost_aware"]
+    )
+
+
+def test_p56_bt_realism_profile_matrix_is_deterministic_and_replay_stable() -> None:
+    snapshots = sort_snapshots(
+        [
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {
+                "id": "s2",
+                "timestamp": "2024-01-02T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "101",
+                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "symbol": "AAPL", "open": "102"},
+        ]
+    )
+    run_contract = BacktestRunContract(
+        execution_assumptions=BacktestExecutionAssumptions(
+            slippage_bps=10,
+            commission_per_order=Decimal("1.25"),
+            fill_timing="next_snapshot",
+        )
+    )
+
+    first = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="p56-bt-matrix",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+    second = build_realism_sensitivity_matrix(
+        ordered_snapshots=snapshots,
+        run_id="p56-bt-matrix",
+        strategy_name="REFERENCE",
+        run_contract=run_contract,
+    )
+
+    assert first == second
+    assert first["profile_order"] == [
+        "configured_baseline",
+        "cost_free_reference",
+        "bounded_cost_stress",
+    ]
+    profiles = {profile["profile_id"]: profile for profile in first["profiles"]}
+    assert profiles["configured_baseline"]["delta_vs_baseline"]["summary"]["total_transaction_cost"] == 0.0
+    assert profiles["cost_free_reference"]["summary"]["total_transaction_cost"] == 0.0
+    assert profiles["bounded_cost_stress"]["summary"]["total_transaction_cost"] >= (
+        profiles["configured_baseline"]["summary"]["total_transaction_cost"]
     )
