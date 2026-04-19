@@ -81,6 +81,10 @@ def test_phase43_capital_allocation_contract_enforces_global_and_strategy_caps()
         "global_cap_exceeded: total_absolute_notional=300.0 global_cap_notional=250.0",
         "strategy_cap_exceeded: strategy_id=alpha",
     )
+    assert [item.rule_code for item in assessment.policy_evidence] == [
+        "global_cap_notional",
+        "strategy_cap_notional",
+    ]
 
 
 def test_phase43_exposure_handling_contract_reports_deterministic_multi_position_metrics() -> None:
