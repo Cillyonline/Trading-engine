@@ -65,6 +65,9 @@ Pagination:
       "symbol": "AAPL",
       "strategy_id": "RSI2",
       "qualification_state": "paper_approved",
+      "action": "entry",
+      "win_rate": 0.864,
+      "expected_value": 1.0,
       "qualification_color": "green",
       "qualification_summary": "Opportunity is approved for bounded paper-trading only.",
       "aggregate_score": 84.15,
@@ -90,6 +93,7 @@ Pagination:
 
 The inspection payload explicitly includes:
 
+- canonical bounded action evidence (`qualification_state`, `action`, `win_rate`, `expected_value`)
 - hard-gate evaluations (`hard_gates`)
 - component-level score rationales (`component_scores`)
 - gate and score explanation lists (`gate_explanations`, `score_explanations`)

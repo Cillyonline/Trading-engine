@@ -344,6 +344,8 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "/signals/decision-surface?limit=20&sort=created_at_desc" in ui_response.text
             assert "Signal Decision Surface" in ui_response.text
             assert "decision_state" in ui_response.text
+            assert "qualification_state" in ui_response.text
+            assert "expected_value" in ui_response.text
             assert "qualification_policy_version" in ui_response.text
             assert "qualification_evidence" in ui_response.text
             assert "missing_criteria" in ui_response.text
@@ -421,7 +423,16 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             )
             decision_item = decision_surface_payload["items"][0]
             assert decision_item["decision_state"] in {"blocked", "watch", "paper_candidate"}
+            assert decision_item["qualification_state"] in {
+                "reject",
+                "watch",
+                "paper_candidate",
+                "paper_approved",
+            }
+            assert decision_item["action"] in {"entry", "exit", "ignore"}
             assert decision_item["qualification_policy_version"] == "professional_non_live_signal_qualification.v1"
+            assert isinstance(decision_item["win_rate"], float)
+            assert isinstance(decision_item["expected_value"], float)
             assert isinstance(decision_item["qualification_evidence"], list)
             assert "score" in decision_item["score_contribution"].lower()
             assert "stage" in decision_item["stage_assessment"].lower()
