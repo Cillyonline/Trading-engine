@@ -96,3 +96,21 @@ def test_backtest_schema_and_execution_docs_define_realism_disclosures() -> None
     assert "This model is non-live and non-broker by design." in execution_content
     assert "does not support live-trading readiness claims" in execution_content
     assert "does not constitute trader validation" in execution_content
+
+
+def test_p56_doc_defines_deterministic_realism_sensitivity_matrix_with_bounded_wording() -> None:
+    content = (
+        REPO_ROOT
+        / "docs"
+        / "testing"
+        / "backtesting"
+        / "p56_bounded_backtest_realism_assumptions.md"
+    ).read_text(encoding="utf-8")
+
+    assert "Deterministic Realism Sensitivity Matrix (Bounded)" in content
+    assert "`configured_baseline`" in content
+    assert "`cost_free_reference`" in content
+    assert "`bounded_cost_stress`" in content
+    assert "`delta_vs_baseline`" in content
+    assert "technical-only comparison evidence" in content
+    assert "must not be interpreted as live" in content

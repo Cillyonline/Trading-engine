@@ -93,6 +93,17 @@ def _base_payload() -> dict[str, Any]:
                 "cost_aware": {"total_return": 0.00001},
                 "deltas": {"total_return": 0.0},
             },
+            "realism_sensitivity_matrix": {
+                "matrix_version": "1.0.0",
+                "deterministic": True,
+                "baseline_profile_id": "configured_baseline",
+                "profile_order": [
+                    "configured_baseline",
+                    "cost_free_reference",
+                    "bounded_cost_stress",
+                ],
+                "profiles": [],
+            },
             "trades": [],
         },
     }
@@ -121,6 +132,7 @@ def test_build_professional_review_contract_returns_canonical_payload() -> None:
             "summary.end_equity",
             "metrics_baseline.summary",
             "metrics_baseline.metrics.cost_aware",
+            "metrics_baseline.realism_sensitivity_matrix",
             "phase_handoff.acceptance_gates.technically_valid_backtest_artifact",
             "phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready",
             "phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready",
@@ -129,6 +141,7 @@ def test_build_professional_review_contract_returns_canonical_payload() -> None:
             "snapshot window and count",
             "strategy identity and params",
             "execution assumptions and baseline assumption alignment",
+            "deterministic realism sensitivity profile matrix",
             "modeled vs unmodeled realism boundary",
             "cost-aware outcome summary and deltas",
             "phase handoff gate outcomes",
@@ -166,6 +179,8 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
     assert review_contract == canonical_review_contract
     assert "run.run_id" in review_contract["required_visible_evidence"]
     assert "metrics_baseline.metrics.cost_aware" in review_contract["required_visible_evidence"]
+    assert "metrics_baseline.realism_sensitivity_matrix" in review_contract["required_visible_evidence"]
+    assert "deterministic realism sensitivity profile matrix" in review_contract["comparison_axes"]
     assert "phase handoff gate outcomes" in review_contract["comparison_axes"]
     assert "must remain separated" in review_contract["readiness_non_inference_statement"]
     assert (
@@ -239,6 +254,7 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
             "metrics_baseline.assumptions",
             "metrics_baseline.summary",
             "metrics_baseline.metrics.cost_aware",
+            "metrics_baseline.realism_sensitivity_matrix",
         ],
         "artifact_lineage_complete": True,
         "artifact_lineage_required_fields": handoff["artifact_lineage"]["required_fields"],
@@ -287,6 +303,7 @@ def test_phase_handoff_contract_reports_passed_gates_for_complete_payload() -> N
             "metrics_baseline.assumptions",
             "metrics_baseline.summary",
             "metrics_baseline.metrics.cost_aware",
+            "metrics_baseline.realism_sensitivity_matrix",
             "orders",
             "fills",
             "positions",

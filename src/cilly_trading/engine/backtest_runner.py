@@ -10,6 +10,7 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestRunContract,
     build_backtest_realism_boundary,
     build_cost_slippage_metrics_baseline,
+    build_realism_sensitivity_matrix,
     serialize_fills,
     serialize_orders,
     serialize_positions,
@@ -248,6 +249,13 @@ class BacktestRunner:
             fills=flow_result.fills,
             execution_assumptions=config.run_contract.execution_assumptions,
         )
+        realism_sensitivity_matrix = build_realism_sensitivity_matrix(
+            ordered_snapshots=processed_snapshots,
+            run_id=config.run_id,
+            strategy_name=config.strategy_name,
+            run_contract=config.run_contract,
+        )
+        metrics_baseline["realism_sensitivity_matrix"] = realism_sensitivity_matrix
 
         payload = {
             "artifact_version": "1",

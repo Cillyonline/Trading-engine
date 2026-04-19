@@ -44,6 +44,7 @@ PHASE_43_REQUIRED_FIELDS: tuple[str, ...] = (
     "metrics_baseline.assumptions",
     "metrics_baseline.summary",
     "metrics_baseline.metrics.cost_aware",
+    "metrics_baseline.realism_sensitivity_matrix",
 )
 
 PHASE_44_REQUIRED_FIELDS: tuple[str, ...] = (
@@ -74,6 +75,7 @@ PROFESSIONAL_REVIEW_REQUIRED_VISIBLE_FIELDS: tuple[str, ...] = (
     "summary.end_equity",
     "metrics_baseline.summary",
     "metrics_baseline.metrics.cost_aware",
+    "metrics_baseline.realism_sensitivity_matrix",
     "phase_handoff.acceptance_gates.technically_valid_backtest_artifact",
     "phase_handoff.acceptance_gates.phase_43_portfolio_simulation_ready",
     "phase_handoff.acceptance_gates.phase_44_paper_trading_readiness_evidence_ready",
@@ -83,6 +85,7 @@ PROFESSIONAL_REVIEW_COMPARISON_AXES: tuple[str, ...] = (
     "snapshot window and count",
     "strategy identity and params",
     "execution assumptions and baseline assumption alignment",
+    "deterministic realism sensitivity profile matrix",
     "modeled vs unmodeled realism boundary",
     "cost-aware outcome summary and deltas",
     "phase handoff gate outcomes",
@@ -103,6 +106,7 @@ TRADER_AUTHORITATIVE_FIELDS: tuple[str, ...] = (
     "metrics_baseline.summary",
     "metrics_baseline.metrics.cost_aware",
     "metrics_baseline.metrics.deltas",
+    "metrics_baseline.realism_sensitivity_matrix",
 )
 
 ARTIFACT_LINEAGE_REQUIRED_FIELDS: tuple[str, ...] = (

@@ -22,10 +22,16 @@ from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 SUPPORTED_RUN_CONTRACT_VERSION = "1.0.0"
 BASELINE_VERSION = "1.0.0"
 REALISM_BOUNDARY_VERSION = "1.0.0"
+REALISM_SENSITIVITY_MATRIX_VERSION = "1.0.0"
 DEFAULT_ACTION_TO_SIDE: dict[str, Literal["BUY", "SELL"]] = {"BUY": "BUY", "SELL": "SELL"}
 MAX_SLIPPAGE_BPS = 250
 MAX_COMMISSION_PER_ORDER = Decimal("25")
 DEFAULT_STARTING_EQUITY = Decimal("100000")
+REALISM_PROFILE_BASELINE_ID = "configured_baseline"
+REALISM_PROFILE_COST_FREE_ID = "cost_free_reference"
+REALISM_PROFILE_COST_STRESS_ID = "bounded_cost_stress"
+REALISM_PROFILE_COST_STRESS_SLIPPAGE_BPS = 25
+REALISM_PROFILE_COST_STRESS_COMMISSION_PER_ORDER = Decimal("2.50")
 
 
 @dataclass(frozen=True)
@@ -655,6 +661,144 @@ def build_cost_slippage_metrics_baseline(
         },
         "trades": [],
     }
+
+
+def build_realism_sensitivity_matrix(
+    *,
+    ordered_snapshots: Sequence[Mapping[str, Any]],
+    run_id: str,
+    strategy_name: str,
+    run_contract: BacktestRunContract,
+) -> dict[str, Any]:
+    """Build deterministic bounded realism sensitivity metrics from one snapshot set."""
+
+    profile_definitions = _build_realism_profile_assumptions(
+        execution_assumptions=run_contract.execution_assumptions
+    )
+
+    baseline_summary: Mapping[str, Any] | None = None
+    baseline_metrics: Mapping[str, Any] | None = None
+    profiles: list[dict[str, Any]] = []
+    for profile_id, profile_name, profile_description, profile_assumptions in profile_definitions:
+        profile_contract = BacktestRunContract(
+            contract_version=run_contract.contract_version,
+            signal_translation=run_contract.signal_translation,
+            execution_assumptions=profile_assumptions,
+        )
+        profile_flow = simulate_execution_flow(
+            snapshots=ordered_snapshots,
+            run_id=run_id,
+            strategy_name=strategy_name,
+            run_contract=profile_contract,
+        )
+        profile_baseline = build_cost_slippage_metrics_baseline(
+            ordered_snapshots=ordered_snapshots,
+            fills=profile_flow.fills,
+            execution_assumptions=profile_assumptions,
+        )
+        profile_summary = dict(profile_baseline["summary"])
+        profile_metrics = dict(profile_baseline["metrics"]["cost_aware"])
+        if profile_id == REALISM_PROFILE_BASELINE_ID:
+            baseline_summary = profile_summary
+            baseline_metrics = profile_metrics
+
+        profiles.append(
+            {
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "profile_description": profile_description,
+                "assumptions": profile_assumptions.to_payload(),
+                "summary": profile_summary,
+                "metrics": profile_metrics,
+            }
+        )
+
+    if baseline_summary is None or baseline_metrics is None:
+        raise ValueError("Configured baseline realism profile is required")
+
+    for profile in profiles:
+        profile["delta_vs_baseline"] = {
+            "summary": _build_numeric_delta_map(
+                current=profile["summary"],
+                baseline=baseline_summary,
+            ),
+            "metrics": _build_numeric_delta_map(
+                current=profile["metrics"],
+                baseline=baseline_metrics,
+            ),
+        }
+
+    return {
+        "matrix_version": REALISM_SENSITIVITY_MATRIX_VERSION,
+        "deterministic": True,
+        "baseline_profile_id": REALISM_PROFILE_BASELINE_ID,
+        "profile_order": [profile["profile_id"] for profile in profiles],
+        "profiles": profiles,
+    }
+
+
+def _build_realism_profile_assumptions(
+    *,
+    execution_assumptions: BacktestExecutionAssumptions,
+) -> tuple[
+    tuple[str, str, str, BacktestExecutionAssumptions],
+    tuple[str, str, str, BacktestExecutionAssumptions],
+    tuple[str, str, str, BacktestExecutionAssumptions],
+]:
+    fill_timing = execution_assumptions.fill_timing
+    stress_slippage_bps = max(
+        execution_assumptions.slippage_bps,
+        REALISM_PROFILE_COST_STRESS_SLIPPAGE_BPS,
+    )
+    stress_commission = max(
+        execution_assumptions.commission_per_order,
+        REALISM_PROFILE_COST_STRESS_COMMISSION_PER_ORDER,
+    )
+    return (
+        (
+            REALISM_PROFILE_BASELINE_ID,
+            "Configured baseline",
+            "Run-config execution assumptions without sensitivity overrides.",
+            execution_assumptions,
+        ),
+        (
+            REALISM_PROFILE_COST_FREE_ID,
+            "Cost-free reference",
+            "Deterministic reference with zero slippage and zero commission.",
+            BacktestExecutionAssumptions(
+                fill_timing=fill_timing,
+                slippage_bps=0,
+                commission_per_order=Decimal("0"),
+            ),
+        ),
+        (
+            REALISM_PROFILE_COST_STRESS_ID,
+            "Bounded cost stress",
+            "Deterministic bounded stress with elevated fixed slippage and commission.",
+            BacktestExecutionAssumptions(
+                fill_timing=fill_timing,
+                slippage_bps=stress_slippage_bps,
+                commission_per_order=stress_commission,
+            ),
+        ),
+    )
+
+
+def _build_numeric_delta_map(
+    *,
+    current: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+) -> dict[str, float | None]:
+    deltas: dict[str, float | None] = {}
+    ordered_keys = sorted(set(current.keys()) | set(baseline.keys()))
+    for key in ordered_keys:
+        current_value = current.get(key)
+        baseline_value = baseline.get(key)
+        if isinstance(current_value, (int, float)) and isinstance(baseline_value, (int, float)):
+            deltas[key] = _round_metric(float(current_value) - float(baseline_value))
+        else:
+            deltas[key] = None
+    return deltas
 
 
 def _snapshot_fill_reference_price(snapshot: Mapping[str, Any]) -> Decimal | None:

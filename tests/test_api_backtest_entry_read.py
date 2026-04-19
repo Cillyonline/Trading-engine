@@ -65,6 +65,14 @@ def test_backtest_entry_read_route_exposes_bounded_non_live_contract(
         assert "technical availability" in payload["boundary"]["technical_availability_statement"]
         assert "not trader validation" in payload["boundary"]["trader_validation_statement"]
         assert "not operational readiness" in payload["boundary"]["operational_readiness_statement"]
+        assert (
+            "metrics_baseline.realism_sensitivity_matrix"
+            in payload["boundary"]["review_required_evidence"]
+        )
+        assert (
+            "deterministic realism sensitivity profile matrix"
+            in payload["boundary"]["review_comparison_axes"]
+        )
         evidence = payload["boundary"]["strategy_readiness_evidence"]
         assert "bounded API/UI evidence surfacing scope" in evidence["bounded_scope"]
         assert evidence["technical"]["gate"] == "technical_implementation"
