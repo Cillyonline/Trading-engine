@@ -76,6 +76,23 @@ by strategy `comparison_group`.
 Threshold-profile calibration is bounded contract behavior for within-group qualification
 consistency only and does not create cross-group ranking authority.
 
+## 4.2 Qualification-Profile Robustness Audit Boundary
+
+Qualification-profile robustness is audited through one fixed deterministic slice set
+using existing qualification evidence dimensions only.
+
+- one covered slice reproduces current-evidence qualification output
+- bounded failure-envelope slices degrade signal/backtest and risk/execution evidence
+  with fixed deterministic deltas
+- one regime slice is resolved deterministically from strategy `comparison_group`
+- audit output records explicit `stable`, `weak`, and `failing` behavior by slice
+
+This robustness audit does not perform probabilistic regime detection, threshold
+recalibration, or scope expansion beyond bounded decision-support review.
+
+Weak or failing slices limit interpretation outside covered conditions. They do not
+create live-trading approval, trader_validation completion, or profitability claims.
+
 ## 5. Runtime and Documentation Alignment Rule
 
 All runtime wording and documentation must remain consistent with this governance contract:
@@ -92,6 +109,8 @@ wording templates that runtime qualification uses:
 
 - `CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY`: the bounded non-comparability statement
 - `CONFIDENCE_TIER_PRECISION_DISCLAIMER`: the bounded precision statement
+- `QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY`: the bounded robustness
+  interpretation limit for covered versus weak/failing slices
 
 ## 6. Non-Goals
 
@@ -100,3 +119,4 @@ This governance contract does not grant:
 - cross-strategy ranking authority
 - live trading approval or broker execution approval
 - forecast or probability certification
+- robustness claims outside covered conditions

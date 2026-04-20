@@ -371,6 +371,99 @@ def test_regression_identical_inputs_are_deterministic_across_groups() -> None:
     )
 
 
+def test_qualification_profile_robustness_audit_identifies_stable_weak_and_failing_slices() -> None:
+    card = evaluate_qualification(_engine_input())
+    audit = card.metadata["qualification_profile_robustness_audit"]
+    by_slice_id = {item["slice_id"]: item for item in audit["slice_results"]}
+
+    assert audit["comparison_group"] == "mean-reversion"
+    assert audit["threshold_profile_id"] == "qualification-threshold.mean-reversion.v1"
+    assert audit["stable_slice_ids"] == ["covered.current_evidence.v1"]
+    assert audit["weak_slice_ids"] == [
+        "failure_envelope.evidence_decay.v1",
+        "regime_slice.mean_reversion_headwind.v1",
+    ]
+    assert audit["failing_slice_ids"] == ["failure_envelope.execution_stress.v1"]
+
+    assert by_slice_id["covered.current_evidence.v1"]["behavior_status"] == "stable"
+    assert by_slice_id["covered.current_evidence.v1"]["qualification_state"] == "paper_approved"
+    assert by_slice_id["covered.current_evidence.v1"]["action"] == "entry"
+
+    assert by_slice_id["failure_envelope.evidence_decay.v1"]["behavior_status"] == "weak"
+    assert by_slice_id["failure_envelope.evidence_decay.v1"]["qualification_state"] == "paper_candidate"
+    assert by_slice_id["failure_envelope.evidence_decay.v1"]["action"] == "entry"
+    assert by_slice_id["failure_envelope.evidence_decay.v1"]["aggregate_score"] == 74.25
+
+    assert by_slice_id["failure_envelope.execution_stress.v1"]["behavior_status"] == "failing"
+    assert by_slice_id["failure_envelope.execution_stress.v1"]["qualification_state"] == "watch"
+    assert by_slice_id["failure_envelope.execution_stress.v1"]["action"] == "ignore"
+    assert by_slice_id["failure_envelope.execution_stress.v1"]["aggregate_score"] == 72.65
+
+    assert by_slice_id["regime_slice.mean_reversion_headwind.v1"]["behavior_status"] == "weak"
+    assert by_slice_id["regime_slice.mean_reversion_headwind.v1"]["qualification_state"] == (
+        "paper_candidate"
+    )
+    assert by_slice_id["regime_slice.mean_reversion_headwind.v1"]["action"] == "entry"
+    assert by_slice_id["regime_slice.mean_reversion_headwind.v1"]["aggregate_score"] == 72.55
+    assert "covered conditions" in audit["interpretation_limit"]
+
+
+def test_qualification_profile_robustness_audit_is_deterministic_for_identical_inputs() -> None:
+    card_a = evaluate_qualification(_engine_input())
+    card_b = evaluate_qualification(_engine_input())
+
+    audit_a = card_a.metadata["qualification_profile_robustness_audit"]
+    audit_b = card_b.metadata["qualification_profile_robustness_audit"]
+
+    assert audit_a == audit_b
+    assert sorted(audit_a.keys()) == [
+        "audit_summary",
+        "comparison_group",
+        "contract_id",
+        "contract_version",
+        "failing_slice_ids",
+        "interpretation_limit",
+        "slice_results",
+        "stable_slice_ids",
+        "threshold_profile_id",
+        "weak_slice_ids",
+    ]
+    for item in audit_a["slice_results"]:
+        assert sorted(item.keys()) == [
+            "action",
+            "aggregate_score",
+            "applied_adjustments",
+            "base_aggregate_score",
+            "behavior_status",
+            "confidence_tier",
+            "description",
+            "deterministic_rank",
+            "expected_value",
+            "finding",
+            "has_blocking_failure",
+            "qualification_state",
+            "slice_id",
+            "slice_type",
+            "win_rate",
+        ]
+
+
+def test_qualification_profile_robustness_audit_resolves_group_specific_regime_slice_ids() -> None:
+    reference = evaluate_qualification(_engine_input(strategy_id="REFERENCE"))
+    reference_slice_ids = [
+        item["slice_id"]
+        for item in reference.metadata["qualification_profile_robustness_audit"]["slice_results"]
+    ]
+    assert reference_slice_ids[-1] == "regime_slice.reference_control_headwind.v1"
+
+    turtle = evaluate_qualification(_engine_input(strategy_id="TURTLE"))
+    turtle_slice_ids = [
+        item["slice_id"]
+        for item in turtle.metadata["qualification_profile_robustness_audit"]["slice_results"]
+    ]
+    assert turtle_slice_ids[-1] == "regime_slice.trend_following_headwind.v1"
+
+
 def test_bounded_trader_relevance_validation_is_aligned_for_complete_qualification_output() -> None:
     card = evaluate_qualification(_engine_input())
     validation = card.metadata["bounded_trader_relevance_validation"]

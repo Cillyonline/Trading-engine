@@ -71,6 +71,101 @@ QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP: dict[str, dict[str, float 
     },
 }
 
+QUALIFICATION_PROFILE_ROBUSTNESS_BASE_SLICES: tuple[dict[str, Any], ...] = (
+    {
+        "slice_id": "covered.current_evidence.v1",
+        "slice_type": "covered",
+        "deterministic_rank": 1,
+        "description": (
+            "Covered current-evidence slice resolves the qualification profile without adverse adjustments."
+        ),
+        "component_score_adjustments": {},
+    },
+    {
+        "slice_id": "failure_envelope.evidence_decay.v1",
+        "slice_type": "failure_envelope",
+        "deterministic_rank": 2,
+        "description": (
+            "Failure-envelope slice degrades signal and backtest evidence by fixed bounded deltas."
+        ),
+        "component_score_adjustments": {
+            "backtest_quality": -18.0,
+            "signal_quality": -18.0,
+        },
+    },
+    {
+        "slice_id": "failure_envelope.execution_stress.v1",
+        "slice_type": "failure_envelope",
+        "deterministic_rank": 3,
+        "description": (
+            "Failure-envelope slice degrades risk and execution evidence by fixed bounded deltas."
+        ),
+        "component_score_adjustments": {
+            "execution_readiness": -35.0,
+            "risk_alignment": -40.0,
+        },
+    },
+)
+
+QUALIFICATION_PROFILE_ROBUSTNESS_REGIME_SLICE_BY_COMPARISON_GROUP: dict[str, dict[str, Any]] = {
+    "default": {
+        "slice_id": "regime_slice.default_headwind.v1",
+        "slice_type": "regime_slice",
+        "deterministic_rank": 4,
+        "description": (
+            "Default regime slice applies a bounded mixed headwind across signal, portfolio-fit, "
+            "and execution evidence."
+        ),
+        "component_score_adjustments": {
+            "execution_readiness": -8.0,
+            "portfolio_fit": -10.0,
+            "signal_quality": -12.0,
+        },
+    },
+    "mean-reversion": {
+        "slice_id": "regime_slice.mean_reversion_headwind.v1",
+        "slice_type": "regime_slice",
+        "deterministic_rank": 4,
+        "description": (
+            "Mean-reversion regime slice applies a bounded headwind to reversal signal, backtest, "
+            "and portfolio-fit evidence."
+        ),
+        "component_score_adjustments": {
+            "backtest_quality": -14.0,
+            "portfolio_fit": -10.0,
+            "signal_quality": -22.0,
+        },
+    },
+    "reference-control": {
+        "slice_id": "regime_slice.reference_control_headwind.v1",
+        "slice_type": "regime_slice",
+        "deterministic_rank": 4,
+        "description": (
+            "Reference-control regime slice applies a bounded stability check across signal, "
+            "backtest, and execution evidence."
+        ),
+        "component_score_adjustments": {
+            "backtest_quality": -10.0,
+            "execution_readiness": -8.0,
+            "signal_quality": -10.0,
+        },
+    },
+    "trend-following": {
+        "slice_id": "regime_slice.trend_following_headwind.v1",
+        "slice_type": "regime_slice",
+        "deterministic_rank": 4,
+        "description": (
+            "Trend-following regime slice applies a bounded chop/headwind adjustment to signal, "
+            "backtest, and risk evidence."
+        ),
+        "component_score_adjustments": {
+            "backtest_quality": -12.0,
+            "risk_alignment": -8.0,
+            "signal_quality": -18.0,
+        },
+    },
+}
+
 
 class StrategyNotRegisteredError(KeyError):
     """Raised when an unknown strategy key is requested."""
@@ -95,6 +190,14 @@ class RegisteredStrategy:
 
 
 _REGISTRY: dict[str, RegisteredStrategy] = {}
+
+
+def _normalize_comparison_group(comparison_group: str | None) -> str:
+    return (
+        comparison_group.strip()
+        if isinstance(comparison_group, str) and comparison_group.strip()
+        else DEFAULT_COMPARISON_GROUP
+    )
 
 
 def _normalize_key(strategy_key: str) -> str:
@@ -260,10 +363,45 @@ def resolve_qualification_threshold_profile(
 ) -> dict[str, float | str]:
     """Resolve deterministic threshold profile for a comparison group."""
 
-    normalized_group = (
-        comparison_group.strip() if isinstance(comparison_group, str) and comparison_group.strip() else DEFAULT_COMPARISON_GROUP
-    )
+    normalized_group = _normalize_comparison_group(comparison_group)
     profile = QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP.get(normalized_group)
     if profile is None:
         profile = QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP[DEFAULT_COMPARISON_GROUP]
     return dict(profile)
+
+
+def resolve_qualification_profile_robustness_slices(
+    *, comparison_group: str | None
+) -> list[dict[str, Any]]:
+    """Resolve deterministic bounded robustness slices for a comparison group."""
+
+    normalized_group = _normalize_comparison_group(comparison_group)
+    regime_slice = QUALIFICATION_PROFILE_ROBUSTNESS_REGIME_SLICE_BY_COMPARISON_GROUP.get(
+        normalized_group
+    )
+    if regime_slice is None:
+        regime_slice = QUALIFICATION_PROFILE_ROBUSTNESS_REGIME_SLICE_BY_COMPARISON_GROUP[
+            DEFAULT_COMPARISON_GROUP
+        ]
+
+    resolved_slices: list[dict[str, Any]] = []
+    for slice_definition in (*QUALIFICATION_PROFILE_ROBUSTNESS_BASE_SLICES, regime_slice):
+        adjustments = {
+            str(category): float(delta)
+            for category, delta in dict(
+                slice_definition.get("component_score_adjustments", {})
+            ).items()
+        }
+        resolved_slices.append(
+            {
+                "slice_id": str(slice_definition["slice_id"]),
+                "slice_type": str(slice_definition["slice_type"]),
+                "deterministic_rank": int(slice_definition["deterministic_rank"]),
+                "description": str(slice_definition["description"]),
+                "component_score_adjustments": dict(sorted(adjustments.items())),
+            }
+        )
+    return sorted(
+        resolved_slices,
+        key=lambda item: (int(item["deterministic_rank"]), str(item["slice_id"])),
+    )

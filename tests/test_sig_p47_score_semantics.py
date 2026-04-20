@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from cilly_trading.engine.decision_card_contract import (
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
     CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY,
+    QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY,
     ComponentScore,
     HardGateResult,
 )
@@ -23,7 +24,7 @@ from cilly_trading.strategies.registry import (
     CROSS_STRATEGY_SCORE_NON_COMPARABILITY_NOTE,
     QUALIFICATION_THRESHOLD_PROFILES_BY_COMPARISON_GROUP,
     get_registered_strategy_metadata,
-    reset_registry,
+    resolve_qualification_profile_robustness_slices,
     resolve_qualification_threshold_profile,
 )
 
@@ -114,6 +115,27 @@ def test_comparison_group_threshold_profiles_are_defined_and_deterministic() -> 
     assert first["profile_id"] == "qualification-threshold.mean-reversion.v1"
     assert first["high_aggregate"] >= first["medium_aggregate"]
     assert first["high_min_component"] >= first["medium_min_component"]
+
+
+def test_comparison_group_robustness_slices_are_defined_and_deterministic() -> None:
+    first = resolve_qualification_profile_robustness_slices(comparison_group="mean-reversion")
+    second = resolve_qualification_profile_robustness_slices(comparison_group="mean-reversion")
+
+    assert first == second
+    assert [item["deterministic_rank"] for item in first] == [1, 2, 3, 4]
+    assert [item["slice_id"] for item in first] == [
+        "covered.current_evidence.v1",
+        "failure_envelope.evidence_decay.v1",
+        "failure_envelope.execution_stress.v1",
+        "regime_slice.mean_reversion_headwind.v1",
+    ]
+    assert all(isinstance(item["component_score_adjustments"], dict) for item in first)
+    assert (
+        resolve_qualification_profile_robustness_slices(comparison_group="trend-following")[-1][
+            "slice_id"
+        ]
+        == "regime_slice.trend_following_headwind.v1"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +297,17 @@ def test_score_semantics_governance_doc_mentions_calibrated_threshold_profiles()
     assert "not directly comparable" in content
 
 
+def test_score_semantics_governance_doc_mentions_bounded_robustness_audit() -> None:
+    content = GOVERNANCE_DOC.read_text(encoding="utf-8")
+
+    assert "Qualification-Profile Robustness Audit Boundary" in content
+    assert "stable" in content
+    assert "weak" in content
+    assert "failing" in content
+    assert "covered conditions" in content
+    assert "QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY" in content
+
+
 def test_score_semantics_governance_doc_defines_non_goals() -> None:
     content = GOVERNANCE_DOC.read_text(encoding="utf-8")
 
@@ -316,3 +349,27 @@ def test_signal_quality_contract_doc_mentions_calibrated_threshold_profiles() ->
     assert "threshold profile" in content.casefold()
     assert "comparison_group" in content
     assert "non-comparability" in content.casefold()
+
+
+def test_signal_quality_contract_doc_mentions_bounded_robustness_claim_limits() -> None:
+    content = (REPO_ROOT / "docs" / "governance" / "signal-quality-bounded-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Qualification-Profile Robustness Boundary" in content
+    assert "covered.current_evidence.v1" in content
+    assert "failure_envelope.execution_stress.v1" in content
+    assert "stable" in content
+    assert "weak" in content
+    assert "failing" in content
+    assert "covered conditions" in content
+    assert "trader_validation" in content
+
+
+def test_qualification_profile_robustness_boundary_constant_is_defined() -> None:
+    boundary = QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY.casefold()
+
+    assert isinstance(QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY, str)
+    assert "covered conditions" in boundary
+    assert "weak or failing slices" in boundary
+    assert "paper profitability" in boundary

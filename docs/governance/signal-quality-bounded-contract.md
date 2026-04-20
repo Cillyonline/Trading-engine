@@ -78,6 +78,23 @@ threshold profiles.
 Cross-group non-comparability remains explicit: threshold profile calibration does not
 make decision-card scores directly comparable across different comparison groups.
 
+## Qualification-Profile Robustness Boundary
+
+Qualification-profile robustness is evaluated through one fixed deterministic bounded
+audit slice set:
+
+- `covered.current_evidence.v1`
+- `failure_envelope.evidence_decay.v1`
+- `failure_envelope.execution_stress.v1`
+- one comparison-group regime slice resolved deterministically from registry metadata
+
+The audit uses only existing component-score evidence dimensions and governed threshold
+profiles. It records explicit `stable`, `weak`, and `failing` slice behavior in bounded
+audit output.
+
+Weak or failing slices limit interpretation outside covered conditions and do not expand
+live-trading approval, paper profitability, or trader_validation claims.
+
 ## Deterministic Ranking Boundary
 
 For setup-stage candidates that meet the configured score floor, ranking is deterministic:
@@ -135,6 +152,10 @@ This contract supports only bounded implementation claims. It explicitly support
 "Classification: technically good, traderically weak" for current state.
 
 It does not claim trader readiness, and it provides no live-trading readiness, execution approval, or profitability guarantee.
+
+Robustness audit findings remain non-live interpretation only: stable slices stay bounded
+to covered conditions, and weak/failing slices reduce interpretive confidence rather than
+expanding claims.
 
 ## Validation Surfaces
 

@@ -11,6 +11,7 @@ from cilly_trading.engine.decision_card_contract import (
     DECISION_CARD_CONTRACT_VERSION,
     BoundedTraderRelevanceValidation,
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
+    QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY,
     UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND,
     REQUIRED_COMPONENT_CATEGORIES,
     ComponentScore,
@@ -21,12 +22,15 @@ from cilly_trading.engine.decision_card_contract import (
     HardGateEvaluation,
     HardGateResult,
     QualificationColor,
+    QualificationProfileRobustnessAudit,
+    QualificationProfileRobustnessSliceResult,
     QualificationState,
     evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
 from cilly_trading.strategies.registry import (
     get_registered_strategy_metadata,
+    resolve_qualification_profile_robustness_slices,
     resolve_qualification_threshold_profile,
 )
 
@@ -55,6 +59,17 @@ EXPECTED_VALUE_REWARD_MULTIPLIER_MIN = 0.50
 EXPECTED_VALUE_REWARD_MULTIPLIER_MAX = 1.50
 EXPECTED_VALUE_MIN = -1.0
 EXPECTED_VALUE_MAX = 1.0
+QUALIFICATION_STATE_RANKS: dict[QualificationState, int] = {
+    "reject": 0,
+    "watch": 1,
+    "paper_candidate": 2,
+    "paper_approved": 3,
+}
+CONFIDENCE_TIER_RANKS: dict[DecisionConfidenceTier, int] = {
+    "low": 0,
+    "medium": 1,
+    "high": 2,
+}
 
 
 @dataclass(frozen=True)
@@ -87,6 +102,18 @@ class SentimentOverlayResolution:
     cap_points: float
     reason: str
     sentiment_score: float | None = None
+
+
+@dataclass(frozen=True)
+class QualificationProfileSnapshot:
+    qualification_state: QualificationState
+    action: DecisionAction
+    confidence_tier: DecisionConfidenceTier
+    aggregate_score: float
+    base_aggregate_score: float
+    win_rate: float
+    expected_value: float
+    has_blocking_failure: bool
 
 
 @dataclass(frozen=True)
@@ -148,6 +175,24 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         expected_value=expected_value,
         confidence_thresholds=threshold_profile["thresholds"],
     )
+    robustness_audit = _evaluate_qualification_profile_robustness_audit(
+        generated_at_utc=input_data.generated_at_utc,
+        hard_gates=hard_gate_evaluation.gates,
+        hard_gate_policy_version=input_data.hard_gate_policy_version,
+        component_scores=integrated_component_scores,
+        sentiment_overlay=input_data.sentiment_overlay,
+        threshold_profile=threshold_profile,
+        baseline_snapshot=QualificationProfileSnapshot(
+            qualification_state=state,
+            action=action,
+            confidence_tier=confidence_tier,
+            aggregate_score=aggregate_score,
+            base_aggregate_score=base_aggregate_score,
+            win_rate=win_rate,
+            expected_value=expected_value,
+            has_blocking_failure=hard_gate_evaluation.has_blocking_failure,
+        ),
+    )
     gate_explanations = _gate_explanations(hard_gate_evaluation=hard_gate_evaluation)
     score_explanations = _score_explanations(
         component_scores=integrated_component_scores,
@@ -161,6 +206,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         sentiment_resolution=sentiment_resolution,
         backtest_input_applied=input_data.backtest_evidence is not None,
         portfolio_fit_input_applied=input_data.portfolio_fit_input is not None,
+        robustness_audit=robustness_audit,
     )
     rationale_summary = (
         "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules."
@@ -169,7 +215,8 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         "Decision action and qualification are deterministic technical implementation evidence "
         "and does not imply live-trading approval, paper profitability, or trader_validation gate completion. "
         "Validation gate status remains explicitly separate and defaults to trader_validation_not_started "
-        "unless governed evidence is recorded."
+        "unless governed evidence is recorded. "
+        f"{robustness_audit.interpretation_limit}"
     )
     trader_relevance_validation = evaluate_bounded_trader_relevance_cases(
         qualification_state=state,
@@ -227,6 +274,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
             expected_value=expected_value,
             action=action,
             trader_relevance_validation=trader_relevance_validation,
+            robustness_audit=robustness_audit,
         ),
     }
     return validate_decision_card(payload)
@@ -521,6 +569,7 @@ def _score_explanations(
     sentiment_resolution: SentimentOverlayResolution,
     backtest_input_applied: bool,
     portfolio_fit_input_applied: bool,
+    robustness_audit: QualificationProfileRobustnessAudit,
 ) -> list[str]:
     ordered = sorted(component_scores, key=lambda component: component.category)
     component_summary = ", ".join(
@@ -563,7 +612,246 @@ def _score_explanations(
             f"qualified win_rate >= {ACTION_ENTRY_WIN_RATE_MIN:.2f} with non-negative expected value -> entry; "
             f"else ignore. Resolved action={action}."
         ),
+        f"Qualification-profile robustness audit: {robustness_audit.audit_summary}",
+        f"Robustness interpretation boundary: {robustness_audit.interpretation_limit}",
     ]
+
+
+def _evaluate_qualification_profile_robustness_audit(
+    *,
+    generated_at_utc: str,
+    hard_gates: list[HardGateResult],
+    hard_gate_policy_version: str,
+    component_scores: list[ComponentScore],
+    sentiment_overlay: SentimentOverlayInput | None,
+    threshold_profile: dict[str, object],
+    baseline_snapshot: QualificationProfileSnapshot,
+) -> QualificationProfileRobustnessAudit:
+    comparison_group = str(threshold_profile["comparison_group"])
+    slice_definitions = resolve_qualification_profile_robustness_slices(
+        comparison_group=comparison_group
+    )
+    slice_results: list[QualificationProfileRobustnessSliceResult] = []
+    for slice_definition in slice_definitions:
+        adjusted_snapshot = _resolve_qualification_profile_snapshot(
+            generated_at_utc=generated_at_utc,
+            hard_gates=hard_gates,
+            hard_gate_policy_version=hard_gate_policy_version,
+            component_scores=component_scores,
+            sentiment_overlay=sentiment_overlay,
+            threshold_profile=threshold_profile,
+            component_score_adjustments=dict(slice_definition["component_score_adjustments"]),
+        )
+        behavior_status = _classify_robustness_behavior(
+            baseline_snapshot=baseline_snapshot,
+            slice_snapshot=adjusted_snapshot,
+            slice_type=str(slice_definition["slice_type"]),
+        )
+        slice_results.append(
+            QualificationProfileRobustnessSliceResult(
+                slice_id=str(slice_definition["slice_id"]),
+                slice_type=str(slice_definition["slice_type"]),
+                deterministic_rank=int(slice_definition["deterministic_rank"]),
+                description=str(slice_definition["description"]),
+                behavior_status=behavior_status,
+                qualification_state=adjusted_snapshot.qualification_state,
+                action=adjusted_snapshot.action,
+                confidence_tier=adjusted_snapshot.confidence_tier,
+                aggregate_score=adjusted_snapshot.aggregate_score,
+                base_aggregate_score=adjusted_snapshot.base_aggregate_score,
+                win_rate=adjusted_snapshot.win_rate,
+                expected_value=adjusted_snapshot.expected_value,
+                has_blocking_failure=adjusted_snapshot.has_blocking_failure,
+                applied_adjustments=_robustness_adjustment_entries(
+                    component_score_adjustments=dict(slice_definition["component_score_adjustments"])
+                ),
+                finding=_robustness_finding(
+                    baseline_snapshot=baseline_snapshot,
+                    slice_snapshot=adjusted_snapshot,
+                    behavior_status=behavior_status,
+                ),
+            )
+        )
+
+    stable_slice_ids = sorted(
+        item.slice_id for item in slice_results if item.behavior_status == "stable"
+    )
+    weak_slice_ids = sorted(item.slice_id for item in slice_results if item.behavior_status == "weak")
+    failing_slice_ids = sorted(
+        item.slice_id for item in slice_results if item.behavior_status == "failing"
+    )
+    audit_summary = (
+        f"Deterministic qualification-profile robustness audit covered {len(slice_results)} slices "
+        f"for comparison_group={comparison_group}: stable={_format_slice_ids(stable_slice_ids)}; "
+        f"weak={_format_slice_ids(weak_slice_ids)}; failing={_format_slice_ids(failing_slice_ids)}."
+    )
+    return QualificationProfileRobustnessAudit(
+        comparison_group=comparison_group,
+        threshold_profile_id=str(threshold_profile["profile_id"]),
+        stable_slice_ids=stable_slice_ids,
+        weak_slice_ids=weak_slice_ids,
+        failing_slice_ids=failing_slice_ids,
+        slice_results=slice_results,
+        audit_summary=audit_summary,
+        interpretation_limit=QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY,
+    )
+
+
+def _resolve_qualification_profile_snapshot(
+    *,
+    generated_at_utc: str,
+    hard_gates: list[HardGateResult],
+    hard_gate_policy_version: str,
+    component_scores: list[ComponentScore],
+    sentiment_overlay: SentimentOverlayInput | None,
+    threshold_profile: dict[str, object],
+    component_score_adjustments: dict[str, float],
+) -> QualificationProfileSnapshot:
+    adjusted_components = _apply_robustness_component_adjustments(
+        component_scores=component_scores,
+        component_score_adjustments=component_score_adjustments,
+    )
+    hard_gate_evaluation = HardGateEvaluation(
+        policy_version=hard_gate_policy_version,
+        gates=list(hard_gates),
+    )
+    base_aggregate_score = compute_aggregate_score(component_scores=adjusted_components)
+    sentiment_resolution = _resolve_sentiment_overlay(
+        sentiment_overlay=sentiment_overlay,
+        generated_at_utc=generated_at_utc,
+        component_scores=adjusted_components,
+    )
+    aggregate_score = _apply_sentiment_overlay(
+        base_aggregate_score=base_aggregate_score,
+        sentiment_resolution=sentiment_resolution,
+    )
+    confidence_tier = assign_confidence_tier(
+        aggregate_score=aggregate_score,
+        component_scores=adjusted_components,
+        confidence_thresholds=threshold_profile["thresholds"],
+    )
+    win_rate = compute_bounded_win_rate(component_scores=adjusted_components)
+    expected_value = compute_bounded_expected_value(
+        component_scores=adjusted_components,
+        win_rate=win_rate,
+    )
+    qualification_state, _, _ = resolve_qualification_state(
+        hard_gate_evaluation=hard_gate_evaluation,
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        confidence_thresholds=threshold_profile["thresholds"],
+    )
+    action = resolve_decision_action(
+        hard_gate_evaluation=hard_gate_evaluation,
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        qualification_state=qualification_state,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        confidence_thresholds=threshold_profile["thresholds"],
+    )
+    return QualificationProfileSnapshot(
+        qualification_state=qualification_state,
+        action=action,
+        confidence_tier=confidence_tier,
+        aggregate_score=aggregate_score,
+        base_aggregate_score=base_aggregate_score,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        has_blocking_failure=hard_gate_evaluation.has_blocking_failure,
+    )
+
+
+def _apply_robustness_component_adjustments(
+    *,
+    component_scores: list[ComponentScore],
+    component_score_adjustments: dict[str, float],
+) -> list[ComponentScore]:
+    adjusted_components: list[ComponentScore] = []
+    for component in component_scores:
+        delta = float(component_score_adjustments.get(component.category, 0.0))
+        adjusted_components.append(
+            ComponentScore(
+                category=component.category,
+                score=_clamp_audit_component_score(float(component.score) + delta),
+                rationale=component.rationale,
+                evidence=list(component.evidence),
+            )
+        )
+    return adjusted_components
+
+
+def _clamp_audit_component_score(value: float) -> float:
+    return max(0.0, min(100.0, round(float(value), 4)))
+
+
+def _classify_robustness_behavior(
+    *,
+    baseline_snapshot: QualificationProfileSnapshot,
+    slice_snapshot: QualificationProfileSnapshot,
+    slice_type: str,
+) -> str:
+    if slice_type == "covered":
+        return "stable"
+    if slice_snapshot.has_blocking_failure or slice_snapshot.qualification_state == "reject":
+        return "failing"
+    baseline_state_rank = QUALIFICATION_STATE_RANKS[baseline_snapshot.qualification_state]
+    slice_state_rank = QUALIFICATION_STATE_RANKS[slice_snapshot.qualification_state]
+    baseline_confidence_rank = CONFIDENCE_TIER_RANKS[baseline_snapshot.confidence_tier]
+    slice_confidence_rank = CONFIDENCE_TIER_RANKS[slice_snapshot.confidence_tier]
+    if baseline_snapshot.action == "entry" and slice_snapshot.action in {"ignore", "exit"}:
+        return "failing"
+    if slice_state_rank < (baseline_state_rank - 1):
+        return "failing"
+    if (
+        slice_state_rank >= baseline_state_rank
+        and slice_snapshot.action == baseline_snapshot.action
+        and slice_confidence_rank >= baseline_confidence_rank
+    ):
+        return "stable"
+    return "weak"
+
+
+def _robustness_adjustment_entries(*, component_score_adjustments: dict[str, float]) -> list[str]:
+    if not component_score_adjustments:
+        return ["component_score_adjustments=none"]
+    return [
+        f"{category} delta={float(delta):.4f}"
+        for category, delta in sorted(component_score_adjustments.items())
+    ]
+
+
+def _robustness_finding(
+    *,
+    baseline_snapshot: QualificationProfileSnapshot,
+    slice_snapshot: QualificationProfileSnapshot,
+    behavior_status: str,
+) -> str:
+    baseline_label = (
+        f"{baseline_snapshot.qualification_state}/{baseline_snapshot.action}/"
+        f"{baseline_snapshot.confidence_tier}"
+    )
+    slice_label = (
+        f"{slice_snapshot.qualification_state}/{slice_snapshot.action}/"
+        f"{slice_snapshot.confidence_tier}"
+    )
+    if behavior_status == "stable":
+        lead = "Slice remained stable relative to covered current evidence."
+        boundary = "Interpretation remains bounded to covered conditions only."
+    elif behavior_status == "weak":
+        lead = "Slice degraded profile support relative to covered current evidence."
+        boundary = "This instability limits interpretation outside covered conditions."
+    else:
+        lead = "Slice produced failing profile behavior relative to covered current evidence."
+        boundary = "Do not generalize stability outside covered conditions from this slice."
+    return (
+        f"{lead} Baseline={baseline_label}; slice={slice_label}; "
+        f"aggregate={slice_snapshot.aggregate_score:.4f}; {boundary}"
+    )
+
+
+def _format_slice_ids(slice_ids: list[str]) -> str:
+    return ",".join(slice_ids) if slice_ids else "none"
 
 
 def _build_metadata(
@@ -576,6 +864,7 @@ def _build_metadata(
     expected_value: float,
     action: DecisionAction,
     trader_relevance_validation: BoundedTraderRelevanceValidation,
+    robustness_audit: QualificationProfileRobustnessAudit,
 ) -> dict[str, object]:
     metadata = dict(input_data.metadata or {})
     metadata["base_aggregate_score"] = base_aggregate_score
@@ -595,6 +884,7 @@ def _build_metadata(
     metadata["decision_action"] = action
     metadata["decision_action_policy_version"] = "paper-action.v1"
     metadata["bounded_trader_relevance_validation"] = trader_relevance_validation.model_dump(mode="python")
+    metadata["qualification_profile_robustness_audit"] = robustness_audit.model_dump(mode="python")
     metadata["technical_implementation_status"] = metadata.get(
         "technical_implementation_status", "technical_in_progress"
     )
