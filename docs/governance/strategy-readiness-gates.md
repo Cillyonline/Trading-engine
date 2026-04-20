@@ -136,6 +136,7 @@ Decision-evidence status boundary for qualification outputs:
 
 - qualification and action outputs may include `technical_implementation_status` as technical-only evidence metadata
 - qualification and action outputs may include `trader_validation_status` as independent trader-validation metadata
+- qualification and action outputs may include bounded trader-relevance validation case outputs (`aligned` | `weak` | `missing`) for deterministic paper-review evidence checks
 - technical and trader-validation statuses must remain explicit, separate fields
 - default bounded interpretation for current paper-evaluation action evidence:
   - technical implementation status may be `technical_in_progress`
@@ -146,6 +147,7 @@ Non-live and governance boundary for this scope:
 
 - no live-trading readiness or authorization claim
 - no broker-connectivity or execution-enablement claim
+- no paper profitability or edge claim
 - no production-readiness claim
 - no replacement of governance gates with inferred UI/API status
 

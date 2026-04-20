@@ -203,6 +203,16 @@ def test_signal_decision_surface_returns_bounded_technical_states(tmp_path: Path
     assert payload["items"][2]["expected_value"] == 1.0
     assert "score" in payload["items"][2]["score_contribution"].lower()
     assert "stage" in payload["items"][1]["stage_assessment"].lower()
+    assert any(
+        "bounded trader-relevance case review" in entry.lower()
+        for entry in payload["items"][2]["qualification_evidence"]
+    )
+    assert any(
+        "boundary evidence" in entry.lower()
+        and "not trader_validation evidence" in entry.lower()
+        and "not paper profitability evidence" in entry.lower()
+        for entry in payload["items"][2]["qualification_evidence"]
+    )
 
 
 def test_signal_decision_surface_covers_threshold_and_entry_zone_edge_cases(
@@ -248,6 +258,13 @@ def test_signal_decision_surface_covers_threshold_and_entry_zone_edge_cases(
     assert by_symbol["EDGE_CANDIDATE"]["missing_criteria"] == []
     assert by_symbol["EDGE_CANDIDATE"]["blocking_conditions"] == []
     assert by_symbol["EDGE_CANDIDATE"]["qualification_evidence"]
+    edge_candidate_review = next(
+        entry
+        for entry in by_symbol["EDGE_CANDIDATE"]["qualification_evidence"]
+        if "Bounded trader-relevance case review" in entry
+    )
+    assert "decision_action_relevance=aligned" in edge_candidate_review
+    assert "qualification_state_relevance=aligned" in edge_candidate_review
 
     assert by_symbol["EDGE_BLOCK"]["decision_state"] == "watch"
     assert by_symbol["EDGE_BLOCK"]["qualification_state"] == "watch"

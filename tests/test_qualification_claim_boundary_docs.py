@@ -24,7 +24,21 @@ def test_governance_doc_defines_evidence_hierarchy_and_forbidden_claim_classes()
     assert "live-trading readiness/approval claims" in content
     assert "broker execution readiness claims" in content
     assert "trader-validation claims" in content
+    assert "paper profitability or edge claims" in content
     assert "guaranteed/certain outcome claims" in content
+
+
+def test_governance_doc_defines_deterministic_bounded_trader_relevance_contract() -> None:
+    content = GOVERNANCE_DOC.read_text(encoding="utf-8")
+
+    assert "Deterministic Bounded Trader-Relevance Review Contract" in content
+    assert "bounded_trader_relevance.paper_review.v1" in content
+    assert "qualification_state_relevance" in content
+    assert "decision_action_relevance" in content
+    assert "boundary_scope_relevance" in content
+    assert "aligned" in content
+    assert "weak" in content
+    assert "missing" in content
 
 
 def test_decision_card_contract_doc_declares_claim_boundary_wording_requirements() -> None:

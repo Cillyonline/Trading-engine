@@ -15,6 +15,7 @@ from cilly_trading.engine.decision_card_contract import (
     ACTION_EXIT_WIN_RATE_MAX,
     QUALIFICATION_HIGH_AGGREGATE_THRESHOLD,
     QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD,
+    evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
 from cilly_trading.models import ExecutionEvent, Order, Position, SignalReadItemDTO, SignalReadResponseDTO, Trade
@@ -565,9 +566,11 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
             "professional non-live qualification criteria over stage, score, confirmation-rule, and entry-zone evidence",
             "explicit qualification evidence with rationale including score contribution and stage assessment",
             "explicit missing criteria and blocking-condition visibility",
+            "deterministic bounded trader-relevance case evaluation for qualification and action outputs",
         ],
         out_of_scope=[
             "trader validation outcomes",
+            "paper profitability or edge claims",
             "operational readiness outcomes",
             "live trading and broker execution decisions",
         ],
@@ -714,6 +717,37 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         action = "entry"
     else:
         action = "ignore"
+
+    boundary_statement = (
+        "Boundary evidence: this deterministic decision output is bounded trader-relevance validation only; "
+        "it is not trader_validation evidence, not paper profitability evidence, and not live-trading readiness evidence."
+    )
+    trader_relevance_validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state=qualification_state,
+        action=action,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        qualification_summary=(
+            "Qualification output remains explicitly bounded to paper-trading scope for technical review."
+        ),
+        rationale_summary=rationale_summary,
+        final_explanation=boundary_statement,
+        qualification_evidence=qualification_evidence + [boundary_statement],
+        missing_criteria=missing_criteria,
+        blocking_conditions=blocking_conditions,
+    )
+    trader_relevance_case_status = ", ".join(
+        f"{item.case_id}={item.evidence_status}"
+        for item in trader_relevance_validation.evaluations
+    )
+    qualification_evidence.append(
+        "Bounded trader-relevance case review "
+        f"(contract={trader_relevance_validation.contract_id}, "
+        f"version={trader_relevance_validation.contract_version}, "
+        f"overall={trader_relevance_validation.overall_status}): "
+        f"{trader_relevance_case_status}."
+    )
+    qualification_evidence.append(boundary_statement)
 
     return SignalDecisionSurfaceItemResponse(
         symbol=str(signal.get("symbol") or ""),

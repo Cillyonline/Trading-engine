@@ -9,6 +9,7 @@ from cilly_trading.engine.decision_card_contract import (
     ACTION_ENTRY_WIN_RATE_MIN,
     ACTION_EXIT_WIN_RATE_MAX,
     DECISION_CARD_CONTRACT_VERSION,
+    BoundedTraderRelevanceValidation,
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
     UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND,
     REQUIRED_COMPONENT_CATEGORIES,
@@ -21,6 +22,7 @@ from cilly_trading.engine.decision_card_contract import (
     HardGateResult,
     QualificationColor,
     QualificationState,
+    evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
 from cilly_trading.strategies.registry import (
@@ -146,6 +148,40 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
         expected_value=expected_value,
         confidence_thresholds=threshold_profile["thresholds"],
     )
+    gate_explanations = _gate_explanations(hard_gate_evaluation=hard_gate_evaluation)
+    score_explanations = _score_explanations(
+        component_scores=integrated_component_scores,
+        base_aggregate_score=base_aggregate_score,
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        threshold_profile=threshold_profile,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        action=action,
+        sentiment_resolution=sentiment_resolution,
+        backtest_input_applied=input_data.backtest_evidence is not None,
+        portfolio_fit_input_applied=input_data.portfolio_fit_input is not None,
+    )
+    rationale_summary = (
+        "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules."
+    )
+    final_explanation = (
+        "Decision action and qualification are deterministic technical implementation evidence "
+        "and does not imply live-trading approval, paper profitability, or trader_validation gate completion. "
+        "Validation gate status remains explicitly separate and defaults to trader_validation_not_started "
+        "unless governed evidence is recorded."
+    )
+    trader_relevance_validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state=state,
+        action=action,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        qualification_summary=qualification_summary,
+        rationale_summary=rationale_summary,
+        final_explanation=final_explanation,
+        gate_explanations=gate_explanations,
+        score_explanations=score_explanations,
+    )
     payload = {
         "contract_version": DECISION_CARD_CONTRACT_VERSION,
         "decision_card_id": input_data.decision_card_id,
@@ -177,26 +213,10 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
             "summary": qualification_summary,
         },
         "rationale": {
-            "summary": "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules.",
-            "gate_explanations": _gate_explanations(hard_gate_evaluation=hard_gate_evaluation),
-            "score_explanations": _score_explanations(
-                component_scores=integrated_component_scores,
-                base_aggregate_score=base_aggregate_score,
-                aggregate_score=aggregate_score,
-                confidence_tier=confidence_tier,
-                threshold_profile=threshold_profile,
-                win_rate=win_rate,
-                expected_value=expected_value,
-                action=action,
-                sentiment_resolution=sentiment_resolution,
-                backtest_input_applied=input_data.backtest_evidence is not None,
-                portfolio_fit_input_applied=input_data.portfolio_fit_input is not None,
-            ),
-            "final_explanation": (
-                "Decision action and qualification are deterministic technical implementation evidence "
-                "and does not imply live-trading approval. Validation gate status remains explicitly "
-                "separate and defaults to trader_validation_not_started unless governed evidence is recorded."
-            ),
+            "summary": rationale_summary,
+            "gate_explanations": gate_explanations,
+            "score_explanations": score_explanations,
+            "final_explanation": final_explanation,
         },
         "metadata": _build_metadata(
             input_data=input_data,
@@ -206,6 +226,7 @@ def evaluate_qualification(input_data: QualificationEngineInput) -> DecisionCard
             win_rate=win_rate,
             expected_value=expected_value,
             action=action,
+            trader_relevance_validation=trader_relevance_validation,
         ),
     }
     return validate_decision_card(payload)
@@ -554,6 +575,7 @@ def _build_metadata(
     win_rate: float,
     expected_value: float,
     action: DecisionAction,
+    trader_relevance_validation: BoundedTraderRelevanceValidation,
 ) -> dict[str, object]:
     metadata = dict(input_data.metadata or {})
     metadata["base_aggregate_score"] = base_aggregate_score
@@ -572,6 +594,7 @@ def _build_metadata(
     metadata["expected_value"] = expected_value
     metadata["decision_action"] = action
     metadata["decision_action_policy_version"] = "paper-action.v1"
+    metadata["bounded_trader_relevance_validation"] = trader_relevance_validation.model_dump(mode="python")
     metadata["technical_implementation_status"] = metadata.get(
         "technical_implementation_status", "technical_in_progress"
     )

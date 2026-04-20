@@ -54,7 +54,9 @@ def test_strategy_readiness_gates_define_bounded_api_ui_evidence_surface_scope()
     assert "GET /backtest/artifacts/{run_id}/{artifact_name}" in content
     assert "must not collapse these states into a single inferred readiness claim" in content
     assert "no live-trading readiness or authorization claim" in content
+    assert "no paper profitability or edge claim" in content
     assert "no production-readiness claim" in content
+    assert "bounded trader-relevance validation" in content
 
 
 def test_docs_index_references_strategy_readiness_gates_contract() -> None:

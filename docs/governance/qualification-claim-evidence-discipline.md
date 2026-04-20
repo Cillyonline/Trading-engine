@@ -30,9 +30,34 @@ The following claim classes are unsupported in qualification outputs and must be
 - production readiness claims
 - broker execution readiness claims
 - trader-validation claims
+- paper profitability or edge claims
 - guaranteed/certain outcome claims
 
-## 4. Runtime and Documentation Alignment Rule
+## 4. Deterministic Bounded Trader-Relevance Review Contract
+
+Canonical contract id/version:
+
+- `bounded_trader_relevance.paper_review.v1`
+- version `1.0.0`
+
+Paper-review cases (deterministic and ordered by case id):
+
+- `qualification_state_relevance`: verify qualification-state output is evidence-explained and explicitly paper-scoped
+- `decision_action_relevance`: verify action output is evidence-explained with bounded decision metrics
+- `boundary_scope_relevance`: verify explicit boundary wording for trader_validation separation, paper profitability separation, and live-readiness separation
+
+Case status semantics:
+
+- `aligned`: all required evidence signals for the case are present
+- `weak`: some required evidence signals are present, but at least one is missing
+- `missing`: no required evidence signals are present
+
+Determinism rule:
+
+- identical inputs must produce identical case classifications and ordering
+- classification must be machine-evaluable from explicit output evidence fields only (no manual interpretation)
+
+## 5. Runtime and Documentation Alignment Rule
 
 Documentation and runtime wording must enforce the same boundary:
 
@@ -40,7 +65,7 @@ Documentation and runtime wording must enforce the same boundary:
 - inspection API wording mirrors the same boundary
 - qualification outputs explicitly state they do not imply live-trading approval
 
-## 5. Validation Rule
+## 6. Validation Rule
 
 Where claim-boundary enforcement exists in runtime contracts, validation must fail closed for unsupported claim language.
 Validation is required for:
@@ -49,7 +74,7 @@ Validation is required for:
 - qualification summary text
 - rationale summary/final explanation text
 
-## 6. Non-Goals
+## 7. Non-Goals
 
 This governance contract does not grant:
 

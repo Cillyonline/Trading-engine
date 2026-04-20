@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 
 from cilly_trading.engine.decision_card_contract import (
+    BOUNDED_TRADER_RELEVANCE_CONTRACT_ID,
+    BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION,
     DECISION_CARD_CONTRACT_VERSION,
     ComponentScore,
     HardGateResult,
+    evaluate_bounded_trader_relevance_cases,
 )
 from cilly_trading.engine.qualification_engine import (
     BacktestEvidenceInput,
@@ -366,3 +369,84 @@ def test_regression_identical_inputs_are_deterministic_across_groups() -> None:
     assert first_turtle.metadata["qualification_threshold_profile_id"] == (
         second_turtle.metadata["qualification_threshold_profile_id"]
     )
+
+
+def test_bounded_trader_relevance_validation_is_aligned_for_complete_qualification_output() -> None:
+    card = evaluate_qualification(_engine_input())
+    validation = card.metadata["bounded_trader_relevance_validation"]
+
+    assert validation["contract_id"] == BOUNDED_TRADER_RELEVANCE_CONTRACT_ID
+    assert validation["contract_version"] == BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION
+    assert validation["overall_status"] == "aligned"
+    assert [item["case_id"] for item in validation["evaluations"]] == [
+        "boundary_scope_relevance",
+        "decision_action_relevance",
+        "qualification_state_relevance",
+    ]
+    assert all(item["evidence_status"] == "aligned" for item in validation["evaluations"])
+
+
+def test_bounded_trader_relevance_validation_supports_weak_path_deterministically() -> None:
+    validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state="watch",
+        action="ignore",
+        win_rate=0.42,
+        expected_value=None,
+        qualification_summary="Qualification output remains bounded to paper scope.",
+        rationale_summary="Partial technical evidence exists.",
+        final_explanation="Boundary mentions trader_validation and live-trading readiness only.",
+        qualification_evidence=["No explicit action rule trace is included yet."],
+        missing_criteria=["Missing deterministic expected-value evidence."],
+        blocking_conditions=[],
+    )
+
+    assert validation.overall_status == "weak"
+    by_case = {item.case_id: item.evidence_status for item in validation.evaluations}
+    assert by_case == {
+        "boundary_scope_relevance": "weak",
+        "decision_action_relevance": "weak",
+        "qualification_state_relevance": "aligned",
+    }
+
+
+def test_bounded_trader_relevance_validation_supports_missing_path_deterministically() -> None:
+    validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state=None,
+        action=None,
+        win_rate=None,
+        expected_value=None,
+        qualification_summary="",
+        rationale_summary="",
+        final_explanation="",
+        qualification_evidence=[],
+        missing_criteria=[],
+        blocking_conditions=[],
+    )
+
+    assert validation.overall_status == "missing"
+    assert all(item.evidence_status == "missing" for item in validation.evaluations)
+
+
+def test_bounded_trader_relevance_validation_schema_is_stable_for_identical_inputs() -> None:
+    card_a = evaluate_qualification(_engine_input())
+    card_b = evaluate_qualification(_engine_input())
+
+    validation_a = card_a.metadata["bounded_trader_relevance_validation"]
+    validation_b = card_b.metadata["bounded_trader_relevance_validation"]
+
+    assert validation_a == validation_b
+    assert sorted(validation_a.keys()) == [
+        "contract_id",
+        "contract_version",
+        "evaluations",
+        "overall_status",
+    ]
+    for item in validation_a["evaluations"]:
+        assert sorted(item.keys()) == [
+            "case_id",
+            "evidence_status",
+            "evidence_summary",
+            "observed_evidence",
+            "required_evidence",
+            "review_question",
+        ]
