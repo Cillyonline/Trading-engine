@@ -34,6 +34,14 @@ UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND = (
     "limited or low-quality upstream evidence limits confidence regardless of thresholds."
 )
 
+QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_ID = "qualification_profile_robustness.paper_audit.v1"
+QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_VERSION = "1.0.0"
+QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY = (
+    "Qualification-profile robustness audit is bounded to deterministic covered, failure-envelope, "
+    "and regime slices. Weak or failing slices limit interpretation outside covered conditions and "
+    "do not expand live-trading approval, paper profitability, or trader_validation claims."
+)
+
 DecisionComponentCategory = Literal[
     "signal_quality",
     "backtest_quality",
@@ -52,6 +60,8 @@ PaperReviewCaseId = Literal[
     "boundary_scope_relevance",
 ]
 TraderRelevanceEvidenceStatus = Literal["aligned", "weak", "missing"]
+QualificationProfileRobustnessStatus = Literal["stable", "weak", "failing"]
+QualificationProfileRobustnessSliceType = Literal["covered", "failure_envelope", "regime_slice"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -424,6 +434,114 @@ def evaluate_bounded_trader_relevance_cases(
     )
 
 
+class QualificationProfileRobustnessSliceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    slice_id: str = Field(min_length=1)
+    slice_type: QualificationProfileRobustnessSliceType
+    deterministic_rank: int = Field(ge=1)
+    description: str = Field(min_length=16)
+    behavior_status: QualificationProfileRobustnessStatus
+    qualification_state: QualificationState
+    action: DecisionAction
+    confidence_tier: DecisionConfidenceTier
+    aggregate_score: float = Field(ge=0.0, le=100.0)
+    base_aggregate_score: float = Field(ge=0.0, le=100.0)
+    win_rate: float = Field(ge=0.0, le=1.0)
+    expected_value: float = Field(ge=-1.0, le=1.0)
+    has_blocking_failure: bool = False
+    applied_adjustments: list[str] = Field(min_length=1)
+    finding: str = Field(min_length=24)
+
+    @field_validator("applied_adjustments")
+    @classmethod
+    def _normalize_adjustments(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value if item and item.strip()]
+        if not normalized:
+            raise ValueError("Robustness slice must include at least one adjustment entry")
+        return normalized
+
+
+class QualificationProfileRobustnessAudit(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_ID
+    contract_version: str = QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_VERSION
+    comparison_group: str = Field(min_length=1)
+    threshold_profile_id: str = Field(min_length=1)
+    stable_slice_ids: list[str] = Field(default_factory=list)
+    weak_slice_ids: list[str] = Field(default_factory=list)
+    failing_slice_ids: list[str] = Field(default_factory=list)
+    slice_results: list[QualificationProfileRobustnessSliceResult] = Field(min_length=1)
+    audit_summary: str = Field(min_length=24)
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_ID:
+            raise ValueError(f"Unsupported qualification-profile robustness contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported qualification-profile robustness contract_version: {value}"
+            )
+        return value
+
+    @field_validator("stable_slice_ids", "weak_slice_ids", "failing_slice_ids")
+    @classmethod
+    def _normalize_slice_id_lists(cls, value: list[str]) -> list[str]:
+        normalized = sorted({item.strip() for item in value if item and item.strip()})
+        return normalized
+
+    @field_validator("slice_results")
+    @classmethod
+    def _validate_slice_results(
+        cls, value: list[QualificationProfileRobustnessSliceResult]
+    ) -> list[QualificationProfileRobustnessSliceResult]:
+        ordered = sorted(value, key=lambda item: (item.deterministic_rank, item.slice_id))
+        slice_ids = [item.slice_id for item in ordered]
+        if len(slice_ids) != len(set(slice_ids)):
+            raise ValueError("Robustness audit slice_results must use unique slice identifiers")
+        return ordered
+
+    @model_validator(mode="after")
+    def _validate_summary_alignment(self) -> "QualificationProfileRobustnessAudit":
+        expected_by_status = {
+            "stable": sorted(
+                item.slice_id for item in self.slice_results if item.behavior_status == "stable"
+            ),
+            "weak": sorted(
+                item.slice_id for item in self.slice_results if item.behavior_status == "weak"
+            ),
+            "failing": sorted(
+                item.slice_id for item in self.slice_results if item.behavior_status == "failing"
+            ),
+        }
+        if self.stable_slice_ids != expected_by_status["stable"]:
+            raise ValueError("stable_slice_ids must match slice_results behavior_status=stable")
+        if self.weak_slice_ids != expected_by_status["weak"]:
+            raise ValueError("weak_slice_ids must match slice_results behavior_status=weak")
+        if self.failing_slice_ids != expected_by_status["failing"]:
+            raise ValueError("failing_slice_ids must match slice_results behavior_status=failing")
+        phrase = _contains_forbidden_claim_phrase(self.audit_summary)
+        if phrase is not None:
+            raise ValueError(f"audit_summary contains unsupported claim language: {phrase}")
+        phrase = _contains_forbidden_claim_phrase(self.interpretation_limit)
+        if phrase is not None:
+            raise ValueError(f"interpretation_limit contains unsupported claim language: {phrase}")
+        if "covered conditions" not in self.interpretation_limit.casefold():
+            raise ValueError(
+                "interpretation_limit must explain how robustness findings limit interpretation "
+                "outside covered conditions"
+            )
+        return self
+
+
 class HardGateEvaluation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -670,7 +788,17 @@ class DecisionCard(BaseModel):
         for key in value:
             if not isinstance(key, str):
                 raise ValueError("metadata keys must be strings")
-        return dict(sorted(value.items()))
+        normalized = dict(sorted(value.items()))
+        robustness_audit = normalized.get("qualification_profile_robustness_audit")
+        if robustness_audit is not None:
+            if not isinstance(robustness_audit, dict):
+                raise ValueError("qualification_profile_robustness_audit metadata must be an object")
+            normalized["qualification_profile_robustness_audit"] = (
+                QualificationProfileRobustnessAudit.model_validate(robustness_audit).model_dump(
+                    mode="python"
+                )
+            )
+        return normalized
 
     @model_validator(mode="after")
     def _validate_qualification_semantics(self) -> "DecisionCard":
@@ -762,6 +890,9 @@ __all__ = [
     "PAPER_REVIEW_CASE_DEFINITIONS",
     "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
     "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
+    "QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_ID",
+    "QUALIFICATION_PROFILE_ROBUSTNESS_CONTRACT_VERSION",
+    "QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY",
     "UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND",
     "QUALIFICATION_HIGH_AGGREGATE_THRESHOLD",
     "QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD",
@@ -777,6 +908,8 @@ __all__ = [
     "DecisionRationale",
     "HardGateEvaluation",
     "HardGateResult",
+    "QualificationProfileRobustnessAudit",
+    "QualificationProfileRobustnessSliceResult",
     "Qualification",
     "ScoreEvaluation",
     "evaluate_bounded_trader_relevance_cases",

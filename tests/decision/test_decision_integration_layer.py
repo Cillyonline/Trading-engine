@@ -142,6 +142,27 @@ def test_evidence_semantics_and_contract_boundary_remain_explicit() -> None:
     ]
 
 
+def test_robustness_audit_and_boundary_language_are_integrated_into_decision_card() -> None:
+    card = evaluate_qualification(_engine_input())
+    audit = card.metadata["qualification_profile_robustness_audit"]
+    score_explanations = " ".join(card.rationale.score_explanations)
+
+    assert audit["stable_slice_ids"] == ["covered.current_evidence.v1"]
+    assert audit["failing_slice_ids"] == ["failure_envelope.execution_stress.v1"]
+    assert "Qualification-profile robustness audit:" in score_explanations
+    assert audit["audit_summary"] in score_explanations
+    assert audit["interpretation_limit"] in score_explanations
+
+    final_explanation = card.rationale.final_explanation.casefold()
+    assert "covered conditions" in final_explanation
+    assert "weak or failing slices limit interpretation outside covered conditions" in (
+        final_explanation
+    )
+    assert "live-trading approval" in final_explanation
+    assert "paper profitability" in final_explanation
+    assert "trader_validation" in final_explanation
+
+
 def test_stale_sentiment_overlay_is_explicitly_neutral_and_bounded() -> None:
     card = evaluate_qualification(
         _engine_input(
