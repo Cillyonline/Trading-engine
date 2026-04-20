@@ -9,6 +9,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DECISION_CARD_CONTRACT_VERSION = "2.0.0"
+BOUNDED_TRADER_RELEVANCE_CONTRACT_ID = "bounded_trader_relevance.paper_review.v1"
+BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION = "1.0.0"
 QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
 QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
 ACTION_EXIT_WIN_RATE_MAX = 0.50
@@ -44,6 +46,12 @@ HardGateStatus = Literal["pass", "fail"]
 QualificationState = Literal["reject", "watch", "paper_candidate", "paper_approved"]
 QualificationColor = Literal["green", "yellow", "red"]
 DecisionAction = Literal["entry", "exit", "ignore"]
+PaperReviewCaseId = Literal[
+    "qualification_state_relevance",
+    "decision_action_relevance",
+    "boundary_scope_relevance",
+]
+TraderRelevanceEvidenceStatus = Literal["aligned", "weak", "missing"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -88,6 +96,40 @@ CLAIM_BOUNDARY_FORBIDDEN_PHRASES: tuple[str, ...] = (
     "live approval",
     "production readiness",
 )
+
+PAPER_REVIEW_CASE_DEFINITIONS: dict[PaperReviewCaseId, dict[str, Any]] = {
+    "qualification_state_relevance": {
+        "review_question": (
+            "Does the output expose deterministic evidence that explains why the qualification state was resolved?"
+        ),
+        "required_evidence": (
+            "qualification_state",
+            "paper_scope_summary",
+            "state_explanation_evidence",
+        ),
+    },
+    "decision_action_relevance": {
+        "review_question": (
+            "Does the output expose deterministic evidence that explains why action is entry/exit/ignore?"
+        ),
+        "required_evidence": (
+            "action",
+            "bounded_decision_metrics",
+            "action_rule_trace",
+        ),
+    },
+    "boundary_scope_relevance": {
+        "review_question": (
+            "Does the output explicitly keep bounded trader-relevance validation separate from trader_validation, "
+            "paper profitability, and live-readiness claims?"
+        ),
+        "required_evidence": (
+            "trader_validation_boundary",
+            "paper_profitability_boundary",
+            "live_readiness_boundary",
+        ),
+    },
+}
 
 
 def _qualification_thresholds_from_metadata(metadata: dict[str, Any]) -> tuple[float, float]:
@@ -178,6 +220,26 @@ def _derive_decision_action_from_fields(
     return "ignore"
 
 
+def _collect_non_empty_texts(values: list[str | None]) -> list[str]:
+    return [value.strip() for value in values if isinstance(value, str) and value.strip()]
+
+
+def _contains_any_phrase(*, texts: list[str], phrases: tuple[str, ...]) -> bool:
+    lowered = [text.casefold() for text in texts]
+    return any(phrase in text for text in lowered for phrase in phrases)
+
+
+def _classify_trader_relevance_status(
+    checks: dict[str, bool],
+) -> TraderRelevanceEvidenceStatus:
+    true_count = sum(1 for ok in checks.values() if ok)
+    if true_count == len(checks):
+        return "aligned"
+    if true_count == 0:
+        return "missing"
+    return "weak"
+
+
 class HardGateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -203,6 +265,163 @@ class HardGateResult(BaseModel):
         if self.status == "pass" and self.failure_reason is not None:
             raise ValueError("Passing hard gates must not define failure_reason")
         return self
+
+
+class BoundedTraderRelevanceCaseEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: PaperReviewCaseId
+    review_question: str = Field(min_length=16)
+    evidence_status: TraderRelevanceEvidenceStatus
+    required_evidence: list[str] = Field(min_length=1)
+    observed_evidence: list[str]
+    evidence_summary: str = Field(min_length=16)
+
+
+class BoundedTraderRelevanceValidation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = BOUNDED_TRADER_RELEVANCE_CONTRACT_ID
+    contract_version: str = BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION
+    overall_status: TraderRelevanceEvidenceStatus
+    evaluations: list[BoundedTraderRelevanceCaseEvaluation] = Field(min_length=1)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != BOUNDED_TRADER_RELEVANCE_CONTRACT_ID:
+            raise ValueError(f"Unsupported bounded trader relevance contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION:
+            raise ValueError(f"Unsupported bounded trader relevance contract_version: {value}")
+        return value
+
+    @field_validator("evaluations")
+    @classmethod
+    def _validate_evaluations(cls, value: list[BoundedTraderRelevanceCaseEvaluation]) -> list[BoundedTraderRelevanceCaseEvaluation]:
+        case_ids = [item.case_id for item in value]
+        required_case_ids = sorted(PAPER_REVIEW_CASE_DEFINITIONS.keys())
+        if sorted(case_ids) != required_case_ids:
+            raise ValueError(
+                "Bounded trader relevance evaluations must cover all canonical paper-review cases"
+            )
+        return sorted(value, key=lambda item: item.case_id)
+
+
+def evaluate_bounded_trader_relevance_cases(
+    *,
+    qualification_state: str | None,
+    action: str | None,
+    win_rate: float | None,
+    expected_value: float | None,
+    qualification_summary: str | None,
+    rationale_summary: str | None = None,
+    final_explanation: str | None = None,
+    gate_explanations: list[str] | None = None,
+    score_explanations: list[str] | None = None,
+    qualification_evidence: list[str] | None = None,
+    missing_criteria: list[str] | None = None,
+    blocking_conditions: list[str] | None = None,
+) -> BoundedTraderRelevanceValidation:
+    normalized_gate_explanations = list(gate_explanations or [])
+    normalized_score_explanations = list(score_explanations or [])
+    normalized_qualification_evidence = list(qualification_evidence or [])
+    normalized_missing_criteria = list(missing_criteria or [])
+    normalized_blocking_conditions = list(blocking_conditions or [])
+
+    all_texts = _collect_non_empty_texts(
+        [
+            qualification_summary,
+            rationale_summary,
+            final_explanation,
+            *normalized_gate_explanations,
+            *normalized_score_explanations,
+            *normalized_qualification_evidence,
+            *normalized_missing_criteria,
+            *normalized_blocking_conditions,
+        ]
+    )
+    qualification_summary_text = (qualification_summary or "").strip()
+
+    case_checks: dict[PaperReviewCaseId, dict[str, bool]] = {
+        "qualification_state_relevance": {
+            "qualification_state": bool(qualification_state and str(qualification_state).strip()),
+            "paper_scope_summary": "paper" in qualification_summary_text.casefold(),
+            "state_explanation_evidence": bool(
+                normalized_gate_explanations
+                or normalized_qualification_evidence
+                or normalized_missing_criteria
+                or normalized_blocking_conditions
+            ),
+        },
+        "decision_action_relevance": {
+            "action": bool(action and str(action).strip()),
+            "bounded_decision_metrics": (win_rate is not None and expected_value is not None),
+            "action_rule_trace": _contains_any_phrase(
+                texts=normalized_score_explanations + normalized_qualification_evidence,
+                phrases=("action", "entry", "exit", "ignore", "expected value", "win_rate", "win-rate"),
+            ),
+        },
+        "boundary_scope_relevance": {
+            "trader_validation_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=("trader_validation", "trader validation"),
+            ),
+            "paper_profitability_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=("paper profitability", "profitability", "edge claim", "profit claim"),
+            ),
+            "live_readiness_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=(
+                    "live-trading approval",
+                    "live trading readiness",
+                    "live readiness",
+                    "operational readiness",
+                    "broker execution readiness",
+                ),
+            ),
+        },
+    }
+
+    evaluations: list[BoundedTraderRelevanceCaseEvaluation] = []
+    statuses: list[TraderRelevanceEvidenceStatus] = []
+    for case_id in sorted(PAPER_REVIEW_CASE_DEFINITIONS.keys()):
+        checks = case_checks[case_id]
+        status = _classify_trader_relevance_status(checks=checks)
+        statuses.append(status)
+        observed = sorted(signal for signal, ok in checks.items() if ok)
+        required = list(PAPER_REVIEW_CASE_DEFINITIONS[case_id]["required_evidence"])
+        summary = (
+            f"Deterministic case={case_id} classified as {status}; "
+            f"observed={','.join(observed) if observed else 'none'}."
+        )
+        evaluations.append(
+            BoundedTraderRelevanceCaseEvaluation(
+                case_id=case_id,
+                review_question=str(PAPER_REVIEW_CASE_DEFINITIONS[case_id]["review_question"]),
+                evidence_status=status,
+                required_evidence=required,
+                observed_evidence=observed,
+                evidence_summary=summary,
+            )
+        )
+
+    if "missing" in statuses:
+        overall_status: TraderRelevanceEvidenceStatus = "missing"
+    elif "weak" in statuses:
+        overall_status = "weak"
+    else:
+        overall_status = "aligned"
+
+    return BoundedTraderRelevanceValidation(
+        overall_status=overall_status,
+        evaluations=evaluations,
+    )
 
 
 class HardGateEvaluation(BaseModel):
@@ -538,6 +757,9 @@ def serialize_decision_card(card: DecisionCard) -> str:
 
 __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
+    "BOUNDED_TRADER_RELEVANCE_CONTRACT_ID",
+    "BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION",
+    "PAPER_REVIEW_CASE_DEFINITIONS",
     "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
     "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
     "UPSTREAM_EVIDENCE_QUALITY_CONFIDENCE_BOUND",
@@ -547,6 +769,8 @@ __all__ = [
     "ACTION_ENTRY_WIN_RATE_MIN",
     "ACTION_EXIT_WIN_RATE_MAX",
     "QUALIFICATION_COLOR_BY_STATE",
+    "BoundedTraderRelevanceCaseEvaluation",
+    "BoundedTraderRelevanceValidation",
     "ComponentScore",
     "DecisionAction",
     "DecisionCard",
@@ -555,6 +779,7 @@ __all__ = [
     "HardGateResult",
     "Qualification",
     "ScoreEvaluation",
+    "evaluate_bounded_trader_relevance_cases",
     "serialize_decision_card",
     "validate_decision_card",
 ]
