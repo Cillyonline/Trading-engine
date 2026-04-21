@@ -54,6 +54,104 @@ EXIT_CODE_RECONCILIATION_FAILED = 13
 EXIT_CODE_EVIDENCE_FAILED = 14
 
 RUN_QUALITY_CLASSIFICATION_VERSION = 1
+OPERATOR_ACTION_CONTRACT_VERSION = 1
+
+RUN_QUALITY_OPERATOR_ACTION_CONTRACTS: dict[str, dict[str, str]] = {
+    "healthy": {
+        "action_category": "informational",
+        "action_code": "record_and_continue",
+        "action_summary": (
+            "Record the bounded daily runtime evidence and continue the next scheduled bounded run."
+        ),
+        "escalation_boundary": (
+            "No escalation from this state alone. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "no_eligible": {
+        "action_category": "review_required",
+        "action_code": "review_no_eligible_and_record",
+        "action_summary": (
+            "Review the bounded no-eligible outcome, confirm skip reasons and inputs, and record the run without retrying solely to force activity."
+        ),
+        "escalation_boundary": (
+            "Escalate only when adjacent bounded evidence is contradictory or the no-eligible pattern is unexpected for the stated inputs. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "degraded": {
+        "action_category": "blocking",
+        "action_code": "stop_and_open_follow_up",
+        "action_summary": (
+            "Treat the bounded run as blocked for continuation claims, investigate the degraded evidence, and open or update follow-up before the next bounded decision."
+        ),
+        "escalation_boundary": (
+            "Do not continue staged evaluation claims from this run until the degraded cause is resolved. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+}
+
+FAILED_STEP_OPERATOR_ACTION_CONTRACTS: dict[str, dict[str, str]] = {
+    "snapshot_ingestion": {
+        "action_category": "retry_required",
+        "action_code": "fix_pre_execution_failure_and_rerun",
+        "action_summary": (
+            "Correct the pre-execution failure cause and rerun the bounded daily workflow."
+        ),
+        "escalation_boundary": (
+            "Retry is bounded to failures before paper execution starts. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "analysis_signal_generation": {
+        "action_category": "retry_required",
+        "action_code": "fix_pre_execution_failure_and_rerun",
+        "action_summary": (
+            "Correct the pre-execution failure cause and rerun the bounded daily workflow."
+        ),
+        "escalation_boundary": (
+            "Retry is bounded to failures before paper execution starts. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "bounded_paper_execution_cycle": {
+        "action_category": "blocking",
+        "action_code": "stop_and_investigate_before_rerun",
+        "action_summary": (
+            "Stop and investigate the bounded execution failure before any rerun decision."
+        ),
+        "escalation_boundary": (
+            "Do not rerun the full workflow blindly after execution has started. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "reconciliation": {
+        "action_category": "blocking",
+        "action_code": "stop_and_investigate_before_rerun",
+        "action_summary": (
+            "Stop and investigate the bounded reconciliation failure before any rerun decision."
+        ),
+        "escalation_boundary": (
+            "Do not continue staged evaluation claims until reconciliation is resolved. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+    "evidence_capture": {
+        "action_category": "blocking",
+        "action_code": "stop_and_investigate_before_rerun",
+        "action_summary": (
+            "Stop and investigate the missing or failed bounded evidence capture before any rerun decision."
+        ),
+        "escalation_boundary": (
+            "Do not rerun the full workflow blindly after execution-stage evidence has already been produced. Do not treat bounded paper evidence as live, broker, or production readiness."
+        ),
+    },
+}
+
+DEFAULT_FAILED_STEP_OPERATOR_ACTION_CONTRACT: dict[str, str] = {
+    "action_category": "blocking",
+    "action_code": "stop_and_investigate_before_rerun",
+    "action_summary": (
+        "Stop and investigate the bounded runtime failure before any rerun decision."
+    ),
+    "escalation_boundary": (
+        "Do not treat bounded paper evidence as live, broker, or production readiness."
+    ),
+}
 
 
 class DailyRuntimeStepError(RuntimeError):
@@ -261,6 +359,8 @@ def _build_error_payload(
         "status": "failed",
         "step_order": list(STEP_ORDER),
         "steps_completed": steps_completed,
+        "operator_action_contract_version": OPERATOR_ACTION_CONTRACT_VERSION,
+        "operator_action_contract": _build_failed_step_action_contract(step),
     }
     if ingestion_run_id is not None:
         payload["ingestion_run_id"] = ingestion_run_id
@@ -344,6 +444,8 @@ def _classify_run_quality(
         run_quality_status = "degraded"
 
     return {
+        "operator_action_contract": _build_run_quality_action_contract(run_quality_status),
+        "operator_action_contract_version": OPERATOR_ACTION_CONTRACT_VERSION,
         "run_quality_classification_version": RUN_QUALITY_CLASSIFICATION_VERSION,
         "run_quality_status": run_quality_status,
         "run_quality_inputs": {
@@ -354,6 +456,21 @@ def _classify_run_quality(
             "reconciliation_ok": reconciliation_ok,
         },
     }
+
+
+def _build_run_quality_action_contract(run_quality_status: str) -> dict[str, str]:
+    contract = RUN_QUALITY_OPERATOR_ACTION_CONTRACTS.get(run_quality_status)
+    if contract is None:
+        raise ValueError(f"unsupported run_quality_status for operator action contract: {run_quality_status}")
+    return dict(contract)
+
+
+def _build_failed_step_action_contract(step: str) -> dict[str, str]:
+    contract = FAILED_STEP_OPERATOR_ACTION_CONTRACTS.get(
+        step,
+        DEFAULT_FAILED_STEP_OPERATOR_ACTION_CONTRACT,
+    )
+    return dict(contract)
 
 
 def run_daily_bounded_paper_runtime(

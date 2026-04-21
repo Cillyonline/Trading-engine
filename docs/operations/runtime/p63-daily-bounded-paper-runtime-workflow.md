@@ -219,6 +219,8 @@ The daily summary artifact includes explicit bounded run-quality fields:
 - `run_quality_status`
 - `run_quality_classification_version`
 - `run_quality_inputs`
+- `operator_action_contract_version`
+- `operator_action_contract`
 
 Deterministic classification rules use existing runtime summary inputs only:
 
@@ -240,6 +242,47 @@ Bounded interpretation:
 - `no_eligible` is valid non-error completion in bounded runtime evidence
 - `run_quality_status` is operator-facing evidence quality only
 - classification does not widen runtime scope and does not imply live readiness
+
+### Deterministic Operator Action Contract (Daily Summary)
+
+The daily summary artifact records one deterministic next-action contract for
+each classified `run_quality_status`.
+
+Recorded action fields:
+
+- `operator_action_contract_version`
+- `operator_action_contract.action_category`
+- `operator_action_contract.action_code`
+- `operator_action_contract.action_summary`
+- `operator_action_contract.escalation_boundary`
+
+Deterministic summary-state mapping:
+
+| `run_quality_status` | `action_category` | Deterministic bounded operator interpretation |
+| --- | --- | --- |
+| `healthy` | `informational` | Record the bounded daily runtime evidence and continue the next scheduled bounded run. |
+| `no_eligible` | `review_required` | Review the bounded no-eligible outcome, confirm skip reasons and inputs, and record the run without retrying solely to force activity. |
+| `degraded` | `blocking` | Stop continuation claims for that run, investigate the degraded evidence, and open or update follow-up before the next bounded decision. |
+
+Operator-facing category wording:
+
+- `healthy` is informational
+- `no_eligible` is review-required
+- `degraded` is blocking
+
+Fail-fast bounded runner guidance:
+
+- pre-execution failures are retry-required
+- execution or post-execution failures are blocking
+- retry-required applies only when the daily command path fails before bounded paper execution starts
+- blocking applies once execution starts or when reconciliation/evidence is incomplete, so the operator does not blindly rerun a partially completed daily workflow
+
+Escalation boundary:
+
+- the action contract is bounded operator guidance only
+- it does not imply operational readiness
+- it does not imply broker readiness
+- it does not imply production readiness
 
 ## Daily Sequential Command Sequence (Bounded Staging)
 

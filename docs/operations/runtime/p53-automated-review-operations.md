@@ -160,6 +160,31 @@ Interpretation boundary:
 - Keep raw evidence markers (`PASS`, `FAIL`, `ERROR`) unchanged; apply the review
   semantics below on top of those markers.
 
+### Daily Runtime Operator Action Boundary
+
+When the daily bounded runtime summary is produced through OPS-P63 or OPS-P64,
+record operator next-action semantics explicitly in the artifact with:
+
+- `operator_action_contract_version`
+- `operator_action_contract.action_category`
+- `operator_action_contract.action_code`
+- `operator_action_contract.action_summary`
+- `operator_action_contract.escalation_boundary`
+
+Bounded action categories for daily runtime use:
+
+- `informational`: record bounded evidence and continue the next scheduled bounded run
+- `review_required`: inspect bounded no-eligible evidence and confirm the outcome without retrying solely to force activity
+- `retry_required`: correct a pre-execution failure and rerun only when bounded paper execution has not started
+- `blocking`: stop continuation claims for the affected run and investigate before any rerun or staged-evaluation claim
+
+Boundary reminder:
+
+- these action categories are bounded operator guidance only
+- they do not imply operational readiness
+- they do not imply broker readiness
+- they do not imply production readiness
+
 ### Decision-Support Review Semantics
 
 Use one review classification per bounded review package:
