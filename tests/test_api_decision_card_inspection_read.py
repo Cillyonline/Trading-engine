@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from cilly_trading.models import Trade
 from cilly_trading.engine.decision_card_contract import REQUIRED_COMPONENT_CATEGORIES
+from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from tests.utils.json_schema_validator import validate_json_schema
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
@@ -19,6 +22,44 @@ def _write_artifact(root: Path, run_id: str, artifact_name: str, payload: Any) -
     (run_dir / artifact_name).write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _repo(tmp_path: Path) -> SqliteCanonicalExecutionRepository:
+    return SqliteCanonicalExecutionRepository(db_path=tmp_path / "decision-card-inspection.db")
+
+
+def _trade(
+    trade_id: str,
+    *,
+    strategy_id: str,
+    symbol: str,
+    status: str,
+    opened_at: str,
+    closed_at: str | None,
+    realized_pnl: str | None,
+    unrealized_pnl: str | None,
+) -> Trade:
+    return Trade.model_validate(
+        {
+            "trade_id": trade_id,
+            "position_id": f"pos-{trade_id}",
+            "strategy_id": strategy_id,
+            "symbol": symbol,
+            "direction": "long",
+            "status": status,
+            "opened_at": opened_at,
+            "closed_at": closed_at,
+            "quantity_opened": Decimal("1"),
+            "quantity_closed": Decimal("1") if status == "closed" else Decimal("0"),
+            "average_entry_price": Decimal("100"),
+            "average_exit_price": Decimal("101") if status == "closed" else None,
+            "realized_pnl": Decimal(realized_pnl) if realized_pnl is not None else None,
+            "unrealized_pnl": Decimal(unrealized_pnl) if unrealized_pnl is not None else None,
+            "opening_order_ids": [f"ord-{trade_id}"],
+            "closing_order_ids": [f"ord-{trade_id}"] if status == "closed" else [],
+            "execution_event_ids": [f"evt-{trade_id}"],
+        }
+    )
+
+
 def _decision_card_payload(
     *,
     decision_card_id: str,
@@ -26,6 +67,7 @@ def _decision_card_payload(
     symbol: str,
     strategy_id: str,
     qualification_state: str,
+    paper_trade_id: str | None = None,
 ) -> dict[str, Any]:
     color_by_state = {
         "reject": "red",
@@ -82,7 +124,7 @@ def _decision_card_payload(
     elif qualification_state == "paper_approved":
         qualification_summary = "Opportunity is approved for bounded paper-trading only."
 
-    return {
+    payload = {
         "contract_version": "2.0.0",
         "decision_card_id": decision_card_id,
         "generated_at_utc": generated_at_utc,
@@ -151,11 +193,24 @@ def _decision_card_payload(
             "source": "qualification_engine",
         },
     }
+    if paper_trade_id is not None:
+        payload["metadata"]["bounded_decision_to_paper_match"] = {
+            "match_mode": "paper_trade_id",
+            "paper_trade_id": paper_trade_id,
+        }
+    return payload
 
 
-def _client(monkeypatch, artifacts_root: Path) -> TestClient:
+def _client(
+    monkeypatch,
+    artifacts_root: Path,
+    repo: SqliteCanonicalExecutionRepository | None = None,
+) -> TestClient:
+    if repo is None:
+        repo = _repo(artifacts_root.parent)
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
     monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", artifacts_root)
+    monkeypatch.setattr(api_main, "canonical_execution_repo", repo)
     return TestClient(api_main.app)
 
 
@@ -353,3 +408,117 @@ def test_decision_card_inspection_regression_ignores_non_contract_artifacts(
     payload = response.json()
     assert payload["total"] == 1
     assert [item["decision_card_id"] for item in payload["items"]] == ["dc-010"]
+
+
+def test_decision_card_inspection_persists_deterministic_bounded_usefulness_audit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-exp",
+            strategy_id="RSI2",
+            symbol="AAPL",
+            status="closed",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at="2026-03-24T08:45:00Z",
+            realized_pnl="1.50",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-weak",
+            strategy_id="RSI2",
+            symbol="MSFT",
+            status="open",
+            opened_at="2026-03-24T09:05:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="0.25",
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-misleading",
+            strategy_id="TURTLE",
+            symbol="NVDA",
+            status="closed",
+            opened_at="2026-03-24T10:05:00Z",
+            closed_at="2026-03-24T10:35:00Z",
+            realized_pnl="-2.00",
+            unrealized_pnl=None,
+        )
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-usefulness",
+        artifact_name="dc-exp.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-exp",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-exp",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-usefulness",
+        artifact_name="dc-weak.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-weak",
+            generated_at_utc="2026-03-24T09:00:00Z",
+            symbol="MSFT",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-weak",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-usefulness",
+        artifact_name="dc-misleading.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-misleading",
+            generated_at_utc="2026-03-24T10:00:00Z",
+            symbol="NVDA",
+            strategy_id="TURTLE",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-misleading",
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        first = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+        second = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+
+    by_id = {item["decision_card_id"]: item for item in first.json()["items"]}
+
+    explanatory_audit = by_id["dc-exp"]["metadata"]["bounded_decision_to_paper_usefulness_audit"]
+    assert explanatory_audit["contract_id"] == "decision_evidence_to_paper_outcome_usefulness.paper_audit.v1"
+    assert explanatory_audit["match_reference"] == {
+        "match_mode": "paper_trade_id",
+        "paper_trade_id": "trade-exp",
+    }
+    assert explanatory_audit["match_status"] == "matched"
+    assert explanatory_audit["usefulness_classification"] == "explanatory"
+    assert explanatory_audit["matched_outcome"]["outcome_direction"] == "favorable"
+    assert "non-live" in explanatory_audit["interpretation_limit"]
+
+    weak_audit = by_id["dc-weak"]["metadata"]["bounded_decision_to_paper_usefulness_audit"]
+    assert weak_audit["match_status"] == "open"
+    assert weak_audit["usefulness_classification"] == "weak"
+    assert weak_audit["matched_outcome"]["outcome_direction"] == "open"
+
+    misleading_audit = by_id["dc-misleading"]["metadata"]["bounded_decision_to_paper_usefulness_audit"]
+    assert misleading_audit["match_status"] == "matched"
+    assert misleading_audit["usefulness_classification"] == "misleading"
+    assert misleading_audit["matched_outcome"]["outcome_direction"] == "adverse"

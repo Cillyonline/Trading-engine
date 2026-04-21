@@ -420,10 +420,12 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
 
     assert payload["boundary"]["workflow_id"] == "phase44_bounded_paper_operator"
     assert payload["boundary"]["description"] == (
-        "One read-only portfolio-to-paper handoff contract that validates bounded "
-        "paper-readiness inputs across canonical inspection and reconciliation surfaces."
+        "One read-only decision-to-paper and portfolio-to-paper handoff contract that "
+        "validates bounded paper-readiness inputs across canonical inspection and "
+        "reconciliation surfaces."
     )
     assert payload["boundary"]["in_scope"] == [
+        "covered decision-card usefulness audit against explicit matched paper-trade outcomes",
         "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
         "paper-facing account, trade, and position views derived from canonical portfolio evidence",
         "reconciliation validation with mismatch accounting",
@@ -467,9 +469,16 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
             "endpoint": "GET /paper/reconciliation",
             "expected_result": "Paper-readiness reconciliation ok=true mismatches=0.",
         },
+        {
+            "step": 6,
+            "action": "Inspect covered decision cards for bounded usefulness classifications against explicit matched paper-trade outcomes.",
+            "endpoint": "GET /decision-cards",
+            "expected_result": "Covered decision-card outputs expose bounded usefulness classifications in metadata without trader-validation or readiness claims.",
+        },
     ]
     assert payload["surfaces"] == {
         "canonical_inspection": [
+            "/decision-cards",
             "/trading-core/orders",
             "/trading-core/execution-events",
             "/trading-core/trades",

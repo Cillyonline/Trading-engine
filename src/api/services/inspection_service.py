@@ -337,10 +337,12 @@ def read_paper_operator_workflow(
         boundary=PaperOperatorWorkflowBoundaryResponse(
             workflow_id="phase44_bounded_paper_operator",
             description=(
-                "One read-only portfolio-to-paper handoff contract that validates bounded "
-                "paper-readiness inputs across canonical inspection and reconciliation surfaces."
+                "One read-only decision-to-paper and portfolio-to-paper handoff contract that "
+                "validates bounded paper-readiness inputs across canonical inspection and "
+                "reconciliation surfaces."
             ),
             in_scope=[
+                "covered decision-card usefulness audit against explicit matched paper-trade outcomes",
                 "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
                 "paper-facing account, trade, and position views derived from canonical portfolio evidence",
                 "reconciliation validation with mismatch accounting",
@@ -395,9 +397,22 @@ def read_paper_operator_workflow(
                     f"{reconciliation.summary.mismatches}."
                 ),
             ),
+            PaperOperatorWorkflowStepResponse(
+                step=6,
+                action=(
+                    "Inspect covered decision cards for bounded usefulness classifications against "
+                    "explicit matched paper-trade outcomes."
+                ),
+                endpoint="GET /decision-cards",
+                expected_result=(
+                    "Covered decision-card outputs expose bounded usefulness classifications in "
+                    "metadata without trader-validation or readiness claims."
+                ),
+            ),
         ],
         surfaces=PaperOperatorWorkflowSurfaceResponse(
             canonical_inspection=[
+                "/decision-cards",
                 "/trading-core/orders",
                 "/trading-core/execution-events",
                 "/trading-core/trades",
@@ -1174,6 +1189,20 @@ def build_decision_card_inspection_items(
                 continue
             seen.add(dedupe_key)
 
+            metadata = dict(card.metadata)
+            usefulness_audit = paper_inspection_service.build_bounded_decision_to_paper_usefulness_audit(
+                canonical_execution_repo=paper_inspection_service.resolve_runtime_canonical_execution_repo(),
+                decision_card_id=card.decision_card_id,
+                generated_at_utc=card.generated_at_utc,
+                symbol=card.symbol,
+                strategy_id=card.strategy_id,
+                action=card.action,
+                qualification_state=card.qualification.state,
+                match_reference=metadata.get("bounded_decision_to_paper_match"),
+            )
+            if usefulness_audit is not None:
+                metadata["bounded_decision_to_paper_usefulness_audit"] = usefulness_audit
+
             items.append(
                 DecisionCardInspectionItemResponse(
                     run_id=run_id,
@@ -1206,7 +1235,7 @@ def build_decision_card_inspection_items(
                     gate_explanations=list(card.rationale.gate_explanations),
                     score_explanations=list(card.rationale.score_explanations),
                     final_explanation=card.rationale.final_explanation,
-                    metadata=dict(card.metadata),
+                    metadata=metadata,
                 )
             )
 
