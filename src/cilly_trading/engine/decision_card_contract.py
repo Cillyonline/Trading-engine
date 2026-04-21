@@ -41,6 +41,15 @@ QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY = (
     "and regime slices. Weak or failing slices limit interpretation outside covered conditions and "
     "do not expand live-trading approval, paper profitability, or trader_validation claims."
 )
+DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID = (
+    "decision_evidence_to_paper_outcome_usefulness.paper_audit.v1"
+)
+DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION = "1.0.0"
+DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY = (
+    "Decision-to-paper usefulness audit is bounded to non-live explanatory value for covered entry "
+    "decisions with explicit paper_trade_id matches. It does not imply trader validation, "
+    "profitability forecasting, live-trading readiness, or operational readiness."
+)
 
 DecisionComponentCategory = Literal[
     "signal_quality",
@@ -62,6 +71,10 @@ PaperReviewCaseId = Literal[
 TraderRelevanceEvidenceStatus = Literal["aligned", "weak", "missing"]
 QualificationProfileRobustnessStatus = Literal["stable", "weak", "failing"]
 QualificationProfileRobustnessSliceType = Literal["covered", "failure_envelope", "regime_slice"]
+DecisionToPaperUsefulnessClassification = Literal["explanatory", "weak", "misleading"]
+DecisionToPaperUsefulnessMatchStatus = Literal["matched", "open", "missing", "invalid"]
+DecisionToPaperUsefulnessMatchMode = Literal["paper_trade_id"]
+PaperTradeOutcomeDirection = Literal["favorable", "flat", "adverse", "open", "invalid"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -320,6 +333,177 @@ class BoundedTraderRelevanceValidation(BaseModel):
                 "Bounded trader relevance evaluations must cover all canonical paper-review cases"
             )
         return sorted(value, key=lambda item: item.case_id)
+
+
+class BoundedDecisionToPaperUsefulnessMatchReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    match_mode: DecisionToPaperUsefulnessMatchMode
+    paper_trade_id: str = Field(min_length=1)
+
+
+class BoundedPaperTradeOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trade_id: str = Field(min_length=1)
+    position_id: str = Field(min_length=1)
+    symbol: str = Field(min_length=1)
+    strategy_id: str = Field(min_length=1)
+    trade_status: Literal["open", "closed"]
+    opened_at_utc: str = Field(min_length=1)
+    closed_at_utc: str | None = None
+    outcome_direction: PaperTradeOutcomeDirection
+    realized_pnl: str | None = None
+    unrealized_pnl: str | None = None
+    outcome_summary: str = Field(min_length=24)
+
+
+class BoundedDecisionToPaperUsefulnessAudit(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID
+    contract_version: str = DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION
+    covered_case_id: str = Field(min_length=1)
+    match_reference: BoundedDecisionToPaperUsefulnessMatchReference
+    match_status: DecisionToPaperUsefulnessMatchStatus
+    matched_outcome: BoundedPaperTradeOutcome | None = None
+    usefulness_classification: DecisionToPaperUsefulnessClassification
+    usefulness_reason: str = Field(min_length=24)
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID:
+            raise ValueError(f"Unsupported decision-to-paper usefulness contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported decision-to-paper usefulness contract_version: {value}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_match_alignment(self) -> "BoundedDecisionToPaperUsefulnessAudit":
+        if self.match_status in {"matched", "open", "invalid"} and self.matched_outcome is None:
+            raise ValueError(
+                "matched_outcome is required when match_status is matched, open, or invalid"
+            )
+        if self.match_status == "missing" and self.matched_outcome is not None:
+            raise ValueError("matched_outcome must be omitted when match_status is missing")
+        lowered_limit = self.interpretation_limit.casefold()
+        required_phrases = (
+            "non-live",
+            "trader validation",
+            "profitability forecasting",
+            "live-trading readiness",
+            "operational readiness",
+        )
+        if not all(phrase in lowered_limit for phrase in required_phrases):
+            raise ValueError(
+                "interpretation_limit must keep non-live usefulness separate from trader validation, "
+                "profitability forecasting, and readiness claims"
+            )
+        return self
+
+
+def _classify_decision_to_paper_usefulness(
+    *,
+    action: str,
+    qualification_state: str,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    matched_outcome: BoundedPaperTradeOutcome | None,
+) -> tuple[DecisionToPaperUsefulnessClassification, str]:
+    if action != "entry":
+        return (
+            "weak",
+            "Contract v1 remains bounded to covered entry decisions, so non-entry decisions stay outside "
+            "strong usefulness interpretation.",
+        )
+    if qualification_state not in {"paper_candidate", "paper_approved"}:
+        return (
+            "weak",
+            "Entry usefulness remains weak because the decision did not resolve to a covered paper-entry "
+            "qualification state.",
+        )
+    if match_status == "missing":
+        return (
+            "weak",
+            "Covered entry decision has no resolved matched paper trade, so usefulness remains unproven in "
+            "bounded non-live review.",
+        )
+    if match_status == "invalid":
+        return (
+            "misleading",
+            "Matched paper trade violates the explicit symbol, strategy, or timing comparison contract, so "
+            "the usefulness signal is misleading.",
+        )
+    if match_status == "open":
+        return (
+            "weak",
+            "Matched paper trade remains open, so bounded usefulness is not yet resolved to an explanatory "
+            "or misleading closed outcome.",
+        )
+    if matched_outcome is None:
+        return (
+            "weak",
+            "Matched paper outcome is unavailable, so bounded usefulness remains weak.",
+        )
+    if matched_outcome.outcome_direction == "favorable":
+        return (
+            "explanatory",
+            "Covered entry decision matched a subsequent closed paper trade with favorable bounded outcome, "
+            "so the surfaced evidence is explanatory in non-live review.",
+        )
+    if matched_outcome.outcome_direction == "flat":
+        return (
+            "weak",
+            "Covered entry decision matched a closed flat paper trade, so the surfaced evidence remains weak "
+            "for bounded usefulness.",
+        )
+    return (
+        "misleading",
+        "Covered entry decision matched a subsequent closed paper trade with adverse bounded outcome, so the "
+        "surfaced evidence is misleading in non-live review.",
+    )
+
+
+def evaluate_bounded_decision_to_paper_usefulness_audit(
+    *,
+    covered_case_id: str,
+    action: str,
+    qualification_state: str,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    match_reference: dict[str, Any],
+    matched_outcome: dict[str, Any] | None = None,
+) -> BoundedDecisionToPaperUsefulnessAudit:
+    normalized_match_reference = BoundedDecisionToPaperUsefulnessMatchReference.model_validate(
+        match_reference
+    )
+    normalized_matched_outcome = (
+        BoundedPaperTradeOutcome.model_validate(matched_outcome)
+        if matched_outcome is not None
+        else None
+    )
+    usefulness_classification, usefulness_reason = _classify_decision_to_paper_usefulness(
+        action=action,
+        qualification_state=qualification_state,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+    )
+    return BoundedDecisionToPaperUsefulnessAudit(
+        covered_case_id=covered_case_id,
+        match_reference=normalized_match_reference,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+        usefulness_classification=usefulness_classification,
+        usefulness_reason=usefulness_reason,
+        interpretation_limit=DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY,
+    )
 
 
 def evaluate_bounded_trader_relevance_cases(
@@ -887,6 +1071,9 @@ __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
     "BOUNDED_TRADER_RELEVANCE_CONTRACT_ID",
     "BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION",
+    "DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID",
+    "DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION",
+    "DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY",
     "PAPER_REVIEW_CASE_DEFINITIONS",
     "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
     "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
@@ -900,6 +1087,9 @@ __all__ = [
     "ACTION_ENTRY_WIN_RATE_MIN",
     "ACTION_EXIT_WIN_RATE_MAX",
     "QUALIFICATION_COLOR_BY_STATE",
+    "BoundedDecisionToPaperUsefulnessAudit",
+    "BoundedDecisionToPaperUsefulnessMatchReference",
+    "BoundedPaperTradeOutcome",
     "BoundedTraderRelevanceCaseEvaluation",
     "BoundedTraderRelevanceValidation",
     "ComponentScore",
@@ -912,6 +1102,7 @@ __all__ = [
     "QualificationProfileRobustnessSliceResult",
     "Qualification",
     "ScoreEvaluation",
+    "evaluate_bounded_decision_to_paper_usefulness_audit",
     "evaluate_bounded_trader_relevance_cases",
     "serialize_decision_card",
     "validate_decision_card",

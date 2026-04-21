@@ -12,12 +12,14 @@ Phase 44 is bounded to one operator verification workflow:
 2. Inspect canonical trading-core lifecycle entities (orders, execution events, trades, positions).
 3. Inspect paper-facing account/trade/position views derived from canonical entities.
 4. Reconcile canonical and paper-facing state and require zero mismatches.
-5. Treat the result as bounded paper-runtime coherence evidence only.
+5. Inspect covered decision-card usefulness audit outputs against exact matched paper trades.
+6. Treat the result as bounded paper-runtime coherence evidence only.
 
 ## Workflow Boundary
 This workflow is read-only, operator-facing, and validation-oriented.
 
 In scope:
+- covered decision-to-paper usefulness audit for explicit paper-trade matches
 - deterministic paper lifecycle evidence
 - canonical inspection surfaces for order lifecycle state
 - paper inspection and reconciliation surfaces derived from canonical entities
@@ -38,6 +40,7 @@ Out of scope:
 - `tests/cilly_trading/engine/test_paper_order_lifecycle.py`
 
 ### Canonical inspection surfaces
+- `GET /decision-cards`
 - `GET /trading-core/orders`
 - `GET /trading-core/execution-events`
 - `GET /trading-core/trades`
@@ -57,6 +60,7 @@ Out of scope:
 4. Inspect canonical trade and position state via `GET /trading-core/trades` and `GET /trading-core/positions`.
 5. Inspect paper-facing trade, position, and account projections via `GET /paper/trades`, `GET /paper/positions`, and `GET /paper/account`.
 6. Reconcile the workflow state via `GET /paper/reconciliation` and require `ok: true` and `summary.mismatches: 0`.
+7. Inspect `/decision-cards` and review `metadata.bounded_decision_to_paper_usefulness_audit` for any covered cases.
 
 ## Minimum Operator Evidence
 The bounded Phase 44 workflow claim requires all of the following evidence:
@@ -65,6 +69,7 @@ The bounded Phase 44 workflow claim requires all of the following evidence:
 - Paper inspection and reconciliation contract coverage is passing (`tests/test_api_paper_inspection_read.py`).
 - Reconciliation returns `ok: true` and `summary.mismatches: 0` for valid lifecycle data.
 - Paper inspection views are derived from canonical trading-core entities, not legacy trade payload authority.
+- Covered decision-card usefulness audit remains bounded to non-live explanatory review and exact paper-trade matches only.
 - Full repository regression gate remains green (`python -m pytest`).
 
 ## Phase 24 vs Phase 44 Boundary
@@ -141,6 +146,7 @@ Each bounded long-run paper operator review must produce the following artifacts
 | R5 | Canonical trade count | `GET /trading-core/trades` | `total` matches `GET /paper/trades` `total` |
 | R6 | Canonical position count | `GET /trading-core/positions` | `total` matches `GET /paper/positions` `total` |
 | R7 | Workflow contract state | `GET /paper/workflow` | `validation.ok: true` |
+| R8 | Covered decision usefulness audit | `GET /decision-cards` | Covered cases expose `metadata.bounded_decision_to_paper_usefulness_audit` only in bounded non-live scope |
 
 All R1–R7 artifacts must be captured in the sequence listed above. R1 must be captured and confirmed clean before R2–R7 are treated as valid review evidence.
 

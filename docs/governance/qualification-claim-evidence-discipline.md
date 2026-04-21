@@ -57,7 +57,41 @@ Determinism rule:
 - identical inputs must produce identical case classifications and ordering
 - classification must be machine-evaluable from explicit output evidence fields only (no manual interpretation)
 
-## 5. Runtime and Documentation Alignment Rule
+## 5. Deterministic Bounded Decision-to-Paper Usefulness Audit
+
+Canonical contract id/version:
+
+- `decision_evidence_to_paper_outcome_usefulness.paper_audit.v1`
+- version `1.0.0`
+
+Covered cases:
+
+- only decision cards that explicitly declare `metadata.bounded_decision_to_paper_match`
+- contract v1 is bounded to covered `entry` decisions only
+- the explicit match contract is one exact `paper_trade_id`
+
+Deterministic matching rule:
+
+- resolve the exact `paper_trade_id`
+- the matched paper trade must share the same `symbol` and `strategy_id` as the decision card
+- the matched paper trade must open at or after `generated_at_utc`
+- if any of those checks fail, the usefulness signal is out of contract and must be classified as misleading
+
+Usefulness classification semantics:
+
+- `explanatory`: the covered entry decision matches a subsequent closed paper trade with a favorable bounded outcome
+- `weak`: the covered entry decision has no resolved match, remains open, or closes flat
+- `misleading`: the covered entry decision matches an invalid or adverse bounded paper outcome
+
+Claim boundary:
+
+- usefulness is bounded to non-live explanatory review only
+- it is not trader validation
+- it is not profitability forecasting
+- it is not live-trading readiness
+- it is not operational readiness
+
+## 6. Runtime and Documentation Alignment Rule
 
 Documentation and runtime wording must enforce the same boundary:
 
@@ -65,7 +99,7 @@ Documentation and runtime wording must enforce the same boundary:
 - inspection API wording mirrors the same boundary
 - qualification outputs explicitly state they do not imply live-trading approval
 
-## 6. Validation Rule
+## 7. Validation Rule
 
 Where claim-boundary enforcement exists in runtime contracts, validation must fail closed for unsupported claim language.
 Validation is required for:
@@ -74,7 +108,7 @@ Validation is required for:
 - qualification summary text
 - rationale summary/final explanation text
 
-## 7. Non-Goals
+## 8. Non-Goals
 
 This governance contract does not grant:
 

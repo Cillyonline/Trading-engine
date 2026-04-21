@@ -8,11 +8,17 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Optional, Sequence
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
+from cilly_trading.engine.decision_card_contract import (
+    BoundedDecisionToPaperUsefulnessMatchReference,
+    evaluate_bounded_decision_to_paper_usefulness_audit,
+)
 from cilly_trading.models import ExecutionEvent, Order, Position, Trade
 
 
@@ -732,3 +738,171 @@ def build_bounded_paper_simulation_state(
         portfolio_positions=tuple(portfolio_positions),
         reconciliation_mismatches=tuple(mismatches),
     )
+
+
+def resolve_runtime_canonical_execution_repo() -> Any | None:
+    try:
+        import api.main as api_main
+    except Exception:
+        return None
+    return getattr(api_main, "canonical_execution_repo", None)
+
+
+def _parse_iso_datetime(value: str) -> datetime:
+    normalized = value.replace("Z", "+00:00") if value.endswith("Z") else value
+    return datetime.fromisoformat(normalized)
+
+
+def _format_decimal(value: Decimal | None) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _build_paper_trade_outcome_payload(
+    *,
+    trade: Trade,
+    expected_symbol: str,
+    expected_strategy_id: str,
+    decision_generated_at_utc: str,
+) -> tuple[Literal["matched", "open", "invalid"], dict[str, Any]]:
+    try:
+        decision_at = _parse_iso_datetime(decision_generated_at_utc)
+        opened_at = _parse_iso_datetime(trade.opened_at)
+    except ValueError:
+        return (
+            "invalid",
+            {
+                "trade_id": trade.trade_id,
+                "position_id": trade.position_id,
+                "symbol": trade.symbol,
+                "strategy_id": trade.strategy_id,
+                "trade_status": trade.status,
+                "opened_at_utc": trade.opened_at,
+                "closed_at_utc": trade.closed_at,
+                "outcome_direction": "invalid",
+                "realized_pnl": _format_decimal(trade.realized_pnl),
+                "unrealized_pnl": _format_decimal(trade.unrealized_pnl),
+                "outcome_summary": (
+                    "Matched paper trade could not satisfy deterministic timestamp parsing for bounded "
+                    "decision-to-paper usefulness review."
+                ),
+            },
+        )
+
+    if trade.symbol != expected_symbol or trade.strategy_id != expected_strategy_id or opened_at < decision_at:
+        return (
+            "invalid",
+            {
+                "trade_id": trade.trade_id,
+                "position_id": trade.position_id,
+                "symbol": trade.symbol,
+                "strategy_id": trade.strategy_id,
+                "trade_status": trade.status,
+                "opened_at_utc": trade.opened_at,
+                "closed_at_utc": trade.closed_at,
+                "outcome_direction": "invalid",
+                "realized_pnl": _format_decimal(trade.realized_pnl),
+                "unrealized_pnl": _format_decimal(trade.unrealized_pnl),
+                "outcome_summary": (
+                    "Matched paper trade violates the explicit symbol, strategy, or subsequent-timing "
+                    "comparison contract."
+                ),
+            },
+        )
+
+    if trade.status == "open":
+        return (
+            "open",
+            {
+                "trade_id": trade.trade_id,
+                "position_id": trade.position_id,
+                "symbol": trade.symbol,
+                "strategy_id": trade.strategy_id,
+                "trade_status": trade.status,
+                "opened_at_utc": trade.opened_at,
+                "closed_at_utc": trade.closed_at,
+                "outcome_direction": "open",
+                "realized_pnl": _format_decimal(trade.realized_pnl),
+                "unrealized_pnl": _format_decimal(trade.unrealized_pnl),
+                "outcome_summary": (
+                    "Matched paper trade remains open, so the bounded non-live outcome is not yet closed."
+                ),
+            },
+        )
+
+    realized_pnl = trade.realized_pnl or Decimal("0")
+    if realized_pnl > Decimal("0"):
+        outcome_direction = "favorable"
+    elif realized_pnl < Decimal("0"):
+        outcome_direction = "adverse"
+    else:
+        outcome_direction = "flat"
+    return (
+        "matched",
+        {
+            "trade_id": trade.trade_id,
+            "position_id": trade.position_id,
+            "symbol": trade.symbol,
+            "strategy_id": trade.strategy_id,
+            "trade_status": trade.status,
+            "opened_at_utc": trade.opened_at,
+            "closed_at_utc": trade.closed_at,
+            "outcome_direction": outcome_direction,
+            "realized_pnl": _format_decimal(trade.realized_pnl),
+            "unrealized_pnl": _format_decimal(trade.unrealized_pnl),
+            "outcome_summary": (
+                "Matched paper trade closed and produced a deterministic bounded paper outcome for "
+                "decision-to-paper usefulness review."
+            ),
+        },
+    )
+
+
+def build_bounded_decision_to_paper_usefulness_audit(
+    *,
+    canonical_execution_repo: Any | None,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    action: str,
+    qualification_state: str,
+    match_reference: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if not isinstance(match_reference, dict):
+        return None
+
+    try:
+        normalized_match_reference = BoundedDecisionToPaperUsefulnessMatchReference.model_validate(
+            match_reference
+        )
+    except ValidationError:
+        return None
+
+    trade: Trade | None = None
+    if canonical_execution_repo is not None:
+        try:
+            trade = canonical_execution_repo.get_trade(normalized_match_reference.paper_trade_id)
+        except Exception:
+            trade = None
+
+    match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
+    matched_outcome: dict[str, Any] | None = None
+    if trade is not None:
+        match_status, matched_outcome = _build_paper_trade_outcome_payload(
+            trade=trade,
+            expected_symbol=symbol,
+            expected_strategy_id=strategy_id,
+            decision_generated_at_utc=generated_at_utc,
+        )
+
+    audit = evaluate_bounded_decision_to_paper_usefulness_audit(
+        covered_case_id=decision_card_id,
+        action=action,
+        qualification_state=qualification_state,
+        match_status=match_status,
+        match_reference=normalized_match_reference.model_dump(mode="python"),
+        matched_outcome=matched_outcome,
+    )
+    return audit.model_dump(mode="python")

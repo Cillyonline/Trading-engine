@@ -177,6 +177,30 @@ Alternatively, run the existing P53 post-run reconciliation script:
 python scripts/run_post_run_reconciliation.py --db-path /path/to/cilly_trading.db
 ```
 
+## Decision Evidence Usefulness Audit
+
+Covered decision cards may expose one bounded usefulness audit through
+`/decision-cards` metadata:
+
+- `metadata.bounded_decision_to_paper_match`
+- `metadata.bounded_decision_to_paper_usefulness_audit`
+
+The canonical matching rule is exact and deterministic:
+
+1. resolve one explicit `paper_trade_id`
+2. require the matched trade to share the same `symbol` and `strategy_id`
+3. require the matched trade to open at or after the decision-card timestamp
+
+The audit classifications are:
+
+- `explanatory`
+- `weak`
+- `misleading`
+
+This audit is bounded to non-live usefulness only. It does not imply trader
+validation, profitability forecasting, live-trading readiness, or operational
+readiness.
+
 ## Gap Analysis
 
 ### Previously Missing (addressed by P60)
@@ -298,6 +322,8 @@ Under bounded staging conditions, this confirms:
 - `/paper/trades` and `/paper/positions` reflect canonical created state
 - reconciliation remains consistent (`ok: true`, `mismatches: 0`) in non-empty
   state
+- covered decision cards can later be reviewed against exact matched
+  paper-trade outcomes for bounded usefulness
 - immediate repeat execution remains bounded and duplicate-entry safe
 - no duplicate paper trades are created on immediate re-run
 
@@ -307,5 +333,7 @@ This OPS-P62 record is bounded staging evidence only. It does not claim:
 - live-trading readiness
 - broker integration readiness
 - production readiness
+- trader validation
+- profitability forecasting
 - strategy calibration completeness
 - portfolio or risk optimization completeness

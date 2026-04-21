@@ -108,6 +108,18 @@ def test_p60_post_execution_verification_documented() -> None:
     assert "/paper/reconciliation" in content
 
 
+def test_p60_decision_usefulness_audit_is_documented() -> None:
+    content = _read(P60_DOC_PATH)
+
+    assert "## Decision Evidence Usefulness Audit" in content
+    assert "metadata.bounded_decision_to_paper_match" in content
+    assert "metadata.bounded_decision_to_paper_usefulness_audit" in content
+    assert "paper_trade_id" in content
+    assert "`explanatory`" in content
+    assert "`weak`" in content
+    assert "`misleading`" in content
+
+
 # ---------------------------------------------------------------------------
 # AC3: Gap analysis is explicit without overclaim
 # ---------------------------------------------------------------------------
@@ -156,6 +168,15 @@ def test_p60_non_live_boundary_is_explicit() -> None:
     assert "No broker APIs are called." in content
     assert "No real capital is at risk." in content
     assert "does not imply live-trading readiness" in content
+
+
+def test_p60_usefulness_audit_keeps_claim_boundary_explicit() -> None:
+    content = _read(P60_DOC_PATH)
+
+    assert "This audit is bounded to non-live usefulness only." in content
+    assert "does not imply trader" in content
+    assert "profitability forecasting" in content
+    assert "operational" in content
 
 
 def test_p60_script_contains_non_live_boundary() -> None:
