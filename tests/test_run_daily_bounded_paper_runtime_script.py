@@ -144,6 +144,13 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert payload["status"] == "ok"
     assert payload["run_quality_status"] == "no_eligible"
     assert payload["run_quality_classification_version"] == 1
+    assert payload["operator_action_contract_version"] == 1
+    assert payload["operator_action_contract"] == {
+        "action_category": "review_required",
+        "action_code": "review_no_eligible_and_record",
+        "action_summary": "Review the bounded no-eligible outcome, confirm skip reasons and inputs, and record the run without retrying solely to force activity.",
+        "escalation_boundary": "Escalate only when adjacent bounded evidence is contradictory or the no-eligible pattern is unexpected for the stated inputs. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
     assert payload["run_quality_inputs"] == {
         "execution_eligible": 0,
         "execution_returncode": 1,
@@ -176,6 +183,8 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     summary_file_payload = json.loads(Path(payload["summary_file"]).read_text(encoding="utf-8"))
     assert summary_file_payload["run_quality_status"] == payload["run_quality_status"]
     assert summary_file_payload["run_quality_classification_version"] == payload["run_quality_classification_version"]
+    assert summary_file_payload["operator_action_contract_version"] == payload["operator_action_contract_version"]
+    assert summary_file_payload["operator_action_contract"] == payload["operator_action_contract"]
     assert summary_file_payload["run_quality_inputs"] == payload["run_quality_inputs"]
 
 
@@ -198,10 +207,34 @@ def test_run_quality_classification_state_transitions_are_deterministic() -> Non
         execution_step={"returncode": 0, "payload": {"status": "pass", "eligible": 3}},
         reconciliation_step={"payload": {"ok": False, "mismatches": 2}},
     )
+    healthy_repeat = module._classify_run_quality(
+        execution_step={"returncode": 0, "payload": {"status": "pass", "eligible": 3}},
+        reconciliation_step={"payload": {"ok": True, "mismatches": 0}},
+    )
 
     assert healthy["run_quality_status"] == "healthy"
+    assert healthy["operator_action_contract_version"] == 1
+    assert healthy["operator_action_contract"] == {
+        "action_category": "informational",
+        "action_code": "record_and_continue",
+        "action_summary": "Record the bounded daily runtime evidence and continue the next scheduled bounded run.",
+        "escalation_boundary": "No escalation from this state alone. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
     assert no_eligible["run_quality_status"] == "no_eligible"
+    assert no_eligible["operator_action_contract"] == {
+        "action_category": "review_required",
+        "action_code": "review_no_eligible_and_record",
+        "action_summary": "Review the bounded no-eligible outcome, confirm skip reasons and inputs, and record the run without retrying solely to force activity.",
+        "escalation_boundary": "Escalate only when adjacent bounded evidence is contradictory or the no-eligible pattern is unexpected for the stated inputs. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
     assert degraded["run_quality_status"] == "degraded"
+    assert degraded["operator_action_contract"] == {
+        "action_category": "blocking",
+        "action_code": "stop_and_open_follow_up",
+        "action_summary": "Treat the bounded run as blocked for continuation claims, investigate the degraded evidence, and open or update follow-up before the next bounded decision.",
+        "escalation_boundary": "Do not continue staged evaluation claims from this run until the degraded cause is resolved. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
+    assert healthy == healthy_repeat
     assert degraded == degraded_repeat
 
 
@@ -259,6 +292,13 @@ def test_daily_runner_stops_after_analysis_failure(
     payload = json.loads(capsys.readouterr().err)
     assert payload["status"] == "failed"
     assert payload["failed_step"] == "analysis_signal_generation"
+    assert payload["operator_action_contract_version"] == 1
+    assert payload["operator_action_contract"] == {
+        "action_category": "retry_required",
+        "action_code": "fix_pre_execution_failure_and_rerun",
+        "action_summary": "Correct the pre-execution failure cause and rerun the bounded daily workflow.",
+        "escalation_boundary": "Retry is bounded to failures before paper execution starts. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
     assert payload["steps_completed"] == ["snapshot_ingestion"]
     assert executed_scripts == ["run_snapshot_ingestion.py"]
 
@@ -330,6 +370,13 @@ def test_daily_runner_stops_after_execution_failure(
     payload = json.loads(capsys.readouterr().err)
     assert payload["status"] == "failed"
     assert payload["failed_step"] == "bounded_paper_execution_cycle"
+    assert payload["operator_action_contract_version"] == 1
+    assert payload["operator_action_contract"] == {
+        "action_category": "blocking",
+        "action_code": "stop_and_investigate_before_rerun",
+        "action_summary": "Stop and investigate the bounded execution failure before any rerun decision.",
+        "escalation_boundary": "Do not rerun the full workflow blindly after execution has started. Do not treat bounded paper evidence as live, broker, or production readiness.",
+    }
     assert payload["steps_completed"] == [
         "snapshot_ingestion",
         "analysis_signal_generation",

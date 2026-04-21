@@ -86,6 +86,8 @@ The runner is fail-fast:
   - `detail`
   - `steps_completed`
   - `step_order`
+  - `operator_action_contract_version`
+  - `operator_action_contract`
 - it returns step-specific non-zero exit codes
 
 Bounded execution note:
@@ -103,6 +105,8 @@ On success, the runner emits bounded JSON summary output to stdout with:
 - `run_quality_status`
 - `run_quality_classification_version`
 - `run_quality_inputs`
+- `operator_action_contract_version`
+- `operator_action_contract`
 - `steps_completed`
 - `verification_surfaces` evidence file paths
 - `summary_file` path
@@ -123,7 +127,30 @@ Deterministic run-quality interpretation:
 Determinism contract:
 
 - same run summary inputs always produce the same `run_quality_status`
+- the same `run_quality_status` always produces the same `operator_action_contract`
 - classification is bounded evidence quality only and remains non-live
+
+Deterministic operator action contract:
+
+| `run_quality_status` | `action_category` | Deterministic bounded operator interpretation |
+| --- | --- | --- |
+| `healthy` | `informational` | Record the bounded daily runtime evidence and continue the next scheduled bounded run. |
+| `no_eligible` | `review_required` | Review the bounded no-eligible outcome, confirm skip reasons and inputs, and record the run without retrying solely to force activity. |
+| `degraded` | `blocking` | Stop continuation claims for that run, investigate the degraded evidence, and open or update follow-up before the next bounded decision. |
+
+Operator-facing category wording:
+
+- `healthy` is informational
+- `no_eligible` is review-required
+- `degraded` is blocking
+
+Fail-fast operator action boundary:
+
+- pre-execution failures are retry-required
+- execution or post-execution failures are blocking
+- pre-execution retry applies only before bounded paper execution starts
+- once execution has started, the operator must stop and investigate before any rerun decision
+- this bounded action contract does not imply operational readiness
 
 ## Verification Surfaces Remain Usable
 

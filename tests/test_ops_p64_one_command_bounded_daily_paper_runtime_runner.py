@@ -56,6 +56,8 @@ def test_p64_doc_defines_bounded_failure_behavior() -> None:
     assert "failed_step" in content
     assert "steps_completed" in content
     assert "step_order" in content
+    assert "operator_action_contract_version" in content
+    assert "operator_action_contract" in content
 
 
 def test_p64_doc_defines_deterministic_run_quality_contract() -> None:
@@ -64,6 +66,8 @@ def test_p64_doc_defines_deterministic_run_quality_contract() -> None:
     assert "run_quality_status" in content
     assert "run_quality_classification_version" in content
     assert "run_quality_inputs" in content
+    assert "operator_action_contract_version" in content
+    assert "operator_action_contract" in content
     assert "`healthy`" in content
     assert "`no_eligible`" in content
     assert "`degraded`" in content
@@ -87,6 +91,18 @@ def test_p64_doc_has_explicit_non_live_claim_boundary() -> None:
     assert "no live orders are placed" in content
     assert "no broker APIs are called" in content
     assert "no production-readiness claim is made" in content
+
+
+def test_p64_doc_defines_bounded_operator_action_categories_and_fail_fast_boundaries() -> None:
+    content = _read(P64_DOC)
+
+    assert "informational" in content
+    assert "review-required" in content
+    assert "retry-required" in content
+    assert "blocking" in content
+    assert "pre-execution failures are retry-required" in content
+    assert "execution or post-execution failures are blocking" in content
+    assert "does not imply operational readiness" in content
 
 
 def test_p64_script_references_ops_p63_order_and_failure_mode() -> None:
