@@ -1,27 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from cilly_trading.non_live_evaluation_contract import (
     CANONICAL_RISK_REJECTION_REASON_CODES,
     RISK_REJECTION_REASON_PRECEDENCE,
 )
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_DOC = (
-    REPO_ROOT / "docs" / "architecture" / "risk" / "non_live_evaluation_contract.md"
-)
-GOVERNANCE_DOC = (
-    REPO_ROOT / "docs" / "governance" / "qualification-claim-evidence-discipline.md"
-)
-PHASE44_DOC = (
-    REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
+from tests.utils.consumer_contract_helpers import (
+    assert_contains_all,
+    assert_starts_with,
+    read_repo_text,
 )
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+CONTRACT_DOC = "docs/architecture/risk/non_live_evaluation_contract.md"
+GOVERNANCE_DOC = "docs/governance/qualification-claim-evidence-discipline.md"
+PHASE44_DOC = "docs/operations/runtime/phase-44-paper-operator-workflow.md"
 
 
 def _extract_bullet_codes_after_heading(content: str, heading: str) -> list[str]:
@@ -55,56 +48,68 @@ def _extract_bullet_codes_after_heading(content: str, heading: str) -> list[str]
 
 
 def test_non_live_evaluation_contract_doc_defines_canonical_semantics() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
-    assert content.startswith("# Professional Non-Live Risk and Exposure Evaluation Contract")
-    assert "NonLiveEvaluationEvidence" in content
-    assert "decision" in content
-    assert "semantic" in content
-    assert "scope" in content
-    assert "reject/cap/boundary semantics" in content
-    assert "Canonical risk rejection reason-code vocabulary (normalized):" in content
-    assert "rejected:risk_framework_kill_switch_enabled" in content
-    assert "rejected:risk_framework_max_position_size_exceeded" in content
-    assert "rejected:risk_framework_max_account_exposure_pct_exceeded" in content
-    assert "rejected:risk_framework_max_strategy_exposure_pct_exceeded" in content
-    assert "rejected:risk_framework_max_symbol_exposure_pct_exceeded" in content
+    assert_starts_with(content, "# Professional Non-Live Risk and Exposure Evaluation Contract")
+    assert_contains_all(
+        content,
+        "NonLiveEvaluationEvidence",
+        "decision",
+        "semantic",
+        "scope",
+        "reject/cap/boundary semantics",
+        "Canonical risk rejection reason-code vocabulary (normalized):",
+        "rejected:risk_framework_kill_switch_enabled",
+        "rejected:risk_framework_max_position_size_exceeded",
+        "rejected:risk_framework_max_account_exposure_pct_exceeded",
+        "rejected:risk_framework_max_strategy_exposure_pct_exceeded",
+        "rejected:risk_framework_max_symbol_exposure_pct_exceeded",
+    )
 
 
 def test_non_live_contract_doc_locks_portfolio_constraint_hit_terminology() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
-    assert "portfolio pipeline outcomes are `approved`, `rejected`, or `constraint_hit`" in content
-    assert "evidence rows are emitted only when a cap or" in content
-    assert "boundary is violated" in content
+    assert_contains_all(
+        content,
+        "portfolio pipeline outcomes are `approved`, `rejected`, or `constraint_hit`",
+        "evidence rows are emitted only when a cap or",
+        "boundary is violated",
+    )
     assert "reject edges only" not in content.lower()
 
 
 def test_non_live_evaluation_contract_doc_keeps_non_live_boundaries_explicit() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
-    assert "Out of scope:" in content
-    assert "live trading enablement" in content
-    assert "broker execution integration" in content
-    assert "external portfolio optimization subsystems" in content
+    assert_contains_all(
+        content,
+        "Out of scope:",
+        "live trading enablement",
+        "broker execution integration",
+        "external portfolio optimization subsystems",
+    )
 
 
 def test_non_live_evaluation_contract_doc_defines_reason_precedence_and_inspection_normalization() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
-    assert "Normalized precedence order (canonical reason codes):" in content
-    assert "rejected:risk_framework_kill_switch_enabled" in content
-    assert "rejected:risk_framework_max_position_size_exceeded" in content
-    assert "rejected:risk_framework_max_account_exposure_pct_exceeded" in content
-    assert "rejected:risk_framework_max_strategy_exposure_pct_exceeded" in content
-    assert "rejected:risk_framework_max_symbol_exposure_pct_exceeded" in content
-    assert "Inspection/read normalization:" in content
-    assert "inspection flows" in content
-    assert "best-effort" in content
+    assert_contains_all(
+        content,
+        "Normalized precedence order (canonical reason codes):",
+        "rejected:risk_framework_kill_switch_enabled",
+        "rejected:risk_framework_max_position_size_exceeded",
+        "rejected:risk_framework_max_account_exposure_pct_exceeded",
+        "rejected:risk_framework_max_strategy_exposure_pct_exceeded",
+        "rejected:risk_framework_max_symbol_exposure_pct_exceeded",
+        "Inspection/read normalization:",
+        "inspection flows",
+        "best-effort",
+    )
 
 
 def test_non_live_contract_doc_reason_vocabulary_matches_runtime_contract_constants() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
     documented_codes = _extract_bullet_codes_after_heading(
         content,
@@ -114,7 +119,7 @@ def test_non_live_contract_doc_reason_vocabulary_matches_runtime_contract_consta
 
 
 def test_non_live_contract_doc_precedence_order_matches_runtime_contract_constants() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
     documented_precedence = _extract_bullet_codes_after_heading(
         content,
@@ -128,69 +133,86 @@ def test_non_live_contract_doc_precedence_order_matches_runtime_contract_constan
 
 
 def test_non_live_contract_doc_explicitly_locks_cross_surface_determinism_boundary() -> None:
-    content = _read(CONTRACT_DOC)
+    content = read_repo_text(CONTRACT_DOC)
 
-    assert "risk gate and paper execution worker surfaces" in content
-    assert "equivalent bounded non-live input state must emit the same canonical reject" in content
-    assert "deterministic precedence is mandatory when multiple constraints are violated" in content
-    assert "best-effort single-field normalization to" in content
-    assert "`normalized_reason_code` without multi-reason precedence selection" in content
-    assert "not live-trading or broker-readiness evidence" in content
-    assert "normalized_reason_codes" in content
-    assert "does not aggregate multiple compatible reason" in content
+    assert_contains_all(
+        content,
+        "risk gate and paper execution worker surfaces",
+        "equivalent bounded non-live input state must emit the same canonical reject",
+        "deterministic precedence is mandatory when multiple constraints are violated",
+        "best-effort single-field normalization to",
+        "`normalized_reason_code` without multi-reason precedence selection",
+        "not live-trading or broker-readiness evidence",
+        "normalized_reason_codes",
+        "does not aggregate multiple compatible reason",
+    )
 
 
 def test_risk_and_portfolio_docs_reference_canonical_non_live_contract() -> None:
-    risk_framework = _read(REPO_ROOT / "docs" / "architecture" / "risk" / "risk_framework.md")
-    portfolio_framework = _read(REPO_ROOT / "docs" / "architecture" / "risk" / "portfolio_framework.md")
+    risk_framework = read_repo_text("docs/architecture/risk/risk_framework.md")
+    portfolio_framework = read_repo_text("docs/architecture/risk/portfolio_framework.md")
 
-    assert "non_live_evaluation_contract.md" in risk_framework
-    assert "policy_evidence" in risk_framework
-    assert "risk evaluator outcomes are `approved` or `rejected`" in risk_framework
-    assert "non_live_evaluation_contract.md" in portfolio_framework
-    assert "policy_evidence" in portfolio_framework
-    assert "approved`, `rejected`, or `constraint_hit`" in portfolio_framework
+    assert_contains_all(
+        risk_framework,
+        "non_live_evaluation_contract.md",
+        "policy_evidence",
+        "risk evaluator outcomes are `approved` or `rejected`",
+    )
+    assert_contains_all(
+        portfolio_framework,
+        "non_live_evaluation_contract.md",
+        "policy_evidence",
+        "approved`, `rejected`, or `constraint_hit`",
+    )
     assert "reject edges only" not in portfolio_framework.lower()
 
 
 def test_ops_policy_doc_references_structured_non_live_evidence_surface() -> None:
-    policy_doc = _read(
-        REPO_ROOT
-        / "docs"
-        / "operations"
-        / "runtime"
-        / "signal_to_paper_execution_policy.md"
+    policy_doc = read_repo_text(
+        "docs/operations/runtime/signal_to_paper_execution_policy.md"
     )
 
-    assert "RiskEvaluationResponse.policy_evidence" in policy_doc
-    assert "CapitalAllocationAssessment.policy_evidence" in policy_doc
-    assert "PortfolioGuardrailAssessment.policy_evidence" in policy_doc
-    assert "non_live_evaluation_contract.md" in policy_doc
-    assert "approved`, `rejected`, or `constraint_hit`" in policy_doc
-    assert "approved outcomes emit an empty evidence tuple" in policy_doc
+    assert_contains_all(
+        policy_doc,
+        "RiskEvaluationResponse.policy_evidence",
+        "CapitalAllocationAssessment.policy_evidence",
+        "PortfolioGuardrailAssessment.policy_evidence",
+        "non_live_evaluation_contract.md",
+        "approved`, `rejected`, or `constraint_hit`",
+        "approved outcomes emit an empty evidence tuple",
+    )
     assert "reject edges only" not in policy_doc.lower()
 
 
 def test_usefulness_governance_doc_defines_exact_non_live_decision_to_paper_contract() -> None:
-    content = _read(GOVERNANCE_DOC)
+    content = read_repo_text(GOVERNANCE_DOC)
 
-    assert "Deterministic Bounded Decision-to-Paper Usefulness Audit" in content
-    assert "decision_evidence_to_paper_outcome_usefulness.paper_audit.v1" in content
-    assert "metadata.bounded_decision_to_paper_match" in content
-    assert "paper_trade_id" in content
-    assert "`explanatory`" in content
-    assert "`weak`" in content
-    assert "`misleading`" in content
+    assert_contains_all(
+        content,
+        "Deterministic Bounded Decision-to-Paper Usefulness Audit",
+        "decision_evidence_to_paper_outcome_usefulness.paper_audit.v1",
+        "metadata.bounded_decision_to_paper_match",
+        "paper_trade_id",
+        "`explanatory`",
+        "`weak`",
+        "`misleading`",
+    )
 
 
 def test_usefulness_docs_keep_non_live_claim_boundaries_explicit() -> None:
-    governance = _read(GOVERNANCE_DOC)
-    phase44 = _read(PHASE44_DOC)
+    governance = read_repo_text(GOVERNANCE_DOC)
+    phase44 = read_repo_text(PHASE44_DOC)
 
-    assert "it is not trader validation" in governance
-    assert "it is not profitability forecasting" in governance
-    assert "it is not live-trading readiness" in governance
-    assert "it is not operational readiness" in governance
-    assert "metadata.bounded_decision_to_paper_usefulness_audit" in phase44
-    assert "non-live explanatory review" in phase44
-    assert "exact paper-trade matches only" in phase44
+    assert_contains_all(
+        governance,
+        "it is not trader validation",
+        "it is not profitability forecasting",
+        "it is not live-trading readiness",
+        "it is not operational readiness",
+    )
+    assert_contains_all(
+        phase44,
+        "metadata.bounded_decision_to_paper_usefulness_audit",
+        "non-live explanatory review",
+        "exact paper-trade matches only",
+    )
