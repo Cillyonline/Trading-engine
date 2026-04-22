@@ -187,6 +187,97 @@ def test_scheduled_runner_is_started_on_api_startup_and_stopped_on_shutdown(monk
     assert calls == ["start_scheduler", "stop_scheduler"]
 
 
+def test_runtime_lifecycle_registration_uses_lifespan_handlers() -> None:
+    assert api_main.app.router.on_startup == []
+    assert api_main.app.router.on_shutdown == []
+
+
+def test_runtime_lifecycle_side_effect_order_remains_deterministic(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(api_main, "ENGINE_RUNTIME_GUARD_ACTIVE", False)
+
+    def _start_runtime() -> str:
+        calls.append(f"start_runtime:guard={api_main.ENGINE_RUNTIME_GUARD_ACTIVE}")
+        return "running"
+
+    def _start_scheduler() -> str:
+        calls.append(f"start_scheduler:guard={api_main.ENGINE_RUNTIME_GUARD_ACTIVE}")
+        return "running"
+
+    def _stop_scheduler() -> str:
+        calls.append(f"stop_scheduler:guard={api_main.ENGINE_RUNTIME_GUARD_ACTIVE}")
+        return "stopped"
+
+    def _shutdown_runtime() -> str:
+        calls.append(f"shutdown_runtime:guard={api_main.ENGINE_RUNTIME_GUARD_ACTIVE}")
+        return "stopped"
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", _start_runtime)
+    monkeypatch.setattr(api_main, "start_scheduled_analysis_runner", _start_scheduler)
+    monkeypatch.setattr(api_main, "shutdown_scheduled_analysis_runner", _stop_scheduler)
+    monkeypatch.setattr(api_main, "shutdown_engine_runtime", _shutdown_runtime)
+
+    with TestClient(api_main.app):
+        assert calls == [
+            "start_runtime:guard=False",
+            "start_scheduler:guard=True",
+        ]
+
+    assert calls == [
+        "start_runtime:guard=False",
+        "start_scheduler:guard=True",
+        "stop_scheduler:guard=True",
+        "shutdown_runtime:guard=False",
+    ]
+
+
+def test_runtime_guard_toggles_across_lifecycle(monkeypatch) -> None:
+    monkeypatch.setattr(api_main, "ENGINE_RUNTIME_GUARD_ACTIVE", False)
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "start_scheduled_analysis_runner", lambda: "running")
+    monkeypatch.setattr(api_main, "shutdown_scheduled_analysis_runner", lambda: "stopped")
+    monkeypatch.setattr(api_main, "shutdown_engine_runtime", lambda: "stopped")
+
+    with TestClient(api_main.app):
+        assert api_main.ENGINE_RUNTIME_GUARD_ACTIVE is True
+
+    assert api_main.ENGINE_RUNTIME_GUARD_ACTIVE is False
+
+
+def test_shutdown_lifecycle_transition_error_is_logged_and_swallowed(monkeypatch) -> None:
+    calls: list[str] = []
+
+    monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+    monkeypatch.setattr(api_main, "start_scheduled_analysis_runner", lambda: "running")
+    monkeypatch.setattr(
+        api_main,
+        "shutdown_scheduled_analysis_runner",
+        lambda: calls.append("stop_scheduler") or "stopped",
+    )
+
+    def _shutdown_runtime() -> str:
+        calls.append("shutdown_runtime")
+        raise api_main.LifecycleTransitionError("Cannot shutdown runtime from state 'ready'.")
+
+    monkeypatch.setattr(api_main, "shutdown_engine_runtime", _shutdown_runtime)
+    monkeypatch.setattr(
+        api_main.logger,
+        "exception",
+        lambda message, *args, **kwargs: calls.append(f"log:{message}"),
+    )
+
+    with TestClient(api_main.app):
+        pass
+
+    assert calls == [
+        "stop_scheduler",
+        "shutdown_runtime",
+        "log:Engine runtime shutdown failed",
+    ]
+    assert api_main.ENGINE_RUNTIME_GUARD_ACTIVE is False
+
+
 def test_watchlist_persistence_survives_api_restart(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "restart-safe.db"
 
