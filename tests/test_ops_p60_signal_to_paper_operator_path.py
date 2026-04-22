@@ -219,3 +219,30 @@ def test_p60_script_writes_evidence() -> None:
 def test_workflow_doc_references_p60() -> None:
     content = _read(WORKFLOW_DOC_PATH)
     assert "P60" in content or "p60" in content
+
+
+# ---------------------------------------------------------------------------
+# AC1+AC2: End-to-end traceability chain is documented
+# ---------------------------------------------------------------------------
+
+
+def test_p60_end_to_end_traceability_chain_is_documented() -> None:
+    content = _read(P60_DOC_PATH)
+    assert "## End-to-End Traceability Chain" in content
+    assert "signal_to_paper_reconciliation_traceability.paper_audit.v1" in content
+    assert "`signal_analysis`" in content
+    assert "`decision_card`" in content
+    assert "`paper_trade`" in content
+    assert "`reconciliation`" in content
+    for status in ("`matched`", "`open`", "`missing`", "`invalid`"):
+        assert status in content
+    assert "non-live" in content.lower()
+
+
+def test_workflow_doc_references_traceability_chain() -> None:
+    content = _read(WORKFLOW_DOC_PATH)
+    assert "## End-to-End Traceability Chain" in content
+    assert "traceability_chain" in content
+    assert "signal_to_paper_reconciliation_traceability.paper_audit.v1" in content
+    for status in ("`matched`", "`open`", "`missing`", "`invalid`"):
+        assert status in content

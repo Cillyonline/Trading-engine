@@ -201,6 +201,38 @@ This audit is bounded to non-live usefulness only. It does not imply trader
 validation, profitability forecasting, live-trading readiness, or operational
 readiness.
 
+## End-to-End Traceability Chain
+
+Covered decision-card outputs from `GET /decision-cards` expose one canonical
+deterministic traceability reference chain in the top-level
+`traceability_chain` field. The contract identifier is
+`signal_to_paper_reconciliation_traceability.paper_audit.v1`.
+
+Stages and required references per stage:
+
+| Stage | Surface | Required reference fields |
+| --- | --- | --- |
+| `signal_analysis` | `/signals` | `analysis_run_id`, `symbol`, `strategy_id` |
+| `decision_card` | `/decision-cards` | `decision_card_id`, `generated_at_utc`, `qualification_state`, `action` |
+| `paper_trade` | `/paper/trades` | `paper_trade_id` (when present) |
+| `reconciliation` | `/paper/reconciliation` | linkage status mirrors `paper_trade` |
+
+Each stage carries an explicit bounded `linkage_status`. The chain reuses the
+same bounded status vocabulary as the decision-to-paper usefulness audit:
+
+- `matched` — explicit reference is resolved against the canonical entity.
+- `open` — referenced paper trade exists but has not yet closed.
+- `missing` — required reference is absent (no implicit inference is allowed).
+- `invalid` — reference exists but violates the symbol/strategy/timing contract.
+
+The `overall_linkage_status` equals the paper stage `linkage_status`, and the
+reconciliation stage status mirrors the paper stage status. This keeps gaps
+explicit rather than inferred from missing wording.
+
+The chain is bounded to non-live deterministic auditability. It does not
+imply trader validation, profitability forecasting, live-trading readiness, or
+operational readiness.
+
 ## Gap Analysis
 
 ### Previously Missing (addressed by P60)

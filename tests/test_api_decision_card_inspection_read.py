@@ -522,3 +522,188 @@ def test_decision_card_inspection_persists_deterministic_bounded_usefulness_audi
     assert misleading_audit["match_status"] == "matched"
     assert misleading_audit["usefulness_classification"] == "misleading"
     assert misleading_audit["matched_outcome"]["outcome_direction"] == "adverse"
+
+
+def test_decision_card_inspection_exposes_end_to_end_traceability_chain(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-matched",
+            strategy_id="RSI2",
+            symbol="AAPL",
+            status="closed",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at="2026-03-24T08:45:00Z",
+            realized_pnl="1.50",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-open",
+            strategy_id="RSI2",
+            symbol="MSFT",
+            status="open",
+            opened_at="2026-03-24T09:05:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="0.25",
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-invalid",
+            strategy_id="OTHER",
+            symbol="NVDA",
+            status="closed",
+            opened_at="2026-03-24T10:05:00Z",
+            closed_at="2026-03-24T10:35:00Z",
+            realized_pnl="0.50",
+            unrealized_pnl=None,
+        )
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-trace",
+        artifact_name="dc-matched.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-matched",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-matched",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-trace",
+        artifact_name="dc-open.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-open",
+            generated_at_utc="2026-03-24T09:00:00Z",
+            symbol="MSFT",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-open",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-trace",
+        artifact_name="dc-missing.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-missing",
+            generated_at_utc="2026-03-24T11:00:00Z",
+            symbol="GOOG",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id=None,
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-trace",
+        artifact_name="dc-invalid.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-invalid",
+            generated_at_utc="2026-03-24T10:00:00Z",
+            symbol="NVDA",
+            strategy_id="TURTLE",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-invalid",
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        first = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+        second = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+
+    by_id = {item["decision_card_id"]: item for item in first.json()["items"]}
+
+    matched = by_id["dc-matched"]["traceability_chain"]
+    assert matched["contract_id"] == "signal_to_paper_reconciliation_traceability.paper_audit.v1"
+    assert matched["contract_version"] == "1.0.0"
+    assert matched["overall_linkage_status"] == "matched"
+    assert matched["signal_analysis"] == {
+        "stage": "signal_analysis",
+        "surface": "/signals",
+        "analysis_run_id": "run-abc",
+        "symbol": "AAPL",
+        "strategy_id": "RSI2",
+        "linkage_status": "matched",
+    }
+    assert matched["decision"] == {
+        "stage": "decision_card",
+        "surface": "/decision-cards",
+        "decision_card_id": "dc-matched",
+        "generated_at_utc": "2026-03-24T08:00:00Z",
+        "qualification_state": "paper_approved",
+        "action": "entry",
+        "linkage_status": "matched",
+    }
+    assert matched["paper"] == {
+        "stage": "paper_trade",
+        "surface": "/paper/trades",
+        "paper_trade_id": "trade-matched",
+        "linkage_status": "matched",
+    }
+    assert matched["reconciliation"] == {
+        "stage": "reconciliation",
+        "surface": "/paper/reconciliation",
+        "linkage_status": "matched",
+    }
+    assert "non-live" in matched["interpretation_limit"]
+
+    open_chain = by_id["dc-open"]["traceability_chain"]
+    assert open_chain["overall_linkage_status"] == "open"
+    assert open_chain["paper"]["linkage_status"] == "open"
+    assert open_chain["reconciliation"]["linkage_status"] == "open"
+
+    missing = by_id["dc-missing"]["traceability_chain"]
+    assert missing["overall_linkage_status"] == "missing"
+    assert missing["paper"]["paper_trade_id"] is None
+    assert missing["paper"]["linkage_status"] == "missing"
+    assert missing["reconciliation"]["linkage_status"] == "missing"
+
+    invalid = by_id["dc-invalid"]["traceability_chain"]
+    assert invalid["overall_linkage_status"] == "invalid"
+    assert invalid["paper"]["paper_trade_id"] == "trade-invalid"
+    assert invalid["paper"]["linkage_status"] == "invalid"
+    assert invalid["reconciliation"]["linkage_status"] == "invalid"
+
+
+def test_decision_card_inspection_traceability_chain_marks_missing_analysis_run_id(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    payload = _decision_card_payload(
+        decision_card_id="dc-no-analysis",
+        generated_at_utc="2026-03-24T08:00:00Z",
+        symbol="AAPL",
+        strategy_id="RSI2",
+        qualification_state="paper_approved",
+    )
+    payload["metadata"].pop("analysis_run_id", None)
+    _write_artifact(
+        artifacts_root,
+        run_id="run-no-analysis",
+        artifact_name="dc.json",
+        payload=payload,
+    )
+
+    with _client(monkeypatch, artifacts_root) as client:
+        response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    chain = response.json()["items"][0]["traceability_chain"]
+    assert chain["signal_analysis"]["analysis_run_id"] is None
+    assert chain["signal_analysis"]["linkage_status"] == "missing"
+    assert chain["overall_linkage_status"] == "missing"
