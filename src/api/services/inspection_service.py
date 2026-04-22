@@ -1600,7 +1600,7 @@ def read_decision_cards(
     all_items = build_decision_card_inspection_items(
         params=params,
         journal_artifacts_root=journal_artifacts_root,
-    )+
+    )
     
     page, total = paginate_items(all_items, limit=params.limit, offset=params.offset)
     return DecisionCardInspectionResponse(
