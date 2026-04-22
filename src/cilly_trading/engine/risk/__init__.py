@@ -1,5 +1,10 @@
 """Risk gate utilities for execution boundary enforcement."""
 
+from .authority import (
+    APPROVED_RISK_FRAMEWORK_REASON_CODE,
+    BOUNDED_RISK_FRAMEWORK_AUTHORITY_CONTRACT_DOC,
+    BOUNDED_RISK_FRAMEWORK_AUTHORITY_ID,
+)
 from .gate import (
     RISK_FRAMEWORK_REASON_CODES,
     RiskApprovalMissingError,
@@ -14,6 +19,9 @@ from .gate import (
 )
 
 __all__ = [
+    "APPROVED_RISK_FRAMEWORK_REASON_CODE",
+    "BOUNDED_RISK_FRAMEWORK_AUTHORITY_CONTRACT_DOC",
+    "BOUNDED_RISK_FRAMEWORK_AUTHORITY_ID",
     "RISK_FRAMEWORK_REASON_CODES",
     "RiskApprovalMissingError",
     "RiskRejectedError",

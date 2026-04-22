@@ -153,3 +153,14 @@ Cross-surface deterministic contract:
 Passing this contract means deterministic technical policy consistency only.
 It does not imply trader validation, production readiness, live-trading
 readiness, or broker go-live approval.
+
+## Bounded Risk-Framework Authority Contract Reference
+
+The canonical bounded risk-framework authority that governs the bounded
+non-live risk primitives covered by this evidence contract is:
+
+- `docs/architecture/risk/bounded_risk_framework_authority_contract.md`
+
+The canonical bounded authority id is `risk_framework_bounded_non_live_v1`.
+This evidence contract aligns with that authority for canonical reason-code
+vocabulary and deterministic precedence.

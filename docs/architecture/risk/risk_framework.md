@@ -92,6 +92,18 @@ Evidence discipline for this bounded contract:
 - evidence rows are emitted only when a cap/boundary is violated (`rejected`)
 - approved outcomes emit an empty evidence tuple
 
+## 8.2) Bounded Risk-Framework Authority Contract
+This framework is governed by one canonical bounded risk-framework authority
+contract that consolidates the currently implemented bounded risk primitives,
+their canonical evidence vocabulary, deterministic validation surfaces, and
+non-live wording boundaries:
+
+- `docs/architecture/risk/bounded_risk_framework_authority_contract.md`
+
+The canonical bounded authority id is `risk_framework_bounded_non_live_v1`.
+This authority is bounded non-live technical evidence only and is not
+live-trading, broker, trader-validation, or operational-readiness evidence.
+
 ## 9) MVP Guardrails
 For MVP scope control, the Risk Framework shall exclude the following:
 
