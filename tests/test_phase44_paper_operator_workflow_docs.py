@@ -1,60 +1,73 @@
 from __future__ import annotations
 
-from pathlib import Path
+import pytest
+
+from tests.utils.consumer_contract_helpers import (
+    REPO_ROOT,
+    assert_contains_all,
+    assert_starts_with,
+    read_repo_text,
+)
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+PHASE44_DOC = "docs/operations/runtime/phase-44-paper-operator-workflow.md"
+DOCS_INDEX = "docs/index.md"
+OPERATOR_CHECKLIST = "docs/operations/runtime/paper-deployment-operator-checklist.md"
+PAPER_INSPECTION_API_DOC = "docs/api/paper_inspection.md"
 
 
 def test_phase44_workflow_doc_defines_bounded_operator_flow_and_surfaces() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
-    assert content.startswith("# Phase 44 Bounded Paper Operator Workflow")
-    assert "## Bounded Workflow Claim" in content
-    assert "## Required Runtime Surfaces" in content
-    assert "GET /trading-core/orders" in content
-    assert "GET /trading-core/execution-events" in content
-    assert "GET /trading-core/trades" in content
-    assert "GET /trading-core/positions" in content
-    assert "GET /paper/trades" in content
-    assert "GET /paper/positions" in content
-    assert "GET /paper/account" in content
-    assert "GET /paper/reconciliation" in content
-    assert "GET /paper/workflow" in content
-    assert "## Explicit Operator Steps" in content
-    assert "## Workflow Boundary" in content
-    assert "## Minimum Operator Evidence" in content
-    assert "tests/test_api_paper_inspection_read.py" in content
-    assert "python -m pytest" in content
+    assert_starts_with(content, "# Phase 44 Bounded Paper Operator Workflow")
+    assert_contains_all(
+        content,
+        "## Bounded Workflow Claim",
+        "## Required Runtime Surfaces",
+        "GET /trading-core/orders",
+        "GET /trading-core/execution-events",
+        "GET /trading-core/trades",
+        "GET /trading-core/positions",
+        "GET /paper/trades",
+        "GET /paper/positions",
+        "GET /paper/account",
+        "GET /paper/reconciliation",
+        "GET /paper/workflow",
+        "## Explicit Operator Steps",
+        "## Workflow Boundary",
+        "## Minimum Operator Evidence",
+        "tests/test_api_paper_inspection_read.py",
+        "python -m pytest",
+    )
 
 
 def test_phase44_workflow_doc_preserves_phase24_boundary_and_non_goals() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
-    assert "## Phase 24 vs Phase 44 Boundary" in content
-    assert "Phase 24 (implemented simulator governance boundary)" in content
-    assert "Phase 44 (bounded runtime workflow claim in this phase slice)" in content
-    assert "## Explicit Non-Goals" in content
-    assert "Live trading" in content
-    assert "Broker integration" in content
-    assert "Mutation-heavy order-entry workflow" in content
+    assert_contains_all(
+        content,
+        "## Phase 24 vs Phase 44 Boundary",
+        "Phase 24 (implemented simulator governance boundary)",
+        "Phase 44 (bounded runtime workflow claim in this phase slice)",
+        "## Explicit Non-Goals",
+        "Live trading",
+        "Broker integration",
+        "Mutation-heavy order-entry workflow",
+    )
 
 
 def test_docs_index_links_phase44_workflow_contract() -> None:
-    content = (REPO_ROOT / "docs" / "index.md").read_text(encoding="utf-8")
+    content = read_repo_text(DOCS_INDEX)
 
-    assert "operations/runtime/phase-44-paper-operator-workflow.md" in content
-    assert "### Phase 44 Reference Materials" in content
+    assert_contains_all(
+        content,
+        "operations/runtime/phase-44-paper-operator-workflow.md",
+        "### Phase 44 Reference Materials",
+    )
 
 
 def test_phase44_workflow_doc_defines_long_run_evaluation_cadence() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
     assert "## Long-Run Evaluation Cadence" in content
     assert "strategy change" in content.lower()
@@ -63,57 +76,120 @@ def test_phase44_workflow_doc_defines_long_run_evaluation_cadence() -> None:
 
 
 def test_phase44_workflow_doc_defines_strategy_change_comparison_boundary() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
-    assert "## Strategy-Change Comparison Boundary" in content
-    assert "Pre-Change Baseline Capture" in content
-    assert "Post-Change Comparison" in content
-    assert "Prohibited Comparison Shortcuts" in content
-    assert "mismatches: 0" in content
+    assert_contains_all(
+        content,
+        "## Strategy-Change Comparison Boundary",
+        "Pre-Change Baseline Capture",
+        "Post-Change Comparison",
+        "Prohibited Comparison Shortcuts",
+        "mismatches: 0",
+    )
 
 
 def test_phase44_workflow_doc_defines_review_artifact_checklist() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
-    assert "## Review Artifact Checklist" in content
-    assert "| R1 |" in content
-    assert "| R7 |" in content
-    assert "`GET /paper/reconciliation`" in content
-    assert "`GET /paper/workflow`" in content
-    assert "R1–R7" in content
+    assert_contains_all(
+        content,
+        "## Review Artifact Checklist",
+        "| R1 |",
+        "| R7 |",
+        "`GET /paper/reconciliation`",
+        "`GET /paper/workflow`",
+        "R1–R7",
+    )
 
 
 def test_phase44_workflow_doc_defines_restart_and_recovery_review() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "phase-44-paper-operator-workflow.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(PHASE44_DOC)
 
-    assert "## Restart and Recovery Review" in content
-    assert "Recovery Verification Steps" in content
-    assert "ok: true" in content
-    assert "mismatches: 0" in content
+    assert_contains_all(
+        content,
+        "## Restart and Recovery Review",
+        "Recovery Verification Steps",
+        "ok: true",
+        "mismatches: 0",
+    )
 
 
 def test_phase44_operator_checklist_includes_long_run_review_section() -> None:
-    content = (
-        REPO_ROOT / "docs" / "operations" / "runtime" / "paper-deployment-operator-checklist.md"
-    ).read_text(encoding="utf-8")
+    content = read_repo_text(OPERATOR_CHECKLIST)
 
-    assert "## E) Long-Run Paper Review Evidence" in content
-    assert "R1–R7" in content
+    assert_contains_all(
+        content,
+        "## E) Long-Run Paper Review Evidence",
+        "R1–R7",
+        "EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT",
+        "EVIDENCE_COMPLETED_OPERATOR_CHECKLIST",
+    )
     assert "strategy-change comparison baseline" in content.lower()
     assert "post-restart recovery verification" in content.lower()
-    assert "EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT" in content
-    assert "EVIDENCE_COMPLETED_OPERATOR_CHECKLIST" in content
 
 
 def test_paper_inspection_api_doc_cross_references_long_run_workflow() -> None:
-    content = (REPO_ROOT / "docs" / "api" / "paper_inspection.md").read_text(encoding="utf-8")
+    content = read_repo_text(PAPER_INSPECTION_API_DOC)
 
-    assert "## Long-Run Evaluation and Review Workflow" in content
-    assert "phase-44-paper-operator-workflow.md" in content
-    assert "R1–R7" in content
+    assert_contains_all(
+        content,
+        "## Long-Run Evaluation and Review Workflow",
+        "phase-44-paper-operator-workflow.md",
+        "R1–R7",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for the canonical bounded contract-test helpers
+# ---------------------------------------------------------------------------
+#
+# These tests cover the shared helpers defined in
+# ``tests.utils.consumer_contract_helpers`` and exposed via
+# ``tests/conftest.py``. They confirm:
+#   * deterministic, read-only behavior of ``read_repo_text``
+#   * deterministic pass/fail equivalence of ``assert_contains_all`` and
+#     ``assert_starts_with`` relative to the expanded forms they replace
+#   * fixture wrappers produce the same callables/values
+# Helpers do not infer runtime behavior or imply live-trading readiness.
+
+
+def test_helper_repo_root_points_to_repository_root() -> None:
+    # The repo root must contain pytest.ini and a tests directory; this
+    # is a deterministic check that does not depend on runtime state.
+    assert (REPO_ROOT / "pytest.ini").is_file()
+    assert (REPO_ROOT / "tests").is_dir()
+
+
+def test_helper_read_repo_text_reads_known_file_as_utf8() -> None:
+    pytest_ini = read_repo_text("pytest.ini")
+    assert isinstance(pytest_ini, str)
+    assert "[pytest]" in pytest_ini
+
+
+def test_helper_assert_contains_all_passes_when_all_substrings_present() -> None:
+    content = "alpha beta gamma"
+    assert_contains_all(content, "alpha", "gamma")
+
+
+def test_helper_assert_contains_all_raises_on_first_missing_substring() -> None:
+    with pytest.raises(AssertionError) as excinfo:
+        assert_contains_all("alpha beta", "alpha", "delta", "gamma")
+    assert "delta" in str(excinfo.value)
+
+
+def test_helper_assert_starts_with_matches_string_startswith() -> None:
+    assert_starts_with("# heading", "# heading")
+    with pytest.raises(AssertionError):
+        assert_starts_with("# heading", "## heading")
+
+
+def test_helper_fixtures_expose_canonical_helpers(
+    repo_root,
+    read_repo_doc,
+    doc_assert_contains_all,
+    doc_assert_starts_with,
+) -> None:
+    assert repo_root == REPO_ROOT
+    assert read_repo_doc("pytest.ini") == read_repo_text("pytest.ini")
+    doc_assert_contains_all("alpha beta gamma", "alpha", "gamma")
+    doc_assert_starts_with("# heading", "# heading")
