@@ -161,6 +161,98 @@ def _insert_snapshot_rows(
     del db_path, ingestion_run_id, symbol, timeframe, rows
 
 
+def _write_decision_card_artifact(root: Path) -> None:
+    run_dir = root / "ui-flow-run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "contract_version": "2.0.0",
+        "decision_card_id": "dc-ui-flow-001",
+        "generated_at_utc": "2026-03-24T08:00:00Z",
+        "symbol": "AAPL",
+        "strategy_id": "RSI2",
+        "hard_gates": {
+            "policy_version": "hard-gates.v1",
+            "gates": [
+                {
+                    "gate_id": "drawdown_safety",
+                    "status": "pass",
+                    "blocking": True,
+                    "reason": "Drawdown remains within threshold",
+                    "evidence": ["max_dd=0.08", "threshold=0.12"],
+                    "failure_reason": None,
+                },
+                {
+                    "gate_id": "portfolio_exposure_cap",
+                    "status": "pass",
+                    "blocking": True,
+                    "reason": "Exposure remains within policy bounds",
+                    "evidence": ["gross_exposure=0.41", "cap=0.60"],
+                    "failure_reason": None,
+                },
+            ],
+        },
+        "score": {
+            "component_scores": [
+                {
+                    "category": "signal_quality",
+                    "score": 88.0,
+                    "rationale": "Signal quality remains stable across the review window",
+                    "evidence": ["hit_rate=0.64", "window=120d"],
+                },
+                {
+                    "category": "backtest_quality",
+                    "score": 84.0,
+                    "rationale": "Backtest quality remains bounded and reproducible",
+                    "evidence": ["sharpe=1.40", "profit_factor=1.60"],
+                },
+                {
+                    "category": "portfolio_fit",
+                    "score": 79.0,
+                    "rationale": "Portfolio fit remains inside concentration limits",
+                    "evidence": ["sector=0.17", "corr_cluster=0.42"],
+                },
+                {
+                    "category": "risk_alignment",
+                    "score": 86.0,
+                    "rationale": "Risk alignment is within configured guardrail bounds",
+                    "evidence": ["risk_trade=0.005", "max_dd=0.10"],
+                },
+                {
+                    "category": "execution_readiness",
+                    "score": 77.0,
+                    "rationale": "Execution readiness remains consistent with assumptions",
+                    "evidence": ["slippage_bps=9", "commission=1.00"],
+                },
+            ],
+            "confidence_tier": "high",
+            "confidence_reason": "Aggregate and minimum component scores satisfy high thresholds.",
+            "aggregate_score": 84.15,
+        },
+        "qualification": {
+            "state": "paper_approved",
+            "color": "green",
+            "summary": "Opportunity is approved for bounded paper-trading only.",
+        },
+        "rationale": {
+            "summary": "Qualification is resolved from explicit hard gates, bounded scores, and confidence rules.",
+            "gate_explanations": [
+                "Gate drawdown_safety was evaluated with explicit threshold evidence.",
+                "Gate portfolio_exposure_cap was evaluated with explicit exposure evidence.",
+            ],
+            "score_explanations": [
+                "Component scores are integrated by deterministic category ordering.",
+                "Aggregate score uses fixed weights and bounded confidence tiers.",
+            ],
+            "final_explanation": "Action state is deterministic and does not imply live-trading approval.",
+        },
+        "metadata": {
+            "analysis_run_id": "run-ui-flow",
+            "source": "ui-runtime-browser-flow-test",
+        },
+    }
+    (run_dir / "decision_card.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
 class _ScoreFromCloseStrategy:
     name = "WATCHLIST_FAKE"
 
@@ -183,10 +275,13 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
         signal_repo = _InMemorySignalRepo()
         analysis_repo = _InMemoryAnalysisRunRepo()
         watchlist_repo = _InMemoryWatchlistRepo()
+        artifacts_root = tmp_path / "runs" / "phase6"
+        _write_decision_card_artifact(artifacts_root)
 
         monkeypatch.setattr(api_main, "signal_repo", signal_repo)
         monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
         monkeypatch.setattr(api_main, "watchlist_repo", watchlist_repo)
+        monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", artifacts_root)
         monkeypatch.setattr(api_main, "_require_engine_runtime_running", lambda: None)
         monkeypatch.setattr(api_main, "_require_ingestion_run", lambda *args, **kwargs: None)
         monkeypatch.setattr(api_main, "_require_snapshot_ready", lambda *args, **kwargs: None)
@@ -436,6 +531,39 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert isinstance(decision_item["qualification_evidence"], list)
             assert "score" in decision_item["score_contribution"].lower()
             assert "stage" in decision_item["stage_assessment"].lower()
+
+            decision_review_first = client.get(
+                "/decision-review",
+                headers=READ_ONLY_HEADERS,
+                params={"symbol": "AAPL"},
+            )
+            decision_review_second = client.get(
+                "/decision-review",
+                headers=READ_ONLY_HEADERS,
+                params={"symbol": "AAPL"},
+            )
+            assert decision_review_first.status_code == 200
+            assert decision_review_second.status_code == 200
+            assert decision_review_first.json() == decision_review_second.json()
+            decision_review_payload = decision_review_first.json()
+            assert decision_review_payload["workflow_id"] == "ui_decision_review_surface_v1"
+            assert decision_review_payload["boundary"]["mode"] == "non_live_decision_review_surface"
+            assert [item["surface"] for item in decision_review_payload["boundary"]["legacy_surface_mappings"]] == [
+                "/decision-cards",
+                "/signals/decision-surface",
+            ]
+            assert decision_review_payload["items"]
+            decision_review_item = decision_review_payload["items"][0]
+            assert decision_review_item["symbol"] == "AAPL"
+            assert decision_review_item["qualification_state"] in {
+                "reject",
+                "watch",
+                "paper_candidate",
+                "paper_approved",
+            }
+            assert decision_review_item["action"] in {"entry", "exit", "ignore"}
+            assert isinstance(decision_review_item["win_rate"], float)
+            assert isinstance(decision_review_item["expected_value"], float)
 
             create_watchlist_response = client.post(
                 "/watchlists",

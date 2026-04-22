@@ -1,18 +1,19 @@
-# Decision Card Inspection API
+# Decision Review API
 
-This document defines the bounded read-only inspection surface for decision-card outputs used by operator and research review workflows.
+This document defines the canonical bounded read-only decision-review surface for operator and research review workflows.
 
 ## Read-Only Endpoint
 
 All access requires `X-Cilly-Role: read_only` (or a higher role).
 
-- `GET /decision-cards`
+- Canonical surface: `GET /decision-review`
+- Backward-compatible covered surface: `GET /decision-cards`
 
 No mutation endpoints are introduced by this surface.
 
 ## Purpose
 
-The endpoint exposes decision-card outcomes and their explanations so reviewers can inspect why a candidate was blocked, approved, or kept in ranked review flow.
+The canonical endpoint exposes deterministic decision-card outcomes and explanations so reviewers can inspect why a candidate was blocked, approved, or kept in ranked review flow without cross-surface reconstruction.
 
 Claim boundary discipline for this surface:
 
@@ -66,6 +67,33 @@ Pagination:
 
 ```json
 {
+  "workflow_id": "ui_decision_review_surface_v1",
+  "boundary": {
+    "mode": "non_live_decision_review_surface",
+    "technical_decision_review_statement": "This canonical decision-review surface consolidates bounded decision-card evidence for deterministic operator and analyst inspection.",
+    "trader_validation_statement": "Decision-review evidence is technical read-only evidence and is not trader validation.",
+    "operational_readiness_statement": "Decision-review evidence does not establish operational readiness, live trading readiness, or broker execution readiness.",
+    "non_inference_boundary_contract": {
+      "contract_id": "bounded_non_inference_boundary_fields.read_only.v1",
+      "contract_version": "1.0.0",
+      "evaluation_mode": "structured_primary_with_wording_fallback"
+    },
+    "strategy_readiness_evidence": {
+      "inferred_readiness_claim": "prohibited"
+    },
+    "legacy_surface_mappings": [
+      {
+        "surface": "/decision-cards",
+        "mapping": "Deterministic 1:1 item evidence mapping for qualification_state, action, win_rate, expected_value, and non_inference_boundary."
+      },
+      {
+        "surface": "/signals/decision-surface",
+        "mapping": "Canonical decision-card evidence fields (qualification_state, action, win_rate, expected_value) remain explicitly aligned for backward-compatible consumer mapping."
+      }
+    ],
+    "in_scope": [],
+    "out_of_scope": []
+  },
   "items": [
     {
       "run_id": "run-a",
@@ -114,6 +142,15 @@ Pagination:
   "total": 1
 }
 ```
+
+## Legacy Surface Mapping
+
+- `/decision-cards` remains available and backward-compatible.
+- `/signals/decision-surface` remains available and keeps explicit parity for canonical decision-card evidence fields:
+  - `qualification_state`
+  - `action`
+  - `win_rate`
+  - `expected_value`
 
 ## Explanation Fields for Operator Review
 

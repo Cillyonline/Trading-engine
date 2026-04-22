@@ -43,6 +43,7 @@ from ..models import (
     TradingCoreTradesReadQuery,
     TradingCoreTradesReadResponse,
 )
+from ..models.inspection_models import DecisionReviewSurfaceResponse
 from ..services import inspection_service
 
 
@@ -431,6 +432,26 @@ def build_inspection_router(
         return inspection_service.read_decision_trace(
             run_id=run_id,
             artifact_name=artifact_name,
+            journal_artifacts_root=deps.get_journal_artifacts_root(),
+        )
+
+    @router.get(
+        "/decision-review",
+        response_model=DecisionReviewSurfaceResponse,
+        summary="Canonical Decision Review Surface",
+        description=(
+            "Read-only canonical bounded decision-review surface for operator/analyst inspection. "
+            "Consolidates deterministic decision-card evidence fields (qualification_state, action, "
+            "win_rate, expected_value) and explicit non-inference boundary metadata while preserving "
+            "mapped backward compatibility with covered legacy read surfaces."
+        ),
+    )
+    def read_decision_review_surface_handler(
+        params: DecisionCardInspectionQuery = Depends(_get_decision_card_inspection_query),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> DecisionReviewSurfaceResponse:
+        return inspection_service.read_decision_review_surface(
+            params=params,
             journal_artifacts_root=deps.get_journal_artifacts_root(),
         )
 

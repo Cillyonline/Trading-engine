@@ -8,6 +8,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import api.main as api_main
+from api.models.inspection_models import DecisionReviewSurfaceResponse
 from cilly_trading.models import Trade
 from cilly_trading.engine.decision_card_contract import REQUIRED_COMPONENT_CATEGORIES
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
@@ -268,6 +269,113 @@ def test_decision_card_inspection_endpoint_is_exposed_and_schema_valid(
     assert errors == []
 
 
+def test_decision_review_surface_endpoint_is_exposed_and_schema_valid(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    _write_artifact(
+        artifacts_root,
+        run_id="run-1",
+        artifact_name="decision_card.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-001",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root) as client:
+        first = client.get("/decision-review", headers=READ_ONLY_HEADERS)
+        second = client.get("/decision-review", headers=READ_ONLY_HEADERS)
+        openapi = client.get("/openapi.json").json()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+
+    payload = first.json()
+    assert payload["workflow_id"] == "ui_decision_review_surface_v1"
+    assert payload["boundary"]["mode"] == "non_live_decision_review_surface"
+    assert payload["boundary"]["non_inference_boundary_contract"] == {
+        "contract_id": "bounded_non_inference_boundary_fields.read_only.v1",
+        "contract_version": "1.0.0",
+        "evaluation_mode": "structured_primary_with_wording_fallback",
+    }
+    assert payload["boundary"]["strategy_readiness_evidence"]["inferred_readiness_claim"] == "prohibited"
+    assert [item["surface"] for item in payload["boundary"]["legacy_surface_mappings"]] == [
+        "/decision-cards",
+        "/signals/decision-surface",
+    ]
+    assert payload["total"] == 1
+    assert payload["items"][0]["decision_card_id"] == "dc-001"
+    assert payload["items"][0]["qualification_state"] == "paper_approved"
+    assert payload["items"][0]["action"] == "entry"
+    assert payload["items"][0]["win_rate"] == 0.864
+    assert payload["items"][0]["expected_value"] == 1.0
+
+    assert "/decision-review" in openapi["paths"]
+    get_spec = openapi["paths"]["/decision-review"]["get"]
+    assert set(openapi["paths"]["/decision-review"].keys()) == {"get"}
+    assert "canonical bounded decision-review surface" in get_spec["description"]
+
+    errors = validate_json_schema(payload, DecisionReviewSurfaceResponse.model_json_schema())
+    assert errors == []
+
+
+def test_decision_review_surface_parity_with_decision_cards(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    _write_artifact(
+        artifacts_root,
+        run_id="run-a",
+        artifact_name="dc-1.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-001",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-a",
+        artifact_name="dc-2.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-002",
+            generated_at_utc="2026-03-24T09:00:00Z",
+            symbol="MSFT",
+            strategy_id="RSI2",
+            qualification_state="reject",
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root) as client:
+        review_response = client.get("/decision-review", headers=READ_ONLY_HEADERS)
+        legacy_response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert review_response.status_code == 200
+    assert legacy_response.status_code == 200
+
+    review_payload = review_response.json()
+    legacy_payload = legacy_response.json()
+    assert [item["decision_card_id"] for item in review_payload["items"]] == [
+        item["decision_card_id"] for item in legacy_payload["items"]
+    ]
+
+    review_by_id = {item["decision_card_id"]: item for item in review_payload["items"]}
+    for legacy_item in legacy_payload["items"]:
+        review_item = review_by_id[legacy_item["decision_card_id"]]
+        assert review_item["qualification_state"] == legacy_item["qualification_state"]
+        assert review_item["action"] == legacy_item["action"]
+        assert review_item["win_rate"] == legacy_item["win_rate"]
+        assert review_item["expected_value"] == legacy_item["expected_value"]
+        assert review_item["non_inference_boundary"] == legacy_item["non_inference_boundary"]
+
+
 def test_decision_card_inspection_ordering_and_filtering_are_deterministic(
     monkeypatch, tmp_path: Path
 ) -> None:
@@ -352,6 +460,13 @@ def test_decision_card_inspection_empty_and_error_cases(monkeypatch, tmp_path: P
     artifacts_root = tmp_path / "runs" / "phase6"
 
     with _client(monkeypatch, artifacts_root) as client:
+        review_empty = client.get("/decision-review", headers=READ_ONLY_HEADERS)
+        review_unauthorized = client.get("/decision-review")
+        review_invalid_limit = client.get(
+            "/decision-review",
+            headers=READ_ONLY_HEADERS,
+            params={"limit": 0},
+        )
         empty = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
         unauthorized = client.get("/decision-cards")
         invalid_limit = client.get(
@@ -364,6 +479,13 @@ def test_decision_card_inspection_empty_and_error_cases(monkeypatch, tmp_path: P
             headers=READ_ONLY_HEADERS,
             params={"review_state": "unknown"},
         )
+
+    assert review_empty.status_code == 200
+    assert review_empty.json()["workflow_id"] == "ui_decision_review_surface_v1"
+    assert review_empty.json()["items"] == []
+    assert review_unauthorized.status_code == 401
+    assert review_unauthorized.json() == {"detail": "unauthorized"}
+    assert review_invalid_limit.status_code == 422
 
     assert empty.status_code == 200
     assert empty.json() == {"items": [], "limit": 50, "offset": 0, "total": 0}

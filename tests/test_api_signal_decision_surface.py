@@ -330,7 +330,7 @@ def test_signal_decision_surface_requires_read_only_role(monkeypatch, tmp_path: 
     assert response.json() == {"detail": "unauthorized"}
 
 
-def test_signal_decision_surface_parity_with_decision_card_read_output(
+def test_signal_decision_surface_parity_with_canonical_decision_review_output(
     tmp_path: Path, monkeypatch
 ) -> None:
     repo = _make_repo(tmp_path)
@@ -396,19 +396,32 @@ def test_signal_decision_surface_parity_with_decision_card_read_output(
 
     with TestClient(api_main.app) as client:
         decision_surface_response = client.get("/signals/decision-surface", headers=READ_ONLY_HEADERS)
-        decision_cards_response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+        decision_review_response = client.get("/decision-review", headers=READ_ONLY_HEADERS)
 
     assert decision_surface_response.status_code == 200
-    assert decision_cards_response.status_code == 200
+    assert decision_review_response.status_code == 200
 
     decision_surface_by_symbol = {
         item["symbol"]: item for item in decision_surface_response.json()["items"]
     }
-    decision_cards_by_symbol = {
-        item["symbol"]: item for item in decision_cards_response.json()["items"]
+    decision_review_payload = decision_review_response.json()
+    assert decision_review_payload["workflow_id"] == "ui_decision_review_surface_v1"
+    assert decision_review_payload["boundary"]["mode"] == "non_live_decision_review_surface"
+    assert [item["surface"] for item in decision_review_payload["boundary"]["legacy_surface_mappings"]] == [
+        "/decision-cards",
+        "/signals/decision-surface",
+    ]
+    decision_review_by_symbol = {
+        item["symbol"]: item for item in decision_review_payload["items"]
     }
     for symbol in ("PARITY_BLOCK", "PARITY_WATCH", "PARITY_APPROVED"):
-        assert decision_surface_by_symbol[symbol]["qualification_state"] == decision_cards_by_symbol[symbol]["qualification_state"]
-        assert decision_surface_by_symbol[symbol]["action"] == decision_cards_by_symbol[symbol]["action"]
-        assert decision_surface_by_symbol[symbol]["win_rate"] == decision_cards_by_symbol[symbol]["win_rate"]
-        assert decision_surface_by_symbol[symbol]["expected_value"] == decision_cards_by_symbol[symbol]["expected_value"]
+        assert (
+            decision_surface_by_symbol[symbol]["qualification_state"]
+            == decision_review_by_symbol[symbol]["qualification_state"]
+        )
+        assert decision_surface_by_symbol[symbol]["action"] == decision_review_by_symbol[symbol]["action"]
+        assert decision_surface_by_symbol[symbol]["win_rate"] == decision_review_by_symbol[symbol]["win_rate"]
+        assert (
+            decision_surface_by_symbol[symbol]["expected_value"]
+            == decision_review_by_symbol[symbol]["expected_value"]
+        )

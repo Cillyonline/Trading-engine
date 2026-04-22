@@ -79,6 +79,9 @@ from ..models import (
     TradingCoreTradesReadResponse,
 )
 from ..models.inspection_models import (
+    DecisionReviewSurfaceBoundaryResponse,
+    DecisionReviewSurfaceLegacyMappingResponse,
+    DecisionReviewSurfaceResponse,
     NonInferenceBoundaryContractResponse,
     NonInferenceBoundaryEvaluationResponse,
     NonInferenceBoundaryFieldStatusResponse,
@@ -89,6 +92,7 @@ from .analysis_service import build_strategy_metadata_response
 
 BACKTEST_WORKFLOW_ID = "ui_bounded_backtest_entry_read"
 SIGNAL_DECISION_SURFACE_WORKFLOW_ID = "ui_signal_decision_surface_v1"
+DECISION_REVIEW_SURFACE_WORKFLOW_ID = "ui_decision_review_surface_v1"
 SIGNAL_DECISION_BLOCKED_SCORE_THRESHOLD = 40.0
 SIGNAL_DECISION_CANDIDATE_SCORE_THRESHOLD = 70.0
 SIGNAL_DECISION_QUALIFICATION_POLICY_VERSION = "professional_non_live_signal_qualification.v1"
@@ -701,6 +705,85 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
             "paper profitability or edge claims",
             "operational readiness outcomes",
             "live trading and broker execution decisions",
+        ],
+    )
+
+
+def _build_decision_review_surface_boundary() -> DecisionReviewSurfaceBoundaryResponse:
+    return DecisionReviewSurfaceBoundaryResponse(
+        mode="non_live_decision_review_surface",
+        technical_decision_review_statement=(
+            "This canonical decision-review surface consolidates bounded decision-card evidence for deterministic operator and analyst inspection."
+        ),
+        trader_validation_statement=(
+            "Decision-review evidence is technical read-only evidence and is not trader validation."
+        ),
+        operational_readiness_statement=(
+            "Decision-review evidence does not establish operational readiness, live trading readiness, or broker execution readiness."
+        ),
+        non_inference_boundary_contract=_build_non_inference_boundary_contract(),
+        strategy_readiness_evidence=StrategyReadinessEvidenceResponse(
+            bounded_scope=(
+                "One bounded API/UI evidence scope for canonical non-live decision-review inspection."
+            ),
+            technical=StrategyReadinessEvidenceStateResponse(
+                gate="technical_implementation",
+                status="technical_in_progress",
+                evidence_scope=(
+                    "Canonical deterministic decision-card evidence surfacing for qualification and action review."
+                ),
+                non_inference_note=(
+                    "Technical decision-review evidence does not imply trader validation or operational readiness."
+                ),
+            ),
+            trader_validation=StrategyReadinessEvidenceStateResponse(
+                gate="trader_validation",
+                status="trader_validation_not_started",
+                evidence_scope=(
+                    "Trader validation evidence is outside this bounded technical decision-review contract."
+                ),
+                non_inference_note=(
+                    "Trader validation status cannot be inferred from decision-review output."
+                ),
+            ),
+            operational_readiness=StrategyReadinessEvidenceStateResponse(
+                gate="operational_readiness",
+                status="operational_not_started",
+                evidence_scope=(
+                    "Operational-readiness evidence is outside this bounded technical decision-review contract."
+                ),
+                non_inference_note=(
+                    "Operational-readiness status cannot be inferred from decision-review output."
+                ),
+            ),
+            inferred_readiness_claim="prohibited",
+        ),
+        legacy_surface_mappings=[
+            DecisionReviewSurfaceLegacyMappingResponse(
+                surface="/decision-cards",
+                mapping=(
+                    "Deterministic 1:1 item evidence mapping for qualification_state, action, win_rate, expected_value, and non_inference_boundary."
+                ),
+            ),
+            DecisionReviewSurfaceLegacyMappingResponse(
+                surface="/signals/decision-surface",
+                mapping=(
+                    "Canonical decision-card evidence fields (qualification_state, action, win_rate, expected_value) remain explicitly aligned for backward-compatible consumer mapping."
+                ),
+            ),
+        ],
+        in_scope=[
+            "canonical bounded decision-review inspection for operator and analyst workflows",
+            "deterministic qualification state, action, and bounded decision metrics visibility",
+            "deterministic non-inference boundary metadata visibility",
+            "explicit mapping guidance for covered legacy read surfaces",
+        ],
+        out_of_scope=[
+            "new execution policies",
+            "strategy or risk logic changes",
+            "scheduler changes",
+            "live trading and broker integration",
+            "trader-readiness or operational-readiness claims",
         ],
     )
 
@@ -1650,6 +1733,26 @@ def read_decision_cards(
     )
     page, total = paginate_items(all_items, limit=params.limit, offset=params.offset)
     return DecisionCardInspectionResponse(
+        items=page,
+        limit=params.limit,
+        offset=params.offset,
+        total=total,
+    )
+
+
+def read_decision_review_surface(
+    *,
+    params: DecisionCardInspectionQuery,
+    journal_artifacts_root: Path,
+) -> DecisionReviewSurfaceResponse:
+    all_items = build_decision_card_inspection_items(
+        params=params,
+        journal_artifacts_root=journal_artifacts_root,
+    )
+    page, total = paginate_items(all_items, limit=params.limit, offset=params.offset)
+    return DecisionReviewSurfaceResponse(
+        workflow_id=DECISION_REVIEW_SURFACE_WORKFLOW_ID,
+        boundary=_build_decision_review_surface_boundary(),
         items=page,
         limit=params.limit,
         offset=params.offset,

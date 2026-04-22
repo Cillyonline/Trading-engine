@@ -607,6 +607,38 @@ class DecisionCardInspectionResponse(BaseModel):
     total: int
 
 
+class DecisionReviewSurfaceLegacyMappingResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    surface: str
+    mapping: str
+
+
+class DecisionReviewSurfaceBoundaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["non_live_decision_review_surface"]
+    technical_decision_review_statement: str
+    trader_validation_statement: str
+    operational_readiness_statement: str
+    non_inference_boundary_contract: NonInferenceBoundaryContractResponse
+    strategy_readiness_evidence: StrategyReadinessEvidenceResponse
+    legacy_surface_mappings: List[DecisionReviewSurfaceLegacyMappingResponse]
+    in_scope: List[str]
+    out_of_scope: List[str]
+
+
+class DecisionReviewSurfaceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_id: str
+    boundary: DecisionReviewSurfaceBoundaryResponse
+    items: List[DecisionCardInspectionItemResponse]
+    limit: int
+    offset: int
+    total: int
+
+
 class DecisionCardInspectionQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

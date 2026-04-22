@@ -54,6 +54,8 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 - `GET /system/state`
 - `GET /strategies`
 - `GET /signals`
+- `GET /decision-review`
+- `GET /decision-cards`
 - `GET /signals/decision-surface`
 - `GET /backtest/artifacts`
 - `GET /backtest/artifacts/{run_id}/{artifact_name}`
@@ -64,6 +66,7 @@ The `/ui` shell consolidates bounded website-facing workflow entrypoints through
 
 Consolidation of IA does not widen route scope and does not imply trader validation or operational readiness.
 Technical signal visibility and ranked evaluation output are explicitly separated from trader validation and operational readiness claims.
+The canonical bounded decision-review contract is `GET /decision-review`, while covered legacy read surfaces (`/decision-cards`, `/signals/decision-surface`) remain available with explicit mapping for canonical decision evidence fields.
 The bounded signal decision surface classifies reviewed signals into technical-only decision states (`blocked`, `watch`, `paper_candidate`) with concise rationale, explicit qualification evidence, missing criteria, and blocking conditions.
 Decision-surface items also expose canonical bounded decision-card evidence fields (`qualification_state`, `action`, `win_rate`, `expected_value`) for deterministic parity across bounded read surfaces.
 Professional non-live qualification criteria remain bounded to explicit signal evidence:
