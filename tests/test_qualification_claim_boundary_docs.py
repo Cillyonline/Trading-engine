@@ -33,16 +33,9 @@ def test_governance_doc_defines_deterministic_bounded_trader_relevance_contract(
 
     assert "Deterministic Bounded Trader-Relevance Review Contract" in content
     assert "bounded_trader_relevance.paper_review.v1" in content
-    assert "bounded_non_inference_boundary_fields.read_only.v1" in content
-    assert "structured boundary fields contract version `1.0.0`" in content
     assert "qualification_state_relevance" in content
     assert "decision_action_relevance" in content
     assert "boundary_scope_relevance" in content
-    assert "trader_validation_boundary" in content
-    assert "paper_profitability_boundary" in content
-    assert "live_readiness_boundary" in content
-    assert "runtime boundary evaluation is driven by the canonical structured evidence fields" in content
-    assert "wording/phrase matching remains bounded compatibility fallback only" in content
     assert "aligned" in content
     assert "weak" in content
     assert "missing" in content

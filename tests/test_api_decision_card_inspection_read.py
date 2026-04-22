@@ -8,7 +8,6 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import api.main as api_main
-from api.models.inspection_models import DecisionReviewSurfaceResponse
 from cilly_trading.models import Trade
 from cilly_trading.engine.decision_card_contract import REQUIRED_COMPONENT_CATEGORIES
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository

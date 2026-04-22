@@ -11,10 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 DECISION_CARD_CONTRACT_VERSION = "2.0.0"
 BOUNDED_TRADER_RELEVANCE_CONTRACT_ID = "bounded_trader_relevance.paper_review.v1"
 BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION = "1.0.0"
-BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_ID = (
-    "bounded_non_inference_boundary_fields.read_only.v1"
-)
-BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION = "1.0.0"
 QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD = 60.0
 QUALIFICATION_HIGH_AGGREGATE_THRESHOLD = 80.0
 ACTION_EXIT_WIN_RATE_MAX = 0.50
@@ -72,18 +68,6 @@ PaperReviewCaseId = Literal[
     "decision_action_relevance",
     "boundary_scope_relevance",
 ]
-TraderRelevanceEvidenceField = Literal[
-    "qualification_state",
-    "paper_scope_summary",
-    "state_explanation_evidence",
-    "action",
-    "bounded_decision_metrics",
-    "action_rule_trace",
-    "trader_validation_boundary",
-    "paper_profitability_boundary",
-    "live_readiness_boundary",
-]
-TraderRelevanceEvidenceSource = Literal["structured_fields", "wording_fallback", "mixed"]
 TraderRelevanceEvidenceStatus = Literal["aligned", "weak", "missing"]
 QualificationProfileRobustnessStatus = Literal["stable", "weak", "failing"]
 QualificationProfileRobustnessSliceType = Literal["covered", "failure_envelope", "regime_slice"]
@@ -168,38 +152,6 @@ PAPER_REVIEW_CASE_DEFINITIONS: dict[PaperReviewCaseId, dict[str, Any]] = {
             "live_readiness_boundary",
         ),
     },
-}
-
-TRADER_RELEVANCE_EVIDENCE_FIELDS: tuple[TraderRelevanceEvidenceField, ...] = (
-    "qualification_state",
-    "paper_scope_summary",
-    "state_explanation_evidence",
-    "action",
-    "bounded_decision_metrics",
-    "action_rule_trace",
-    "trader_validation_boundary",
-    "paper_profitability_boundary",
-    "live_readiness_boundary",
-)
-
-TRADER_RELEVANCE_FAILURE_REASONS: dict[TraderRelevanceEvidenceField, str] = {
-    "qualification_state": "qualification_state is missing from the bounded output.",
-    "paper_scope_summary": "paper_scope_summary is not explicitly asserted by structured boundary fields.",
-    "state_explanation_evidence": "state_explanation_evidence is missing (no deterministic state-evidence trace).",
-    "action": "action is missing from the bounded output.",
-    "bounded_decision_metrics": (
-        "bounded_decision_metrics is incomplete (win_rate and expected_value are both required)."
-    ),
-    "action_rule_trace": "action_rule_trace is missing from deterministic structured evidence.",
-    "trader_validation_boundary": (
-        "trader_validation_boundary is not explicitly separated by deterministic structured boundary fields."
-    ),
-    "paper_profitability_boundary": (
-        "paper_profitability_boundary is not explicitly separated by deterministic structured boundary fields."
-    ),
-    "live_readiness_boundary": (
-        "live_readiness_boundary is not explicitly separated by deterministic structured boundary fields."
-    ),
 }
 
 
@@ -298,31 +250,6 @@ def _collect_non_empty_texts(values: list[str | None]) -> list[str]:
 def _contains_any_phrase(*, texts: list[str], phrases: tuple[str, ...]) -> bool:
     lowered = [text.casefold() for text in texts]
     return any(phrase in text for text in lowered for phrase in phrases)
-
-
-def _normalize_structured_trader_relevance_fields(
-    values: dict[str, bool] | None,
-) -> dict[TraderRelevanceEvidenceField, bool]:
-    if not isinstance(values, dict):
-        return {}
-    normalized: dict[TraderRelevanceEvidenceField, bool] = {}
-    for field in TRADER_RELEVANCE_EVIDENCE_FIELDS:
-        raw_value = values.get(field)
-        if isinstance(raw_value, bool):
-            normalized[field] = raw_value
-    return normalized
-
-
-def _case_source_from_fields(
-    field_sources: dict[TraderRelevanceEvidenceField, TraderRelevanceEvidenceSource],
-    required_fields: list[str],
-) -> TraderRelevanceEvidenceSource:
-    sources = {field_sources[field] for field in required_fields if field in field_sources}
-    if sources == {"structured_fields"}:
-        return "structured_fields"
-    if sources == {"wording_fallback"}:
-        return "wording_fallback"
-    return "mixed"
 
 
 def _classify_trader_relevance_status(
@@ -593,7 +520,6 @@ def evaluate_bounded_trader_relevance_cases(
     qualification_evidence: list[str] | None = None,
     missing_criteria: list[str] | None = None,
     blocking_conditions: list[str] | None = None,
-    structured_evidence_fields: dict[str, bool] | None = None,
 ) -> BoundedTraderRelevanceValidation:
     normalized_gate_explanations = list(gate_explanations or [])
     normalized_score_explanations = list(score_explanations or [])
@@ -615,59 +541,46 @@ def evaluate_bounded_trader_relevance_cases(
     )
     qualification_summary_text = (qualification_summary or "").strip()
 
-    fallback_fields: dict[TraderRelevanceEvidenceField, bool] = {
-        "qualification_state": bool(qualification_state and str(qualification_state).strip()),
-        "paper_scope_summary": "paper" in qualification_summary_text.casefold(),
-        "state_explanation_evidence": bool(
-            normalized_gate_explanations
-            or normalized_qualification_evidence
-            or normalized_missing_criteria
-            or normalized_blocking_conditions
-        ),
-        "action": bool(action and str(action).strip()),
-        "bounded_decision_metrics": (win_rate is not None and expected_value is not None),
-        "action_rule_trace": _contains_any_phrase(
-            texts=normalized_score_explanations + normalized_qualification_evidence,
-            phrases=("action", "entry", "exit", "ignore", "expected value", "win_rate", "win-rate"),
-        ),
-        "trader_validation_boundary": _contains_any_phrase(
-            texts=all_texts,
-            phrases=("trader_validation", "trader validation"),
-        ),
-        "paper_profitability_boundary": _contains_any_phrase(
-            texts=all_texts,
-            phrases=("paper profitability", "profitability", "edge claim", "profit claim"),
-        ),
-        "live_readiness_boundary": _contains_any_phrase(
-            texts=all_texts,
-            phrases=(
-                "live-trading approval",
-                "live trading readiness",
-                "live readiness",
-                "operational readiness",
-                "broker execution readiness",
+    case_checks: dict[PaperReviewCaseId, dict[str, bool]] = {
+        "qualification_state_relevance": {
+            "qualification_state": bool(qualification_state and str(qualification_state).strip()),
+            "paper_scope_summary": "paper" in qualification_summary_text.casefold(),
+            "state_explanation_evidence": bool(
+                normalized_gate_explanations
+                or normalized_qualification_evidence
+                or normalized_missing_criteria
+                or normalized_blocking_conditions
             ),
-        ),
+        },
+        "decision_action_relevance": {
+            "action": bool(action and str(action).strip()),
+            "bounded_decision_metrics": (win_rate is not None and expected_value is not None),
+            "action_rule_trace": _contains_any_phrase(
+                texts=normalized_score_explanations + normalized_qualification_evidence,
+                phrases=("action", "entry", "exit", "ignore", "expected value", "win_rate", "win-rate"),
+            ),
+        },
+        "boundary_scope_relevance": {
+            "trader_validation_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=("trader_validation", "trader validation"),
+            ),
+            "paper_profitability_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=("paper profitability", "profitability", "edge claim", "profit claim"),
+            ),
+            "live_readiness_boundary": _contains_any_phrase(
+                texts=all_texts,
+                phrases=(
+                    "live-trading approval",
+                    "live trading readiness",
+                    "live readiness",
+                    "operational readiness",
+                    "broker execution readiness",
+                ),
+            ),
+        },
     }
-    normalized_structured_fields = _normalize_structured_trader_relevance_fields(
-        structured_evidence_fields
-    )
-    resolved_fields: dict[TraderRelevanceEvidenceField, bool] = {}
-    field_sources: dict[TraderRelevanceEvidenceField, TraderRelevanceEvidenceSource] = {}
-    for field in TRADER_RELEVANCE_EVIDENCE_FIELDS:
-        if field in normalized_structured_fields:
-            resolved_fields[field] = normalized_structured_fields[field]
-            field_sources[field] = "structured_fields"
-        else:
-            resolved_fields[field] = fallback_fields[field]
-            field_sources[field] = "wording_fallback"
-
-    case_checks: dict[PaperReviewCaseId, dict[str, bool]] = {}
-    for case_id in sorted(PAPER_REVIEW_CASE_DEFINITIONS.keys()):
-        required_fields = list(PAPER_REVIEW_CASE_DEFINITIONS[case_id]["required_evidence"])
-        case_checks[case_id] = {
-            field: resolved_fields[field] for field in required_fields if field in resolved_fields
-        }
 
     evaluations: list[BoundedTraderRelevanceCaseEvaluation] = []
     statuses: list[TraderRelevanceEvidenceStatus] = []
@@ -677,18 +590,9 @@ def evaluate_bounded_trader_relevance_cases(
         statuses.append(status)
         observed = sorted(signal for signal, ok in checks.items() if ok)
         required = list(PAPER_REVIEW_CASE_DEFINITIONS[case_id]["required_evidence"])
-        missing = sorted(signal for signal in required if not checks.get(signal, False))
-        failure_reasons = [TRADER_RELEVANCE_FAILURE_REASONS[item] for item in missing]
-        case_source = _case_source_from_fields(
-            field_sources=field_sources,
-            required_fields=required,
-        )
         summary = (
             f"Deterministic case={case_id} classified as {status}; "
-            f"source={case_source}; "
-            f"observed={','.join(observed) if observed else 'none'}; "
-            f"missing={','.join(missing) if missing else 'none'}; "
-            f"failure_reasons={' | '.join(failure_reasons) if failure_reasons else 'none'}."
+            f"observed={','.join(observed) if observed else 'none'}."
         )
         evaluations.append(
             BoundedTraderRelevanceCaseEvaluation(
@@ -1167,8 +1071,6 @@ __all__ = [
     "DECISION_CARD_CONTRACT_VERSION",
     "BOUNDED_TRADER_RELEVANCE_CONTRACT_ID",
     "BOUNDED_TRADER_RELEVANCE_CONTRACT_VERSION",
-    "BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_ID",
-    "BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION",
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID",
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION",
     "DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY",
@@ -1185,8 +1087,6 @@ __all__ = [
     "ACTION_ENTRY_WIN_RATE_MIN",
     "ACTION_EXIT_WIN_RATE_MAX",
     "QUALIFICATION_COLOR_BY_STATE",
-    "TRADER_RELEVANCE_EVIDENCE_FIELDS",
-    "TRADER_RELEVANCE_FAILURE_REASONS",
     "BoundedDecisionToPaperUsefulnessAudit",
     "BoundedDecisionToPaperUsefulnessMatchReference",
     "BoundedPaperTradeOutcome",
