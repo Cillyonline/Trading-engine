@@ -906,3 +906,49 @@ def build_bounded_decision_to_paper_usefulness_audit(
         matched_outcome=matched_outcome,
     )
     return audit.model_dump(mode="python")
+
+
+def resolve_bounded_paper_linkage_status(
+    *,
+    canonical_execution_repo: Any | None,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    match_reference: dict[str, Any] | None,
+) -> tuple[Literal["matched", "open", "missing", "invalid"], str | None]:
+    """Return the bounded paper linkage status and resolved paper_trade_id.
+
+    The status mirrors the decision-to-paper usefulness contract semantics
+    (matched/open/missing/invalid) so the end-to-end traceability chain can
+    expose explicit, deterministic linkage status across stages.
+    """
+
+    if not isinstance(match_reference, dict):
+        return "missing", None
+
+    try:
+        normalized = BoundedDecisionToPaperUsefulnessMatchReference.model_validate(
+            match_reference
+        )
+    except ValidationError:
+        return "invalid", None
+
+    paper_trade_id = normalized.paper_trade_id
+    if canonical_execution_repo is None:
+        return "missing", paper_trade_id
+
+    try:
+        trade = canonical_execution_repo.get_trade(paper_trade_id)
+    except Exception:
+        trade = None
+
+    if trade is None:
+        return "missing", paper_trade_id
+
+    status, _ = _build_paper_trade_outcome_payload(
+        trade=trade,
+        expected_symbol=symbol,
+        expected_strategy_id=strategy_id,
+        decision_generated_at_utc=generated_at_utc,
+    )
+    return status, paper_trade_id

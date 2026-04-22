@@ -218,3 +218,78 @@ def test_analysis_run_id_is_deterministic_for_same_inputs(tmp_path: Path) -> Non
     assert signals_a
     assert signals_b
     assert signals_a[0]["analysis_run_id"] == signals_b[0]["analysis_run_id"]
+
+
+def test_end_to_end_traceability_chain_is_deterministic_and_explicit() -> None:
+    """Bounded chain semantics:
+
+    - matched/open/missing/invalid linkage statuses are explicit per stage
+    - chain output is deterministic for identical deterministic inputs
+    - chain remains bounded to non-live auditability
+    """
+
+    from cilly_trading.engine.decision_card_contract import (
+        END_TO_END_TRACEABILITY_CONTRACT_ID,
+        END_TO_END_TRACEABILITY_CONTRACT_VERSION,
+        evaluate_bounded_end_to_end_traceability_chain,
+    )
+
+    common: dict = dict(
+        decision_card_id="dc-001",
+        generated_at_utc="2026-04-22T08:00:00Z",
+        symbol="AAPL",
+        strategy_id="RSI2",
+        qualification_state="paper_approved",
+        action="entry",
+        analysis_run_id="run-abc",
+        paper_trade_id="trade-1",
+        paper_match_status="matched",
+    )
+
+    first = evaluate_bounded_end_to_end_traceability_chain(**common)
+    second = evaluate_bounded_end_to_end_traceability_chain(**common)
+    assert first.model_dump() == second.model_dump()
+    assert first.contract_id == END_TO_END_TRACEABILITY_CONTRACT_ID
+    assert first.contract_version == END_TO_END_TRACEABILITY_CONTRACT_VERSION
+    assert first.overall_linkage_status == "matched"
+    assert first.signal_analysis.linkage_status == "matched"
+    assert first.paper.linkage_status == "matched"
+    assert first.reconciliation.linkage_status == "matched"
+    for phrase in (
+        "non-live",
+        "trader validation",
+        "profitability forecasting",
+        "live-trading readiness",
+        "operational readiness",
+    ):
+        assert phrase in first.interpretation_limit.casefold()
+
+    open_chain = evaluate_bounded_end_to_end_traceability_chain(
+        **{**common, "paper_match_status": "open"}
+    )
+    assert open_chain.overall_linkage_status == "open"
+    assert open_chain.paper.linkage_status == "open"
+    assert open_chain.reconciliation.linkage_status == "open"
+
+    missing_chain = evaluate_bounded_end_to_end_traceability_chain(
+        **{**common, "paper_trade_id": None, "paper_match_status": None}
+    )
+    assert missing_chain.overall_linkage_status == "missing"
+    assert missing_chain.paper.paper_trade_id is None
+    assert missing_chain.paper.linkage_status == "missing"
+    assert missing_chain.reconciliation.linkage_status == "missing"
+
+    invalid_chain = evaluate_bounded_end_to_end_traceability_chain(
+        **{**common, "paper_match_status": "invalid"}
+    )
+    assert invalid_chain.overall_linkage_status == "invalid"
+    assert invalid_chain.paper.linkage_status == "invalid"
+    assert invalid_chain.reconciliation.linkage_status == "invalid"
+
+    no_signal_chain = evaluate_bounded_end_to_end_traceability_chain(
+        **{**common, "analysis_run_id": None}
+    )
+    assert no_signal_chain.signal_analysis.analysis_run_id is None
+    assert no_signal_chain.signal_analysis.linkage_status == "missing"
+    # Paper status is independent of signal status; overall mirrors paper status.
+    assert no_signal_chain.overall_linkage_status == "matched"

@@ -15,6 +15,7 @@ from cilly_trading.engine.decision_card_contract import (
     ACTION_EXIT_WIN_RATE_MAX,
     QUALIFICATION_HIGH_AGGREGATE_THRESHOLD,
     QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD,
+    evaluate_bounded_end_to_end_traceability_chain,
     evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
@@ -1190,18 +1191,47 @@ def build_decision_card_inspection_items(
             seen.add(dedupe_key)
 
             metadata = dict(card.metadata)
+            canonical_repo = paper_inspection_service.resolve_runtime_canonical_execution_repo()
+            match_reference = metadata.get("bounded_decision_to_paper_match")
             usefulness_audit = paper_inspection_service.build_bounded_decision_to_paper_usefulness_audit(
-                canonical_execution_repo=paper_inspection_service.resolve_runtime_canonical_execution_repo(),
+                canonical_execution_repo=canonical_repo,
                 decision_card_id=card.decision_card_id,
                 generated_at_utc=card.generated_at_utc,
                 symbol=card.symbol,
                 strategy_id=card.strategy_id,
                 action=card.action,
                 qualification_state=card.qualification.state,
-                match_reference=metadata.get("bounded_decision_to_paper_match"),
+                match_reference=match_reference,
             )
             if usefulness_audit is not None:
                 metadata["bounded_decision_to_paper_usefulness_audit"] = usefulness_audit
+
+            paper_match_status, paper_trade_id = (
+                paper_inspection_service.resolve_bounded_paper_linkage_status(
+                    canonical_execution_repo=canonical_repo,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    match_reference=match_reference,
+                )
+            )
+            analysis_run_id_meta = card.metadata.get("analysis_run_id")
+            analysis_run_id = (
+                analysis_run_id_meta
+                if isinstance(analysis_run_id_meta, str) and len(analysis_run_id_meta) > 0
+                else None
+            )
+            traceability_chain = evaluate_bounded_end_to_end_traceability_chain(
+                decision_card_id=card.decision_card_id,
+                generated_at_utc=card.generated_at_utc,
+                symbol=card.symbol,
+                strategy_id=card.strategy_id,
+                qualification_state=card.qualification.state,
+                action=card.action,
+                analysis_run_id=analysis_run_id,
+                paper_trade_id=paper_trade_id,
+                paper_match_status=paper_match_status,
+            )
 
             items.append(
                 DecisionCardInspectionItemResponse(
@@ -1236,6 +1266,7 @@ def build_decision_card_inspection_items(
                     score_explanations=list(card.rationale.score_explanations),
                     final_explanation=card.rationale.final_explanation,
                     metadata=metadata,
+                    traceability_chain=traceability_chain.model_dump(mode="python"),
                 )
             )
 

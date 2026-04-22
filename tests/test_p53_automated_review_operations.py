@@ -702,3 +702,19 @@ def test_reconciliation_uses_real_repository_state_and_detects_missing_order_ref
     mismatch_items = payload["mismatch_items"]
     assert isinstance(mismatch_items, list)
     assert any(item.get("code") == "execution_event_order_missing" for item in mismatch_items)
+
+
+def test_p53_automation_doc_documents_end_to_end_traceability_chain() -> None:
+    content = (
+        REPO_ROOT / "docs" / "operations" / "runtime" / "p53-automated-review-operations.md"
+    ).read_text(encoding="utf-8")
+
+    assert "## End-to-End Traceability Chain Evidence" in content
+    assert "signal_to_paper_reconciliation_traceability.paper_audit.v1" in content
+    assert "`signal_analysis`" in content
+    assert "`decision_card`" in content
+    assert "`paper_trade`" in content
+    assert "`reconciliation`" in content
+    for status in ("`matched`", "`open`", "`missing`", "`invalid`"):
+        assert status in content
+    assert "non-live" in content.lower()

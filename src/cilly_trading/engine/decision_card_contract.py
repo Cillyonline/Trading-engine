@@ -51,6 +51,20 @@ DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY = (
     "profitability forecasting, live-trading readiness, or operational readiness."
 )
 
+END_TO_END_TRACEABILITY_CONTRACT_ID = (
+    "signal_to_paper_reconciliation_traceability.paper_audit.v1"
+)
+END_TO_END_TRACEABILITY_CONTRACT_VERSION = "1.0.0"
+END_TO_END_TRACEABILITY_INTERPRETATION_BOUNDARY = (
+    "End-to-end traceability chain is bounded to non-live deterministic auditability across "
+    "signal/analysis, decision-card, paper-trade, and reconciliation surfaces. It does not imply "
+    "trader validation, profitability forecasting, live-trading readiness, or operational readiness."
+)
+END_TO_END_TRACEABILITY_RECONCILIATION_SURFACE = "/paper/reconciliation"
+END_TO_END_TRACEABILITY_DECISION_SURFACE = "/decision-cards"
+END_TO_END_TRACEABILITY_PAPER_SURFACE = "/paper/trades"
+END_TO_END_TRACEABILITY_SIGNAL_SURFACE = "/signals"
+
 DecisionComponentCategory = Literal[
     "signal_quality",
     "backtest_quality",
@@ -503,6 +517,172 @@ def evaluate_bounded_decision_to_paper_usefulness_audit(
         usefulness_classification=usefulness_classification,
         usefulness_reason=usefulness_reason,
         interpretation_limit=DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY,
+    )
+
+
+EndToEndTraceabilityLinkageStatus = Literal["matched", "open", "missing", "invalid"]
+
+
+class BoundedSignalAnalysisStageReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage: Literal["signal_analysis"] = "signal_analysis"
+    surface: str = END_TO_END_TRACEABILITY_SIGNAL_SURFACE
+    analysis_run_id: str | None = None
+    symbol: str = Field(min_length=1)
+    strategy_id: str = Field(min_length=1)
+    linkage_status: EndToEndTraceabilityLinkageStatus
+
+
+class BoundedDecisionStageReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage: Literal["decision_card"] = "decision_card"
+    surface: str = END_TO_END_TRACEABILITY_DECISION_SURFACE
+    decision_card_id: str = Field(min_length=1)
+    generated_at_utc: str = Field(min_length=1)
+    qualification_state: QualificationState
+    action: DecisionAction
+    linkage_status: EndToEndTraceabilityLinkageStatus = "matched"
+
+
+class BoundedPaperStageReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage: Literal["paper_trade"] = "paper_trade"
+    surface: str = END_TO_END_TRACEABILITY_PAPER_SURFACE
+    paper_trade_id: str | None = None
+    linkage_status: EndToEndTraceabilityLinkageStatus
+
+
+class BoundedReconciliationStageReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage: Literal["reconciliation"] = "reconciliation"
+    surface: str = END_TO_END_TRACEABILITY_RECONCILIATION_SURFACE
+    linkage_status: EndToEndTraceabilityLinkageStatus
+
+
+class BoundedEndToEndTraceabilityChain(BaseModel):
+    """One canonical deterministic traceability reference chain.
+
+    Stages: signal/analysis -> decision card -> paper trade -> reconciliation.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = END_TO_END_TRACEABILITY_CONTRACT_ID
+    contract_version: str = END_TO_END_TRACEABILITY_CONTRACT_VERSION
+    overall_linkage_status: EndToEndTraceabilityLinkageStatus
+    signal_analysis: BoundedSignalAnalysisStageReference
+    decision: BoundedDecisionStageReference
+    paper: BoundedPaperStageReference
+    reconciliation: BoundedReconciliationStageReference
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != END_TO_END_TRACEABILITY_CONTRACT_ID:
+            raise ValueError(f"Unsupported end-to-end traceability contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != END_TO_END_TRACEABILITY_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported end-to-end traceability contract_version: {value}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_chain_alignment(self) -> "BoundedEndToEndTraceabilityChain":
+        lowered_limit = self.interpretation_limit.casefold()
+        required_phrases = (
+            "non-live",
+            "trader validation",
+            "profitability forecasting",
+            "live-trading readiness",
+            "operational readiness",
+        )
+        if not all(phrase in lowered_limit for phrase in required_phrases):
+            raise ValueError(
+                "interpretation_limit must keep non-live traceability separate from trader "
+                "validation, profitability forecasting, and readiness claims"
+            )
+        if self.paper.paper_trade_id is None and self.paper.linkage_status != "missing":
+            raise ValueError(
+                "paper.linkage_status must be 'missing' when paper_trade_id is not provided"
+            )
+        if self.paper.paper_trade_id is not None and self.paper.linkage_status == "missing":
+            raise ValueError(
+                "paper.linkage_status must not be 'missing' when paper_trade_id is provided"
+            )
+        # Reconciliation linkage status mirrors paper linkage status: a paper match must be
+        # reconcilable; a missing/invalid paper reference cannot anchor a reconciliation match.
+        if self.reconciliation.linkage_status != self.paper.linkage_status:
+            raise ValueError(
+                "reconciliation.linkage_status must equal paper.linkage_status for the bounded chain"
+            )
+        if self.overall_linkage_status != self.paper.linkage_status:
+            raise ValueError(
+                "overall_linkage_status must equal paper.linkage_status for the bounded chain"
+            )
+        return self
+
+
+def evaluate_bounded_end_to_end_traceability_chain(
+    *,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    qualification_state: QualificationState,
+    action: DecisionAction,
+    analysis_run_id: str | None,
+    paper_trade_id: str | None,
+    paper_match_status: EndToEndTraceabilityLinkageStatus | None,
+) -> BoundedEndToEndTraceabilityChain:
+    """Build a deterministic end-to-end traceability chain from explicit references.
+
+    ``paper_match_status`` is the bounded linkage status returned by the
+    decision-to-paper usefulness audit (matched/open/missing/invalid). When
+    ``paper_trade_id`` is None the chain is locked to ``missing``.
+    """
+
+    if paper_trade_id is None:
+        resolved_status: EndToEndTraceabilityLinkageStatus = "missing"
+    elif paper_match_status is None:
+        resolved_status = "missing"
+    else:
+        resolved_status = paper_match_status
+
+    signal_linkage_status: EndToEndTraceabilityLinkageStatus = (
+        "matched" if analysis_run_id else "missing"
+    )
+    return BoundedEndToEndTraceabilityChain(
+        overall_linkage_status=resolved_status,
+        signal_analysis=BoundedSignalAnalysisStageReference(
+            analysis_run_id=analysis_run_id,
+            symbol=symbol,
+            strategy_id=strategy_id,
+            linkage_status=signal_linkage_status,
+        ),
+        decision=BoundedDecisionStageReference(
+            decision_card_id=decision_card_id,
+            generated_at_utc=generated_at_utc,
+            qualification_state=qualification_state,
+            action=action,
+        ),
+        paper=BoundedPaperStageReference(
+            paper_trade_id=paper_trade_id,
+            linkage_status=resolved_status,
+        ),
+        reconciliation=BoundedReconciliationStageReference(
+            linkage_status=resolved_status,
+        ),
+        interpretation_limit=END_TO_END_TRACEABILITY_INTERPRETATION_BOUNDARY,
     )
 
 
@@ -1074,6 +1254,13 @@ __all__ = [
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID",
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION",
     "DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY",
+    "END_TO_END_TRACEABILITY_CONTRACT_ID",
+    "END_TO_END_TRACEABILITY_CONTRACT_VERSION",
+    "END_TO_END_TRACEABILITY_INTERPRETATION_BOUNDARY",
+    "END_TO_END_TRACEABILITY_RECONCILIATION_SURFACE",
+    "END_TO_END_TRACEABILITY_DECISION_SURFACE",
+    "END_TO_END_TRACEABILITY_PAPER_SURFACE",
+    "END_TO_END_TRACEABILITY_SIGNAL_SURFACE",
     "PAPER_REVIEW_CASE_DEFINITIONS",
     "CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY",
     "CONFIDENCE_TIER_PRECISION_DISCLAIMER",
@@ -1087,15 +1274,21 @@ __all__ = [
     "ACTION_ENTRY_WIN_RATE_MIN",
     "ACTION_EXIT_WIN_RATE_MAX",
     "QUALIFICATION_COLOR_BY_STATE",
+    "BoundedDecisionStageReference",
     "BoundedDecisionToPaperUsefulnessAudit",
     "BoundedDecisionToPaperUsefulnessMatchReference",
+    "BoundedEndToEndTraceabilityChain",
+    "BoundedPaperStageReference",
     "BoundedPaperTradeOutcome",
+    "BoundedReconciliationStageReference",
+    "BoundedSignalAnalysisStageReference",
     "BoundedTraderRelevanceCaseEvaluation",
     "BoundedTraderRelevanceValidation",
     "ComponentScore",
     "DecisionAction",
     "DecisionCard",
     "DecisionRationale",
+    "EndToEndTraceabilityLinkageStatus",
     "HardGateEvaluation",
     "HardGateResult",
     "QualificationProfileRobustnessAudit",
@@ -1103,6 +1296,7 @@ __all__ = [
     "Qualification",
     "ScoreEvaluation",
     "evaluate_bounded_decision_to_paper_usefulness_audit",
+    "evaluate_bounded_end_to_end_traceability_chain",
     "evaluate_bounded_trader_relevance_cases",
     "serialize_decision_card",
     "validate_decision_card",

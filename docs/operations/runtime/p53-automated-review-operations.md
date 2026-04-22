@@ -237,6 +237,30 @@ The automation scripts implement the same logic defined in the Phase 44 operator
 
 All scripts use the same canonical state authority (`SqliteCanonicalExecutionRepository`) and derivation functions (`build_paper_account_state`, `build_paper_reconciliation_mismatches`, `build_trading_core_positions`) as the paper inspection API endpoints.
 
+## End-to-End Traceability Chain Evidence
+
+Bounded automated review evidence is composable with the canonical end-to-end
+traceability chain exposed by `GET /decision-cards.traceability_chain`
+(contract id `signal_to_paper_reconciliation_traceability.paper_audit.v1`).
+
+The traceability chain links the artifacts captured by these scripts back to
+the originating signal/analysis and decision card:
+
+| Stage | Surface | Anchored evidence |
+| --- | --- | --- |
+| `signal_analysis` | `/signals` | `analysis_run_id`, `symbol`, `strategy_id` lineage on persisted signals |
+| `decision_card` | `/decision-cards` | `decision_card_id`, `generated_at_utc`, `qualification_state`, `action` |
+| `paper_trade` | `/paper/trades` | `paper_trade_id` referenced by `metadata.bounded_decision_to_paper_match` |
+| `reconciliation` | `/paper/reconciliation` | reconciliation evidence file from `run_post_run_reconciliation.py` |
+
+Each stage exposes an explicit bounded `linkage_status`
+(`matched`, `open`, `missing`, `invalid`). Linkage gaps are represented
+explicitly rather than inferred from missing wording, which keeps bounded
+audits and root-cause analysis deterministic across review windows. The
+chain is bounded to non-live deterministic auditability and does not imply
+trader validation, profitability forecasting, live-trading readiness, or
+operational readiness.
+
 ## Operator Checklist Integration
 
 The automation evidence outputs map to the operator checklist sections:

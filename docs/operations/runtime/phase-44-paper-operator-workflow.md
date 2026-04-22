@@ -61,6 +61,32 @@ Out of scope:
 5. Inspect paper-facing trade, position, and account projections via `GET /paper/trades`, `GET /paper/positions`, and `GET /paper/account`.
 6. Reconcile the workflow state via `GET /paper/reconciliation` and require `ok: true` and `summary.mismatches: 0`.
 7. Inspect `/decision-cards` and review `metadata.bounded_decision_to_paper_usefulness_audit` for any covered cases.
+8. Inspect the top-level `traceability_chain` on each `/decision-cards` item to confirm the explicit signal/analysis -> decision -> paper -> reconciliation reference chain (see [End-to-End Traceability Chain](#end-to-end-traceability-chain)).
+
+## End-to-End Traceability Chain
+
+Every item returned by `GET /decision-cards` carries a deterministic
+`traceability_chain` field that exposes one canonical reference chain:
+signal/analysis -> decision card -> paper trade -> reconciliation. The
+contract identifier is
+`signal_to_paper_reconciliation_traceability.paper_audit.v1`.
+
+Each stage exposes an explicit bounded `linkage_status` from the same
+vocabulary used by the decision-to-paper usefulness audit:
+
+- `matched` — explicit reference is resolved against the canonical entity.
+- `open` — referenced paper trade exists but has not yet closed.
+- `missing` — required reference is absent (no implicit inference is allowed).
+- `invalid` — reference exists but violates the symbol/strategy/timing contract.
+
+The `overall_linkage_status` mirrors the paper stage status, and the
+reconciliation stage status mirrors the paper stage status. This keeps
+linkage gaps explicit rather than inferred from missing wording, so audits
+and root-cause analysis can traverse the full chain deterministically.
+
+The chain is bounded to non-live deterministic auditability and does not
+imply trader validation, profitability forecasting, live-trading readiness,
+or operational readiness.
 
 ## Minimum Operator Evidence
 The bounded Phase 44 workflow claim requires all of the following evidence:

@@ -668,3 +668,21 @@ def test_portfolio_positions_align_with_paper_position_exposure(
         for item in portfolio_positions
     ]
     assert observed == expected
+
+
+def test_paper_workflow_surfaces_align_with_traceability_chain_contract(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_lifecycle_data(repo)
+
+    with _test_client(monkeypatch, repo) as client:
+        workflow = client.get("/paper/workflow", headers=READ_ONLY_HEADERS).json()
+
+    surfaces = workflow["surfaces"]
+    # The bounded end-to-end traceability chain references these canonical
+    # surfaces; assert the workflow contract still exposes them so the chain
+    # remains traversable from /decision-cards through /paper/reconciliation.
+    assert "/decision-cards" in surfaces["canonical_inspection"]
+    assert "/paper/trades" in surfaces["paper_inspection"]
+    assert surfaces["reconciliation"] == "/paper/reconciliation"

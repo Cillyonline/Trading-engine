@@ -532,6 +532,59 @@ class DecisionCardComponentScoreInspectionResponse(BaseModel):
     evidence: List[str]
 
 
+class BoundedSignalAnalysisStageReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["signal_analysis"] = "signal_analysis"
+    surface: str
+    analysis_run_id: Optional[str] = None
+    symbol: str
+    strategy_id: str
+    linkage_status: Literal["matched", "open", "missing", "invalid"]
+
+
+class BoundedDecisionStageReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["decision_card"] = "decision_card"
+    surface: str
+    decision_card_id: str
+    generated_at_utc: str
+    qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"]
+    action: Literal["entry", "exit", "ignore"]
+    linkage_status: Literal["matched", "open", "missing", "invalid"]
+
+
+class BoundedPaperStageReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["paper_trade"] = "paper_trade"
+    surface: str
+    paper_trade_id: Optional[str] = None
+    linkage_status: Literal["matched", "open", "missing", "invalid"]
+
+
+class BoundedReconciliationStageReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal["reconciliation"] = "reconciliation"
+    surface: str
+    linkage_status: Literal["matched", "open", "missing", "invalid"]
+
+
+class BoundedEndToEndTraceabilityChainResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_id: str
+    contract_version: str
+    overall_linkage_status: Literal["matched", "open", "missing", "invalid"]
+    signal_analysis: BoundedSignalAnalysisStageReferenceResponse
+    decision: BoundedDecisionStageReferenceResponse
+    paper: BoundedPaperStageReferenceResponse
+    reconciliation: BoundedReconciliationStageReferenceResponse
+    interpretation_limit: str
+
+
 class DecisionCardInspectionItemResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -558,6 +611,7 @@ class DecisionCardInspectionItemResponse(BaseModel):
     score_explanations: List[str]
     final_explanation: str
     metadata: Dict[str, Any]
+    traceability_chain: BoundedEndToEndTraceabilityChainResponse
 
 
 class DecisionCardInspectionResponse(BaseModel):
