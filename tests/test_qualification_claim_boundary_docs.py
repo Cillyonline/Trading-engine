@@ -33,9 +33,16 @@ def test_governance_doc_defines_deterministic_bounded_trader_relevance_contract(
 
     assert "Deterministic Bounded Trader-Relevance Review Contract" in content
     assert "bounded_trader_relevance.paper_review.v1" in content
+    assert "bounded_non_inference_boundary_fields.read_only.v1" in content
+    assert "structured boundary fields contract version `1.0.0`" in content
     assert "qualification_state_relevance" in content
     assert "decision_action_relevance" in content
     assert "boundary_scope_relevance" in content
+    assert "trader_validation_boundary" in content
+    assert "paper_profitability_boundary" in content
+    assert "live_readiness_boundary" in content
+    assert "runtime boundary evaluation is driven by the canonical structured evidence fields" in content
+    assert "wording/phrase matching remains bounded compatibility fallback only" in content
     assert "aligned" in content
     assert "weak" in content
     assert "missing" in content
@@ -59,7 +66,11 @@ def test_decision_card_inspection_doc_matches_claim_boundary_runtime_wording() -
     assert "Claim boundary discipline for this surface:" in content
     assert "confidence language is evidence-aligned only" in content
     assert "must not imply live-trading approval" in content
-    assert "rejects unsupported confidence inflation language" in content
+    assert "Structured non-inference boundary fields contract for decision/inspection payloads" in content
+    assert "`bounded_non_inference_boundary_fields.read_only.v1`" in content
+    assert "`evaluation_mode`: `structured_primary_with_wording_fallback`" in content
+    assert "failure_reasons" in content
+    assert "structured boundary semantics first and keeps wording checks as bounded compatibility fallback" in content
     assert "confidence is explicitly bounded by upstream evidence quality" in content
     assert "limited upstream evidence limits the achievable confidence tier" in content
 

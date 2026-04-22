@@ -13,8 +13,12 @@ from cilly_trading.engine.backtest_handoff_contract import build_professional_re
 from cilly_trading.engine.decision_card_contract import (
     ACTION_ENTRY_WIN_RATE_MIN,
     ACTION_EXIT_WIN_RATE_MAX,
+    BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_ID,
+    BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION,
     QUALIFICATION_HIGH_AGGREGATE_THRESHOLD,
     QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD,
+    TRADER_RELEVANCE_EVIDENCE_FIELDS,
+    TRADER_RELEVANCE_FAILURE_REASONS,
     evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
@@ -74,6 +78,11 @@ from ..models import (
     TradingCoreTradesReadQuery,
     TradingCoreTradesReadResponse,
 )
+from ..models.inspection_models import (
+    NonInferenceBoundaryContractResponse,
+    NonInferenceBoundaryEvaluationResponse,
+    NonInferenceBoundaryFieldStatusResponse,
+)
 from . import paper_inspection_service
 from .analysis_service import build_strategy_metadata_response
 
@@ -96,6 +105,7 @@ GOVERNED_BACKTEST_ARTIFACT_NAMES = frozenset(
         "performance-report.sha256",
     }
 )
+NON_INFERENCE_BOUNDARY_EVALUATION_MODE = "structured_primary_with_wording_fallback"
 
 
 @dataclass
@@ -106,6 +116,108 @@ class InspectionServiceDependencies:
     canonical_execution_repo: Any
     journal_artifacts_root: Path
     default_strategy_configs: Dict[str, Dict[str, Any]]
+
+
+def _build_non_inference_boundary_contract() -> NonInferenceBoundaryContractResponse:
+    return NonInferenceBoundaryContractResponse(
+        contract_id=BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_ID,
+        contract_version=BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION,
+        evaluation_mode=NON_INFERENCE_BOUNDARY_EVALUATION_MODE,
+    )
+
+
+def _extract_structured_evidence_fields_from_validation(
+    validation_payload: Dict[str, Any],
+) -> Dict[str, bool]:
+    fields: Dict[str, bool] = {}
+    evaluations = validation_payload.get("evaluations")
+    if not isinstance(evaluations, list):
+        return fields
+    for evaluation in evaluations:
+        if not isinstance(evaluation, dict):
+            continue
+        required_evidence = evaluation.get("required_evidence")
+        observed_evidence = evaluation.get("observed_evidence")
+        if not isinstance(required_evidence, list):
+            continue
+        observed_set = {
+            value.strip()
+            for value in (observed_evidence or [])
+            if isinstance(value, str) and value.strip()
+        }
+        for field in required_evidence:
+            if isinstance(field, str) and field in TRADER_RELEVANCE_EVIDENCE_FIELDS:
+                fields[field] = field in observed_set
+    return fields
+
+
+def _build_non_inference_boundary_evaluation(
+    *,
+    validation_payload: Dict[str, Any],
+    structured_evidence_fields: Dict[str, bool],
+) -> NonInferenceBoundaryEvaluationResponse:
+    extracted_fields = _extract_structured_evidence_fields_from_validation(validation_payload)
+    failure_reasons: List[str] = []
+    field_status_payload: Dict[str, NonInferenceBoundaryFieldStatusResponse] = {}
+    for field in TRADER_RELEVANCE_EVIDENCE_FIELDS:
+        field_present = bool(extracted_fields.get(field, False))
+        field_source: Literal["structured_fields", "wording_fallback", "mixed"]
+        if field in structured_evidence_fields:
+            field_source = "structured_fields"
+        else:
+            field_source = "wording_fallback"
+        failure_reason = None
+        if not field_present:
+            failure_reason = TRADER_RELEVANCE_FAILURE_REASONS[field]
+            failure_reasons.append(failure_reason)
+        field_status_payload[field] = NonInferenceBoundaryFieldStatusResponse(
+            present=field_present,
+            source=field_source,
+            failure_reason=failure_reason,
+        )
+
+    overall_status_raw = validation_payload.get("overall_status")
+    overall_status: Literal["aligned", "weak", "missing"]
+    if overall_status_raw in {"aligned", "weak", "missing"}:
+        overall_status = overall_status_raw
+    else:
+        overall_status = "missing"
+
+    return NonInferenceBoundaryEvaluationResponse(
+        contract_id=BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_ID,
+        contract_version=BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION,
+        evaluation_mode=NON_INFERENCE_BOUNDARY_EVALUATION_MODE,
+        overall_status=overall_status,
+        qualification_state=field_status_payload["qualification_state"],
+        paper_scope_summary=field_status_payload["paper_scope_summary"],
+        state_explanation_evidence=field_status_payload["state_explanation_evidence"],
+        action=field_status_payload["action"],
+        bounded_decision_metrics=field_status_payload["bounded_decision_metrics"],
+        action_rule_trace=field_status_payload["action_rule_trace"],
+        trader_validation_boundary=field_status_payload["trader_validation_boundary"],
+        paper_profitability_boundary=field_status_payload["paper_profitability_boundary"],
+        live_readiness_boundary=field_status_payload["live_readiness_boundary"],
+        failure_reasons=failure_reasons,
+    )
+
+
+def _base_structured_evidence_fields_for_decision_output(
+    *,
+    qualification_state: str,
+    action: str,
+    win_rate: float,
+    expected_value: float,
+    state_explanation_evidence: bool,
+    action_rule_trace: bool,
+) -> Dict[str, bool]:
+    return {
+        "qualification_state": bool(qualification_state),
+        "paper_scope_summary": True,
+        "state_explanation_evidence": state_explanation_evidence,
+        "action": bool(action),
+        "bounded_decision_metrics": win_rate is not None and expected_value is not None,
+        "action_rule_trace": action_rule_trace,
+    }
 
 
 def paginate_items(items: list[Any], *, limit: int, offset: int) -> tuple[list[Any], int]:
@@ -540,6 +652,7 @@ def _build_signal_decision_surface_boundary() -> SignalDecisionSurfaceBoundaryRe
             "Technical decision states do not establish operational readiness, live trading readiness, or "
             "broker execution readiness."
         ),
+        non_inference_boundary_contract=_build_non_inference_boundary_contract(),
         strategy_readiness_evidence=StrategyReadinessEvidenceResponse(
             bounded_scope=(
                 "One bounded API/UI evidence scope for non-live technical signal decision support on /ui."
@@ -733,6 +846,23 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
     else:
         action = "ignore"
 
+    structured_evidence_fields = _base_structured_evidence_fields_for_decision_output(
+        qualification_state=qualification_state,
+        action=action,
+        win_rate=win_rate,
+        expected_value=expected_value,
+        state_explanation_evidence=bool(
+            qualification_evidence or missing_criteria or blocking_conditions
+        ),
+        action_rule_trace=True,
+    )
+    structured_evidence_fields.update(
+        {
+            "trader_validation_boundary": True,
+            "paper_profitability_boundary": True,
+            "live_readiness_boundary": True,
+        }
+    )
     boundary_statement = (
         "Boundary evidence: this deterministic decision output is bounded trader-relevance validation only; "
         "it is not trader_validation evidence, not paper profitability evidence, and not live-trading readiness evidence."
@@ -750,6 +880,12 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         qualification_evidence=qualification_evidence + [boundary_statement],
         missing_criteria=missing_criteria,
         blocking_conditions=blocking_conditions,
+        structured_evidence_fields=structured_evidence_fields,
+    )
+    trader_relevance_validation_payload = trader_relevance_validation.model_dump(mode="python")
+    non_inference_boundary = _build_non_inference_boundary_evaluation(
+        validation_payload=trader_relevance_validation_payload,
+        structured_evidence_fields=structured_evidence_fields,
     )
     trader_relevance_case_status = ", ".join(
         f"{item.case_id}={item.evidence_status}"
@@ -786,6 +922,7 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         stage_assessment=stage_assessment,
         missing_criteria=missing_criteria,
         blocking_conditions=blocking_conditions,
+        non_inference_boundary=non_inference_boundary,
     )
 
 
@@ -1138,6 +1275,29 @@ def decision_card_item_sort_key(
     return (timestamp, item.decision_card_id, item.run_id, item.artifact_name)
 
 
+def _structured_evidence_fields_from_decision_card(
+    *,
+    card: Any,
+    metadata: Dict[str, Any],
+) -> Dict[str, bool]:
+    structured_fields = _base_structured_evidence_fields_for_decision_output(
+        qualification_state=card.qualification.state,
+        action=card.action,
+        win_rate=card.score.win_rate,
+        expected_value=card.score.expected_value,
+        state_explanation_evidence=bool(
+            card.rationale.gate_explanations or card.rationale.score_explanations
+        ),
+        action_rule_trace=bool(card.rationale.score_explanations),
+    )
+    existing_validation = metadata.get("bounded_trader_relevance_validation")
+    if isinstance(existing_validation, dict):
+        extracted_fields = _extract_structured_evidence_fields_from_validation(existing_validation)
+        if extracted_fields:
+            structured_fields.update(extracted_fields)
+    return structured_fields
+
+
 def build_decision_card_inspection_items(
     *,
     params: DecisionCardInspectionQuery,
@@ -1203,6 +1363,27 @@ def build_decision_card_inspection_items(
             if usefulness_audit is not None:
                 metadata["bounded_decision_to_paper_usefulness_audit"] = usefulness_audit
 
+            structured_evidence_fields = _structured_evidence_fields_from_decision_card(
+                card=card,
+                metadata=metadata,
+            )
+            trader_relevance_validation = evaluate_bounded_trader_relevance_cases(
+                qualification_state=card.qualification.state,
+                action=card.action,
+                win_rate=card.score.win_rate,
+                expected_value=card.score.expected_value,
+                qualification_summary=card.qualification.summary,
+                rationale_summary=card.rationale.summary,
+                final_explanation=card.rationale.final_explanation,
+                gate_explanations=list(card.rationale.gate_explanations),
+                score_explanations=list(card.rationale.score_explanations),
+                structured_evidence_fields=structured_evidence_fields,
+            )
+            non_inference_boundary = _build_non_inference_boundary_evaluation(
+                validation_payload=trader_relevance_validation.model_dump(mode="python"),
+                structured_evidence_fields=structured_evidence_fields,
+            )
+
             items.append(
                 DecisionCardInspectionItemResponse(
                     run_id=run_id,
@@ -1236,6 +1417,7 @@ def build_decision_card_inspection_items(
                     score_explanations=list(card.rationale.score_explanations),
                     final_explanation=card.rationale.final_explanation,
                     metadata=metadata,
+                    non_inference_boundary=non_inference_boundary,
                 )
             )
 

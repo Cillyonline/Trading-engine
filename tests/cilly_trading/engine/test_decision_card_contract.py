@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from cilly_trading.engine.decision_card_contract import (
     DECISION_CARD_CONTRACT_VERSION,
     DecisionCard,
+    evaluate_bounded_trader_relevance_cases,
     serialize_decision_card,
     validate_decision_card,
 )
@@ -339,3 +340,100 @@ def test_negative_validation_rejects_additional_forbidden_claim_phrases(forbidde
 
     with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
         validate_decision_card(payload)
+
+
+def test_bounded_trader_relevance_uses_structured_fields_as_primary_validation_path() -> None:
+    structured_evidence_fields = {
+        "qualification_state": True,
+        "paper_scope_summary": True,
+        "state_explanation_evidence": True,
+        "action": True,
+        "bounded_decision_metrics": True,
+        "action_rule_trace": True,
+        "trader_validation_boundary": True,
+        "paper_profitability_boundary": True,
+        "live_readiness_boundary": True,
+    }
+    validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state="paper_candidate",
+        action="entry",
+        win_rate=0.61,
+        expected_value=0.22,
+        qualification_summary="Unrelated summary wording.",
+        rationale_summary="Different wording does not matter here.",
+        final_explanation="No boundary phrase tokens in this text.",
+        gate_explanations=["Deterministic gate evidence is present."],
+        score_explanations=["Deterministic score trace is present."],
+        structured_evidence_fields=structured_evidence_fields,
+    )
+
+    assert validation.overall_status == "aligned"
+    assert all(item.evidence_status == "aligned" for item in validation.evaluations)
+
+
+def test_bounded_trader_relevance_falls_back_to_wording_for_missing_structured_fields() -> None:
+    validation = evaluate_bounded_trader_relevance_cases(
+        qualification_state="watch",
+        action="ignore",
+        win_rate=0.42,
+        expected_value=0.0,
+        qualification_summary="Qualification output remains bounded to paper scope.",
+        rationale_summary="Partial technical evidence exists.",
+        final_explanation="Boundary explicitly separates trader_validation only.",
+        qualification_evidence=["No paper profitability or live-readiness boundary field is present."],
+        structured_evidence_fields={
+            "qualification_state": True,
+            "paper_scope_summary": True,
+            "state_explanation_evidence": True,
+            "action": True,
+            "bounded_decision_metrics": True,
+            "action_rule_trace": True,
+        },
+    )
+
+    by_case = {item.case_id: item for item in validation.evaluations}
+    assert by_case["boundary_scope_relevance"].evidence_status == "weak"
+    assert "paper_profitability_boundary" in by_case["boundary_scope_relevance"].evidence_summary
+    assert "live_readiness_boundary" in by_case["boundary_scope_relevance"].evidence_summary
+    assert validation.overall_status == "weak"
+
+
+def test_bounded_trader_relevance_is_wording_stable_with_identical_structured_fields() -> None:
+    structured_evidence_fields = {
+        "qualification_state": True,
+        "paper_scope_summary": True,
+        "state_explanation_evidence": True,
+        "action": True,
+        "bounded_decision_metrics": True,
+        "action_rule_trace": True,
+        "trader_validation_boundary": True,
+        "paper_profitability_boundary": False,
+        "live_readiness_boundary": True,
+    }
+    validation_a = evaluate_bounded_trader_relevance_cases(
+        qualification_state="paper_candidate",
+        action="entry",
+        win_rate=0.66,
+        expected_value=0.29,
+        qualification_summary="Text variant A.",
+        rationale_summary="A.",
+        final_explanation="A.",
+        structured_evidence_fields=structured_evidence_fields,
+    )
+    validation_b = evaluate_bounded_trader_relevance_cases(
+        qualification_state="paper_candidate",
+        action="entry",
+        win_rate=0.66,
+        expected_value=0.29,
+        qualification_summary="Text variant B with different terms and order.",
+        rationale_summary="B.",
+        final_explanation="B with different non-deterministic prose.",
+        structured_evidence_fields=structured_evidence_fields,
+    )
+
+    assert validation_a.model_dump(mode="python") == validation_b.model_dump(mode="python")
+    boundary_case = next(
+        item for item in validation_a.evaluations if item.case_id == "boundary_scope_relevance"
+    )
+    assert boundary_case.evidence_status == "weak"
+    assert "paper_profitability_boundary" in boundary_case.evidence_summary

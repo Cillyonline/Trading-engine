@@ -39,18 +39,38 @@ Canonical contract id/version:
 
 - `bounded_trader_relevance.paper_review.v1`
 - version `1.0.0`
+- structured boundary fields contract `bounded_non_inference_boundary_fields.read_only.v1`
+- structured boundary fields contract version `1.0.0`
+
+Canonical structured evidence fields (non-inference + claim-boundary semantics):
+
+- `qualification_state`
+- `paper_scope_summary`
+- `state_explanation_evidence`
+- `action`
+- `bounded_decision_metrics`
+- `action_rule_trace`
+- `trader_validation_boundary`
+- `paper_profitability_boundary`
+- `live_readiness_boundary`
 
 Paper-review cases (deterministic and ordered by case id):
 
 - `qualification_state_relevance`: verify qualification-state output is evidence-explained and explicitly paper-scoped
 - `decision_action_relevance`: verify action output is evidence-explained with bounded decision metrics
-- `boundary_scope_relevance`: verify explicit boundary wording for trader_validation separation, paper profitability separation, and live-readiness separation
+- `boundary_scope_relevance`: verify explicit structured boundary-field separation for trader_validation, paper profitability, and live-readiness semantics
 
 Case status semantics:
 
 - `aligned`: all required evidence signals for the case are present
 - `weak`: some required evidence signals are present, but at least one is missing
 - `missing`: no required evidence signals are present
+
+Primary enforcement and fallback rule:
+
+- runtime boundary evaluation is driven by the canonical structured evidence fields above
+- wording/phrase matching remains bounded compatibility fallback only when required structured fields are absent
+- outputs must include deterministic boundary status and explicit boundary-failure reasons for missing boundary fields
 
 Determinism rule:
 
@@ -95,8 +115,8 @@ Claim boundary:
 
 Documentation and runtime wording must enforce the same boundary:
 
-- decision-card contract wording and runtime output wording use the same evidence hierarchy
-- inspection API wording mirrors the same boundary
+- decision-card contract and runtime output use the same canonical structured boundary fields first
+- inspection API mirrors the same structured boundary contract and deterministic failure reasons
 - qualification outputs explicitly state they do not imply live-trading approval
 
 ## 7. Validation Rule
@@ -107,6 +127,7 @@ Validation is required for:
 - confidence reason text
 - qualification summary text
 - rationale summary/final explanation text
+- structured non-inference boundary fields when surfaced on decision/inspection read payloads
 
 ## 8. Non-Goals
 

@@ -190,6 +190,26 @@ def test_confidence_boundary_is_explicitly_upstream_evidence_limited() -> None:
     assert "does not imply live-trading approval" in card.rationale.final_explanation.casefold()
 
 
+def test_bounded_trader_relevance_validation_exposes_explicit_deterministic_failure_reason_channel() -> None:
+    card = evaluate_qualification(_engine_input())
+    validation = card.metadata["bounded_trader_relevance_validation"]
+
+    assert validation["overall_status"] == "aligned"
+    for evaluation in validation["evaluations"]:
+        assert "source=" in evaluation["evidence_summary"]
+        assert "missing=" in evaluation["evidence_summary"]
+        assert "failure_reasons=" in evaluation["evidence_summary"]
+
+
+def test_bounded_trader_relevance_validation_is_deterministic_for_identical_inputs() -> None:
+    first = evaluate_qualification(_engine_input())
+    second = evaluate_qualification(_engine_input())
+
+    assert first.metadata["bounded_trader_relevance_validation"] == second.metadata[
+        "bounded_trader_relevance_validation"
+    ]
+
+
 def test_expected_value_calculation_positive_zero_negative_cases() -> None:
     base_components = _base_component_scores()
     positive_win_rate = compute_bounded_win_rate(component_scores=base_components)

@@ -21,6 +21,16 @@ Claim boundary discipline for this surface:
 - qualification and rationale language is bounded to paper-trading qualification scope
 - qualification state is contract-bounded (`reject` | `watch` | `paper_candidate` | `paper_approved`) and deterministic from hard-gate + score semantics
 - inspection outputs must not imply live-trading approval, broker readiness, production readiness, trader validation, or guaranteed outcomes
+- non-inference and claim-boundary evaluation is enforced from canonical structured boundary fields first, with wording fallback only for compatibility when structured fields are unavailable
+
+Structured non-inference boundary fields contract for decision/inspection payloads:
+
+- `contract_id`: `bounded_non_inference_boundary_fields.read_only.v1`
+- `contract_version`: `1.0.0`
+- `evaluation_mode`: `structured_primary_with_wording_fallback`
+- canonical fields: `qualification_state`, `paper_scope_summary`, `state_explanation_evidence`, `action`, `bounded_decision_metrics`, `action_rule_trace`, `trader_validation_boundary`, `paper_profitability_boundary`, `live_readiness_boundary`
+- `overall_status`: deterministic (`aligned` | `weak` | `missing`)
+- `failure_reasons`: explicit deterministic boundary-failure reasons
 
 ## Deterministic Ordering
 
@@ -80,7 +90,23 @@ Pagination:
       "gate_explanations": [],
       "score_explanations": [],
       "final_explanation": "Action state is deterministic and does not imply live-trading approval.",
-      "metadata": {}
+      "metadata": {},
+      "non_inference_boundary": {
+        "contract_id": "bounded_non_inference_boundary_fields.read_only.v1",
+        "contract_version": "1.0.0",
+        "evaluation_mode": "structured_primary_with_wording_fallback",
+        "overall_status": "aligned",
+        "qualification_state": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "paper_scope_summary": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "state_explanation_evidence": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "action": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "bounded_decision_metrics": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "action_rule_trace": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "trader_validation_boundary": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "paper_profitability_boundary": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "live_readiness_boundary": {"present": true, "source": "structured_fields", "failure_reason": null},
+        "failure_reasons": []
+      }
     }
   ],
   "limit": 50,
@@ -98,7 +124,8 @@ The inspection payload explicitly includes:
 - component-level score rationales (`component_scores`)
 - gate and score explanation lists (`gate_explanations`, `score_explanations`)
 - final qualification explanation (`final_explanation`)
+- structured non-inference boundary evaluation with explicit per-field status and deterministic failure reasons (`non_inference_boundary`)
 
 This keeps decision outputs explainable without introducing mutation or live-trading controls.
 
-The runtime contract validation for decision cards enforces this wording boundary and rejects unsupported confidence inflation language.
+The runtime contract validation for decision cards enforces structured boundary semantics first and keeps wording checks as bounded compatibility fallback while continuing to reject unsupported confidence inflation language.

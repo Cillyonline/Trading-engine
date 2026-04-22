@@ -398,6 +398,41 @@ class StrategyReadinessEvidenceResponse(BaseModel):
     inferred_readiness_claim: Literal["prohibited"]
 
 
+class NonInferenceBoundaryContractResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_id: str
+    contract_version: str
+    evaluation_mode: Literal["structured_primary_with_wording_fallback"]
+
+
+class NonInferenceBoundaryFieldStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    present: bool
+    source: Literal["structured_fields", "wording_fallback", "mixed"]
+    failure_reason: Optional[str] = None
+
+
+class NonInferenceBoundaryEvaluationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contract_id: str
+    contract_version: str
+    evaluation_mode: Literal["structured_primary_with_wording_fallback"]
+    overall_status: Literal["aligned", "weak", "missing"]
+    qualification_state: NonInferenceBoundaryFieldStatusResponse
+    paper_scope_summary: NonInferenceBoundaryFieldStatusResponse
+    state_explanation_evidence: NonInferenceBoundaryFieldStatusResponse
+    action: NonInferenceBoundaryFieldStatusResponse
+    bounded_decision_metrics: NonInferenceBoundaryFieldStatusResponse
+    action_rule_trace: NonInferenceBoundaryFieldStatusResponse
+    trader_validation_boundary: NonInferenceBoundaryFieldStatusResponse
+    paper_profitability_boundary: NonInferenceBoundaryFieldStatusResponse
+    live_readiness_boundary: NonInferenceBoundaryFieldStatusResponse
+    failure_reasons: List[str]
+
+
 class SignalDecisionSurfaceBoundaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -405,6 +440,7 @@ class SignalDecisionSurfaceBoundaryResponse(BaseModel):
     technical_decision_state_statement: str
     trader_validation_statement: str
     operational_readiness_statement: str
+    non_inference_boundary_contract: NonInferenceBoundaryContractResponse
     strategy_readiness_evidence: StrategyReadinessEvidenceResponse
     in_scope: List[str]
     out_of_scope: List[str]
@@ -434,6 +470,7 @@ class SignalDecisionSurfaceItemResponse(BaseModel):
     stage_assessment: str
     missing_criteria: List[str]
     blocking_conditions: List[str]
+    non_inference_boundary: NonInferenceBoundaryEvaluationResponse
 
 
 class SignalDecisionSurfaceResponse(BaseModel):
@@ -558,6 +595,7 @@ class DecisionCardInspectionItemResponse(BaseModel):
     score_explanations: List[str]
     final_explanation: str
     metadata: Dict[str, Any]
+    non_inference_boundary: NonInferenceBoundaryEvaluationResponse
 
 
 class DecisionCardInspectionResponse(BaseModel):
