@@ -17,8 +17,6 @@ from cilly_trading.engine.decision_card_contract import (
     BOUNDED_NON_INFERENCE_BOUNDARY_FIELDS_CONTRACT_VERSION,
     QUALIFICATION_HIGH_AGGREGATE_THRESHOLD,
     QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD,
-    TRADER_RELEVANCE_EVIDENCE_FIELDS,
-    TRADER_RELEVANCE_FAILURE_REASONS,
     evaluate_bounded_trader_relevance_cases,
     validate_decision_card,
 )
@@ -846,23 +844,6 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
     else:
         action = "ignore"
 
-    structured_evidence_fields = _base_structured_evidence_fields_for_decision_output(
-        qualification_state=qualification_state,
-        action=action,
-        win_rate=win_rate,
-        expected_value=expected_value,
-        state_explanation_evidence=bool(
-            qualification_evidence or missing_criteria or blocking_conditions
-        ),
-        action_rule_trace=True,
-    )
-    structured_evidence_fields.update(
-        {
-            "trader_validation_boundary": True,
-            "paper_profitability_boundary": True,
-            "live_readiness_boundary": True,
-        }
-    )
     boundary_statement = (
         "Boundary evidence: this deterministic decision output is bounded trader-relevance validation only; "
         "it is not trader_validation evidence, not paper profitability evidence, and not live-trading readiness evidence."
@@ -880,12 +861,6 @@ def _build_signal_decision_surface_item(signal: Dict[str, Any]) -> SignalDecisio
         qualification_evidence=qualification_evidence + [boundary_statement],
         missing_criteria=missing_criteria,
         blocking_conditions=blocking_conditions,
-        structured_evidence_fields=structured_evidence_fields,
-    )
-    trader_relevance_validation_payload = trader_relevance_validation.model_dump(mode="python")
-    non_inference_boundary = _build_non_inference_boundary_evaluation(
-        validation_payload=trader_relevance_validation_payload,
-        structured_evidence_fields=structured_evidence_fields,
     )
     trader_relevance_case_status = ", ".join(
         f"{item.case_id}={item.evidence_status}"
@@ -1363,27 +1338,6 @@ def build_decision_card_inspection_items(
             if usefulness_audit is not None:
                 metadata["bounded_decision_to_paper_usefulness_audit"] = usefulness_audit
 
-            structured_evidence_fields = _structured_evidence_fields_from_decision_card(
-                card=card,
-                metadata=metadata,
-            )
-            trader_relevance_validation = evaluate_bounded_trader_relevance_cases(
-                qualification_state=card.qualification.state,
-                action=card.action,
-                win_rate=card.score.win_rate,
-                expected_value=card.score.expected_value,
-                qualification_summary=card.qualification.summary,
-                rationale_summary=card.rationale.summary,
-                final_explanation=card.rationale.final_explanation,
-                gate_explanations=list(card.rationale.gate_explanations),
-                score_explanations=list(card.rationale.score_explanations),
-                structured_evidence_fields=structured_evidence_fields,
-            )
-            non_inference_boundary = _build_non_inference_boundary_evaluation(
-                validation_payload=trader_relevance_validation.model_dump(mode="python"),
-                structured_evidence_fields=structured_evidence_fields,
-            )
-
             items.append(
                 DecisionCardInspectionItemResponse(
                     run_id=run_id,
@@ -1417,7 +1371,6 @@ def build_decision_card_inspection_items(
                     score_explanations=list(card.rationale.score_explanations),
                     final_explanation=card.rationale.final_explanation,
                     metadata=metadata,
-                    non_inference_boundary=non_inference_boundary,
                 )
             )
 
@@ -1647,7 +1600,8 @@ def read_decision_cards(
     all_items = build_decision_card_inspection_items(
         params=params,
         journal_artifacts_root=journal_artifacts_root,
-    )
+    )+
+    
     page, total = paginate_items(all_items, limit=params.limit, offset=params.offset)
     return DecisionCardInspectionResponse(
         items=page,
