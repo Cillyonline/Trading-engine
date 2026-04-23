@@ -500,3 +500,211 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             }
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_ui_consolidated_operator_workflow_walks_canonical_read_surfaces(monkeypatch) -> None:
+    """Deterministic browser-flow regression for the consolidated bounded
+    operator workflow: watchlist -> analysis -> decision review -> backtest
+    evidence. Asserts the consolidated workflow consumes only existing
+    canonical read surfaces and that consolidated UI markers are present."""
+
+    tmp_path = _make_isolated_sqlite_tmp_path()
+    try:
+        backtest_root = tmp_path / "runs" / "phase6"
+        run_dir = backtest_root / "bt-run-consolidated"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "backtest-result.json").write_text(
+            json.dumps({"run": {"run_id": "bt-run-consolidated"}, "summary": {"total_trades": 1}}),
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
+        monkeypatch.setattr(api_main, "get_runtime_controller", lambda: _RuntimeControllerStub("running"))
+        monkeypatch.setattr(api_main, "JOURNAL_ARTIFACTS_ROOT", backtest_root)
+
+        signal_repo = _InMemorySignalRepo()
+        analysis_repo = _InMemoryAnalysisRunRepo()
+        watchlist_repo = _InMemoryWatchlistRepo()
+
+        monkeypatch.setattr(api_main, "signal_repo", signal_repo)
+        monkeypatch.setattr(api_main, "analysis_run_repo", analysis_repo)
+        monkeypatch.setattr(api_main, "watchlist_repo", watchlist_repo)
+        monkeypatch.setattr(api_main, "_require_engine_runtime_running", lambda: None)
+        monkeypatch.setattr(api_main, "_require_ingestion_run", lambda *args, **kwargs: None)
+        monkeypatch.setattr(api_main, "_require_snapshot_ready", lambda *args, **kwargs: None)
+        monkeypatch.setattr(api_main, "_resolve_analysis_db_path", lambda: str(tmp_path / "analysis.db"))
+        monkeypatch.setattr(api_main, "create_registered_strategies", lambda: [_ScoreFromCloseStrategy()])
+        monkeypatch.setattr(
+            api_main,
+            "trigger_operator_analysis_run",
+            lambda execute, execute_kwargs, **kwargs: execute(**execute_kwargs),
+        )
+
+        def _run_snapshot_analysis_stub(
+            *,
+            symbols,
+            strategies,
+            engine_config,
+            strategy_configs,
+            signal_repo,
+            ingestion_run_id,
+            db_path,
+            run_id=None,
+            symbol_failures=None,
+            isolate_symbol_failures=False,
+        ):
+            del strategies, engine_config, strategy_configs, db_path, symbol_failures, isolate_symbol_failures
+            now = datetime.now(timezone.utc).isoformat()
+            output = []
+            for index, symbol in enumerate(symbols):
+                output.append(
+                    {
+                        "signal_id": f"{run_id or ingestion_run_id}-{symbol}",
+                        "analysis_run_id": run_id,
+                        "ingestion_run_id": ingestion_run_id,
+                        "symbol": symbol,
+                        "strategy": "RSI2",
+                        "direction": "long",
+                        "score": 80.0 - index,
+                        "signal_strength": 80.0 - index,
+                        "timestamp": now,
+                        "stage": "setup",
+                        "timeframe": "D1",
+                        "market_type": "stock",
+                        "data_source": "yahoo",
+                    }
+                )
+            signal_repo.save_signals(output)
+            return output
+
+        monkeypatch.setattr(api_main, "_run_snapshot_analysis", _run_snapshot_analysis_stub)
+        monkeypatch.setattr(
+            api_main,
+            "get_system_state_payload",
+            lambda: {
+                "schema_version": "v1",
+                "status": "running",
+                "runtime": {
+                    "schema_version": "v1",
+                    "runtime_id": "runtime-ui-consolidated",
+                    "mode": "running",
+                    "timestamps": {
+                        "started_at": "2025-01-01T00:00:00+00:00",
+                        "updated_at": "2025-01-01T00:00:00+00:00",
+                    },
+                    "ownership": {"owner_tag": "engine"},
+                    "extensions": [],
+                },
+                "metadata": {"read_only": True, "source": "engine_control_plane"},
+            },
+        )
+
+        with TestClient(api_main.app) as client:
+            ui_response = client.get("/ui")
+            assert ui_response.status_code == 200
+            ui_text = ui_response.text
+
+            # Consolidated workflow UI markers must be present.
+            assert 'id="ui-consolidated-operator-workflow"' in ui_text
+            assert 'id="ui-consolidated-operator-workflow-steps"' in ui_text
+            assert 'id="ui-consolidated-operator-workflow-non-live-boundary"' in ui_text
+            assert 'id="ui-consolidated-operator-workflow-canonical-reads"' in ui_text
+            assert 'id="decision-review"' in ui_text
+            assert "Consolidated Bounded Operator Workflow" in ui_text
+
+            # Steps must appear in canonical order: watchlist -> analysis ->
+            # decision review -> backtest evidence.
+            order = [
+                ui_text.index("Step 1 &middot; Watchlist:"),
+                ui_text.index("Step 2 &middot; Analysis:"),
+                ui_text.index("Step 3 &middot; Decision Review:"),
+                ui_text.index("Step 4 &middot; Backtest Evidence:"),
+            ]
+            assert order == sorted(order)
+
+            # Each consolidated step must deep-link to an existing /ui section
+            # backed by an existing canonical read surface.
+            for href in (
+                'href="#watchlist-workflow"',
+                'href="#analysis-entry"',
+                'href="#decision-review"',
+                'href="#backtest-entry"',
+            ):
+                assert href in ui_text
+
+            # Non-live boundary text must be preserved by the consolidation.
+            assert "does not introduce live trading" in ui_text
+            assert "broker integration" in ui_text
+            assert "strategy optimization" in ui_text
+
+            ingestion_run_id = str(uuid.uuid4())
+
+            # Step 1 - Watchlist: persist scope through canonical /watchlists.
+            create_response = client.post(
+                "/watchlists",
+                headers=OPERATOR_HEADERS,
+                json={
+                    "watchlist_id": "consolidated-flow",
+                    "name": "Consolidated Flow",
+                    "symbols": ["AAPL", "MSFT"],
+                },
+            )
+            assert create_response.status_code == 200
+            list_response = client.get("/watchlists", headers=READ_ONLY_HEADERS)
+            assert list_response.status_code == 200
+            assert list_response.json()["total"] == 1
+
+            # Step 2 - Analysis: run bounded analysis through canonical
+            # /watchlists/{watchlist_id}/execute (consumes /analysis surfaces).
+            execute_response = client.post(
+                "/watchlists/consolidated-flow/execute",
+                headers=OPERATOR_HEADERS,
+                json={
+                    "ingestion_run_id": ingestion_run_id,
+                    "market_type": "stock",
+                    "lookback_days": 200,
+                    "min_score": 0.0,
+                },
+            )
+            assert execute_response.status_code == 200
+            execute_payload = execute_response.json()
+            assert execute_payload["watchlist_id"] == "consolidated-flow"
+            assert {item["symbol"] for item in execute_payload["ranked_results"]} == {"AAPL", "MSFT"}
+
+            # Step 3 - Decision Review: read bounded technical decision surface.
+            decision_response = client.get(
+                "/signals/decision-surface",
+                headers=READ_ONLY_HEADERS,
+                params={"ingestion_run_id": ingestion_run_id, "sort": "created_at_desc"},
+            )
+            assert decision_response.status_code == 200
+            decision_payload = decision_response.json()
+            assert decision_payload["items"], "decision review must surface reviewed signals"
+            assert (
+                decision_payload["boundary"]["mode"] == "non_live_signal_decision_surface"
+            )
+            for item in decision_payload["items"]:
+                assert item["decision_state"] in {"blocked", "watch", "paper_candidate"}
+
+            # Step 4 - Backtest Evidence: read bounded backtest artifacts.
+            backtest_list_response = client.get(
+                "/backtest/artifacts",
+                headers=READ_ONLY_HEADERS,
+            )
+            assert backtest_list_response.status_code == 200
+            backtest_payload = backtest_list_response.json()
+            assert backtest_payload["workflow_id"] == "ui_bounded_backtest_entry_read"
+            assert backtest_payload["boundary"]["mode"] == "non_live_backtest_read_only"
+            assert backtest_payload["total"] == 1
+            assert backtest_payload["items"][0]["run_id"] == "bt-run-consolidated"
+
+            backtest_content_response = client.get(
+                "/backtest/artifacts/bt-run-consolidated/backtest-result.json",
+                headers=READ_ONLY_HEADERS,
+            )
+            assert backtest_content_response.status_code == 200
+            assert (
+                backtest_content_response.json()["run_id"] == "bt-run-consolidated"
+            )
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)

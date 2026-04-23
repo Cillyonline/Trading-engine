@@ -32,6 +32,23 @@ The canonical `/ui` shell owns one bounded signal review and trade-evaluation wo
 
 These navigation labels and anchors are the website-facing IA ownership markers for this issue slice and explicitly constrain scope to one bounded workflow.
 
+## Consolidated Bounded Operator Workflow
+The canonical `/ui` shell additionally consolidates the existing watchlist, analysis, decision-review, and backtest-evidence surfaces into one ordered bounded operator workflow:
+
+1. **Step 1 · Watchlist** (`#watchlist-workflow`) – consumes canonical `/watchlists`, `/watchlists/{watchlist_id}` read/write surfaces.
+2. **Step 2 · Analysis** (`#analysis-entry`) – consumes canonical `POST /analysis/run` (single symbol) and `POST /watchlists/{watchlist_id}/execute` (ranked watchlist).
+3. **Step 3 · Decision Review** (`#decision-review`) – consumes canonical `GET /signals/decision-surface` for bounded technical decision states (`blocked`, `watch`, `paper_candidate`) with explicit qualification evidence, missing criteria, and blocking conditions.
+4. **Step 4 · Backtest Evidence** (`#backtest-entry`) – consumes canonical `GET /backtest/artifacts` and `GET /backtest/artifacts/{run_id}/{artifact_name}`.
+
+Marker contract for this consolidation:
+- `id="ui-consolidated-operator-workflow"` declares the consolidated workflow container on `/ui`.
+- `id="ui-consolidated-operator-workflow-steps"` enumerates the four ordered steps.
+- `id="ui-consolidated-operator-workflow-non-live-boundary"` reaffirms the non-live boundary of the consolidated workflow.
+- `id="ui-consolidated-operator-workflow-canonical-reads"` enumerates the canonical read surfaces the consolidated workflow consumes.
+- `id="decision-review"` is the section anchor for the bounded signal decision review step.
+
+Consolidation reuses existing canonical APIs and read surfaces and does not introduce semantic duplication. The consolidated workflow does not introduce new execution logic, broker integration, strategy optimization, live trading, trader validation, or operational-readiness inference, and supports Phase 36 web activation and Phase 40 trading-desk dashboard scope without expanding beyond current roadmap authority.
+
 ## Explicit Non-Live Boundary
 IA consolidation in `/ui` does not introduce:
 - live trading
