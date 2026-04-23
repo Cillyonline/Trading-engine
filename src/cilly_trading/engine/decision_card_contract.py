@@ -63,6 +63,16 @@ SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY = (
 )
 SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD = 70.0
 SIGNAL_QUALITY_STABILITY_LOW_THRESHOLD = 50.0
+CONFIDENCE_CALIBRATION_CONTRACT_ID = (
+    "bounded_confidence_calibration.realism_to_paper.paper_audit.v1"
+)
+CONFIDENCE_CALIBRATION_CONTRACT_VERSION = "1.0.0"
+CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY = (
+    "Bounded confidence calibration audit is limited to non-live deterministic interpretation of "
+    "decision-card confidence tier against covered backtest-realism evidence completeness and "
+    "matched paper-trade outcomes. It does not imply trader validation, profitability forecasting, "
+    "live-trading readiness, or operational readiness."
+)
 
 END_TO_END_TRACEABILITY_CONTRACT_ID = (
     "signal_to_paper_reconciliation_traceability.paper_audit.v1"
@@ -103,6 +113,8 @@ DecisionToPaperUsefulnessMatchStatus = Literal["matched", "open", "missing", "in
 DecisionToPaperUsefulnessMatchMode = Literal["paper_trade_id"]
 PaperTradeOutcomeDirection = Literal["favorable", "flat", "adverse", "open", "invalid"]
 SignalQualityStabilityClassification = Literal["stable", "weak", "failing"]
+BacktestRealismCalibrationStatus = Literal["stable", "weak", "failing", "missing"]
+ConfidenceCalibrationClassification = Literal["stable", "weak", "failing"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -705,6 +717,206 @@ def evaluate_bounded_signal_quality_stability_audit(
         stability_classification=classification,
         stability_reason=reason,
         interpretation_limit=SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY,
+    )
+
+
+class BoundedConfidenceCalibrationAudit(BaseModel):
+    """Bounded confidence-tier calibration against realism coverage and paper outcomes."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = CONFIDENCE_CALIBRATION_CONTRACT_ID
+    contract_version: str = CONFIDENCE_CALIBRATION_CONTRACT_VERSION
+    covered_case_id: str = Field(min_length=1)
+    confidence_tier: DecisionConfidenceTier
+    backtest_realism_status: BacktestRealismCalibrationStatus
+    backtest_realism_reason: str = Field(min_length=24)
+    match_reference: BoundedDecisionToPaperUsefulnessMatchReference | None = None
+    match_status: DecisionToPaperUsefulnessMatchStatus
+    matched_outcome: BoundedPaperTradeOutcome | None = None
+    calibration_classification: ConfidenceCalibrationClassification
+    calibration_reason: str = Field(min_length=24)
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != CONFIDENCE_CALIBRATION_CONTRACT_ID:
+            raise ValueError(f"Unsupported confidence calibration contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != CONFIDENCE_CALIBRATION_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported confidence calibration contract_version: {value}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_match_alignment(self) -> "BoundedConfidenceCalibrationAudit":
+        if self.match_status == "missing":
+            if self.matched_outcome is not None:
+                raise ValueError("matched_outcome must be omitted when match_status is missing")
+        else:
+            if self.matched_outcome is None:
+                raise ValueError(
+                    "matched_outcome is required when match_status is matched, open, or invalid"
+                )
+        lowered_limit = self.interpretation_limit.casefold()
+        required_phrases = (
+            "non-live",
+            "trader validation",
+            "profitability forecasting",
+            "live-trading readiness",
+            "operational readiness",
+        )
+        if not all(phrase in lowered_limit for phrase in required_phrases):
+            raise ValueError(
+                "interpretation_limit must keep non-live confidence calibration separate from "
+                "trader validation, profitability forecasting, and readiness claims"
+            )
+        return self
+
+
+def _classify_confidence_calibration(
+    *,
+    confidence_tier: DecisionConfidenceTier,
+    backtest_realism_status: BacktestRealismCalibrationStatus,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    matched_outcome: BoundedPaperTradeOutcome | None,
+) -> tuple[ConfidenceCalibrationClassification, str]:
+    if backtest_realism_status == "missing" or match_status == "missing":
+        return (
+            "weak",
+            "Covered confidence tier lacks either matched paper evidence or covered backtest-realism "
+            "evidence, so calibration remains weak in bounded non-live review.",
+        )
+
+    if backtest_realism_status == "failing" or match_status == "invalid":
+        if confidence_tier == "low":
+            return (
+                "stable",
+                "Covered confidence tier remains low while realism coverage or paper matching is "
+                "failing, so bounded calibration is stable in non-live review.",
+            )
+        return (
+            "failing",
+            "Covered confidence tier overstates evidence while realism coverage or paper matching is "
+            "failing, so bounded calibration is failing in non-live review.",
+        )
+
+    if match_status == "open":
+        if confidence_tier == "high":
+            return (
+                "weak",
+                "Covered confidence tier stays high while the matched paper trade remains open, so "
+                "bounded calibration is weak until the downstream outcome closes.",
+            )
+        return (
+            "stable",
+            "Covered confidence tier remains cautious while the matched paper trade is still open, "
+            "so bounded calibration is stable in non-live review.",
+        )
+
+    if matched_outcome is None:
+        return (
+            "weak",
+            "Matched paper outcome is unavailable, so bounded confidence calibration remains weak.",
+        )
+
+    if matched_outcome.outcome_direction == "adverse":
+        if confidence_tier == "low":
+            return (
+                "stable",
+                "Covered confidence tier remains low and the matched paper trade closed adverse, so "
+                "bounded calibration is stable in non-live review.",
+            )
+        return (
+            "failing",
+            "Covered confidence tier remained above low while the matched paper trade closed adverse, "
+            "so bounded calibration is failing in non-live review.",
+        )
+
+    if matched_outcome.outcome_direction == "flat":
+        if confidence_tier == "high":
+            return (
+                "weak",
+                "Covered confidence tier remains high while the matched paper trade closed flat, so "
+                "bounded calibration is weak in non-live review.",
+            )
+        return (
+            "stable",
+            "Covered confidence tier stays bounded at medium/low while the matched paper trade closed "
+            "flat, so calibration is stable in non-live review.",
+        )
+
+    # favorable
+    if backtest_realism_status == "stable":
+        if confidence_tier == "low":
+            return (
+                "weak",
+                "Covered confidence tier remains low even though realism coverage is stable and the "
+                "matched paper trade closed favorable, so bounded calibration is weak in non-live review.",
+            )
+        return (
+            "stable",
+            "Covered confidence tier aligns with stable realism coverage and a favorable matched paper "
+            "outcome, so bounded calibration is stable in non-live review.",
+        )
+
+    # backtest_realism_status == "weak"
+    if confidence_tier == "high":
+        return (
+            "weak",
+            "Covered confidence tier remains high while backtest-realism coverage is only weak, so "
+            "bounded calibration is weak despite the favorable matched paper outcome.",
+        )
+    return (
+        "stable",
+        "Covered confidence tier remains bounded at medium/low while backtest-realism coverage is weak "
+        "and the matched paper outcome is favorable, so calibration is stable in non-live review.",
+    )
+
+
+def evaluate_bounded_confidence_calibration_audit(
+    *,
+    covered_case_id: str,
+    confidence_tier: DecisionConfidenceTier,
+    backtest_realism_status: BacktestRealismCalibrationStatus,
+    backtest_realism_reason: str,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    match_reference: dict[str, Any] | None = None,
+    matched_outcome: dict[str, Any] | None = None,
+) -> BoundedConfidenceCalibrationAudit:
+    normalized_match_reference = (
+        BoundedDecisionToPaperUsefulnessMatchReference.model_validate(match_reference)
+        if match_reference is not None
+        else None
+    )
+    normalized_matched_outcome = (
+        BoundedPaperTradeOutcome.model_validate(matched_outcome)
+        if matched_outcome is not None
+        else None
+    )
+    classification, reason = _classify_confidence_calibration(
+        confidence_tier=confidence_tier,
+        backtest_realism_status=backtest_realism_status,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+    )
+    return BoundedConfidenceCalibrationAudit(
+        covered_case_id=covered_case_id,
+        confidence_tier=confidence_tier,
+        backtest_realism_status=backtest_realism_status,
+        backtest_realism_reason=backtest_realism_reason,
+        match_reference=normalized_match_reference,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+        calibration_classification=classification,
+        calibration_reason=reason,
+        interpretation_limit=CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY,
     )
 
 

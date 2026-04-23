@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from cilly_trading.engine.decision_card_contract import (
+    CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY,
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
     CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY,
     QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY,
@@ -364,6 +365,30 @@ def test_signal_quality_contract_doc_mentions_bounded_robustness_claim_limits() 
     assert "failing" in content
     assert "covered conditions" in content
     assert "trader_validation" in content
+
+
+def test_signal_quality_contract_doc_mentions_bounded_confidence_calibration() -> None:
+    content = (REPO_ROOT / "docs" / "governance" / "signal-quality-bounded-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Confidence Calibration Boundary" in content
+    assert "backtest-realism" in content
+    assert "matched paper-trade outcomes" in content
+    assert "stable" in content
+    assert "weak" in content
+    assert "failing" in content
+    assert "non-live" in content
+
+
+def test_confidence_calibration_boundary_constant_is_defined() -> None:
+    boundary = CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY.casefold()
+
+    assert isinstance(CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY, str)
+    assert "non-live" in boundary
+    assert "trader validation" in boundary
+    assert "profitability forecasting" in boundary
+    assert "live-trading readiness" in boundary
 
 
 def test_qualification_profile_robustness_boundary_constant_is_defined() -> None:

@@ -1139,6 +1139,42 @@ def decision_card_item_sort_key(
     return (timestamp, item.decision_card_id, item.run_id, item.artifact_name)
 
 
+def _extract_realism_sensitivity_matrix(content: Any) -> dict[str, Any] | None:
+    if isinstance(content, dict):
+        metrics_baseline = content.get("metrics_baseline")
+        if isinstance(metrics_baseline, dict):
+            matrix = metrics_baseline.get("realism_sensitivity_matrix")
+            if isinstance(matrix, dict):
+                return matrix
+        for value in content.values():
+            matrix = _extract_realism_sensitivity_matrix(value)
+            if matrix is not None:
+                return matrix
+        return None
+    if isinstance(content, list):
+        for value in content:
+            matrix = _extract_realism_sensitivity_matrix(value)
+            if matrix is not None:
+                return matrix
+    return None
+
+
+def _load_run_realism_sensitivity_matrix(run_dir: Path) -> dict[str, Any] | None:
+    if not run_dir.exists():
+        return None
+
+    for artifact_path in sorted(run_dir.iterdir(), key=lambda path: path.name):
+        if artifact_path.suffix.casefold() != ".json" or not artifact_path.is_file():
+            continue
+        content_type, content = read_journal_artifact_content(artifact_path)
+        if content_type != "json":
+            continue
+        matrix = _extract_realism_sensitivity_matrix(content)
+        if matrix is not None:
+            return matrix
+    return None
+
+
 def build_decision_card_inspection_items(
     *,
     params: DecisionCardInspectionQuery,
@@ -1146,6 +1182,7 @@ def build_decision_card_inspection_items(
 ) -> List[DecisionCardInspectionItemResponse]:
     items: List[DecisionCardInspectionItemResponse] = []
     seen: set[tuple[str, str, str, str]] = set()
+    run_realism_cache: dict[str, dict[str, Any] | None] = {}
 
     for run_id, artifact_path in iter_journal_artifact_files(
         journal_artifacts_root=journal_artifacts_root
@@ -1192,6 +1229,11 @@ def build_decision_card_inspection_items(
 
             metadata = dict(card.metadata)
             canonical_repo = paper_inspection_service.resolve_runtime_canonical_execution_repo()
+            if run_id not in run_realism_cache:
+                run_realism_cache[run_id] = _load_run_realism_sensitivity_matrix(
+                    artifact_path.parent
+                )
+            realism_sensitivity_matrix = run_realism_cache[run_id]
             match_reference = metadata.get("bounded_decision_to_paper_match")
             usefulness_audit = paper_inspection_service.build_bounded_decision_to_paper_usefulness_audit(
                 canonical_execution_repo=canonical_repo,
@@ -1224,6 +1266,19 @@ def build_decision_card_inspection_items(
             )
             if stability_audit is not None:
                 metadata["bounded_signal_quality_stability_audit"] = stability_audit
+
+            metadata["bounded_confidence_calibration_audit"] = (
+                paper_inspection_service.build_bounded_confidence_calibration_audit(
+                    canonical_execution_repo=canonical_repo,
+                    decision_card_id=card.decision_card_id,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    confidence_tier=card.score.confidence_tier,
+                    realism_sensitivity_matrix=realism_sensitivity_matrix,
+                    match_reference=match_reference,
+                )
+            )
 
             paper_match_status, paper_trade_id = (
                 paper_inspection_service.resolve_bounded_paper_linkage_status(
