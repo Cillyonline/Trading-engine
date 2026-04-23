@@ -95,6 +95,33 @@ audit output.
 Weak or failing slices limit interpretation outside covered conditions and do not expand
 live-trading approval, paper profitability, or trader_validation claims.
 
+## Confidence Calibration Boundary
+
+Score-confidence interpretation is additionally bounded by one deterministic calibration
+contract that relates:
+
+- the covered `confidence_tier`
+- covered backtest-realism sensitivity evidence
+- matched paper-trade outcomes when an explicit `paper_trade_id` link exists
+
+This calibration contract does not rescore strategies and does not change execution
+behavior. It classifies confidence behavior only:
+
+- `stable`: the covered confidence tier stays aligned with stable/complete realism coverage
+  and the matched paper outcome does not contradict the bounded interpretation
+- `weak`: the covered confidence tier remains only partially supported, or covered realism /
+  downstream paper evidence is missing or still open
+- `failing`: the covered confidence tier overstates evidence relative to failing realism
+  coverage or a contradictory matched paper outcome
+
+The calibration remains non-live and bounded:
+
+- it does not imply trader validation
+- it does not imply paper profitability
+- it does not imply live-trading readiness or operational readiness
+- missing backtest-realism evidence or missing matched paper evidence limits calibration to
+  weak bounded interpretation rather than inflating confidence claims
+
 ## Deterministic Ranking Boundary
 
 For setup-stage candidates that meet the configured score floor, ranking is deterministic:

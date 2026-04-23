@@ -7,8 +7,12 @@ import pytest
 from pydantic import ValidationError
 
 from cilly_trading.engine.decision_card_contract import (
+    CONFIDENCE_CALIBRATION_CONTRACT_ID,
+    CONFIDENCE_CALIBRATION_CONTRACT_VERSION,
     DECISION_CARD_CONTRACT_VERSION,
+    BoundedConfidenceCalibrationAudit,
     DecisionCard,
+    evaluate_bounded_confidence_calibration_audit,
     serialize_decision_card,
     validate_decision_card,
 )
@@ -339,3 +343,87 @@ def test_negative_validation_rejects_additional_forbidden_claim_phrases(forbidde
 
     with pytest.raises(ValidationError, match="confidence_reason contains unsupported claim language"):
         validate_decision_card(payload)
+
+
+@pytest.mark.parametrize(
+    ("confidence_tier", "realism_status", "match_status", "outcome_direction", "expected"),
+    [
+        ("high", "stable", "matched", "favorable", "stable"),
+        ("high", "stable", "matched", "adverse", "failing"),
+        ("high", "weak", "matched", "favorable", "weak"),
+        ("medium", "weak", "matched", "favorable", "stable"),
+        ("low", "failing", "matched", "adverse", "stable"),
+        ("low", "stable", "matched", "favorable", "weak"),
+        ("medium", "missing", "missing", None, "weak"),
+    ],
+)
+def test_bounded_confidence_calibration_bucket_regression(
+    confidence_tier: str,
+    realism_status: str,
+    match_status: str,
+    outcome_direction: str | None,
+    expected: str,
+) -> None:
+    matched_outcome = None
+    match_reference = None
+    if match_status != "missing":
+        match_reference = {"match_mode": "paper_trade_id", "paper_trade_id": "tr-1"}
+        matched_outcome = {
+            "trade_id": "tr-1",
+            "position_id": "pos-1",
+            "symbol": "AAPL",
+            "strategy_id": "RSI2",
+            "trade_status": "open" if match_status == "open" else "closed",
+            "opened_at_utc": "2026-04-01T08:05:00Z",
+            "closed_at_utc": None if match_status == "open" else "2026-04-01T08:45:00Z",
+            "outcome_direction": outcome_direction or "open",
+            "realized_pnl": "1.50" if outcome_direction == "favorable" else "-1.50",
+            "unrealized_pnl": None,
+            "outcome_summary": "Matched paper trade contributes deterministic bounded calibration evidence.",
+        }
+
+    audit = evaluate_bounded_confidence_calibration_audit(
+        covered_case_id="dc-calibration",
+        confidence_tier=confidence_tier,
+        backtest_realism_status=realism_status,
+        backtest_realism_reason="Backtest realism coverage remains bounded for deterministic calibration review.",
+        match_status=match_status,
+        match_reference=match_reference,
+        matched_outcome=matched_outcome,
+    )
+
+    assert isinstance(audit, BoundedConfidenceCalibrationAudit)
+    assert audit.contract_id == CONFIDENCE_CALIBRATION_CONTRACT_ID
+    assert audit.contract_version == CONFIDENCE_CALIBRATION_CONTRACT_VERSION
+    assert audit.calibration_classification == expected
+
+
+def test_bounded_confidence_calibration_is_deterministic_for_identical_inputs() -> None:
+    common = {
+        "covered_case_id": "dc-calibration",
+        "confidence_tier": "high",
+        "backtest_realism_status": "stable",
+        "backtest_realism_reason": (
+            "Backtest realism coverage remains bounded for deterministic calibration review."
+        ),
+        "match_status": "matched",
+        "match_reference": {"match_mode": "paper_trade_id", "paper_trade_id": "tr-1"},
+        "matched_outcome": {
+            "trade_id": "tr-1",
+            "position_id": "pos-1",
+            "symbol": "AAPL",
+            "strategy_id": "RSI2",
+            "trade_status": "closed",
+            "opened_at_utc": "2026-04-01T08:05:00Z",
+            "closed_at_utc": "2026-04-01T08:45:00Z",
+            "outcome_direction": "favorable",
+            "realized_pnl": "1.50",
+            "unrealized_pnl": None,
+            "outcome_summary": "Matched paper trade contributes deterministic bounded calibration evidence.",
+        },
+    }
+
+    first = evaluate_bounded_confidence_calibration_audit(**common)
+    second = evaluate_bounded_confidence_calibration_audit(**common)
+
+    assert first.model_dump() == second.model_dump()

@@ -201,6 +201,51 @@ def _decision_card_payload(
     return payload
 
 
+def _backtest_artifact_payload(*, unstable: bool = False) -> dict[str, Any]:
+    baseline_cost = 12.0
+    stress_cost = 18.0 if not unstable else 10.0
+    return {
+        "metrics_baseline": {
+            "realism_sensitivity_matrix": {
+                "matrix_version": "1.0.0",
+                "deterministic": True,
+                "baseline_profile_id": "configured_baseline",
+                "profile_order": [
+                    "configured_baseline",
+                    "cost_free_reference",
+                    "bounded_cost_stress",
+                ],
+                "profiles": [
+                    {
+                        "profile_id": "configured_baseline",
+                        "summary": {
+                            "total_transaction_cost": baseline_cost,
+                            "total_commission": 6.0,
+                            "total_slippage_cost": 6.0,
+                        },
+                    },
+                    {
+                        "profile_id": "cost_free_reference",
+                        "summary": {
+                            "total_transaction_cost": 0.0,
+                            "total_commission": 0.0,
+                            "total_slippage_cost": 0.0,
+                        },
+                    },
+                    {
+                        "profile_id": "bounded_cost_stress",
+                        "summary": {
+                            "total_transaction_cost": stress_cost,
+                            "total_commission": 9.0 if not unstable else 5.0,
+                            "total_slippage_cost": 9.0 if not unstable else 5.0,
+                        },
+                    },
+                ],
+            }
+        }
+    }
+
+
 def _client(
     monkeypatch,
     artifacts_root: Path,
@@ -837,3 +882,118 @@ def test_decision_card_inspection_persists_deterministic_signal_quality_stabilit
     assert missing["stability_classification"] == "weak"
     assert missing["matched_outcome"] is None
     assert missing["match_reference"] is None
+
+
+def test_decision_card_inspection_persists_bounded_confidence_calibration_audit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-cal-stable",
+            strategy_id="RSI2",
+            symbol="AAPL",
+            status="closed",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at="2026-03-24T09:05:00Z",
+            realized_pnl="2.50",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-cal-failing",
+            strategy_id="RSI2",
+            symbol="MSFT",
+            status="closed",
+            opened_at="2026-03-24T10:05:00Z",
+            closed_at="2026-03-24T11:05:00Z",
+            realized_pnl="-2.50",
+            unrealized_pnl=None,
+        )
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-calibration-stable",
+        artifact_name="backtest-result.json",
+        payload=_backtest_artifact_payload(),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-calibration-stable",
+        artifact_name="decision-card.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-cal-stable",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-cal-stable",
+        ),
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-calibration-failing",
+        artifact_name="backtest-result.json",
+        payload=_backtest_artifact_payload(unstable=True),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-calibration-failing",
+        artifact_name="decision-card.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-cal-failing",
+            generated_at_utc="2026-03-24T10:00:00Z",
+            symbol="MSFT",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-cal-failing",
+        ),
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-calibration-missing",
+        artifact_name="decision-card.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-cal-missing",
+            generated_at_utc="2026-03-24T12:00:00Z",
+            symbol="GOOG",
+            strategy_id="RSI2",
+            qualification_state="paper_candidate",
+            paper_trade_id=None,
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        first = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+        second = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+
+    by_id = {item["decision_card_id"]: item for item in first.json()["items"]}
+
+    stable = by_id["dc-cal-stable"]["metadata"]["bounded_confidence_calibration_audit"]
+    assert stable["contract_id"] == "bounded_confidence_calibration.realism_to_paper.paper_audit.v1"
+    assert stable["contract_version"] == "1.0.0"
+    assert stable["backtest_realism_status"] == "stable"
+    assert stable["match_status"] == "matched"
+    assert stable["matched_outcome"]["outcome_direction"] == "favorable"
+    assert stable["calibration_classification"] == "stable"
+
+    failing = by_id["dc-cal-failing"]["metadata"]["bounded_confidence_calibration_audit"]
+    assert failing["backtest_realism_status"] == "failing"
+    assert failing["match_status"] == "matched"
+    assert failing["matched_outcome"]["outcome_direction"] == "adverse"
+    assert failing["calibration_classification"] == "failing"
+
+    missing = by_id["dc-cal-missing"]["metadata"]["bounded_confidence_calibration_audit"]
+    assert missing["backtest_realism_status"] == "missing"
+    assert missing["match_status"] == "missing"
+    assert missing["matched_outcome"] is None
+    assert missing["calibration_classification"] == "weak"
+    assert "non-live" in missing["interpretation_limit"]
