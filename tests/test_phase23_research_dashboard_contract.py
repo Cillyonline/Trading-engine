@@ -176,3 +176,50 @@ def test_aligned_docs_do_not_state_readiness_inference_claims() -> None:
         content = _read(path).lower()
         for phrase in prohibited_phrases:
             assert phrase not in content, f"{phrase!r} must not appear in {path}"
+
+
+def test_ui_surface_declares_consolidated_bounded_operator_workflow() -> None:
+    content = _read(UI_FILE)
+
+    assert 'id="ui-consolidated-operator-workflow"' in content
+    assert 'id="ui-consolidated-operator-workflow-steps"' in content
+    assert 'id="ui-consolidated-operator-workflow-non-live-boundary"' in content
+    assert 'id="ui-consolidated-operator-workflow-canonical-reads"' in content
+    assert 'id="decision-review"' in content
+    assert "Consolidated Bounded Operator Workflow" in content
+    assert "Step 1 &middot; Watchlist:" in content
+    assert "Step 2 &middot; Analysis:" in content
+    assert "Step 3 &middot; Decision Review:" in content
+    assert "Step 4 &middot; Backtest Evidence:" in content
+    assert 'href="#watchlist-workflow"' in content
+    assert 'href="#analysis-entry"' in content
+    assert 'href="#decision-review"' in content
+    assert 'href="#backtest-entry"' in content
+    assert "/signals/decision-surface" in content
+    assert "/backtest/artifacts" in content
+    assert "/watchlists/{watchlist_id}/execute" in content
+    assert "does not introduce live trading" in content
+    assert "broker integration" in content
+    assert "strategy optimization" in content
+
+
+def test_phase23_contract_declares_consolidated_bounded_operator_workflow() -> None:
+    content = _read(PHASE23_CONTRACT_DOC)
+
+    assert "## Consolidated Bounded Operator Workflow" in content
+    assert "Step 1 \u00b7 Watchlist" in content
+    assert "Step 2 \u00b7 Analysis" in content
+    assert "Step 3 \u00b7 Decision Review" in content
+    assert "Step 4 \u00b7 Backtest Evidence" in content
+    assert "`#decision-review`" in content
+    assert "`#watchlist-workflow`" in content
+    assert "`#analysis-entry`" in content
+    assert "`#backtest-entry`" in content
+    assert "`id=\"ui-consolidated-operator-workflow\"`" in content
+    assert "`GET /signals/decision-surface`" in content
+    assert "`GET /backtest/artifacts`" in content
+    assert "`POST /watchlists/{watchlist_id}/execute`" in content
+    assert "reuses existing canonical APIs and read surfaces" in content
+    assert "does not introduce new execution logic" in content
+    assert "Phase 36" in content
+    assert "Phase 40" in content
