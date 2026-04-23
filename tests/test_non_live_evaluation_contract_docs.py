@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from cilly_trading.non_live_evaluation_contract import (
     CANONICAL_RISK_REJECTION_REASON_CODES,
     RISK_REJECTION_REASON_PRECEDENCE,
@@ -15,6 +17,10 @@ from tests.utils.consumer_contract_helpers import (
 CONTRACT_DOC = "docs/architecture/risk/non_live_evaluation_contract.md"
 GOVERNANCE_DOC = "docs/governance/qualification-claim-evidence-discipline.md"
 PHASE44_DOC = "docs/operations/runtime/phase-44-paper-operator-workflow.md"
+
+
+def _read(path: Path) -> str:
+    return read_repo_text(path.as_posix())
 
 
 def _extract_bullet_codes_after_heading(content: str, heading: str) -> list[str]:
@@ -146,6 +152,17 @@ def test_non_live_contract_doc_explicitly_locks_cross_surface_determinism_bounda
         "normalized_reason_codes",
         "does not aggregate multiple compatible reason",
     )
+
+
+def test_non_live_contract_doc_locks_fail_closed_evidence_discipline_and_legacy_mapping() -> None:
+    content = _read(Path(CONTRACT_DOC))
+
+    assert "deterministic rejection path" in content
+    assert "fails closed when covered required evidence is contradictory or malformed" in content
+    assert "legacy reason-only rejects" in content
+    assert "deterministic synthetic evidence row" in content
+    assert "technical non-live evidence only" in content
+    assert "not live-trading or broker-readiness evidence" in content
 
 
 def test_risk_and_portfolio_docs_reference_canonical_non_live_contract() -> None:

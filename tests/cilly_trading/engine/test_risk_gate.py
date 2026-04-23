@@ -9,12 +9,14 @@ from risk.contracts import RiskEvaluationRequest
 
 from cilly_trading.engine.risk import (
     RISK_FRAMEWORK_REASON_CODES,
+    RiskEvidenceDisciplineError,
     ThresholdRiskGate,
     adapt_risk_framework_response_to_risk_decision,
     evaluate_risk_framework_execution_decision,
 )
 from cilly_trading.non_live_evaluation_contract import (
     CANONICAL_RISK_REJECTION_REASON_CODES,
+    NonLiveEvaluationEvidence,
     normalize_risk_rejection_reason_code,
     resolve_risk_rejection_reason_precedence,
 )
@@ -31,6 +33,15 @@ class _LegacyRuntimeRiskResponse:
     reason: str
     adjusted_position_size: float
     risk_score: float
+
+
+@dataclass(frozen=True)
+class _RuntimeRiskResponseWithEvidence:
+    approved: bool
+    reason: str
+    adjusted_position_size: float
+    risk_score: float
+    policy_evidence: tuple[object, ...]
 
 
 def _policy_evidence_or_empty(decision: object) -> tuple[object, ...]:
@@ -241,7 +252,152 @@ def test_adapter_handles_runtime_response_without_policy_evidence() -> None:
 
     assert decision.decision == "REJECTED"
     assert decision.reason == "rejected:risk_framework_max_account_exposure_pct_exceeded"
-    assert _policy_evidence_or_empty(decision) == ()
+    if _decision_has_policy_evidence(decision):
+        policy_evidence = _policy_evidence_or_empty(decision)
+        assert len(policy_evidence) == 1
+        assert policy_evidence[0].reason_code == "rejected: max_account_exposure_pct_exceeded"
+        assert policy_evidence[0].scope == "portfolio"
+    else:
+        assert _policy_evidence_or_empty(decision) == ()
+
+
+def test_adapter_rejects_contradictory_evidence_when_response_is_approved() -> None:
+    with pytest.raises(
+        RiskEvidenceDisciplineError,
+        match="approved risk decision contains covered rejection evidence rows",
+    ):
+        adapt_risk_framework_response_to_risk_decision(
+            framework_request=_framework_request(),
+            framework_response=_RuntimeRiskResponseWithEvidence(
+                approved=True,
+                reason="approved: within_risk_limits",
+                adjusted_position_size=400.0,
+                risk_score=0.6,
+                policy_evidence=(
+                    NonLiveEvaluationEvidence(
+                        decision="reject",
+                        semantic="cap",
+                        scope="trade",
+                        rule_code="max_position_size",
+                        reason_code="rejected: max_position_size_exceeded",
+                        observed_value=600.0,
+                        limit_value=500.0,
+                    ),
+                ),
+            ),
+            limits=_framework_limits(),
+            strategy_exposure=200.0,
+            symbol_exposure=100.0,
+            rule_version="adapter-v1",
+            evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+
+def test_adapter_rejects_contradictory_approve_evidence_when_response_is_rejected() -> None:
+    with pytest.raises(
+        RiskEvidenceDisciplineError,
+        match="decision='approve'",
+    ):
+        adapt_risk_framework_response_to_risk_decision(
+            framework_request=_framework_request(),
+            framework_response=_RuntimeRiskResponseWithEvidence(
+                approved=False,
+                reason="rejected: max_position_size_exceeded",
+                adjusted_position_size=500.0,
+                risk_score=0.8,
+                policy_evidence=(
+                    {
+                        "decision": "approve",
+                        "scope": "trade",
+                        "reason_code": "rejected: max_position_size_exceeded",
+                    },
+                ),
+            ),
+            limits=_framework_limits(),
+            strategy_exposure=200.0,
+            symbol_exposure=100.0,
+            rule_version="adapter-v1",
+            evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+
+def test_adapter_fails_closed_when_covered_evidence_reason_code_is_missing() -> None:
+    with pytest.raises(
+        RiskEvidenceDisciplineError,
+        match="must include non-empty reason_code",
+    ):
+        adapt_risk_framework_response_to_risk_decision(
+            framework_request=_framework_request(),
+            framework_response=_RuntimeRiskResponseWithEvidence(
+                approved=False,
+                reason="rejected: max_position_size_exceeded",
+                adjusted_position_size=500.0,
+                risk_score=0.8,
+                policy_evidence=(
+                    {
+                        "decision": "reject",
+                        "scope": "trade",
+                        "reason_code": "",
+                    },
+                ),
+            ),
+            limits=_framework_limits(),
+            strategy_exposure=200.0,
+            symbol_exposure=100.0,
+            rule_version="adapter-v1",
+            evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+
+
+def test_adapter_precedence_is_deterministic_for_multi_violation_evidence_rows() -> None:
+    framework_response = _RuntimeRiskResponseWithEvidence(
+        approved=False,
+        reason="rejected: max_symbol_exposure_pct_exceeded",
+        adjusted_position_size=200.0,
+        risk_score=0.7,
+        policy_evidence=(
+            NonLiveEvaluationEvidence(
+                decision="reject",
+                semantic="cap",
+                scope="portfolio",
+                rule_code="max_account_exposure_pct",
+                reason_code="rejected: max_account_exposure_pct_exceeded",
+                observed_value=0.91,
+                limit_value=0.80,
+            ),
+            NonLiveEvaluationEvidence(
+                decision="reject",
+                semantic="cap",
+                scope="trade",
+                rule_code="max_position_size",
+                reason_code="rejected: max_position_size_exceeded",
+                observed_value=900.0,
+                limit_value=500.0,
+            ),
+        ),
+    )
+
+    first = adapt_risk_framework_response_to_risk_decision(
+        framework_request=_framework_request(),
+        framework_response=framework_response,
+        limits=_framework_limits(),
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    second = adapt_risk_framework_response_to_risk_decision(
+        framework_request=_framework_request(),
+        framework_response=framework_response,
+        limits=_framework_limits(),
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert first == second
+    assert first.reason == "rejected:risk_framework_max_position_size_exceeded"
 
 
 def test_canonical_rejection_reason_vocabulary_is_exposed_in_gate_map() -> None:

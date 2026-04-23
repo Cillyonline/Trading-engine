@@ -87,6 +87,11 @@ Execution adapter propagation:
 - normalizes reason codes to canonical vocabulary
 - enforces deterministic precedence for multi-violation candidates
 - propagates `policy_evidence` into `RiskDecision`
+- evaluates covered trade/symbol/strategy/portfolio/runtime evidence through one
+  deterministic rejection path
+- fails closed when covered required evidence is contradictory or malformed
+- preserves bounded compatibility by mapping legacy reason-only rejects to one
+  deterministic synthetic evidence row when explicit evidence rows are absent
 
 Portfolio producers:
 
@@ -144,6 +149,9 @@ Cross-surface deterministic contract:
 - equivalent bounded non-live input state must emit the same canonical reject
   reason code across risk gate and paper execution worker surfaces.
 - deterministic precedence is mandatory when multiple constraints are violated.
+- contradictory covered evidence for an approved decision is fail-closed.
+- contradictory or malformed covered evidence for a rejected decision is
+  fail-closed.
 - inspection/read surfaces provide best-effort single-field normalization to
   `normalized_reason_code` without multi-reason precedence selection.
 - this contract is technical non-live evidence only and is not live-trading or broker-readiness evidence.
