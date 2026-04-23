@@ -21,7 +21,9 @@ from cilly_trading.engine.telemetry.schema import (
     build_telemetry_event,
 )
 from cilly_trading.non_live_evaluation_contract import (
+    NonLiveEvaluationEvidence,
     RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON,
+    normalize_risk_rejection_reason_code,
     resolve_risk_rejection_reason_precedence,
 )
 from cilly_trading.risk_framework.allocation_rules import RiskLimits as FrameworkRiskLimits
@@ -56,6 +58,39 @@ RISK_FRAMEWORK_REASON_CODES: dict[str, str] = {
 _RISK_DECISION_ACCEPTS_POLICY_EVIDENCE = (
     "policy_evidence" in inspect.signature(RiskDecision).parameters
 )
+_COVERED_EVIDENCE_SCOPES: frozenset[str] = frozenset(
+    {
+        "trade",
+        "symbol",
+        "strategy",
+        "portfolio",
+        "runtime",
+    }
+)
+
+_RISK_REASON_TO_EVIDENCE_METADATA: dict[str, tuple[str, str, str]] = {
+    "rejected: kill_switch_enabled": ("boundary", "runtime", "kill_switch_enabled"),
+    "rejected: max_position_size_exceeded": ("cap", "trade", "max_position_size"),
+    "rejected: max_account_exposure_pct_exceeded": (
+        "cap",
+        "portfolio",
+        "max_account_exposure_pct",
+    ),
+    "rejected: max_strategy_exposure_pct_exceeded": (
+        "cap",
+        "strategy",
+        "max_strategy_exposure_pct",
+    ),
+    "rejected: max_symbol_exposure_pct_exceeded": (
+        "cap",
+        "symbol",
+        "max_symbol_exposure_pct",
+    ),
+}
+
+
+class RiskEvidenceDisciplineError(ValueError):
+    """Raised when bounded risk evidence is missing or contradictory."""
 
 
 def _safe_pct(numerator: float, denominator: float) -> float:
@@ -77,6 +112,62 @@ def _extract_policy_evidence(
     if isinstance(evidence, list):
         return tuple(evidence)
     return ()
+
+
+def _read_evidence_field(evidence: object, field_name: str) -> object | None:
+    if isinstance(evidence, Mapping):
+        return evidence.get(field_name)
+    return getattr(evidence, field_name, None)
+
+
+def _collect_covered_rejection_reason_codes(
+    policy_evidence: tuple[Any, ...],
+) -> tuple[str, ...]:
+    rejection_reason_codes: list[str] = []
+    for evidence in policy_evidence:
+        scope = _read_evidence_field(evidence, "scope")
+        if scope not in _COVERED_EVIDENCE_SCOPES:
+            continue
+        decision = _read_evidence_field(evidence, "decision")
+        if decision not in {"approve", "reject"}:
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence must declare decision='approve' or decision='reject'"
+            )
+        reason_code = _read_evidence_field(evidence, "reason_code")
+        if not isinstance(reason_code, str) or not reason_code:
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence must include non-empty reason_code"
+            )
+        if decision == "approve":
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence contradicts rejection discipline: decision='approve'"
+            )
+        normalize_risk_rejection_reason_code(reason_code)
+        rejection_reason_codes.append(reason_code)
+    return tuple(rejection_reason_codes)
+
+
+def _build_synthetic_rejection_evidence(
+    *,
+    reason_code: str,
+    observed_value: float,
+    limit_value: float,
+) -> NonLiveEvaluationEvidence:
+    metadata = _RISK_REASON_TO_EVIDENCE_METADATA.get(reason_code)
+    if metadata is None:
+        raise RiskEvidenceDisciplineError(
+            f"cannot synthesize bounded risk evidence for unsupported reason code: {reason_code}"
+        )
+    semantic, scope, rule_code = metadata
+    return NonLiveEvaluationEvidence(
+        decision="reject",
+        semantic=semantic,  # type: ignore[arg-type]
+        scope=scope,  # type: ignore[arg-type]
+        rule_code=rule_code,
+        reason_code=reason_code,
+        observed_value=observed_value,
+        limit_value=limit_value,
+    )
 
 
 def _build_risk_decision(
@@ -122,17 +213,29 @@ def adapt_risk_framework_response_to_risk_decision(
 
     reason = framework_response.reason
     if reason == "approved: within_risk_limits":
+        if _collect_covered_rejection_reason_codes(policy_evidence):
+            raise RiskEvidenceDisciplineError(
+                "approved risk decision contains covered rejection evidence rows"
+            )
         decision = "APPROVED"
         score = float(framework_response.risk_score)
         max_allowed = float(limits.max_account_exposure_pct)
         decision_reason = RISK_FRAMEWORK_REASON_CODES[reason]
     else:
         decision = "REJECTED"
-        precedence_candidates = [framework_response.reason]
-        precedence_candidates.extend(
-            evidence.reason_code for evidence in policy_evidence
-        )
         try:
+            normalize_risk_rejection_reason_code(reason)
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
+            ) from exc
+        evidence_reason_codes = _collect_covered_rejection_reason_codes(policy_evidence)
+        if not evidence_reason_codes:
+            # Compatibility mapping for bounded non-live producers that still emit
+            # reason-only rejects without explicit policy evidence rows.
+            evidence_reason_codes = (reason,)
+        try:
+            precedence_candidates = [reason, *evidence_reason_codes]
             decision_reason = resolve_risk_rejection_reason_precedence(precedence_candidates)
         except ValueError as exc:
             raise ValueError(
@@ -155,6 +258,14 @@ def adapt_risk_framework_response_to_risk_decision(
             max_allowed = float(limits.max_symbol_exposure_pct)
         else:  # pragma: no cover - guarded by reason map above
             raise ValueError(f"unsupported risk-framework reason: {reason}")
+        if not _collect_covered_rejection_reason_codes(policy_evidence):
+            policy_evidence = (
+                _build_synthetic_rejection_evidence(
+                    reason_code=reason,
+                    observed_value=score,
+                    limit_value=max_allowed,
+                ),
+            )
 
     if framework_response.approved != (decision == "APPROVED"):
         raise ValueError("risk-framework approval flag conflicts with mapped execution decision")
@@ -386,6 +497,7 @@ def _emit_guard_trigger_log(*, guard_type: str, payload: Mapping[str, Any]) -> N
 
 __all__ = [
     "RISK_FRAMEWORK_REASON_CODES",
+    "RiskEvidenceDisciplineError",
     "RiskApprovalMissingError",
     "RiskRejectedError",
     "ThresholdRiskGate",

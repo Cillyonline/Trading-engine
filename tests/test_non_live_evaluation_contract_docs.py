@@ -148,6 +148,17 @@ def test_non_live_contract_doc_explicitly_locks_cross_surface_determinism_bounda
     )
 
 
+def test_non_live_contract_doc_locks_fail_closed_evidence_discipline_and_legacy_mapping() -> None:
+    content = _read(CONTRACT_DOC)
+
+    assert "deterministic rejection path" in content
+    assert "fails closed when covered required evidence is contradictory or malformed" in content
+    assert "legacy reason-only rejects" in content
+    assert "deterministic synthetic evidence row" in content
+    assert "technical non-live evidence only" in content
+    assert "not live-trading or broker-readiness evidence" in content
+
+
 def test_risk_and_portfolio_docs_reference_canonical_non_live_contract() -> None:
     risk_framework = read_repo_text("docs/architecture/risk/risk_framework.md")
     portfolio_framework = read_repo_text("docs/architecture/risk/portfolio_framework.md")

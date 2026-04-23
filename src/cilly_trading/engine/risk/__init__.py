@@ -8,6 +8,7 @@ from .authority import (
 from .gate import (
     RISK_FRAMEWORK_REASON_CODES,
     RiskApprovalMissingError,
+    RiskEvidenceDisciplineError,
     RiskRejectedError,
     ThresholdRiskGate,
     adapt_risk_framework_response_to_risk_decision,
@@ -24,6 +25,7 @@ __all__ = [
     "BOUNDED_RISK_FRAMEWORK_AUTHORITY_ID",
     "RISK_FRAMEWORK_REASON_CODES",
     "RiskApprovalMissingError",
+    "RiskEvidenceDisciplineError",
     "RiskRejectedError",
     "ThresholdRiskGate",
     "adapt_risk_framework_response_to_risk_decision",
