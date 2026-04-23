@@ -91,7 +91,51 @@ Claim boundary:
 - it is not live-trading readiness
 - it is not operational readiness
 
-## 6. Runtime and Documentation Alignment Rule
+## 6. Deterministic Bounded Signal-Quality Stability Audit
+
+Canonical contract id/version:
+
+- `bounded_signal_quality_stability.paper_audit.v1`
+- version `1.0.0`
+
+Covered cases:
+
+- only decision cards that expose a covered `signal_quality` component score
+- the matched downstream evidence is resolved through the existing
+  `metadata.bounded_decision_to_paper_match` paper-trade match contract
+- the audit is exposed on covered decision cards as
+  `metadata.bounded_signal_quality_stability_audit`
+
+Deterministic comparison rule:
+
+- the covered `signal_quality` component score is compared against the bounded
+  paper-trade outcome resolved through the same match rule as the
+  decision-to-paper usefulness audit (`paper_trade_id`, same `symbol` and
+  `strategy_id`, opened at or after the decision-card timestamp)
+- comparison thresholds are fixed: `signal_quality_score >= 70.0` is the
+  bounded high band; `< 50.0` is the bounded low band
+
+Stability classification semantics:
+
+- `stable`: the covered signal-quality score is at or above the bounded high
+  threshold and the matched paper trade closed favorable
+- `weak`: the covered signal has no resolved match, the matched trade remains
+  open, the matched trade closed flat, the covered score is below the bounded
+  high threshold against a favorable outcome, or the covered score sits in the
+  bounded intermediate band against an adverse outcome
+- `failing`: the matched trade violates the explicit symbol, strategy, or
+  timing comparison contract, or the matched paper trade closed adverse with a
+  covered signal-quality score outside the bounded intermediate band
+
+Claim boundary:
+
+- the audit is bounded to non-live deterministic signal-quality stability only
+- it is not trader validation
+- it is not profitability forecasting
+- it is not live-trading readiness
+- it is not operational readiness
+
+## 7. Runtime and Documentation Alignment Rule
 
 Documentation and runtime wording must enforce the same boundary:
 
@@ -99,7 +143,7 @@ Documentation and runtime wording must enforce the same boundary:
 - inspection API wording mirrors the same boundary
 - qualification outputs explicitly state they do not imply live-trading approval
 
-## 7. Validation Rule
+## 8. Validation Rule
 
 Where claim-boundary enforcement exists in runtime contracts, validation must fail closed for unsupported claim language.
 Validation is required for:
@@ -108,7 +152,7 @@ Validation is required for:
 - qualification summary text
 - rationale summary/final explanation text
 
-## 8. Non-Goals
+## 9. Non-Goals
 
 This governance contract does not grant:
 

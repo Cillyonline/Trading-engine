@@ -707,3 +707,133 @@ def test_decision_card_inspection_traceability_chain_marks_missing_analysis_run_
     assert chain["signal_analysis"]["analysis_run_id"] is None
     assert chain["signal_analysis"]["linkage_status"] == "missing"
     assert chain["overall_linkage_status"] == "missing"
+
+
+def test_decision_card_inspection_persists_deterministic_signal_quality_stability_audit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-stable",
+            strategy_id="RSI2",
+            symbol="AAPL",
+            status="closed",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at="2026-03-24T08:45:00Z",
+            realized_pnl="1.50",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-failing",
+            strategy_id="TURTLE",
+            symbol="NVDA",
+            status="closed",
+            opened_at="2026-03-24T10:05:00Z",
+            closed_at="2026-03-24T10:35:00Z",
+            realized_pnl="-2.00",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-weak-open",
+            strategy_id="RSI2",
+            symbol="MSFT",
+            status="open",
+            opened_at="2026-03-24T09:05:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="0.25",
+        )
+    )
+
+    _write_artifact(
+        artifacts_root,
+        run_id="run-stability",
+        artifact_name="dc-stable.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-stable",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="AAPL",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-stable",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-stability",
+        artifact_name="dc-failing.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-failing",
+            generated_at_utc="2026-03-24T10:00:00Z",
+            symbol="NVDA",
+            strategy_id="TURTLE",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-failing",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-stability",
+        artifact_name="dc-weak.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-weak",
+            generated_at_utc="2026-03-24T09:00:00Z",
+            symbol="MSFT",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-weak-open",
+        ),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-stability",
+        artifact_name="dc-missing.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-missing",
+            generated_at_utc="2026-03-24T11:00:00Z",
+            symbol="GOOG",
+            strategy_id="RSI2",
+            qualification_state="paper_approved",
+            paper_trade_id=None,
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        first = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+        second = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert first.status_code == 200
+    assert first.json() == second.json()
+
+    by_id = {item["decision_card_id"]: item for item in first.json()["items"]}
+
+    stable = by_id["dc-stable"]["metadata"]["bounded_signal_quality_stability_audit"]
+    assert stable["contract_id"] == "bounded_signal_quality_stability.paper_audit.v1"
+    assert stable["contract_version"] == "1.0.0"
+    assert stable["match_status"] == "matched"
+    assert stable["stability_classification"] == "stable"
+    assert stable["matched_outcome"]["outcome_direction"] == "favorable"
+    assert stable["signal_quality_score"] == 88.0
+    assert "non-live" in stable["interpretation_limit"]
+
+    failing = by_id["dc-failing"]["metadata"]["bounded_signal_quality_stability_audit"]
+    assert failing["match_status"] == "matched"
+    assert failing["stability_classification"] == "failing"
+    assert failing["matched_outcome"]["outcome_direction"] == "adverse"
+
+    weak = by_id["dc-weak"]["metadata"]["bounded_signal_quality_stability_audit"]
+    assert weak["match_status"] == "open"
+    assert weak["stability_classification"] == "weak"
+    assert weak["matched_outcome"]["outcome_direction"] == "open"
+
+    missing = by_id["dc-missing"]["metadata"]["bounded_signal_quality_stability_audit"]
+    assert missing["match_status"] == "missing"
+    assert missing["stability_classification"] == "weak"
+    assert missing["matched_outcome"] is None
+    assert missing["match_reference"] is None

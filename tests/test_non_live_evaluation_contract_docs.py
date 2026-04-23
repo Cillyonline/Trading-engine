@@ -199,6 +199,25 @@ def test_usefulness_governance_doc_defines_exact_non_live_decision_to_paper_cont
     )
 
 
+def test_signal_quality_stability_governance_doc_defines_bounded_audit_contract() -> None:
+    content = read_repo_text(GOVERNANCE_DOC)
+
+    assert_contains_all(
+        content,
+        "Deterministic Bounded Signal-Quality Stability Audit",
+        "bounded_signal_quality_stability.paper_audit.v1",
+        "metadata.bounded_signal_quality_stability_audit",
+        "metadata.bounded_decision_to_paper_match",
+        "`stable`",
+        "`weak`",
+        "`failing`",
+        "it is not trader validation",
+        "it is not profitability forecasting",
+        "it is not live-trading readiness",
+        "it is not operational readiness",
+    )
+
+
 def test_usefulness_docs_keep_non_live_claim_boundaries_explicit() -> None:
     governance = read_repo_text(GOVERNANCE_DOC)
     phase44 = read_repo_text(PHASE44_DOC)
