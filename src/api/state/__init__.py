@@ -3,6 +3,7 @@
 from .alerts_state import (
     ALERT_DELIVERY_SERVICE_ATTR,
     ALERT_CONFIGURATION_STORE_ATTR,
+    ALERT_FILE_SINK_PATH_ENV_VAR,
     ALERT_HISTORY_STORE_ATTR,
     get_alert_delivery_service,
     get_alert_configuration_store,
@@ -13,6 +14,7 @@ from .alerts_state import (
 __all__ = [
     "ALERT_DELIVERY_SERVICE_ATTR",
     "ALERT_CONFIGURATION_STORE_ATTR",
+    "ALERT_FILE_SINK_PATH_ENV_VAR",
     "ALERT_HISTORY_STORE_ATTR",
     "get_alert_delivery_service",
     "get_alert_configuration_store",

@@ -6,6 +6,7 @@ from typing import Protocol
 
 from cilly_trading.alerts.alert_models import AlertEvent
 from .bounded_non_live_channel import BoundedNonLiveChannel
+from .file_sink_channel import FileSinkChannel
 
 
 class NotificationChannel(Protocol):
@@ -17,4 +18,4 @@ class NotificationChannel(Protocol):
         """Deliver an alert event to an external notification destination."""
 
 
-__all__ = ["BoundedNonLiveChannel", "NotificationChannel"]
+__all__ = ["BoundedNonLiveChannel", "FileSinkChannel", "NotificationChannel"]
