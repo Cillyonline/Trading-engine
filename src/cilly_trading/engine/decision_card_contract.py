@@ -51,6 +51,19 @@ DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY = (
     "profitability forecasting, live-trading readiness, or operational readiness."
 )
 
+SIGNAL_QUALITY_STABILITY_CONTRACT_ID = (
+    "bounded_signal_quality_stability.paper_audit.v1"
+)
+SIGNAL_QUALITY_STABILITY_CONTRACT_VERSION = "1.0.0"
+SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY = (
+    "Bounded signal-quality stability audit is bounded to non-live deterministic comparison between "
+    "covered decision-card signal-quality evidence and matched paper-trade outcomes. It does not "
+    "imply trader validation, profitability forecasting, live-trading readiness, or operational "
+    "readiness."
+)
+SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD = 70.0
+SIGNAL_QUALITY_STABILITY_LOW_THRESHOLD = 50.0
+
 END_TO_END_TRACEABILITY_CONTRACT_ID = (
     "signal_to_paper_reconciliation_traceability.paper_audit.v1"
 )
@@ -89,6 +102,7 @@ DecisionToPaperUsefulnessClassification = Literal["explanatory", "weak", "mislea
 DecisionToPaperUsefulnessMatchStatus = Literal["matched", "open", "missing", "invalid"]
 DecisionToPaperUsefulnessMatchMode = Literal["paper_trade_id"]
 PaperTradeOutcomeDirection = Literal["favorable", "flat", "adverse", "open", "invalid"]
+SignalQualityStabilityClassification = Literal["stable", "weak", "failing"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -517,6 +531,180 @@ def evaluate_bounded_decision_to_paper_usefulness_audit(
         usefulness_classification=usefulness_classification,
         usefulness_reason=usefulness_reason,
         interpretation_limit=DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY,
+    )
+
+
+class BoundedSignalQualityStabilityAudit(BaseModel):
+    """Bounded signal-quality stability audit against matched paper outcomes.
+
+    The audit is deterministic and bounded to non-live evidence comparison only.
+    It compares the covered decision-card ``signal_quality`` component score
+    against the matched paper-trade outcome resolved through the existing
+    decision-to-paper match contract and classifies the covered signal as
+    ``stable``, ``weak``, or ``failing``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = SIGNAL_QUALITY_STABILITY_CONTRACT_ID
+    contract_version: str = SIGNAL_QUALITY_STABILITY_CONTRACT_VERSION
+    covered_case_id: str = Field(min_length=1)
+    signal_quality_score: float = Field(ge=0.0, le=100.0)
+    match_reference: BoundedDecisionToPaperUsefulnessMatchReference | None = None
+    match_status: DecisionToPaperUsefulnessMatchStatus
+    matched_outcome: BoundedPaperTradeOutcome | None = None
+    stability_classification: SignalQualityStabilityClassification
+    stability_reason: str = Field(min_length=24)
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != SIGNAL_QUALITY_STABILITY_CONTRACT_ID:
+            raise ValueError(f"Unsupported signal-quality stability contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != SIGNAL_QUALITY_STABILITY_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported signal-quality stability contract_version: {value}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_match_alignment(self) -> "BoundedSignalQualityStabilityAudit":
+        if self.match_status == "missing":
+            if self.matched_outcome is not None:
+                raise ValueError(
+                    "matched_outcome must be omitted when match_status is missing"
+                )
+        else:
+            if self.matched_outcome is None:
+                raise ValueError(
+                    "matched_outcome is required when match_status is matched, open, or invalid"
+                )
+        lowered_limit = self.interpretation_limit.casefold()
+        required_phrases = (
+            "non-live",
+            "trader validation",
+            "profitability forecasting",
+            "live-trading readiness",
+            "operational readiness",
+        )
+        if not all(phrase in lowered_limit for phrase in required_phrases):
+            raise ValueError(
+                "interpretation_limit must keep non-live signal-quality stability separate from "
+                "trader validation, profitability forecasting, and readiness claims"
+            )
+        return self
+
+
+def _classify_signal_quality_stability(
+    *,
+    signal_quality_score: float,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    matched_outcome: BoundedPaperTradeOutcome | None,
+) -> tuple[SignalQualityStabilityClassification, str]:
+    if match_status == "missing":
+        return (
+            "weak",
+            "Covered signal has no matched paper-trade evidence, so bounded signal-quality "
+            "stability remains unproven in non-live review.",
+        )
+    if match_status == "invalid":
+        return (
+            "failing",
+            "Matched paper trade violates the explicit symbol, strategy, or timing comparison "
+            "contract, so bounded signal-quality stability is failing in non-live review.",
+        )
+    if match_status == "open":
+        return (
+            "weak",
+            "Matched paper trade remains open, so bounded signal-quality stability is not yet "
+            "resolved against a closed downstream outcome.",
+        )
+    if matched_outcome is None:
+        return (
+            "weak",
+            "Matched paper outcome is unavailable, so bounded signal-quality stability remains "
+            "weak.",
+        )
+    if matched_outcome.outcome_direction == "favorable":
+        if signal_quality_score >= SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD:
+            return (
+                "stable",
+                "Covered signal-quality score remains at or above the bounded high threshold and "
+                "the matched paper trade closed favorable, so bounded signal-quality stability is "
+                "stable in non-live review.",
+            )
+        return (
+            "weak",
+            "Matched paper trade closed favorable, but the covered signal-quality score is below "
+            "the bounded high threshold, so bounded signal-quality stability remains weak in "
+            "non-live review.",
+        )
+    if matched_outcome.outcome_direction == "flat":
+        return (
+            "weak",
+            "Matched paper trade closed flat, so bounded signal-quality stability remains weak "
+            "in non-live review.",
+        )
+    # adverse
+    if signal_quality_score >= SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD:
+        return (
+            "failing",
+            "Covered signal-quality score is at or above the bounded high threshold but the "
+            "matched paper trade closed adverse, so bounded signal-quality stability is failing "
+            "in non-live review.",
+        )
+    if signal_quality_score < SIGNAL_QUALITY_STABILITY_LOW_THRESHOLD:
+        return (
+            "failing",
+            "Covered signal-quality score is below the bounded low threshold and the matched "
+            "paper trade closed adverse, so bounded signal-quality stability is failing in "
+            "non-live review.",
+        )
+    return (
+        "weak",
+        "Matched paper trade closed adverse with a covered signal-quality score in the bounded "
+        "intermediate band, so bounded signal-quality stability remains weak in non-live review.",
+    )
+
+
+def evaluate_bounded_signal_quality_stability_audit(
+    *,
+    covered_case_id: str,
+    signal_quality_score: float,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    match_reference: dict[str, Any] | None = None,
+    matched_outcome: dict[str, Any] | None = None,
+) -> BoundedSignalQualityStabilityAudit:
+    normalized_match_reference = (
+        BoundedDecisionToPaperUsefulnessMatchReference.model_validate(match_reference)
+        if match_reference is not None
+        else None
+    )
+    normalized_matched_outcome = (
+        BoundedPaperTradeOutcome.model_validate(matched_outcome)
+        if matched_outcome is not None
+        else None
+    )
+    classification, reason = _classify_signal_quality_stability(
+        signal_quality_score=signal_quality_score,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+    )
+    return BoundedSignalQualityStabilityAudit(
+        covered_case_id=covered_case_id,
+        signal_quality_score=signal_quality_score,
+        match_reference=normalized_match_reference,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+        stability_classification=classification,
+        stability_reason=reason,
+        interpretation_limit=SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY,
     )
 
 
@@ -1254,6 +1442,11 @@ __all__ = [
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_ID",
     "DECISION_TO_PAPER_USEFULNESS_CONTRACT_VERSION",
     "DECISION_TO_PAPER_USEFULNESS_INTERPRETATION_BOUNDARY",
+    "SIGNAL_QUALITY_STABILITY_CONTRACT_ID",
+    "SIGNAL_QUALITY_STABILITY_CONTRACT_VERSION",
+    "SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY",
+    "SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD",
+    "SIGNAL_QUALITY_STABILITY_LOW_THRESHOLD",
     "END_TO_END_TRACEABILITY_CONTRACT_ID",
     "END_TO_END_TRACEABILITY_CONTRACT_VERSION",
     "END_TO_END_TRACEABILITY_INTERPRETATION_BOUNDARY",
@@ -1282,6 +1475,7 @@ __all__ = [
     "BoundedPaperTradeOutcome",
     "BoundedReconciliationStageReference",
     "BoundedSignalAnalysisStageReference",
+    "BoundedSignalQualityStabilityAudit",
     "BoundedTraderRelevanceCaseEvaluation",
     "BoundedTraderRelevanceValidation",
     "ComponentScore",
@@ -1289,6 +1483,7 @@ __all__ = [
     "DecisionCard",
     "DecisionRationale",
     "EndToEndTraceabilityLinkageStatus",
+    "SignalQualityStabilityClassification",
     "HardGateEvaluation",
     "HardGateResult",
     "QualificationProfileRobustnessAudit",
@@ -1297,6 +1492,7 @@ __all__ = [
     "ScoreEvaluation",
     "evaluate_bounded_decision_to_paper_usefulness_audit",
     "evaluate_bounded_end_to_end_traceability_chain",
+    "evaluate_bounded_signal_quality_stability_audit",
     "evaluate_bounded_trader_relevance_cases",
     "serialize_decision_card",
     "validate_decision_card",

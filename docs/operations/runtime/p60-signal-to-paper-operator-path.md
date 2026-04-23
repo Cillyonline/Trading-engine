@@ -201,6 +201,29 @@ This audit is bounded to non-live usefulness only. It does not imply trader
 validation, profitability forecasting, live-trading readiness, or operational
 readiness.
 
+## Signal-Quality Stability Audit
+
+Covered decision cards may also expose one bounded signal-quality stability
+audit through `/decision-cards` metadata:
+
+- `metadata.bounded_signal_quality_stability_audit`
+
+The audit reuses the same canonical match contract as the decision-to-paper
+usefulness audit (`metadata.bounded_decision_to_paper_match`,
+`paper_trade_id`, same `symbol` and `strategy_id`, opened at or after the
+decision-card timestamp) and compares the covered `signal_quality` component
+score against the matched paper-trade outcome.
+
+The audit classifications are:
+
+- `stable`
+- `weak`
+- `failing`
+
+This audit is bounded to non-live deterministic signal-quality stability only.
+It does not imply trader validation, profitability forecasting, live-trading
+readiness, or operational readiness.
+
 ## End-to-End Traceability Chain
 
 Covered decision-card outputs from `GET /decision-cards` expose one canonical

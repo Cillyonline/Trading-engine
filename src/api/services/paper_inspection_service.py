@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from cilly_trading.engine.decision_card_contract import (
     BoundedDecisionToPaperUsefulnessMatchReference,
     evaluate_bounded_decision_to_paper_usefulness_audit,
+    evaluate_bounded_signal_quality_stability_audit,
 )
 from cilly_trading.models import ExecutionEvent, Order, Position, Trade
 
@@ -952,3 +953,67 @@ def resolve_bounded_paper_linkage_status(
         decision_generated_at_utc=generated_at_utc,
     )
     return status, paper_trade_id
+
+
+def build_bounded_signal_quality_stability_audit(
+    *,
+    canonical_execution_repo: Any | None,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    signal_quality_score: float | None,
+    match_reference: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build the bounded signal-quality stability audit payload.
+
+    The audit deterministically classifies the covered signal-quality score
+    against the matched paper-trade outcome resolved through the existing
+    decision-to-paper match contract. Returns ``None`` when no covered
+    signal-quality score is available so the audit stays bounded to covered
+    evidence only.
+    """
+
+    if signal_quality_score is None:
+        return None
+
+    normalized_match_reference: BoundedDecisionToPaperUsefulnessMatchReference | None = None
+    if isinstance(match_reference, dict):
+        try:
+            normalized_match_reference = (
+                BoundedDecisionToPaperUsefulnessMatchReference.model_validate(match_reference)
+            )
+        except ValidationError:
+            normalized_match_reference = None
+
+    match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
+    matched_outcome: dict[str, Any] | None = None
+    if normalized_match_reference is not None:
+        trade: Trade | None = None
+        if canonical_execution_repo is not None:
+            try:
+                trade = canonical_execution_repo.get_trade(
+                    normalized_match_reference.paper_trade_id
+                )
+            except Exception:
+                trade = None
+        if trade is not None:
+            match_status, matched_outcome = _build_paper_trade_outcome_payload(
+                trade=trade,
+                expected_symbol=symbol,
+                expected_strategy_id=strategy_id,
+                decision_generated_at_utc=generated_at_utc,
+            )
+
+    audit = evaluate_bounded_signal_quality_stability_audit(
+        covered_case_id=decision_card_id,
+        signal_quality_score=float(signal_quality_score),
+        match_status=match_status,
+        match_reference=(
+            normalized_match_reference.model_dump(mode="python")
+            if normalized_match_reference is not None
+            else None
+        ),
+        matched_outcome=matched_outcome,
+    )
+    return audit.model_dump(mode="python")

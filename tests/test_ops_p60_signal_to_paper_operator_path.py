@@ -140,6 +140,22 @@ def test_p60_decision_usefulness_audit_is_documented() -> None:
     )
 
 
+def test_p60_signal_quality_stability_audit_is_documented() -> None:
+    content = read_repo_text(P60_DOC_PATH)
+
+    assert_contains_all(
+        content,
+        "## Signal-Quality Stability Audit",
+        "metadata.bounded_signal_quality_stability_audit",
+        "metadata.bounded_decision_to_paper_match",
+        "`stable`",
+        "`weak`",
+        "`failing`",
+        "non-live deterministic signal-quality stability",
+        "does not imply trader",
+    )
+
+
 # ---------------------------------------------------------------------------
 # AC3: Gap analysis is explicit without overclaim
 # ---------------------------------------------------------------------------

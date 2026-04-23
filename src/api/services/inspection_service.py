@@ -1206,6 +1206,25 @@ def build_decision_card_inspection_items(
             if usefulness_audit is not None:
                 metadata["bounded_decision_to_paper_usefulness_audit"] = usefulness_audit
 
+            signal_quality_score: float | None = None
+            for component in card.score.component_scores:
+                if component.category == "signal_quality":
+                    signal_quality_score = float(component.score)
+                    break
+            stability_audit = (
+                paper_inspection_service.build_bounded_signal_quality_stability_audit(
+                    canonical_execution_repo=canonical_repo,
+                    decision_card_id=card.decision_card_id,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    signal_quality_score=signal_quality_score,
+                    match_reference=match_reference,
+                )
+            )
+            if stability_audit is not None:
+                metadata["bounded_signal_quality_stability_audit"] = stability_audit
+
             paper_match_status, paper_trade_id = (
                 paper_inspection_service.resolve_bounded_paper_linkage_status(
                     canonical_execution_repo=canonical_repo,
