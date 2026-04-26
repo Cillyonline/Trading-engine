@@ -138,10 +138,28 @@ python -m pytest
 - A red check blocks merge until tests pass.
 
 ### Run Paper Trading (Simulation)
-No production operator CLI/runtime entrypoint is documented for paper-trading simulation in this runbook. The repository contains an engine-level deterministic simulator module (`src/cilly_trading/engine/paper_trading.py`) that is test-verified, but no owner-facing run command is defined here. It does not provide live trading or broker integration, and no real orders are used.
+Bounded paper-runtime operation is documented in dedicated runtime contracts,
+not inline in this SOP. The current owner-facing bounded command path is the
+OPS-P64 daily runner, which orchestrates the OPS-P63 workflow through existing
+snapshot ingestion, analysis, bounded paper execution, reconciliation, and
+evidence-capture steps.
+
+Local OPS-P64 invocation:
+
+```bash
+python scripts/run_daily_bounded_paper_runtime.py \
+  --db-path cilly_trading.db \
+  --base-url http://127.0.0.1:18000
+```
+
+This command remains bounded and non-live. It does not provide live trading,
+broker integration, real-capital execution, production-readiness evidence,
+trader-validation evidence, or profitability claims.
 
 Reference:
 - [paper_trading.md](paper-trading.md)
+- [runtime/p63-daily-bounded-paper-runtime-workflow.md](runtime/p63-daily-bounded-paper-runtime-workflow.md)
+- [runtime/p64-one-command-bounded-daily-paper-runtime-runner.md](runtime/p64-one-command-bounded-daily-paper-runtime-runner.md)
 
 **Datum:** 2026-03-29
 **Thema:** Bounded Staging Prep – Host vorbereitet
