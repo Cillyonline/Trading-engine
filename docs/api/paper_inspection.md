@@ -1,6 +1,6 @@
 # Paper Inspection API
 
-This document defines the read-only paper inspection surface for paper account state, paper trades, and derived paper positions.
+This document defines the read-only paper inspection surface for portfolio-aware paper account state, paper trades, derived paper positions, reconciliation, and bounded operator workflow inspection.
 
 ## Singular State Authority
 
@@ -27,6 +27,7 @@ All endpoints require `X-Cilly-Role: read_only` (or a higher role).
 - `GET /paper/trades`
 - `GET /paper/positions`
 - `GET /paper/reconciliation`
+- `GET /portfolio/positions`
 
 No mutation endpoints are introduced by this surface.
 
@@ -85,8 +86,9 @@ This is the minimum operator inspection path for paper trading from order intent
 3. Read lifecycle transitions and fills from `GET /trading-core/execution-events` (`created` -> `submitted` -> fill states).
 4. Read resulting trade lifecycle from `GET /trading-core/trades`.
 5. Read derived position state from `GET /trading-core/positions`.
-6. Read paper-facing account state from `GET /paper/account`.
-7. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
+6. Read portfolio-aware aggregation from `GET /portfolio/positions`.
+7. Read paper-facing account state from `GET /paper/account`.
+8. Run `GET /paper/reconciliation` and require `ok: true` with `summary.mismatches: 0`.
 
 `GET /paper/reconciliation` fails closed for operational validation: any missing cross-reference or account equation mismatch is returned in `mismatch_items` with deterministic `code`, `entity_type`, and `entity_id` values. The reconciliation validates:
 
@@ -98,7 +100,18 @@ This is the minimum operator inspection path for paper trading from order intent
 - Account equations (`cash`, `equity`, `total_pnl`, `realized_pnl`, `unrealized_pnl`) match the sums derived from canonical trades.
 - Account counts (`open_trades`, `closed_trades`, `open_positions`) match the canonical entity statuses.
 
-`GET /paper/workflow` is the bounded operator contract surface that makes workflow scope, boundary, required inspection/reconciliation surfaces, and validation checks explicit.
+`GET /paper/workflow` is the bounded operator contract surface that makes workflow scope, boundary, required inspection/reconciliation surfaces, validation checks, inspection counts, and deterministic reference-chain continuity explicit.
+
+The workflow response exposes:
+
+- `surfaces.canonical_inspection` for `/decision-cards` and `/trading-core/*`.
+- `surfaces.portfolio_inspection` for `/portfolio/positions`.
+- `surfaces.paper_inspection` for `/paper/trades`, `/paper/positions`, and `/paper/account`.
+- `surfaces.reconciliation` for `/paper/reconciliation`.
+- `reference_chain` for the decision evidence -> portfolio inspection -> paper execution -> reconciliation chain.
+- `inspection_summary` for canonical, portfolio, paper, and reconciliation counts derived from the same canonical execution repository.
+
+The workflow is bounded operator inspection only. It does not imply trader validation, live-trading readiness, broker readiness, or operational readiness.
 
 ## Deterministic Ordering
 
@@ -164,7 +177,7 @@ This is the minimum operator inspection path for paper trading from order intent
 
 ## Long-Run Evaluation and Review Workflow
 
-The full bounded long-run paper operator review workflow — including evaluation cadence guidance, review artifact checklist (R1–R7), strategy-change comparison boundary, and restart and recovery verification steps — is defined in:
+The full bounded long-run paper operator review workflow - including evaluation cadence guidance, review artifact checklist (R1-R8), strategy-change comparison boundary, and restart and recovery verification steps - is defined in:
 
 ```
 docs/operations/runtime/phase-44-paper-operator-workflow.md
@@ -177,7 +190,7 @@ This workflow is read-only and review-oriented. It does not introduce mutation e
 Post-run reconciliation, weekly review artifact generation, and restart/recovery evidence capture are automated by the P53 scripts:
 
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation` - automated post-run reconciliation with evidence output.
-- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` - deterministic R1-R7 weekly review bundle generation.
+- `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` - deterministic bounded weekly review bundle generation.
 - `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` and `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` - restart/recovery evidence with baseline comparison.
 
 All automation uses the same canonical state authority and derivation functions as the endpoints documented above. The full automation contract is in `docs/operations/runtime/p53-automated-review-operations.md`.

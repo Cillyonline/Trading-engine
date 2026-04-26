@@ -273,8 +273,8 @@ def build_inspection_router(
         response_model=PaperOperatorWorkflowReadResponse,
         summary="Paper Operator Workflow",
         description=(
-            "Read-only bounded Phase 44 paper-trading operator workflow contract composed from "
-            "canonical inspection and reconciliation surfaces."
+            "Read-only bounded Phase 44 portfolio-to-paper operator workflow contract composed "
+            "from canonical inspection, portfolio inspection, and reconciliation surfaces."
         ),
     )
     def read_paper_operator_workflow_handler(
