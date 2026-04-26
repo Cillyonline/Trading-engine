@@ -88,7 +88,7 @@ Use these exact evidence identifiers in the checklist references:
 | # | Item | Evidence reference | Answer (YES/NO/N/A) |
 | --- | --- | --- | --- |
 | E1 | Long-run review workflow executed: `GET /paper/workflow` returned `validation.ok: true` | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | NO |
-| E2 | All R1–R7 review artifacts captured in sequence per Phase 44 workflow doc | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | NO |
+| E2 | All R1-R8 (R1–R8) review artifacts captured in sequence per Phase 44 workflow doc | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | NO |
 | E3 | Strategy-change comparison baseline captured (required if any strategy change applied during this session; `N/A` if no strategy change) | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | N/A |
 | E4 | Post-restart recovery verification completed: `GET /paper/reconciliation` returned `ok: true`, `mismatches: 0` after most recent restart | `EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT` | NO |
 
@@ -97,7 +97,7 @@ Use these exact evidence identifiers in the checklist references:
 The following scripts automate evidence capture for Section E items:
 
 - **Post-run reconciliation**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/run_post_run_reconciliation.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/reconciliation` (supports E1, E4)
-- **Weekly review artifacts (R1-R7)**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` (supports E2)
+- **Weekly review artifacts**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/generate_weekly_review.py --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/weekly-review` (supports E2)
 - **Pre-restart baseline**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase pre-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence` (supports E3)
 - **Post-restart verification**: `docker compose --env-file .env -f docker/staging/docker-compose.staging.yml exec api python /app/scripts/capture_restart_evidence.py --phase post-restart --db-path /data/db/cilly_trading.db --evidence-dir /data/artifacts/restart-evidence --baseline /data/artifacts/restart-evidence/pre-restart-pass-YYYYMMDDTHHMMSSZ.json` (supports E4)
 
@@ -131,7 +131,7 @@ OPS-P54 bounded gate result:
 Remaining bounded gaps for this run:
 - Docker daemon for `desktop-linux` was not available (`npipe:////./pipe/dockerDesktopLinuxEngine` missing), preventing compose startup.
 - No active bounded staging runtime on `127.0.0.1:18000`, so `/health/*` readiness evidence could not be captured as ready.
-- No current-session long-run paper workflow/reconciliation evidence (`/paper/workflow`, `/paper/reconciliation`, and R1–R7 artifact capture) because staging runtime startup failed.
+- No current-session long-run paper workflow/reconciliation evidence (`/paper/workflow`, `/paper/reconciliation`, and R1-R8 artifact capture) because staging runtime startup failed.
 
 Non-goal claim boundary for this run:
 - This checklist does not claim live trading readiness.

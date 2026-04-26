@@ -254,8 +254,36 @@ class PaperOperatorWorkflowSurfaceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     canonical_inspection: List[str]
+    portfolio_inspection: List[str]
     paper_inspection: List[str]
     reconciliation: str
+
+
+class PaperOperatorWorkflowReferenceResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal[
+        "decision_evidence",
+        "portfolio_inspection",
+        "paper_execution",
+        "reconciliation",
+    ]
+    surface: str
+    reference: str
+    continuity: str
+
+
+class PaperOperatorWorkflowInspectionSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canonical_orders: int
+    canonical_execution_events: int
+    canonical_trades: int
+    canonical_positions: int
+    portfolio_positions: int
+    paper_trades: int
+    paper_positions: int
+    reconciliation_mismatches: int
 
 
 class PaperOperatorWorkflowValidationCheckResponse(BaseModel):
@@ -280,6 +308,8 @@ class PaperOperatorWorkflowReadResponse(BaseModel):
     boundary: PaperOperatorWorkflowBoundaryResponse
     steps: List[PaperOperatorWorkflowStepResponse]
     surfaces: PaperOperatorWorkflowSurfaceResponse
+    reference_chain: List[PaperOperatorWorkflowReferenceResponse]
+    inspection_summary: PaperOperatorWorkflowInspectionSummaryResponse
     validation: PaperOperatorWorkflowValidationResponse
 
 

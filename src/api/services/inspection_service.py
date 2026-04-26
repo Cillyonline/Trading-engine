@@ -45,6 +45,8 @@ from ..models import (
     PaperAccountReadResponse,
     PaperAccountStateResponse,
     PaperOperatorWorkflowBoundaryResponse,
+    PaperOperatorWorkflowInspectionSummaryResponse,
+    PaperOperatorWorkflowReferenceResponse,
     PaperOperatorWorkflowReadResponse,
     PaperOperatorWorkflowStepResponse,
     PaperOperatorWorkflowSurfaceResponse,
@@ -305,6 +307,12 @@ def read_paper_operator_workflow(
         symbol=None,
         position_id=None,
     )
+    portfolio_positions_items = paper_inspection_service.build_portfolio_positions_from_trades(
+        trades=core_trades_items,
+    )
+    paper_portfolio_positions_items = paper_inspection_service.build_portfolio_positions_from_trades(
+        trades=paper_trades_items,
+    )
     reconciliation = read_paper_reconciliation(deps=deps)
 
     checks = [
@@ -332,6 +340,12 @@ def read_paper_operator_workflow(
             expected="true",
             actual=str(paper_positions_items == core_positions_items).lower(),
         ),
+        PaperOperatorWorkflowValidationCheckResponse(
+            code="portfolio_inspection_positions_are_derived_from_canonical_trades",
+            ok=portfolio_positions_items == paper_portfolio_positions_items,
+            expected="true",
+            actual=str(portfolio_positions_items == paper_portfolio_positions_items).lower(),
+        ),
     ]
 
     return PaperOperatorWorkflowReadResponse(
@@ -339,15 +353,16 @@ def read_paper_operator_workflow(
             workflow_id="phase44_bounded_paper_operator",
             description=(
                 "One read-only decision-to-paper and portfolio-to-paper handoff contract that "
-                "validates bounded paper-readiness inputs across canonical inspection and "
+                "validates bounded paper execution evidence across canonical inspection and "
                 "reconciliation surfaces."
             ),
             in_scope=[
                 "covered decision-card usefulness audit against explicit matched paper-trade outcomes",
                 "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
                 "paper-facing account, trade, and position views derived from canonical portfolio evidence",
+                "portfolio position inspection derived from the same canonical trade evidence",
                 "reconciliation validation with mismatch accounting",
-                "bounded paper-readiness review with no unsupported upstream claim expansion",
+                "bounded paper operator inspection with no readiness or operational-readiness claim",
             ],
             out_of_scope=[
                 "live-trading readiness or approval",
@@ -373,7 +388,7 @@ def read_paper_operator_workflow(
             ),
             PaperOperatorWorkflowStepResponse(
                 step=3,
-                action="Inspect canonical trade and position state that defines portfolio readiness.",
+                action="Inspect canonical trade and position state that defines portfolio evidence.",
                 endpoint="GET /trading-core/trades + GET /trading-core/positions",
                 expected_result=(
                     f"Canonical portfolio evidence is readable (trades={len(core_trades_items)}, "
@@ -382,19 +397,19 @@ def read_paper_operator_workflow(
             ),
             PaperOperatorWorkflowStepResponse(
                 step=4,
-                action="Inspect paper-facing views derived from the canonical portfolio handoff.",
-                endpoint="GET /paper/trades + GET /paper/positions + GET /paper/account",
+                action="Inspect portfolio and paper-facing views derived from the canonical handoff.",
+                endpoint="GET /portfolio/positions + GET /paper/trades + GET /paper/positions + GET /paper/account",
                 expected_result=(
-                    f"Paper-readiness views are readable (trades={len(paper_trades_items)}, "
-                    f"positions={len(paper_positions_items)})."
+                    f"Bounded inspection views are readable (portfolio_positions={len(portfolio_positions_items)}, "
+                    f"paper_trades={len(paper_trades_items)}, paper_positions={len(paper_positions_items)})."
                 ),
             ),
             PaperOperatorWorkflowStepResponse(
                 step=5,
-                action="Run reconciliation and require zero mismatches before paper-readiness review.",
+                action="Run reconciliation and require zero mismatches before bounded operator review.",
                 endpoint="GET /paper/reconciliation",
                 expected_result=(
-                    f"Paper-readiness reconciliation ok={str(reconciliation.ok).lower()} mismatches="
+                    f"Bounded paper reconciliation ok={str(reconciliation.ok).lower()} mismatches="
                     f"{reconciliation.summary.mismatches}."
                 ),
             ),
@@ -410,6 +425,15 @@ def read_paper_operator_workflow(
                     "metadata without trader-validation or readiness claims."
                 ),
             ),
+            PaperOperatorWorkflowStepResponse(
+                step=7,
+                action="Confirm the explicit reference chain from decision evidence to reconciliation.",
+                endpoint="GET /decision-cards + GET /portfolio/positions + GET /paper/trades + GET /paper/reconciliation",
+                expected_result=(
+                    "Decision, portfolio, paper execution, and reconciliation stages expose deterministic references "
+                    "without inferring live or operational readiness."
+                ),
+            ),
         ],
         surfaces=PaperOperatorWorkflowSurfaceResponse(
             canonical_inspection=[
@@ -419,12 +443,61 @@ def read_paper_operator_workflow(
                 "/trading-core/trades",
                 "/trading-core/positions",
             ],
+            portfolio_inspection=[
+                "/portfolio/positions",
+            ],
             paper_inspection=[
                 "/paper/trades",
                 "/paper/positions",
                 "/paper/account",
             ],
             reconciliation="/paper/reconciliation",
+        ),
+        reference_chain=[
+            PaperOperatorWorkflowReferenceResponse(
+                stage="decision_evidence",
+                surface="/decision-cards",
+                reference="decision_card_id + metadata.bounded_decision_to_paper_match.paper_trade_id",
+                continuity=(
+                    "Covered decision evidence carries the explicit paper_trade_id reference used by "
+                    "bounded usefulness and traceability audits."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="portfolio_inspection",
+                surface="/portfolio/positions",
+                reference="strategy_id + symbol",
+                continuity=(
+                    "Portfolio inspection aggregates open canonical trades by strategy_id and symbol; "
+                    "it does not introduce a separate position authority."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="paper_execution",
+                surface="/paper/trades",
+                reference="paper_trade_id -> Trade.trade_id",
+                continuity=(
+                    "Paper-facing trades are the canonical Trade entities used by decision-card match references."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="reconciliation",
+                surface="/paper/reconciliation",
+                reference="order_id + event_id + trade_id + position_id + account equations",
+                continuity=(
+                    "Reconciliation deterministically reports any broken reference or account equation mismatch."
+                ),
+            ),
+        ],
+        inspection_summary=PaperOperatorWorkflowInspectionSummaryResponse(
+            canonical_orders=len(core_orders_items),
+            canonical_execution_events=len(core_events_items),
+            canonical_trades=len(core_trades_items),
+            canonical_positions=len(core_positions_items),
+            portfolio_positions=len(portfolio_positions_items),
+            paper_trades=len(paper_trades_items),
+            paper_positions=len(paper_positions_items),
+            reconciliation_mismatches=reconciliation.summary.mismatches,
         ),
         validation=PaperOperatorWorkflowValidationResponse(
             ok=all(check.ok for check in checks),

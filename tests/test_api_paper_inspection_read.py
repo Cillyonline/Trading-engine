@@ -421,15 +421,16 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
     assert payload["boundary"]["workflow_id"] == "phase44_bounded_paper_operator"
     assert payload["boundary"]["description"] == (
         "One read-only decision-to-paper and portfolio-to-paper handoff contract that "
-        "validates bounded paper-readiness inputs across canonical inspection and "
+        "validates bounded paper execution evidence across canonical inspection and "
         "reconciliation surfaces."
     )
     assert payload["boundary"]["in_scope"] == [
         "covered decision-card usefulness audit against explicit matched paper-trade outcomes",
         "explicit portfolio-to-paper handoff inputs from canonical orders, execution events, trades, and positions",
         "paper-facing account, trade, and position views derived from canonical portfolio evidence",
+        "portfolio position inspection derived from the same canonical trade evidence",
         "reconciliation validation with mismatch accounting",
-        "bounded paper-readiness review with no unsupported upstream claim expansion",
+        "bounded paper operator inspection with no readiness or operational-readiness claim",
     ]
     assert payload["boundary"]["out_of_scope"] == [
         "live-trading readiness or approval",
@@ -453,27 +454,33 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
         },
         {
             "step": 3,
-            "action": "Inspect canonical trade and position state that defines portfolio readiness.",
+            "action": "Inspect canonical trade and position state that defines portfolio evidence.",
             "endpoint": "GET /trading-core/trades + GET /trading-core/positions",
             "expected_result": "Canonical portfolio evidence is readable (trades=1, positions=1).",
         },
         {
             "step": 4,
-            "action": "Inspect paper-facing views derived from the canonical portfolio handoff.",
-            "endpoint": "GET /paper/trades + GET /paper/positions + GET /paper/account",
-            "expected_result": "Paper-readiness views are readable (trades=1, positions=1).",
+            "action": "Inspect portfolio and paper-facing views derived from the canonical handoff.",
+            "endpoint": "GET /portfolio/positions + GET /paper/trades + GET /paper/positions + GET /paper/account",
+            "expected_result": "Bounded inspection views are readable (portfolio_positions=1, paper_trades=1, paper_positions=1).",
         },
         {
             "step": 5,
-            "action": "Run reconciliation and require zero mismatches before paper-readiness review.",
+            "action": "Run reconciliation and require zero mismatches before bounded operator review.",
             "endpoint": "GET /paper/reconciliation",
-            "expected_result": "Paper-readiness reconciliation ok=true mismatches=0.",
+            "expected_result": "Bounded paper reconciliation ok=true mismatches=0.",
         },
         {
             "step": 6,
             "action": "Inspect covered decision cards for bounded usefulness classifications against explicit matched paper-trade outcomes.",
             "endpoint": "GET /decision-cards",
             "expected_result": "Covered decision-card outputs expose bounded usefulness classifications in metadata without trader-validation or readiness claims.",
+        },
+        {
+            "step": 7,
+            "action": "Confirm the explicit reference chain from decision evidence to reconciliation.",
+            "endpoint": "GET /decision-cards + GET /portfolio/positions + GET /paper/trades + GET /paper/reconciliation",
+            "expected_result": "Decision, portfolio, paper execution, and reconciliation stages expose deterministic references without inferring live or operational readiness.",
         },
     ]
     assert payload["surfaces"] == {
@@ -484,12 +491,51 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
             "/trading-core/trades",
             "/trading-core/positions",
         ],
+        "portfolio_inspection": [
+            "/portfolio/positions",
+        ],
         "paper_inspection": [
             "/paper/trades",
             "/paper/positions",
             "/paper/account",
         ],
         "reconciliation": "/paper/reconciliation",
+    }
+    assert payload["reference_chain"] == [
+        {
+            "stage": "decision_evidence",
+            "surface": "/decision-cards",
+            "reference": "decision_card_id + metadata.bounded_decision_to_paper_match.paper_trade_id",
+            "continuity": "Covered decision evidence carries the explicit paper_trade_id reference used by bounded usefulness and traceability audits.",
+        },
+        {
+            "stage": "portfolio_inspection",
+            "surface": "/portfolio/positions",
+            "reference": "strategy_id + symbol",
+            "continuity": "Portfolio inspection aggregates open canonical trades by strategy_id and symbol; it does not introduce a separate position authority.",
+        },
+        {
+            "stage": "paper_execution",
+            "surface": "/paper/trades",
+            "reference": "paper_trade_id -> Trade.trade_id",
+            "continuity": "Paper-facing trades are the canonical Trade entities used by decision-card match references.",
+        },
+        {
+            "stage": "reconciliation",
+            "surface": "/paper/reconciliation",
+            "reference": "order_id + event_id + trade_id + position_id + account equations",
+            "continuity": "Reconciliation deterministically reports any broken reference or account equation mismatch.",
+        },
+    ]
+    assert payload["inspection_summary"] == {
+        "canonical_orders": 1,
+        "canonical_execution_events": 4,
+        "canonical_trades": 1,
+        "canonical_positions": 1,
+        "portfolio_positions": 1,
+        "paper_trades": 1,
+        "paper_positions": 1,
+        "reconciliation_mismatches": 0,
     }
     assert payload["validation"] == {
         "ok": True,
@@ -514,6 +560,12 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
             },
             {
                 "code": "portfolio_to_paper_positions_match_canonical_positions",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
+            {
+                "code": "portfolio_inspection_positions_are_derived_from_canonical_trades",
                 "ok": True,
                 "expected": "true",
                 "actual": "true",
@@ -615,6 +667,12 @@ def test_paper_workflow_validation_fails_closed_on_reconciliation_mismatches(
                 "expected": "true",
                 "actual": "true",
             },
+            {
+                "code": "portfolio_inspection_positions_are_derived_from_canonical_trades",
+                "ok": True,
+                "expected": "true",
+                "actual": "true",
+            },
         ],
     }
 
@@ -684,5 +742,32 @@ def test_paper_workflow_surfaces_align_with_traceability_chain_contract(
     # surfaces; assert the workflow contract still exposes them so the chain
     # remains traversable from /decision-cards through /paper/reconciliation.
     assert "/decision-cards" in surfaces["canonical_inspection"]
+    assert "/portfolio/positions" in surfaces["portfolio_inspection"]
     assert "/paper/trades" in surfaces["paper_inspection"]
     assert surfaces["reconciliation"] == "/paper/reconciliation"
+
+
+def test_paper_workflow_inspection_summary_and_reference_chain_are_deterministic(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo = _repo(tmp_path)
+    _seed_lifecycle_data(repo)
+
+    with _test_client(monkeypatch, repo) as client:
+        first = client.get("/paper/workflow", headers=READ_ONLY_HEADERS).json()
+        second = client.get("/paper/workflow", headers=READ_ONLY_HEADERS).json()
+        portfolio_positions = client.get("/portfolio/positions", headers=READ_ONLY_HEADERS).json()
+
+    assert first == second
+    assert first["inspection_summary"]["portfolio_positions"] == portfolio_positions["total"]
+    assert [item["stage"] for item in first["reference_chain"]] == [
+        "decision_evidence",
+        "portfolio_inspection",
+        "paper_execution",
+        "reconciliation",
+    ]
+    assert first["reference_chain"][1]["surface"] == "/portfolio/positions"
+    assert "operational readiness" in first["steps"][-1]["expected_result"]
+    assert first["boundary"]["in_scope"][-1] == (
+        "bounded paper operator inspection with no readiness or operational-readiness claim"
+    )

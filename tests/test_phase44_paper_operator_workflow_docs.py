@@ -28,6 +28,7 @@ def test_phase44_workflow_doc_defines_bounded_operator_flow_and_surfaces() -> No
         "GET /trading-core/execution-events",
         "GET /trading-core/trades",
         "GET /trading-core/positions",
+        "GET /portfolio/positions",
         "GET /paper/trades",
         "GET /paper/positions",
         "GET /paper/account",
@@ -36,6 +37,8 @@ def test_phase44_workflow_doc_defines_bounded_operator_flow_and_surfaces() -> No
         "## Explicit Operator Steps",
         "## Workflow Boundary",
         "## Minimum Operator Evidence",
+        "reference_chain",
+        "inspection_summary",
         "tests/test_api_paper_inspection_read.py",
         "python -m pytest",
     )
@@ -95,10 +98,11 @@ def test_phase44_workflow_doc_defines_review_artifact_checklist() -> None:
         content,
         "## Review Artifact Checklist",
         "| R1 |",
-        "| R7 |",
+        "| R8 |",
         "`GET /paper/reconciliation`",
+        "`GET /portfolio/positions`",
         "`GET /paper/workflow`",
-        "R1–R7",
+        "R1-R8",
     )
 
 
@@ -120,7 +124,7 @@ def test_phase44_operator_checklist_includes_long_run_review_section() -> None:
     assert_contains_all(
         content,
         "## E) Long-Run Paper Review Evidence",
-        "R1–R7",
+        "R1-R8",
         "EVIDENCE_PAPER_CONSISTENCY_TEST_OUTPUT",
         "EVIDENCE_COMPLETED_OPERATOR_CHECKLIST",
     )
@@ -135,7 +139,7 @@ def test_paper_inspection_api_doc_cross_references_long_run_workflow() -> None:
         content,
         "## Long-Run Evaluation and Review Workflow",
         "phase-44-paper-operator-workflow.md",
-        "R1–R7",
+        "R1-R8",
     )
 
 
