@@ -15,6 +15,8 @@ governance-level acknowledgement that:
 
 - the canonical bounded authority id is `risk_framework_bounded_non_live_v1`
 - it covers the currently implemented bounded risk primitives only
+- it covers bounded stop-loss, position-sizing, trade-risk, strategy-risk,
+  symbol-risk, and portfolio-risk evidence for non-live evaluation only
 - it preserves explicit non-live, non-broker, no-readiness-overclaim
   boundaries
 
@@ -26,6 +28,8 @@ In scope for this overlay:
   contract
 - governance-level restatement of bounded non-live wording boundaries
 - governance-level alignment with bounded technical risk evidence
+- governance-level acknowledgement of deterministic bounded risk-budget
+  evidence without live-trading or broker-readiness claims
 
 Out of scope for this overlay:
 

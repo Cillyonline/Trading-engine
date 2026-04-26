@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from risk.contracts import RiskEvaluationRequest
@@ -213,7 +213,10 @@ def test_adapter_maps_risk_framework_reason_codes_deterministically(
     assert decision.reason == expected_reason
     assert decision.rule_version == "adapter-v1"
     assert decision.timestamp == datetime(2026, 1, 1, tzinfo=timezone.utc)
-    assert _policy_evidence_or_empty(decision) == ()
+    if expected_decision == "APPROVED":
+        assert _policy_evidence_or_empty(decision) == ()
+    else:
+        assert _policy_evidence_or_empty(decision)
 
 
 def test_adapter_rejects_unknown_reason_code() -> None:
@@ -465,6 +468,109 @@ def test_evaluate_risk_framework_execution_decision_is_deterministic_for_equal_i
     assert first.decision == "APPROVED"
     assert first.reason == "approved:risk_framework_within_limits"
     assert _policy_evidence_or_empty(first) == ()
+
+
+def test_adapter_rejects_non_utc_timezone_aware_timestamp() -> None:
+    with pytest.raises(ValueError, match="timezone-aware and in UTC"):
+        adapt_risk_framework_response_to_risk_decision(
+            framework_request=_framework_request(),
+            framework_response=FrameworkRiskEvaluationResponse(
+                approved=True,
+                reason="approved: within_risk_limits",
+                adjusted_position_size=400.0,
+                risk_score=0.6,
+            ),
+            limits=_framework_limits(),
+            strategy_exposure=200.0,
+            symbol_exposure=100.0,
+            rule_version="adapter-v1",
+            evaluated_at=datetime(
+                2026,
+                1,
+                1,
+                tzinfo=timezone(timedelta(hours=1)),
+            ),
+        )
+
+
+def test_evaluate_risk_framework_execution_decision_propagates_bounded_risk_evidence() -> None:
+    decision = evaluate_risk_framework_execution_decision(
+        request_id="req-bounded-approved",
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=400.0,
+        account_equity=10_000.0,
+        current_exposure=800.0,
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        entry_price=100.0,
+        stop_loss_price=95.0,
+        strategy_risk_used=100.0,
+        symbol_risk_used=50.0,
+        portfolio_risk_used=200.0,
+        require_bounded_risk_evidence=True,
+        limits=RiskLimits(
+            max_account_exposure_pct=0.80,
+            max_position_size=500.0,
+            max_strategy_exposure_pct=0.30,
+            max_symbol_exposure_pct=0.20,
+            max_trade_risk_pct=0.02,
+            max_strategy_risk_pct=0.05,
+            max_symbol_risk_pct=0.04,
+            max_portfolio_risk_pct=0.10,
+        ),
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    policy_evidence = _policy_evidence_or_empty(decision)
+    assert decision.decision == "APPROVED"
+    assert decision.reason == "approved:risk_framework_within_limits"
+    assert [row.rule_code for row in policy_evidence] == [
+        "stop_loss_position_size",
+        "max_trade_risk",
+        "strategy_risk_budget",
+        "symbol_risk_budget",
+        "portfolio_risk_budget",
+    ]
+    assert {row.scope for row in policy_evidence} == {
+        "trade",
+        "strategy",
+        "symbol",
+        "portfolio",
+    }
+
+
+def test_evaluate_risk_framework_execution_decision_fails_closed_for_missing_bounded_evidence() -> None:
+    decision = evaluate_risk_framework_execution_decision(
+        request_id="req-bounded-missing",
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=400.0,
+        account_equity=10_000.0,
+        current_exposure=800.0,
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        require_bounded_risk_evidence=True,
+        limits=RiskLimits(
+            max_account_exposure_pct=0.80,
+            max_position_size=500.0,
+            max_strategy_exposure_pct=0.30,
+            max_symbol_exposure_pct=0.20,
+            max_trade_risk_pct=0.02,
+            max_strategy_risk_pct=0.05,
+            max_symbol_risk_pct=0.04,
+            max_portfolio_risk_pct=0.10,
+        ),
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.reason == "rejected:risk_framework_stop_loss_evidence_missing"
+    assert _policy_evidence_or_empty(decision)[0].reason_code == (
+        "rejected: stop_loss_evidence_missing"
+    )
 
 
 def test_evaluate_risk_framework_execution_decision_prefers_kill_switch_for_multi_violation() -> None:

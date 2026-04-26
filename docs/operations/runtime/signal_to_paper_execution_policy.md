@@ -258,13 +258,16 @@ Canonical contract reference:
 - `docs/architecture/risk/non_live_evaluation_contract.md`
 
 For this non-live contract, evidence rows are emitted only for violated
-cap/boundary outcomes:
+cap/boundary outcomes except when bounded risk-budget evidence is explicitly
+required:
 
-- risk evaluator outcomes are `approved` or `rejected`, and evidence is emitted
-  on `rejected` outcomes only
+- exposure-only risk evaluator outcomes are `approved` or `rejected`, and
+  evidence is emitted on `rejected` outcomes only
+- bounded risk-budget approved outcomes emit deterministic stop-loss
+  position-sizing, trade, strategy, symbol, and portfolio evidence rows
 - portfolio pipeline outcomes are `approved`, `rejected`, or `constraint_hit`,
   and evidence is emitted on cap/boundary `constraint_hit` outcomes
-- approved outcomes emit an empty evidence tuple
+- exposure-only approved outcomes emit an empty evidence tuple
 
 Issue #981 completion is technical implementation evidence only. It does not
 claim trader validation, trader approval of thresholds, live readiness, or

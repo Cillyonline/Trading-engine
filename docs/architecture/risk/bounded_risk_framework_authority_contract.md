@@ -78,10 +78,17 @@ Approved outcome reason code:
 Canonical rejection reason codes (precedence order):
 
 1. `rejected:risk_framework_kill_switch_enabled`
-2. `rejected:risk_framework_max_position_size_exceeded`
-3. `rejected:risk_framework_max_account_exposure_pct_exceeded`
-4. `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
-5. `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
+2. `rejected:risk_framework_stop_loss_evidence_missing`
+3. `rejected:risk_framework_stop_loss_evidence_invalid`
+4. `rejected:risk_framework_position_size_exceeds_stop_loss_budget`
+5. `rejected:risk_framework_max_trade_risk_exceeded`
+6. `rejected:risk_framework_strategy_risk_budget_exceeded`
+7. `rejected:risk_framework_symbol_risk_budget_exceeded`
+8. `rejected:risk_framework_portfolio_risk_budget_exceeded`
+9. `rejected:risk_framework_max_position_size_exceeded`
+10. `rejected:risk_framework_max_account_exposure_pct_exceeded`
+11. `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
+12. `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
 
 The canonical guard-type vocabulary for risk-gate guard triggers is:
 
@@ -106,8 +113,10 @@ properties for risk-boundary evaluation:
   the canonical reason code is selected by the precedence order above
 - timezone-aware UTC `evaluated_at` is required; naive timestamps are
   rejected
-- approved outcomes carry an empty `policy_evidence` tuple
-- rejected outcomes carry exactly one canonical cap/boundary evidence row
+- exposure-only approved outcomes carry an empty `policy_evidence` tuple
+- bounded risk-budget approved outcomes carry deterministic trade, strategy,
+  symbol, and portfolio evidence rows
+- rejected outcomes carry canonical cap/boundary evidence rows
 
 Identical covered inputs are defined as the full tuple of:
 
@@ -136,6 +145,10 @@ required bounded evidence is incomplete or contradictory:
 - non-finite or unbounded threshold / notional inputs at the threshold gate
   -> raise `ValueError`
 - naive (non-UTC, non-timezone-aware) `evaluated_at` -> raise `ValueError`
+- missing stop-loss evidence when bounded risk evidence is required ->
+  deterministic rejection
+- contradictory stop-loss evidence when bounded risk evidence is required ->
+  deterministic rejection
 
 Fail-closed means that absence, ambiguity, or contradiction of bounded
 evidence never silently degrades to an APPROVED execution decision.

@@ -22,6 +22,12 @@ Frozen dataclass fields:
 - `proposed_position_size: float`
 - `account_equity: float`
 - `current_exposure: float`
+- `entry_price: Optional[float] = None`
+- `stop_loss_price: Optional[float] = None`
+- `strategy_risk_used: float = 0.0`
+- `symbol_risk_used: float = 0.0`
+- `portfolio_risk_used: float = 0.0`
+- `require_bounded_risk_evidence: bool = False`
 
 ### `RiskEvaluationResponse`
 Frozen dataclass fields:
@@ -29,6 +35,13 @@ Frozen dataclass fields:
 - `reason: str`
 - `adjusted_position_size: Optional[float]`
 - `risk_score: float`
+- `policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()`
+
+The optional bounded-risk request fields support deterministic stop-loss,
+position-sizing, trade-risk, strategy-risk, symbol-risk, and portfolio-risk
+evidence for non-live evaluation only. Missing or contradictory required
+bounded evidence fails closed. These fields do not introduce live trading,
+broker execution, trader-validation, or operational-readiness claims.
 
 ### `RiskEvaluator` (optional protocol)
 Method signature:
@@ -38,3 +51,6 @@ Method signature:
 - Policy/risk business logic
 - Runtime orchestration
 - Execution integration
+- Live trading
+- Broker integration
+- Trader validation
