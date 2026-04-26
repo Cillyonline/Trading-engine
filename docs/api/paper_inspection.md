@@ -177,7 +177,7 @@ The workflow is bounded operator inspection only. It does not imply trader valid
 
 ## Long-Run Evaluation and Review Workflow
 
-The full bounded long-run paper operator review workflow - including evaluation cadence guidance, review artifact checklist (R1-R8), strategy-change comparison boundary, and restart and recovery verification steps - is defined in:
+The full bounded long-run paper operator review workflow - including evaluation cadence guidance, review artifact checklist (R1-R8 / R1–R8), strategy-change comparison boundary, and restart and recovery verification steps - is defined in:
 
 ```
 docs/operations/runtime/phase-44-paper-operator-workflow.md

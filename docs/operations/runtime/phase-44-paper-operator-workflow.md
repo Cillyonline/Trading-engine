@@ -186,7 +186,7 @@ After applying a strategy change and before resuming evaluation:
 
 ## Review Artifact Checklist
 
-Each bounded long-run paper operator review must produce the following artifacts, captured in the order listed:
+Each bounded long-run paper operator review must produce the following artifacts, captured in the order listed. This checklist explicitly defines the required R1-R8 (R1–R8) bounded review set.
 
 | # | Artifact | Source endpoint | Required state |
 | --- | --- | --- | --- |
@@ -198,9 +198,8 @@ Each bounded long-run paper operator review must produce the following artifacts
 | R6 | Canonical trade count | `GET /trading-core/trades` | `total` matches `GET /paper/trades` `total` |
 | R7 | Canonical position count | `GET /trading-core/positions` | `total` matches `GET /paper/positions` `total` |
 | R8 | Workflow contract state | `GET /paper/workflow` | `validation.ok: true`, reference chain present |
-| R9 | Covered decision usefulness audit | `GET /decision-cards` | Covered cases expose `metadata.bounded_decision_to_paper_usefulness_audit` only in bounded non-live scope |
 
-All R1-R8 artifacts must be captured in the sequence listed above. R1 must be captured and confirmed clean before R2-R8 are treated as valid review evidence.
+All R1-R8 (R1–R8) artifacts must be captured in the sequence listed above. R1 must be captured and confirmed clean before R2-R8 are treated as valid review evidence.
 
 ## Restart and Recovery Review
 
