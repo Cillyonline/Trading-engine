@@ -56,6 +56,13 @@ Mandatory fields:
 Canonical risk rejection reason-code vocabulary (normalized):
 
 - `rejected:risk_framework_kill_switch_enabled`
+- `rejected:risk_framework_stop_loss_evidence_missing`
+- `rejected:risk_framework_stop_loss_evidence_invalid`
+- `rejected:risk_framework_position_size_exceeds_stop_loss_budget`
+- `rejected:risk_framework_max_trade_risk_exceeded`
+- `rejected:risk_framework_strategy_risk_budget_exceeded`
+- `rejected:risk_framework_symbol_risk_budget_exceeded`
+- `rejected:risk_framework_portfolio_risk_budget_exceeded`
 - `rejected:risk_framework_max_position_size_exceeded`
 - `rejected:risk_framework_max_account_exposure_pct_exceeded`
 - `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
@@ -66,8 +73,10 @@ must be normalized to the canonical vocabulary above before cross-surface
 inspection/read comparison.
 
 For issue #993 producer paths, evidence rows are emitted only when a cap or
-boundary is violated. Approved outcomes remain deterministic and carry an empty
-evidence tuple.
+boundary is violated. For issue #1047 bounded risk-budget paths, approved
+outcomes emit deterministic bounded evidence rows for stop-loss position
+sizing, trade risk, strategy risk, symbol risk, and portfolio risk when bounded
+risk evidence is required.
 
 ## Runtime and Portfolio Producers
 
@@ -78,8 +87,11 @@ Risk producer:
 
 Approval discipline:
 
-- approved risk outcomes (`approved: within_risk_limits`) emit no evidence rows
-- reject outcomes emit one canonical reject/cap/boundary evidence row
+- exposure-only approved risk outcomes (`approved: within_risk_limits`) emit no
+  evidence rows
+- bounded risk-budget approved outcomes emit deterministic approve evidence
+  rows for trade, strategy, symbol, and portfolio risk scope
+- reject outcomes emit canonical reject/cap/boundary evidence rows
 
 Execution adapter propagation:
 
@@ -112,18 +124,31 @@ Portfolio discipline:
 Deterministic ordering for per-request risk evaluation:
 
 1. runtime boundary (`kill_switch_enabled`)
-2. trade cap (`max_position_size`)
-3. portfolio cap (`max_account_exposure_pct`)
-4. strategy cap (`max_strategy_exposure_pct`)
-5. symbol cap (`max_symbol_exposure_pct`)
+2. stop-loss evidence missing or invalid
+3. bounded stop-loss position sizing
+4. per-trade stop-loss risk budget
+5. strategy risk budget
+6. symbol risk budget
+7. portfolio risk budget
+8. trade cap (`max_position_size`)
+9. portfolio cap (`max_account_exposure_pct`)
+10. strategy cap (`max_strategy_exposure_pct`)
+11. symbol cap (`max_symbol_exposure_pct`)
 
 Normalized precedence order (canonical reason codes):
 
-1. `rejected:risk_framework_kill_switch_enabled`
-2. `rejected:risk_framework_max_position_size_exceeded`
-3. `rejected:risk_framework_max_account_exposure_pct_exceeded`
-4. `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
-5. `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
+- `rejected:risk_framework_kill_switch_enabled`
+- `rejected:risk_framework_stop_loss_evidence_missing`
+- `rejected:risk_framework_stop_loss_evidence_invalid`
+- `rejected:risk_framework_position_size_exceeds_stop_loss_budget`
+- `rejected:risk_framework_max_trade_risk_exceeded`
+- `rejected:risk_framework_strategy_risk_budget_exceeded`
+- `rejected:risk_framework_symbol_risk_budget_exceeded`
+- `rejected:risk_framework_portfolio_risk_budget_exceeded`
+- `rejected:risk_framework_max_position_size_exceeded`
+- `rejected:risk_framework_max_account_exposure_pct_exceeded`
+- `rejected:risk_framework_max_strategy_exposure_pct_exceeded`
+- `rejected:risk_framework_max_symbol_exposure_pct_exceeded`
 
 Deterministic ordering for portfolio decision pipeline:
 

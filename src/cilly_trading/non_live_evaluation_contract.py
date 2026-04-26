@@ -16,6 +16,13 @@ NonLiveScope = Literal["trade", "symbol", "strategy", "portfolio", "runtime"]
 
 CanonicalRiskRejectionReasonCode = Literal[
     "rejected:risk_framework_kill_switch_enabled",
+    "rejected:risk_framework_stop_loss_evidence_missing",
+    "rejected:risk_framework_stop_loss_evidence_invalid",
+    "rejected:risk_framework_position_size_exceeds_stop_loss_budget",
+    "rejected:risk_framework_max_trade_risk_exceeded",
+    "rejected:risk_framework_strategy_risk_budget_exceeded",
+    "rejected:risk_framework_symbol_risk_budget_exceeded",
+    "rejected:risk_framework_portfolio_risk_budget_exceeded",
     "rejected:risk_framework_max_position_size_exceeded",
     "rejected:risk_framework_max_account_exposure_pct_exceeded",
     "rejected:risk_framework_max_strategy_exposure_pct_exceeded",
@@ -24,6 +31,13 @@ CanonicalRiskRejectionReasonCode = Literal[
 
 CANONICAL_RISK_REJECTION_REASON_CODES: tuple[CanonicalRiskRejectionReasonCode, ...] = (
     "rejected:risk_framework_kill_switch_enabled",
+    "rejected:risk_framework_stop_loss_evidence_missing",
+    "rejected:risk_framework_stop_loss_evidence_invalid",
+    "rejected:risk_framework_position_size_exceeds_stop_loss_budget",
+    "rejected:risk_framework_max_trade_risk_exceeded",
+    "rejected:risk_framework_strategy_risk_budget_exceeded",
+    "rejected:risk_framework_symbol_risk_budget_exceeded",
+    "rejected:risk_framework_portfolio_risk_budget_exceeded",
     "rejected:risk_framework_max_position_size_exceeded",
     "rejected:risk_framework_max_account_exposure_pct_exceeded",
     "rejected:risk_framework_max_strategy_exposure_pct_exceeded",
@@ -39,6 +53,25 @@ RISK_FRAMEWORK_REASON_TO_CANONICAL_REJECTION_REASON: dict[
     str, CanonicalRiskRejectionReasonCode
 ] = {
     "rejected: kill_switch_enabled": "rejected:risk_framework_kill_switch_enabled",
+    "rejected: stop_loss_evidence_missing": (
+        "rejected:risk_framework_stop_loss_evidence_missing"
+    ),
+    "rejected: stop_loss_evidence_invalid": (
+        "rejected:risk_framework_stop_loss_evidence_invalid"
+    ),
+    "rejected: position_size_exceeds_stop_loss_budget": (
+        "rejected:risk_framework_position_size_exceeds_stop_loss_budget"
+    ),
+    "rejected: max_trade_risk_exceeded": "rejected:risk_framework_max_trade_risk_exceeded",
+    "rejected: strategy_risk_budget_exceeded": (
+        "rejected:risk_framework_strategy_risk_budget_exceeded"
+    ),
+    "rejected: symbol_risk_budget_exceeded": (
+        "rejected:risk_framework_symbol_risk_budget_exceeded"
+    ),
+    "rejected: portfolio_risk_budget_exceeded": (
+        "rejected:risk_framework_portfolio_risk_budget_exceeded"
+    ),
     "rejected: max_position_size_exceeded": "rejected:risk_framework_max_position_size_exceeded",
     "rejected: max_account_exposure_pct_exceeded": (
         "rejected:risk_framework_max_account_exposure_pct_exceeded"

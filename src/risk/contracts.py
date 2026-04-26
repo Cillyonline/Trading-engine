@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from cilly_trading.non_live_evaluation_contract import NonLiveEvaluationEvidence
+
 
 DecisionType = Literal["APPROVED", "REJECTED"]
 
@@ -44,6 +46,7 @@ class RiskDecision:
         reason: Human-readable explanation for the decision.
         timestamp: timezone-aware UTC datetime of evaluation.
         rule_version: Version identifier of the risk policy/ruleset used.
+        policy_evidence: Deterministic bounded non-live evidence rows.
     """
 
     decision: DecisionType
@@ -52,6 +55,7 @@ class RiskDecision:
     reason: str
     timestamp: datetime
     rule_version: str
+    policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()
 
 
 class RiskGate(Protocol):

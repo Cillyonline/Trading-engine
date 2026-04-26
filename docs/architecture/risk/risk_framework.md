@@ -89,8 +89,10 @@ The canonical cross-framework contract is:
 Evidence discipline for this bounded contract:
 
 - risk evaluator outcomes are `approved` or `rejected`
-- evidence rows are emitted only when a cap/boundary is violated (`rejected`)
-- approved outcomes emit an empty evidence tuple
+- exposure-only approved outcomes emit an empty evidence tuple
+- bounded risk-budget approved outcomes emit deterministic stop-loss
+  position-sizing, trade, strategy, symbol, and portfolio evidence rows
+- rejected outcomes emit canonical cap/boundary evidence rows
 
 ## 8.2) Bounded Risk-Framework Authority Contract
 This framework is governed by one canonical bounded risk-framework authority

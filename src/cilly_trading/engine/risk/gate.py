@@ -70,6 +70,33 @@ _COVERED_EVIDENCE_SCOPES: frozenset[str] = frozenset(
 
 _RISK_REASON_TO_EVIDENCE_METADATA: dict[str, tuple[str, str, str]] = {
     "rejected: kill_switch_enabled": ("boundary", "runtime", "kill_switch_enabled"),
+    "rejected: stop_loss_evidence_missing": (
+        "boundary",
+        "trade",
+        "stop_loss_evidence_required",
+    ),
+    "rejected: stop_loss_evidence_invalid": (
+        "boundary",
+        "trade",
+        "stop_loss_evidence_valid",
+    ),
+    "rejected: position_size_exceeds_stop_loss_budget": (
+        "cap",
+        "trade",
+        "stop_loss_position_size",
+    ),
+    "rejected: max_trade_risk_exceeded": ("cap", "trade", "max_trade_risk"),
+    "rejected: strategy_risk_budget_exceeded": (
+        "cap",
+        "strategy",
+        "strategy_risk_budget",
+    ),
+    "rejected: symbol_risk_budget_exceeded": ("cap", "symbol", "symbol_risk_budget"),
+    "rejected: portfolio_risk_budget_exceeded": (
+        "cap",
+        "portfolio",
+        "portfolio_risk_budget",
+    ),
     "rejected: max_position_size_exceeded": ("cap", "trade", "max_position_size"),
     "rejected: max_account_exposure_pct_exceeded": (
         "cap",
@@ -97,6 +124,12 @@ def _safe_pct(numerator: float, denominator: float) -> float:
     if denominator == 0.0:
         return float("inf")
     return numerator / denominator
+
+
+def _risk_limit_notional(account_equity: float, limit_pct: float | None) -> float:
+    if limit_pct is None:
+        return float("inf")
+    return abs(account_equity) * limit_pct
 
 
 def _extract_policy_evidence(
@@ -139,12 +172,46 @@ def _collect_covered_rejection_reason_codes(
                 "covered risk policy evidence must include non-empty reason_code"
             )
         if decision == "approve":
-            raise RiskEvidenceDisciplineError(
-                "covered risk policy evidence contradicts rejection discipline: decision='approve'"
-            )
+            continue
         normalize_risk_rejection_reason_code(reason_code)
         rejection_reason_codes.append(reason_code)
     return tuple(rejection_reason_codes)
+
+
+def _validate_covered_policy_evidence(policy_evidence: tuple[Any, ...]) -> None:
+    for evidence in policy_evidence:
+        scope = _read_evidence_field(evidence, "scope")
+        if scope not in _COVERED_EVIDENCE_SCOPES:
+            continue
+        decision = _read_evidence_field(evidence, "decision")
+        if decision not in {"approve", "reject"}:
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence must declare decision='approve' or decision='reject'"
+            )
+        reason_code = _read_evidence_field(evidence, "reason_code")
+        if not isinstance(reason_code, str) or not reason_code:
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence must include non-empty reason_code"
+            )
+        if decision == "reject":
+            normalize_risk_rejection_reason_code(reason_code)
+        elif reason_code.startswith("rejected:"):
+            raise RiskEvidenceDisciplineError(
+                "covered risk policy evidence contradicts rejection discipline: decision='approve'"
+            )
+
+
+def _first_rejection_evidence_limit(
+    policy_evidence: tuple[Any, ...],
+    reason_code: str,
+) -> float | None:
+    for evidence in policy_evidence:
+        if _read_evidence_field(evidence, "reason_code") != reason_code:
+            continue
+        limit_value = _read_evidence_field(evidence, "limit_value")
+        if isinstance(limit_value, int | float):
+            return float(limit_value)
+    return None
 
 
 def _build_synthetic_rejection_evidence(
@@ -213,6 +280,7 @@ def adapt_risk_framework_response_to_risk_decision(
 
     reason = framework_response.reason
     if reason == "approved: within_risk_limits":
+        _validate_covered_policy_evidence(policy_evidence)
         if _collect_covered_rejection_reason_codes(policy_evidence):
             raise RiskEvidenceDisciplineError(
                 "approved risk decision contains covered rejection evidence rows"
@@ -229,10 +297,9 @@ def adapt_risk_framework_response_to_risk_decision(
             raise ValueError(
                 f"unsupported risk-framework reason for execution mapping: {framework_response.reason}"
             ) from exc
+        _validate_covered_policy_evidence(policy_evidence)
         evidence_reason_codes = _collect_covered_rejection_reason_codes(policy_evidence)
         if not evidence_reason_codes:
-            # Compatibility mapping for bounded non-live producers that still emit
-            # reason-only rejects without explicit policy evidence rows.
             evidence_reason_codes = (reason,)
         try:
             precedence_candidates = [reason, *evidence_reason_codes]
@@ -247,6 +314,39 @@ def adapt_risk_framework_response_to_risk_decision(
         elif reason == "rejected: max_position_size_exceeded":
             score = float(normalized_proposed)
             max_allowed = float(limits.max_position_size)
+        elif reason == "rejected: stop_loss_evidence_missing":
+            score = float("inf")
+            max_allowed = 0.0
+        elif reason == "rejected: stop_loss_evidence_invalid":
+            score = float("inf")
+            max_allowed = 0.0
+        elif reason == "rejected: position_size_exceeds_stop_loss_budget":
+            score = float(normalized_proposed)
+            max_allowed = _first_rejection_evidence_limit(policy_evidence, reason) or 0.0
+        elif reason == "rejected: max_trade_risk_exceeded":
+            score = float(framework_response.risk_score)
+            max_allowed = _risk_limit_notional(
+                normalized_equity,
+                limits.max_trade_risk_pct,
+            )
+        elif reason == "rejected: strategy_risk_budget_exceeded":
+            score = float(framework_response.risk_score)
+            max_allowed = _risk_limit_notional(
+                normalized_equity,
+                limits.max_strategy_risk_pct,
+            )
+        elif reason == "rejected: symbol_risk_budget_exceeded":
+            score = float(framework_response.risk_score)
+            max_allowed = _risk_limit_notional(
+                normalized_equity,
+                limits.max_symbol_risk_pct,
+            )
+        elif reason == "rejected: portfolio_risk_budget_exceeded":
+            score = float(framework_response.risk_score)
+            max_allowed = _risk_limit_notional(
+                normalized_equity,
+                limits.max_portfolio_risk_pct,
+            )
         elif reason == "rejected: max_account_exposure_pct_exceeded":
             score = float(framework_response.risk_score)
             max_allowed = float(limits.max_account_exposure_pct)
@@ -271,7 +371,11 @@ def adapt_risk_framework_response_to_risk_decision(
         raise ValueError("risk-framework approval flag conflicts with mapped execution decision")
 
     timestamp = evaluated_at or datetime.now(tz=timezone.utc)
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+    if (
+        timestamp.tzinfo is None
+        or timestamp.utcoffset() is None
+        or timestamp.utcoffset() != timezone.utc.utcoffset(timestamp)
+    ):
         raise ValueError("evaluated_at must be timezone-aware and in UTC")
 
     return _build_risk_decision(
@@ -296,6 +400,12 @@ def evaluate_risk_framework_execution_decision(
     strategy_exposure: float,
     symbol_exposure: float,
     limits: FrameworkRiskLimits,
+    entry_price: float | None = None,
+    stop_loss_price: float | None = None,
+    strategy_risk_used: float = 0.0,
+    symbol_risk_used: float = 0.0,
+    portfolio_risk_used: float = 0.0,
+    require_bounded_risk_evidence: bool = False,
     rule_version: str = "risk-framework-v1",
     config: Mapping[str, object] | None = None,
     evaluated_at: datetime | None = None,
@@ -308,6 +418,12 @@ def evaluate_risk_framework_execution_decision(
         proposed_position_size=proposed_position_size,
         account_equity=account_equity,
         current_exposure=current_exposure,
+        entry_price=entry_price,
+        stop_loss_price=stop_loss_price,
+        strategy_risk_used=strategy_risk_used,
+        symbol_risk_used=symbol_risk_used,
+        portfolio_risk_used=portfolio_risk_used,
+        require_bounded_risk_evidence=require_bounded_risk_evidence,
     )
     framework_response = evaluate_framework_risk(
         framework_request,

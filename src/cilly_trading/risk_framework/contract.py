@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
+from cilly_trading.non_live_evaluation_contract import NonLiveEvaluationEvidence
+
 
 @dataclass(frozen=True)
 class RiskEvaluationRequest:
@@ -20,6 +22,17 @@ class RiskEvaluationRequest:
         proposed_position_size: Requested position size before risk adjustment.
         account_equity: Current account equity used by downstream evaluators.
         current_exposure: Current account exposure before this proposal.
+        entry_price: Optional proposed entry price for bounded stop-loss risk.
+        stop_loss_price: Optional proposed stop-loss price for bounded max-risk
+            evidence.
+        strategy_risk_used: Current strategy-level bounded risk before this
+            proposal.
+        symbol_risk_used: Current symbol-level bounded risk before this
+            proposal.
+        portfolio_risk_used: Current portfolio-level bounded risk before this
+            proposal.
+        require_bounded_risk_evidence: Require stop-loss and bounded risk-budget
+            evidence to fail closed when missing or contradictory.
     """
 
     strategy_id: str
@@ -27,6 +40,12 @@ class RiskEvaluationRequest:
     proposed_position_size: float
     account_equity: float
     current_exposure: float
+    entry_price: Optional[float] = None
+    stop_loss_price: Optional[float] = None
+    strategy_risk_used: float = 0.0
+    symbol_risk_used: float = 0.0
+    portfolio_risk_used: float = 0.0
+    require_bounded_risk_evidence: bool = False
 
 
 @dataclass(frozen=True)
@@ -38,12 +57,14 @@ class RiskEvaluationResponse:
         reason: Human-readable explanation of the evaluation outcome.
         adjusted_position_size: Optional adjusted position size.
         risk_score: Numeric risk score produced by an implementation.
+        policy_evidence: Deterministic bounded non-live evidence rows.
     """
 
     approved: bool
     reason: str
     adjusted_position_size: Optional[float]
     risk_score: float
+    policy_evidence: tuple[NonLiveEvaluationEvidence, ...] = ()
 
 
 class RiskEvaluator(Protocol):
