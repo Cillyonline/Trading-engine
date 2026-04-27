@@ -93,6 +93,35 @@ recalibration, or scope expansion beyond bounded decision-support review.
 Weak or failing slices limit interpretation outside covered conditions. They do not
 create live-trading approval, trader_validation completion, or profitability claims.
 
+## 4.3 Per-Strategy MVP Score Calibration Boundary
+
+RSI2 and Turtle MVP aggregate scores are classified as bounded per-strategy
+calibration evidence only.
+
+The bounded strategy-score calibration audit relates:
+
+- the covered RSI2 or Turtle aggregate score
+- the ordinal `confidence_tier`
+- covered backtest-realism evidence where available
+- matched paper-trade outcomes where an explicit `paper_trade_id` link exists
+
+The audit emits explicit `stable`, `weak`, `failing`, or `limited` classification:
+
+- `stable`: covered per-strategy score evidence is supported by stable backtest-realism
+  coverage and a favorable matched paper outcome
+- `weak`: covered evidence is partial, open, flat, or otherwise not strong enough for
+  stable interpretation
+- `failing`: covered score evidence conflicts with failing realism evidence, invalid
+  paper matching, or an adverse matched paper outcome
+- `limited`: backtest-realism evidence or matched paper evidence is missing, so the
+  score remains bounded per-strategy evidence with limited calibration support
+
+This audit does not rescore strategies, optimize strategy parameters, forecast
+profitability, or validate trader judgement. Missing evidence must reduce the
+classification to weak or limited and must not inflate confidence claims.
+
+Confidence tier remains ordinal and does not represent a probability. Cross-strategy comparability remains explicitly unsupported unless governed evidence proves otherwise; current RSI2 and Turtle score calibration does not create cross-strategy ranking authority.
+
 ## 5. Runtime and Documentation Alignment Rule
 
 All runtime wording and documentation must remain consistent with this governance contract:
@@ -111,6 +140,8 @@ wording templates that runtime qualification uses:
 - `CONFIDENCE_TIER_PRECISION_DISCLAIMER`: the bounded precision statement
 - `QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY`: the bounded robustness
   interpretation limit for covered versus weak/failing slices
+- `STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY`: the bounded per-strategy
+  score-calibration limit for RSI2/Turtle MVP score evidence
 
 ## 6. Non-Goals
 
@@ -120,3 +151,4 @@ This governance contract does not grant:
 - live trading approval or broker execution approval
 - forecast or probability certification
 - robustness claims outside covered conditions
+- trader_validation completion or profitability forecasting from MVP score calibration

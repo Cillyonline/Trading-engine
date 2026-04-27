@@ -1352,6 +1352,23 @@ def build_decision_card_inspection_items(
                     match_reference=match_reference,
                 )
             )
+            strategy_score_calibration_audit = (
+                paper_inspection_service.build_bounded_strategy_score_calibration_audit(
+                    canonical_execution_repo=canonical_repo,
+                    decision_card_id=card.decision_card_id,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    aggregate_score=card.score.aggregate_score,
+                    confidence_tier=card.score.confidence_tier,
+                    realism_sensitivity_matrix=realism_sensitivity_matrix,
+                    match_reference=match_reference,
+                )
+            )
+            if strategy_score_calibration_audit is not None:
+                metadata["bounded_strategy_score_calibration_audit"] = (
+                    strategy_score_calibration_audit
+                )
 
             paper_match_status, paper_trade_id = (
                 paper_inspection_service.resolve_bounded_paper_linkage_status(

@@ -73,6 +73,18 @@ CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY = (
     "matched paper-trade outcomes. It does not imply trader validation, profitability forecasting, "
     "live-trading readiness, or operational readiness."
 )
+STRATEGY_SCORE_CALIBRATION_CONTRACT_ID = (
+    "bounded_strategy_score_calibration.backtest_to_paper.paper_audit.v1"
+)
+STRATEGY_SCORE_CALIBRATION_CONTRACT_VERSION = "1.0.0"
+STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY = (
+    "Bounded strategy-score calibration is limited to per-strategy non-live interpretation of "
+    "RSI2/Turtle MVP aggregate scores against covered backtest-realism evidence and matched "
+    "paper-trade outcomes where available. Confidence tier remains ordinal, not probabilistic. "
+    "Cross-strategy comparability remains explicitly unsupported unless governed evidence proves "
+    "otherwise. It does not imply trader validation, profitability forecasting, live-trading "
+    "readiness, or operational readiness."
+)
 
 END_TO_END_TRACEABILITY_CONTRACT_ID = (
     "signal_to_paper_reconciliation_traceability.paper_audit.v1"
@@ -115,6 +127,8 @@ PaperTradeOutcomeDirection = Literal["favorable", "flat", "adverse", "open", "in
 SignalQualityStabilityClassification = Literal["stable", "weak", "failing"]
 BacktestRealismCalibrationStatus = Literal["stable", "weak", "failing", "missing"]
 ConfidenceCalibrationClassification = Literal["stable", "weak", "failing"]
+StrategyScoreCalibrationClassification = Literal["stable", "weak", "failing", "limited"]
+StrategyScoreEvidenceCoverage = Literal["covered", "partial", "missing", "invalid"]
 
 REQUIRED_COMPONENT_CATEGORIES: tuple[DecisionComponentCategory, ...] = (
     "signal_quality",
@@ -920,6 +934,226 @@ def evaluate_bounded_confidence_calibration_audit(
     )
 
 
+class BoundedStrategyScoreCalibrationAudit(BaseModel):
+    """Bounded per-strategy MVP score calibration against covered evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_id: str = STRATEGY_SCORE_CALIBRATION_CONTRACT_ID
+    contract_version: str = STRATEGY_SCORE_CALIBRATION_CONTRACT_VERSION
+    covered_case_id: str = Field(min_length=1)
+    strategy_id: Literal["RSI2", "TURTLE"]
+    score_scope: Literal["per_strategy"] = "per_strategy"
+    score_interpretation: Literal["bounded_per_strategy_evidence"] = (
+        "bounded_per_strategy_evidence"
+    )
+    aggregate_score: float = Field(ge=0.0, le=100.0)
+    confidence_tier: DecisionConfidenceTier
+    confidence_tier_semantics: Literal["ordinal_not_probabilistic"] = (
+        "ordinal_not_probabilistic"
+    )
+    backtest_realism_status: BacktestRealismCalibrationStatus
+    backtest_realism_reason: str = Field(min_length=24)
+    match_reference: BoundedDecisionToPaperUsefulnessMatchReference | None = None
+    match_status: DecisionToPaperUsefulnessMatchStatus
+    matched_outcome: BoundedPaperTradeOutcome | None = None
+    evidence_coverage: StrategyScoreEvidenceCoverage
+    calibration_classification: StrategyScoreCalibrationClassification
+    calibration_reason: str = Field(min_length=24)
+    cross_strategy_comparison_supported: Literal[False] = False
+    interpretation_limit: str = Field(min_length=24)
+
+    @field_validator("contract_id")
+    @classmethod
+    def _validate_contract_id(cls, value: str) -> str:
+        if value != STRATEGY_SCORE_CALIBRATION_CONTRACT_ID:
+            raise ValueError(f"Unsupported strategy-score calibration contract_id: {value}")
+        return value
+
+    @field_validator("contract_version")
+    @classmethod
+    def _validate_contract_version(cls, value: str) -> str:
+        if value != STRATEGY_SCORE_CALIBRATION_CONTRACT_VERSION:
+            raise ValueError(
+                f"Unsupported strategy-score calibration contract_version: {value}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_boundary_alignment(self) -> "BoundedStrategyScoreCalibrationAudit":
+        if self.match_status == "missing":
+            if self.matched_outcome is not None:
+                raise ValueError("matched_outcome must be omitted when match_status is missing")
+        else:
+            if self.matched_outcome is None:
+                raise ValueError(
+                    "matched_outcome is required when match_status is matched, open, or invalid"
+                )
+        lowered_limit = self.interpretation_limit.casefold()
+        required_phrases = (
+            "per-strategy",
+            "confidence tier remains ordinal",
+            "cross-strategy comparability remains explicitly unsupported",
+            "non-live",
+            "trader validation",
+            "profitability forecasting",
+            "live-trading readiness",
+        )
+        if not all(phrase in lowered_limit for phrase in required_phrases):
+            raise ValueError(
+                "interpretation_limit must preserve per-strategy, ordinal, non-live, "
+                "non-comparability, trader-validation, profitability, and readiness boundaries"
+            )
+        return self
+
+
+def _classify_strategy_score_evidence_coverage(
+    *,
+    backtest_realism_status: BacktestRealismCalibrationStatus,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+) -> StrategyScoreEvidenceCoverage:
+    if backtest_realism_status == "missing" and match_status == "missing":
+        return "missing"
+    if backtest_realism_status == "failing" or match_status == "invalid":
+        return "invalid"
+    if backtest_realism_status == "missing" or match_status in {"missing", "open"}:
+        return "partial"
+    return "covered"
+
+
+def _classify_strategy_score_calibration(
+    *,
+    aggregate_score: float,
+    confidence_tier: DecisionConfidenceTier,
+    backtest_realism_status: BacktestRealismCalibrationStatus,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    matched_outcome: BoundedPaperTradeOutcome | None,
+) -> tuple[
+    StrategyScoreEvidenceCoverage,
+    StrategyScoreCalibrationClassification,
+    str,
+]:
+    evidence_coverage = _classify_strategy_score_evidence_coverage(
+        backtest_realism_status=backtest_realism_status,
+        match_status=match_status,
+    )
+    if evidence_coverage == "missing":
+        return (
+            evidence_coverage,
+            "limited",
+            "Strategy score has neither covered backtest-realism evidence nor matched paper "
+            "outcome evidence, so per-strategy calibration is limited in non-live review.",
+        )
+    if evidence_coverage == "invalid":
+        return (
+            evidence_coverage,
+            "failing",
+            "Strategy score evidence includes failing backtest-realism coverage or invalid paper "
+            "matching, so bounded per-strategy calibration is failing.",
+        )
+    if match_status == "open":
+        return (
+            evidence_coverage,
+            "weak",
+            "Strategy score has an open matched paper trade, so calibration remains weak until "
+            "the downstream paper outcome is closed.",
+        )
+    if backtest_realism_status == "missing" or match_status == "missing":
+        return (
+            evidence_coverage,
+            "limited",
+            "Strategy score is supported by only partial calibration evidence, so interpretation "
+            "is limited to bounded per-strategy evidence.",
+        )
+    if matched_outcome is None:
+        return (
+            evidence_coverage,
+            "weak",
+            "Matched paper outcome is unavailable, so bounded per-strategy score calibration "
+            "remains weak.",
+        )
+    if matched_outcome.outcome_direction == "adverse":
+        if confidence_tier == "low" or aggregate_score < QUALIFICATION_MEDIUM_AGGREGATE_THRESHOLD:
+            return (
+                evidence_coverage,
+                "weak",
+                "Adverse matched paper outcome aligns only with a cautious low-score posture, so "
+                "per-strategy calibration remains weak rather than stable.",
+            )
+        return (
+            evidence_coverage,
+            "failing",
+            "Strategy score remained medium/high while the matched paper outcome closed adverse, "
+            "so bounded per-strategy calibration is failing.",
+        )
+    if matched_outcome.outcome_direction == "flat":
+        return (
+            evidence_coverage,
+            "weak",
+            "Matched paper outcome closed flat, so the strategy score has weak bounded "
+            "per-strategy calibration evidence.",
+        )
+    if backtest_realism_status == "stable" and confidence_tier in {"medium", "high"}:
+        return (
+            evidence_coverage,
+            "stable",
+            "Strategy score is bounded per-strategy evidence with stable covered backtest-realism "
+            "coverage and a favorable matched paper outcome.",
+        )
+    return (
+        evidence_coverage,
+        "weak",
+        "Strategy score has favorable paper evidence but incomplete or cautious supporting "
+        "evidence, so bounded per-strategy calibration remains weak.",
+    )
+
+
+def evaluate_bounded_strategy_score_calibration_audit(
+    *,
+    covered_case_id: str,
+    strategy_id: Literal["RSI2", "TURTLE"],
+    aggregate_score: float,
+    confidence_tier: DecisionConfidenceTier,
+    backtest_realism_status: BacktestRealismCalibrationStatus,
+    backtest_realism_reason: str,
+    match_status: DecisionToPaperUsefulnessMatchStatus,
+    match_reference: dict[str, Any] | None = None,
+    matched_outcome: dict[str, Any] | None = None,
+) -> BoundedStrategyScoreCalibrationAudit:
+    normalized_match_reference = (
+        BoundedDecisionToPaperUsefulnessMatchReference.model_validate(match_reference)
+        if match_reference is not None
+        else None
+    )
+    normalized_matched_outcome = (
+        BoundedPaperTradeOutcome.model_validate(matched_outcome)
+        if matched_outcome is not None
+        else None
+    )
+    evidence_coverage, classification, reason = _classify_strategy_score_calibration(
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        backtest_realism_status=backtest_realism_status,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+    )
+    return BoundedStrategyScoreCalibrationAudit(
+        covered_case_id=covered_case_id,
+        strategy_id=strategy_id,
+        aggregate_score=aggregate_score,
+        confidence_tier=confidence_tier,
+        backtest_realism_status=backtest_realism_status,
+        backtest_realism_reason=backtest_realism_reason,
+        match_reference=normalized_match_reference,
+        match_status=match_status,
+        matched_outcome=normalized_matched_outcome,
+        evidence_coverage=evidence_coverage,
+        calibration_classification=classification,
+        calibration_reason=reason,
+        interpretation_limit=STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY,
+    )
+
+
 EndToEndTraceabilityLinkageStatus = Literal["matched", "open", "missing", "invalid"]
 
 
@@ -1659,6 +1893,12 @@ __all__ = [
     "SIGNAL_QUALITY_STABILITY_INTERPRETATION_BOUNDARY",
     "SIGNAL_QUALITY_STABILITY_HIGH_THRESHOLD",
     "SIGNAL_QUALITY_STABILITY_LOW_THRESHOLD",
+    "CONFIDENCE_CALIBRATION_CONTRACT_ID",
+    "CONFIDENCE_CALIBRATION_CONTRACT_VERSION",
+    "CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY",
+    "STRATEGY_SCORE_CALIBRATION_CONTRACT_ID",
+    "STRATEGY_SCORE_CALIBRATION_CONTRACT_VERSION",
+    "STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY",
     "END_TO_END_TRACEABILITY_CONTRACT_ID",
     "END_TO_END_TRACEABILITY_CONTRACT_VERSION",
     "END_TO_END_TRACEABILITY_INTERPRETATION_BOUNDARY",
@@ -1688,6 +1928,7 @@ __all__ = [
     "BoundedReconciliationStageReference",
     "BoundedSignalAnalysisStageReference",
     "BoundedSignalQualityStabilityAudit",
+    "BoundedStrategyScoreCalibrationAudit",
     "BoundedTraderRelevanceCaseEvaluation",
     "BoundedTraderRelevanceValidation",
     "ComponentScore",
@@ -1696,6 +1937,8 @@ __all__ = [
     "DecisionRationale",
     "EndToEndTraceabilityLinkageStatus",
     "SignalQualityStabilityClassification",
+    "StrategyScoreCalibrationClassification",
+    "StrategyScoreEvidenceCoverage",
     "HardGateEvaluation",
     "HardGateResult",
     "QualificationProfileRobustnessAudit",
@@ -1705,6 +1948,7 @@ __all__ = [
     "evaluate_bounded_decision_to_paper_usefulness_audit",
     "evaluate_bounded_end_to_end_traceability_chain",
     "evaluate_bounded_signal_quality_stability_audit",
+    "evaluate_bounded_strategy_score_calibration_audit",
     "evaluate_bounded_trader_relevance_cases",
     "serialize_decision_card",
     "validate_decision_card",
