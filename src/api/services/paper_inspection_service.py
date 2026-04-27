@@ -21,6 +21,7 @@ from cilly_trading.engine.decision_card_contract import (
     evaluate_bounded_confidence_calibration_audit,
     evaluate_bounded_decision_to_paper_usefulness_audit,
     evaluate_bounded_signal_quality_stability_audit,
+    evaluate_bounded_strategy_score_calibration_audit,
 )
 from cilly_trading.models import ExecutionEvent, Order, Position, Trade
 
@@ -1153,6 +1154,74 @@ def build_bounded_confidence_calibration_audit(
 
     audit = evaluate_bounded_confidence_calibration_audit(
         covered_case_id=decision_card_id,
+        confidence_tier=confidence_tier,
+        backtest_realism_status=backtest_realism_status,
+        backtest_realism_reason=backtest_realism_reason,
+        match_status=match_status,
+        match_reference=(
+            normalized_match_reference.model_dump(mode="python")
+            if normalized_match_reference is not None
+            else None
+        ),
+        matched_outcome=matched_outcome,
+    )
+    return audit.model_dump(mode="python")
+
+
+def build_bounded_strategy_score_calibration_audit(
+    *,
+    canonical_execution_repo: Any | None,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    aggregate_score: float,
+    confidence_tier: Literal["low", "medium", "high"],
+    realism_sensitivity_matrix: dict[str, Any] | None,
+    match_reference: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build bounded per-strategy score calibration for governed MVP strategies."""
+
+    normalized_strategy_id = strategy_id.strip().upper()
+    if normalized_strategy_id not in {"RSI2", "TURTLE"}:
+        return None
+
+    backtest_realism_status, backtest_realism_reason = classify_backtest_realism_calibration_status(
+        realism_sensitivity_matrix
+    )
+
+    normalized_match_reference: BoundedDecisionToPaperUsefulnessMatchReference | None = None
+    if isinstance(match_reference, dict):
+        try:
+            normalized_match_reference = (
+                BoundedDecisionToPaperUsefulnessMatchReference.model_validate(match_reference)
+            )
+        except ValidationError:
+            normalized_match_reference = None
+
+    match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
+    matched_outcome: dict[str, Any] | None = None
+    if normalized_match_reference is not None:
+        trade: Trade | None = None
+        if canonical_execution_repo is not None:
+            try:
+                trade = canonical_execution_repo.get_trade(
+                    normalized_match_reference.paper_trade_id
+                )
+            except Exception:
+                trade = None
+        if trade is not None:
+            match_status, matched_outcome = _build_paper_trade_outcome_payload(
+                trade=trade,
+                expected_symbol=symbol,
+                expected_strategy_id=normalized_strategy_id,
+                decision_generated_at_utc=generated_at_utc,
+            )
+
+    audit = evaluate_bounded_strategy_score_calibration_audit(
+        covered_case_id=decision_card_id,
+        strategy_id=normalized_strategy_id,  # type: ignore[arg-type]
+        aggregate_score=aggregate_score,
         confidence_tier=confidence_tier,
         backtest_realism_status=backtest_realism_status,
         backtest_realism_reason=backtest_realism_reason,

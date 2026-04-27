@@ -122,6 +122,25 @@ The calibration remains non-live and bounded:
 - missing backtest-realism evidence or missing matched paper evidence limits calibration to
   weak bounded interpretation rather than inflating confidence claims
 
+## Per-Strategy MVP Score Calibration Boundary
+
+RSI2 and Turtle MVP aggregate scores are interpreted only as bounded per-strategy
+calibration evidence. The audit relates the covered score to backtest-realism evidence
+and matched paper-trade outcomes where those evidence links exist.
+
+Classification is bounded:
+
+- `stable`: covered backtest-realism evidence and matched paper outcome support the
+  per-strategy score interpretation
+- `weak`: evidence is open, flat, partial, or otherwise not enough for stable support
+- `failing`: evidence contradicts the covered score interpretation
+- `limited`: calibration evidence is missing
+
+Confidence tier remains ordinal, not probabilistic. Cross-strategy comparability remains
+unsupported; RSI2 and Turtle score calibration does not create cross-strategy ranking
+authority. The audit remains non-live and does not imply trader validation, paper
+profitability, live-trading readiness, or operational readiness.
+
 ## Deterministic Ranking Boundary
 
 For setup-stage candidates that meet the configured score floor, ranking is deterministic:

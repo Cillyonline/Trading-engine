@@ -997,3 +997,76 @@ def test_decision_card_inspection_persists_bounded_confidence_calibration_audit(
     assert missing["matched_outcome"] is None
     assert missing["calibration_classification"] == "weak"
     assert "non-live" in missing["interpretation_limit"]
+
+    score_stable = by_id["dc-cal-stable"]["metadata"]["bounded_strategy_score_calibration_audit"]
+    assert score_stable["contract_id"] == "bounded_strategy_score_calibration.backtest_to_paper.paper_audit.v1"
+    assert score_stable["strategy_id"] == "RSI2"
+    assert score_stable["score_interpretation"] == "bounded_per_strategy_evidence"
+    assert score_stable["score_scope"] == "per_strategy"
+    assert score_stable["confidence_tier_semantics"] == "ordinal_not_probabilistic"
+    assert score_stable["backtest_realism_status"] == "stable"
+    assert score_stable["match_status"] == "matched"
+    assert score_stable["calibration_classification"] == "stable"
+    assert score_stable["cross_strategy_comparison_supported"] is False
+
+    score_failing = by_id["dc-cal-failing"]["metadata"]["bounded_strategy_score_calibration_audit"]
+    assert score_failing["calibration_classification"] == "failing"
+    assert score_failing["matched_outcome"]["outcome_direction"] == "adverse"
+
+    score_missing = by_id["dc-cal-missing"]["metadata"]["bounded_strategy_score_calibration_audit"]
+    assert score_missing["evidence_coverage"] == "missing"
+    assert score_missing["calibration_classification"] == "limited"
+    assert (
+        "cross-strategy comparability remains explicitly unsupported"
+        in score_missing["interpretation_limit"].casefold()
+    )
+
+
+def test_decision_card_inspection_strategy_score_calibration_marks_open_evidence_weak(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-score-open",
+            strategy_id="TURTLE",
+            symbol="NVDA",
+            status="open",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="0.25",
+        )
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-score-weak",
+        artifact_name="backtest-result.json",
+        payload=_backtest_artifact_payload(),
+    )
+    _write_artifact(
+        artifacts_root,
+        run_id="run-score-weak",
+        artifact_name="decision-card.json",
+        payload=_decision_card_payload(
+            decision_card_id="dc-score-weak",
+            generated_at_utc="2026-03-24T08:00:00Z",
+            symbol="NVDA",
+            strategy_id="TURTLE",
+            qualification_state="paper_approved",
+            paper_trade_id="trade-score-open",
+        ),
+    )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    audit = response.json()["items"][0]["metadata"]["bounded_strategy_score_calibration_audit"]
+    assert audit["strategy_id"] == "TURTLE"
+    assert audit["backtest_realism_status"] == "stable"
+    assert audit["match_status"] == "open"
+    assert audit["evidence_coverage"] == "partial"
+    assert audit["calibration_classification"] == "weak"
+    assert audit["confidence_tier_semantics"] == "ordinal_not_probabilistic"

@@ -12,8 +12,10 @@ from cilly_trading.engine.decision_card_contract import (
     CONFIDENCE_TIER_PRECISION_DISCLAIMER,
     CROSS_STRATEGY_SCORE_COMPARABILITY_BOUNDARY,
     QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY,
+    STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY,
     ComponentScore,
     HardGateResult,
+    evaluate_bounded_strategy_score_calibration_audit,
 )
 from cilly_trading.engine.qualification_engine import (
     QualificationEngineInput,
@@ -309,6 +311,18 @@ def test_score_semantics_governance_doc_mentions_bounded_robustness_audit() -> N
     assert "QUALIFICATION_PROFILE_ROBUSTNESS_INTERPRETATION_BOUNDARY" in content
 
 
+def test_score_semantics_governance_doc_mentions_per_strategy_score_calibration() -> None:
+    content = GOVERNANCE_DOC.read_text(encoding="utf-8")
+
+    assert "Per-Strategy MVP Score Calibration Boundary" in content
+    assert "RSI2 and Turtle MVP aggregate scores" in content
+    assert "bounded per-strategy" in content
+    assert "limited" in content
+    assert "Confidence tier remains ordinal" in content
+    assert "Cross-strategy comparability remains explicitly unsupported" in content
+    assert "STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY" in content
+
+
 def test_score_semantics_governance_doc_defines_non_goals() -> None:
     content = GOVERNANCE_DOC.read_text(encoding="utf-8")
 
@@ -381,6 +395,19 @@ def test_signal_quality_contract_doc_mentions_bounded_confidence_calibration() -
     assert "non-live" in content
 
 
+def test_signal_quality_contract_doc_mentions_per_strategy_score_calibration() -> None:
+    content = (REPO_ROOT / "docs" / "governance" / "signal-quality-bounded-contract.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Per-Strategy MVP Score Calibration Boundary" in content
+    assert "RSI2 and Turtle MVP aggregate scores" in content
+    assert "limited" in content
+    assert "Confidence tier remains ordinal" in content
+    assert "Cross-strategy comparability remains" in content
+    assert "non-live" in content
+
+
 def test_confidence_calibration_boundary_constant_is_defined() -> None:
     boundary = CONFIDENCE_CALIBRATION_INTERPRETATION_BOUNDARY.casefold()
 
@@ -389,6 +416,97 @@ def test_confidence_calibration_boundary_constant_is_defined() -> None:
     assert "trader validation" in boundary
     assert "profitability forecasting" in boundary
     assert "live-trading readiness" in boundary
+
+
+def test_strategy_score_calibration_boundary_preserves_per_strategy_limits() -> None:
+    boundary = STRATEGY_SCORE_CALIBRATION_INTERPRETATION_BOUNDARY.casefold()
+
+    assert "per-strategy" in boundary
+    assert "rsi2/turtle mvp aggregate scores" in boundary
+    assert "confidence tier remains ordinal" in boundary
+    assert "cross-strategy comparability remains explicitly unsupported" in boundary
+    assert "non-live" in boundary
+
+
+def test_strategy_score_calibration_classifies_stable_weak_failing_and_missing_paths() -> None:
+    match_reference = {"match_mode": "paper_trade_id", "paper_trade_id": "trade-1"}
+    favorable_outcome = {
+        "trade_id": "trade-1",
+        "position_id": "pos-1",
+        "symbol": "AAPL",
+        "strategy_id": "RSI2",
+        "trade_status": "closed",
+        "opened_at_utc": "2026-03-24T08:05:00Z",
+        "closed_at_utc": "2026-03-24T09:05:00Z",
+        "outcome_direction": "favorable",
+        "realized_pnl": "1.25",
+        "unrealized_pnl": None,
+        "outcome_summary": "Matched paper trade closed with favorable bounded outcome.",
+    }
+    adverse_outcome = {**favorable_outcome, "outcome_direction": "adverse", "realized_pnl": "-1.25"}
+    open_outcome = {
+        **favorable_outcome,
+        "trade_status": "open",
+        "closed_at_utc": None,
+        "outcome_direction": "open",
+        "realized_pnl": None,
+        "unrealized_pnl": "0.25",
+    }
+
+    stable = evaluate_bounded_strategy_score_calibration_audit(
+        covered_case_id="dc-stable",
+        strategy_id="RSI2",
+        aggregate_score=84.0,
+        confidence_tier="high",
+        backtest_realism_status="stable",
+        backtest_realism_reason="Backtest-realism evidence is complete and deterministic.",
+        match_status="matched",
+        match_reference=match_reference,
+        matched_outcome=favorable_outcome,
+    )
+    weak = evaluate_bounded_strategy_score_calibration_audit(
+        covered_case_id="dc-weak",
+        strategy_id="TURTLE",
+        aggregate_score=74.0,
+        confidence_tier="medium",
+        backtest_realism_status="stable",
+        backtest_realism_reason="Backtest-realism evidence is complete and deterministic.",
+        match_status="open",
+        match_reference=match_reference,
+        matched_outcome=open_outcome,
+    )
+    failing = evaluate_bounded_strategy_score_calibration_audit(
+        covered_case_id="dc-failing",
+        strategy_id="RSI2",
+        aggregate_score=84.0,
+        confidence_tier="high",
+        backtest_realism_status="stable",
+        backtest_realism_reason="Backtest-realism evidence is complete and deterministic.",
+        match_status="matched",
+        match_reference=match_reference,
+        matched_outcome=adverse_outcome,
+    )
+    missing = evaluate_bounded_strategy_score_calibration_audit(
+        covered_case_id="dc-missing",
+        strategy_id="TURTLE",
+        aggregate_score=72.0,
+        confidence_tier="medium",
+        backtest_realism_status="missing",
+        backtest_realism_reason="Backtest-realism evidence is not available for this card.",
+        match_status="missing",
+        match_reference=None,
+        matched_outcome=None,
+    )
+
+    assert stable.score_interpretation == "bounded_per_strategy_evidence"
+    assert stable.score_scope == "per_strategy"
+    assert stable.calibration_classification == "stable"
+    assert stable.cross_strategy_comparison_supported is False
+    assert stable.confidence_tier_semantics == "ordinal_not_probabilistic"
+    assert weak.calibration_classification == "weak"
+    assert failing.calibration_classification == "failing"
+    assert missing.evidence_coverage == "missing"
+    assert missing.calibration_classification == "limited"
 
 
 def test_qualification_profile_robustness_boundary_constant_is_defined() -> None:
