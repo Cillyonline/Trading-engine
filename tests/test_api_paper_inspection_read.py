@@ -484,6 +484,10 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
         },
     ]
     assert payload["surfaces"] == {
+        "signal_inspection": [
+            "/signals",
+            "/signals/decision-surface",
+        ],
         "canonical_inspection": [
             "/decision-cards",
             "/trading-core/orders",
@@ -503,10 +507,28 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
     }
     assert payload["reference_chain"] == [
         {
+            "stage": "signal_evidence",
+            "surface": "/signals + /signals/decision-surface",
+            "reference": "analysis_run_id + symbol + strategy_id + generated_at_utc",
+            "continuity": "Covered signal evidence carries deterministic analysis and signal references before decision-card inspection.",
+        },
+        {
             "stage": "decision_evidence",
             "surface": "/decision-cards",
             "reference": "decision_card_id + metadata.bounded_decision_to_paper_match.paper_trade_id",
             "continuity": "Covered decision evidence carries the explicit paper_trade_id reference used by bounded usefulness and traceability audits.",
+        },
+        {
+            "stage": "portfolio_impact",
+            "surface": "/portfolio/positions",
+            "reference": "portfolio_impact_id = decision_card_id + strategy_id + symbol",
+            "continuity": "Portfolio impact is inspectable before paper execution through deterministic strategy_id and symbol aggregation from canonical trades.",
+        },
+        {
+            "stage": "paper_order_lifecycle",
+            "surface": "/trading-core/orders + /trading-core/execution-events",
+            "reference": "paper_order_id + execution_event_ids",
+            "continuity": "Paper order lifecycle references connect portfolio handoff intent to canonical created, submitted, fill, cancel, or terminal execution events.",
         },
         {
             "stage": "portfolio_inspection",
@@ -525,6 +547,12 @@ def test_paper_workflow_contract_is_explicit_and_aligned_to_surfaces(
             "surface": "/paper/reconciliation",
             "reference": "order_id + event_id + trade_id + position_id + account equations",
             "continuity": "Reconciliation deterministically reports any broken reference or account equation mismatch.",
+        },
+        {
+            "stage": "paper_outcome",
+            "surface": "/paper/trades + /decision-cards metadata",
+            "reference": "paper_trade_id + paper_outcome.outcome_state",
+            "continuity": "Decision-card metadata explicitly classifies paper outcomes as missing, invalid, open, or closed without inferring live or operational readiness.",
         },
     ]
     assert payload["inspection_summary"] == {
@@ -741,6 +769,7 @@ def test_paper_workflow_surfaces_align_with_traceability_chain_contract(
     # The bounded end-to-end traceability chain references these canonical
     # surfaces; assert the workflow contract still exposes them so the chain
     # remains traversable from /decision-cards through /paper/reconciliation.
+    assert "/signals/decision-surface" in surfaces["signal_inspection"]
     assert "/decision-cards" in surfaces["canonical_inspection"]
     assert "/portfolio/positions" in surfaces["portfolio_inspection"]
     assert "/paper/trades" in surfaces["paper_inspection"]
@@ -761,12 +790,16 @@ def test_paper_workflow_inspection_summary_and_reference_chain_are_deterministic
     assert first == second
     assert first["inspection_summary"]["portfolio_positions"] == portfolio_positions["total"]
     assert [item["stage"] for item in first["reference_chain"]] == [
+        "signal_evidence",
         "decision_evidence",
+        "portfolio_impact",
+        "paper_order_lifecycle",
         "portfolio_inspection",
         "paper_execution",
         "reconciliation",
+        "paper_outcome",
     ]
-    assert first["reference_chain"][1]["surface"] == "/portfolio/positions"
+    assert first["reference_chain"][2]["surface"] == "/portfolio/positions"
     assert "operational readiness" in first["steps"][-1]["expected_result"]
     assert first["boundary"]["in_scope"][-1] == (
         "bounded paper operator inspection with no readiness or operational-readiness claim"

@@ -253,6 +253,7 @@ class PaperOperatorWorkflowStepResponse(BaseModel):
 class PaperOperatorWorkflowSurfaceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    signal_inspection: List[str]
     canonical_inspection: List[str]
     portfolio_inspection: List[str]
     paper_inspection: List[str]
@@ -263,10 +264,14 @@ class PaperOperatorWorkflowReferenceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage: Literal[
+        "signal_evidence",
         "decision_evidence",
+        "portfolio_impact",
+        "paper_order_lifecycle",
         "portfolio_inspection",
         "paper_execution",
         "reconciliation",
+        "paper_outcome",
     ]
     surface: str
     reference: str

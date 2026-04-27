@@ -1070,3 +1070,99 @@ def test_decision_card_inspection_strategy_score_calibration_marks_open_evidence
     assert audit["evidence_coverage"] == "partial"
     assert audit["calibration_classification"] == "weak"
     assert audit["confidence_tier_semantics"] == "ordinal_not_probabilistic"
+
+
+def test_decision_card_metadata_exposes_signal_portfolio_paper_reconciliation_states(
+    monkeypatch, tmp_path: Path
+) -> None:
+    artifacts_root = tmp_path / "runs" / "phase6"
+    repo = _repo(tmp_path)
+    repo.save_trade(
+        _trade(
+            "trade-closed",
+            strategy_id="RSI2",
+            symbol="AAPL",
+            status="closed",
+            opened_at="2026-03-24T08:05:00Z",
+            closed_at="2026-03-24T08:45:00Z",
+            realized_pnl="1.50",
+            unrealized_pnl=None,
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-open",
+            strategy_id="RSI2",
+            symbol="MSFT",
+            status="open",
+            opened_at="2026-03-24T09:05:00Z",
+            closed_at=None,
+            realized_pnl=None,
+            unrealized_pnl="0.25",
+        )
+    )
+    repo.save_trade(
+        _trade(
+            "trade-invalid",
+            strategy_id="RSI2",
+            symbol="TSLA",
+            status="closed",
+            opened_at="2026-03-24T10:05:00Z",
+            closed_at="2026-03-24T10:45:00Z",
+            realized_pnl="1.00",
+            unrealized_pnl=None,
+        )
+    )
+
+    for decision_card_id, symbol, paper_trade_id in (
+        ("dc-closed", "AAPL", "trade-closed"),
+        ("dc-open", "MSFT", "trade-open"),
+        ("dc-invalid", "NVDA", "trade-invalid"),
+        ("dc-missing", "GOOG", None),
+    ):
+        _write_artifact(
+            artifacts_root,
+            run_id=f"run-{decision_card_id}",
+            artifact_name="decision-card.json",
+            payload=_decision_card_payload(
+                decision_card_id=decision_card_id,
+                generated_at_utc="2026-03-24T08:00:00Z",
+                symbol=symbol,
+                strategy_id="RSI2",
+                qualification_state="paper_approved",
+                paper_trade_id=paper_trade_id,
+            ),
+        )
+
+    with _client(monkeypatch, artifacts_root, repo=repo) as client:
+        response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
+
+    assert response.status_code == 200
+    by_id = {item["decision_card_id"]: item for item in response.json()["items"]}
+    states = {
+        decision_card_id: item["metadata"][
+            "bounded_signal_portfolio_paper_reconciliation_audit"
+        ]["paper_outcome"]["outcome_state"]
+        for decision_card_id, item in by_id.items()
+    }
+    assert states == {
+        "dc-closed": "closed",
+        "dc-open": "open",
+        "dc-invalid": "invalid",
+        "dc-missing": "missing",
+    }
+
+    closed = by_id["dc-closed"]["metadata"][
+        "bounded_signal_portfolio_paper_reconciliation_audit"
+    ]
+    assert closed["portfolio_impact"]["pre_paper_execution_visible"] is True
+    assert closed["portfolio_impact"]["portfolio_impact_id"] == (
+        "portfolio-impact:dc-closed:RSI2:AAPL"
+    )
+    assert closed["paper_order"]["opening_order_ids"] == ["ord-trade-closed"]
+    assert closed["classification_vocabulary"]["paper_outcome_states"] == [
+        "missing",
+        "invalid",
+        "open",
+        "closed",
+    ]
