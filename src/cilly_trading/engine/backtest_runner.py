@@ -293,6 +293,12 @@ class BacktestRunner:
             "processed_snapshots": processed_snapshots,
             "orders": serialize_orders(flow_result.orders),
             "fills": serialize_fills(flow_result.fills),
+            "execution_events": serialize_fills(
+                [*flow_result.fills, *flow_result.rejection_events]
+            ),
+            "risk_decisions": flow_result.risk_decisions,
+            "rejected_orders": serialize_orders(flow_result.rejected_orders),
+            "rejection_events": serialize_fills(flow_result.rejection_events),
             "positions": serialize_positions(flow_result.positions),
             "summary": {
                 "start_equity": metrics_baseline["summary"]["starting_equity"],

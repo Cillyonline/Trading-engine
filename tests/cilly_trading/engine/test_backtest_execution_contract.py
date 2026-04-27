@@ -23,6 +23,13 @@ from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerC
 
 
 def _sample_flow_snapshots() -> list[dict[str, object]]:
+    approved_risk = {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "10",
+        "reason": "deterministic_risk_within_bounds",
+        "rule_version": "test-risk-v1",
+    }
     return [
         {
             "id": "s1",
@@ -30,7 +37,13 @@ def _sample_flow_snapshots() -> list[dict[str, object]]:
             "symbol": "AAPL",
             "open": "100",
             "signals": [
-                {"signal_id": "sig-buy", "action": "BUY", "quantity": "2", "symbol": "AAPL"},
+                {
+                    "signal_id": "sig-buy",
+                    "action": "BUY",
+                    "quantity": "2",
+                    "symbol": "AAPL",
+                    "risk_evidence": approved_risk,
+                },
             ],
         },
         {
@@ -39,7 +52,13 @@ def _sample_flow_snapshots() -> list[dict[str, object]]:
             "symbol": "AAPL",
             "open": "110",
             "signals": [
-                {"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"},
+                {
+                    "signal_id": "sig-sell",
+                    "action": "SELL",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": approved_risk,
+                },
             ],
         },
         {
@@ -107,12 +126,152 @@ def test_representative_backtest_flow_next_snapshot() -> None:
 
     assert len(result.orders) == 2
     assert len(result.fills) == 2
+    assert len(result.risk_decisions) == 2
+    assert result.risk_decisions[0]["decision"] == "APPROVED"
+    assert result.risk_decisions[0]["evidence_status"] == "present"
+    assert result.rejected_orders == []
+    assert result.rejection_events == []
     assert result.fills[0].order_id.endswith(":sig-buy:1")
     assert result.fills[0].occurred_at == "2024-01-02T00:00:00Z"
     assert result.fills[1].order_id.endswith(":sig-sell:2")
     assert result.fills[1].occurred_at == "2024-01-03T00:00:00Z"
     assert result.positions[0].status == "open"
     assert result.positions[0].net_quantity == Decimal("1.00000000")
+
+
+def test_representative_backtest_flow_rejects_order_with_risk_evidence() -> None:
+    snapshots = [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [
+                {
+                    "signal_id": "sig-buy",
+                    "action": "BUY",
+                    "quantity": "2",
+                    "symbol": "AAPL",
+                    "risk_evidence": {
+                        "decision": "REJECTED",
+                        "score": "11",
+                        "max_allowed": "10",
+                        "reason": "deterministic_risk_limit_exceeded",
+                        "rule_version": "test-risk-v1",
+                    },
+                },
+            ],
+        },
+        {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+    ]
+
+    result = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-risk-reject",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(),
+    )
+
+    assert len(result.orders) == 1
+    assert len(result.fills) == 0
+    assert len(result.risk_decisions) == 1
+    assert result.risk_decisions[0]["decision"] == "REJECTED"
+    assert len(result.rejected_orders) == 1
+    assert result.rejected_orders[0].status == "rejected"
+    assert len(result.rejection_events) == 1
+    assert result.rejection_events[0].event_type == "rejected"
+
+
+def test_representative_backtest_flow_missing_risk_evidence_rejects_safely() -> None:
+    snapshots = [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [
+                {"signal_id": "sig-buy", "action": "BUY", "quantity": "2", "symbol": "AAPL"},
+            ],
+        },
+        {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+    ]
+
+    result = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id="run-missing-risk",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(),
+    )
+
+    missing_decision = result.risk_decisions[0]
+    assert missing_decision["decision"] == "REJECTED"
+    assert missing_decision["evidence_status"] == "missing_required_risk_evidence"
+    assert missing_decision["reason"] == "missing_required_risk_evidence"
+    assert len(result.rejected_orders) == 1
+    assert len(result.rejection_events) == 1
+
+
+@pytest.mark.parametrize(
+    ("field_name", "field_value"),
+    [
+        ("score", "NaN"),
+        ("score", "inf"),
+        ("max_allowed", "NaN"),
+        ("max_allowed", "inf"),
+    ],
+)
+def test_representative_backtest_flow_non_finite_risk_evidence_rejects_safely(
+    field_name: str,
+    field_value: str,
+) -> None:
+    risk_evidence = {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "10",
+        "reason": "deterministic_risk_within_bounds",
+        "rule_version": "test-risk-v1",
+    }
+    risk_evidence[field_name] = field_value
+    snapshots = [
+        {
+            "id": "s1",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "symbol": "AAPL",
+            "open": "100",
+            "signals": [
+                {
+                    "signal_id": f"sig-{field_name}-{field_value}",
+                    "action": "BUY",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": risk_evidence,
+                },
+            ],
+        },
+        {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+    ]
+
+    result = simulate_execution_flow(
+        snapshots=snapshots,
+        run_id=f"run-non-finite-{field_name}-{field_value}",
+        strategy_name="REFERENCE",
+        run_contract=BacktestRunContract(),
+    )
+
+    assert result.fills == []
+    assert len(result.risk_decisions) == 1
+    assert result.risk_decisions[0]["decision"] == "REJECTED"
+    assert result.risk_decisions[0]["evidence_status"] == "invalid_required_risk_evidence"
+    assert (
+        result.risk_decisions[0]["reason"]
+        == "invalid_required_risk_evidence:non_finite_score_or_max_allowed"
+    )
+    assert result.risk_decisions[0]["score"] == 0.0
+    assert result.risk_decisions[0]["max_allowed"] == 0.0
+    assert len(result.rejected_orders) == 1
+    assert result.rejected_orders[0].status == "rejected"
+    assert len(result.rejection_events) == 1
+    assert result.rejection_events[0].event_type == "rejected"
 
 
 def test_representative_backtest_flow_same_snapshot() -> None:
@@ -274,6 +433,12 @@ def test_backtest_realism_boundary_reports_modeled_and_unmodeled_assumptions() -
     )
 
     assert boundary["boundary_version"] == "1.0.0"
+    assert boundary["modeled_assumptions"]["bounded_risk_decisions"] == {
+        "risk_evidence_version": "1.0.0",
+        "evidence_source": "signal_risk_evidence",
+        "missing_evidence_policy": "deterministic_order_rejection",
+        "broker_risk_behavior": "not_modeled",
+    }
     assert boundary["modeled_assumptions"]["fees"] == {
         "commission_model": "fixed_per_filled_order",
         "commission_per_order": "1.00",
@@ -289,7 +454,9 @@ def test_backtest_realism_boundary_reports_modeled_and_unmodeled_assumptions() -
         "price_source": "open_then_price",
     }
     assert "Not modeled." in boundary["unmodeled_assumptions"]["market_hours"]
+    assert "broker rejects" in boundary["unmodeled_assumptions"]["broker_behavior"]
     assert "market-hours compliance realism" in boundary["evidence_boundary"]["unsupported_claims"]
+    assert "broker reject realism" in boundary["evidence_boundary"]["unsupported_claims"]
     assert "bounded backtest evidence only" in boundary["evidence_boundary"]["decision_use_constraint"]
 
 
@@ -422,3 +589,16 @@ def test_realism_sensitivity_matrix_delta_calculation_consistency() -> None:
     assert baseline["delta_vs_baseline"]["metrics"]["total_return"] == 0.0
     assert no_cost["delta_vs_baseline"]["summary"]["ending_equity_cost_aware"] == pytest.approx(2.33)
     assert no_cost["delta_vs_baseline"]["summary"]["total_transaction_cost"] == pytest.approx(-2.33)
+
+
+def test_backtest_realism_docs_keep_risk_rejections_bounded() -> None:
+    contract = Path("docs/governance/backtest-realism-boundary-contract.md").read_text(encoding="utf-8")
+    runtime = Path("docs/operations/runtime/backtest_realism_boundary_runtime.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "missing_required_risk_evidence" in contract
+    assert "Rejected orders remain represented" in contract
+    assert "model broker rejects" in contract
+    assert "missing_required_risk_evidence" in runtime
+    assert "do not model broker rejects" in runtime

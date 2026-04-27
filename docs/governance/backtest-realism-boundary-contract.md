@@ -18,6 +18,8 @@ In scope:
 
 - canonical wording for covered execution assumptions (slippage, commission, fill timing,
   price source, fill model, partial-fills policy)
+- canonical wording for deterministic bounded risk-decision evidence, including
+  missing-evidence rejection handling
 - canonical wording for the modeled vs unmodeled realism boundary already exposed by the
   deterministic backtest
 - canonical interpretation rules that prevent overreading bounded backtest output as
@@ -59,6 +61,11 @@ assumption not listed here is explicitly out of contract for backtest evidence.
 
 - Snapshots are sorted deterministically by snapshot key and id.
 - Signals are translated to deterministic market orders with deterministic ordering.
+- Signal-derived orders require deterministic risk evidence. Present risk evidence is
+  represented as an explicit risk decision; missing required risk evidence is classified
+  as `missing_required_risk_evidence` and rejects the order deterministically.
+- Rejected orders remain represented in the artifact as rejected orders and rejection
+  execution events; they do not silently disappear.
 - Identical inputs and identical run-config assumptions MUST produce identical outputs.
 
 ## Canonical Realism Boundary Disclosure
@@ -70,11 +77,15 @@ Every backtest artifact MUST carry, under `realism_boundary`, both:
 - `unmodeled_assumptions`: explicit disclosure of realism dimensions that are NOT
   modeled in the deterministic backtest:
   - market hours, exchange sessions, holidays, halts, auctions, after-hours restrictions
-  - broker routing, venue selection, rejects, cancels, broker-specific policies
+  - broker routing, venue selection, broker rejects, cancels, broker-specific policies
   - order-book depth, queue position, latency, fill probability, market impact
 
 Both lists are canonical and authoritative for what the backtest does and does not model.
 Adding new modeled dimensions requires updating this contract first.
+
+Backtest risk rejections are bounded deterministic artifact evidence only. They do not
+model broker rejects, broker routing, venue behavior, market access controls, or live
+risk management.
 
 ## Deterministic Replay Stability (Canonical)
 
@@ -85,6 +96,7 @@ artifact payloads, including:
 - `execution_assumptions`
 - `realism_boundary.modeled_assumptions`
 - `realism_boundary.unmodeled_assumptions`
+- deterministic `risk_decisions`, `rejected_orders`, and `rejection_events`
 - the cost-aware metrics baseline summary, equity curve, and metrics
 - the deterministic realism sensitivity matrix (profile order, per-profile assumptions,
   summaries, metrics, and `delta_vs_baseline`)

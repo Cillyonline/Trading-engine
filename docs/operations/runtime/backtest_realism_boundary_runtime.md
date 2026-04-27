@@ -26,12 +26,14 @@ artifact payload under `realism_boundary`. The surface is composed of:
 
 - `boundary_version`: canonical version of the realism boundary contract surface.
 - `modeled_assumptions`:
+  - `bounded_risk_decisions`: required signal risk evidence, deterministic
+    approve/reject decisions, and deterministic missing-evidence rejection policy
   - `fees`: `commission_model` and `commission_per_order`
   - `slippage`: `slippage_bps` and `slippage_model`
   - `fills`: `fill_model`, `fill_timing`, `partial_fills_allowed`, `price_source`
 - `unmodeled_assumptions`:
   - `market_hours`: not modeled (sessions, halts, auctions, after-hours excluded)
-  - `broker_behavior`: not modeled (routing, rejects, cancels, broker policies excluded)
+  - `broker_behavior`: not modeled (routing, broker rejects, cancels, broker policies excluded)
   - `liquidity_and_microstructure`: not modeled (depth, queue, latency, impact excluded)
 - `evidence_boundary`:
   - `supported_interpretation`: deterministic replay under declared assumptions and
@@ -68,6 +70,17 @@ technical-only comparison evidence:
 
 The matrix MUST NOT be used as evidence of live execution behavior, broker fill
 quality, or trader-validated edge.
+
+## Bounded Risk-Decision Runtime Behavior
+
+Signal-derived backtest orders require deterministic risk evidence. The runtime
+records the resulting `risk_decisions` in the artifact. If required risk evidence
+is absent, the order is rejected with `missing_required_risk_evidence` and is
+preserved under `rejected_orders` and `rejection_events`.
+
+These rejected orders and rejection events are bounded backtest evidence only.
+They do not model broker rejects, live routing, venue behavior, liquidity,
+latency, or market access controls.
 
 ## Non-Live Boundary
 
