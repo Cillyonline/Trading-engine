@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import api.main as api_main
-from api.order_events_sqlite import SqliteOrderEventRepository
+from cilly_trading.repositories.order_events_sqlite import SqliteOrderEventRepository
 
 READ_ONLY_HEADERS = {api_main.ROLE_HEADER_NAME: "read_only"}
 

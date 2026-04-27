@@ -6,10 +6,9 @@ from pathlib import Path
 from cilly_trading.db import DEFAULT_DB_PATH
 from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRepository
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
+from cilly_trading.repositories.order_events_sqlite import SqliteOrderEventRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
 from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
-
-from ..order_events_sqlite import SqliteOrderEventRepository
 
 
 @dataclass(frozen=True)
