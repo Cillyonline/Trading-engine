@@ -436,6 +436,10 @@ def read_paper_operator_workflow(
             ),
         ],
         surfaces=PaperOperatorWorkflowSurfaceResponse(
+            signal_inspection=[
+                "/signals",
+                "/signals/decision-surface",
+            ],
             canonical_inspection=[
                 "/decision-cards",
                 "/trading-core/orders",
@@ -455,12 +459,39 @@ def read_paper_operator_workflow(
         ),
         reference_chain=[
             PaperOperatorWorkflowReferenceResponse(
+                stage="signal_evidence",
+                surface="/signals + /signals/decision-surface",
+                reference="analysis_run_id + symbol + strategy_id + generated_at_utc",
+                continuity=(
+                    "Covered signal evidence carries deterministic analysis and signal references "
+                    "before decision-card inspection."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
                 stage="decision_evidence",
                 surface="/decision-cards",
                 reference="decision_card_id + metadata.bounded_decision_to_paper_match.paper_trade_id",
                 continuity=(
                     "Covered decision evidence carries the explicit paper_trade_id reference used by "
                     "bounded usefulness and traceability audits."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="portfolio_impact",
+                surface="/portfolio/positions",
+                reference="portfolio_impact_id = decision_card_id + strategy_id + symbol",
+                continuity=(
+                    "Portfolio impact is inspectable before paper execution through deterministic "
+                    "strategy_id and symbol aggregation from canonical trades."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="paper_order_lifecycle",
+                surface="/trading-core/orders + /trading-core/execution-events",
+                reference="paper_order_id + execution_event_ids",
+                continuity=(
+                    "Paper order lifecycle references connect portfolio handoff intent to canonical "
+                    "created, submitted, fill, cancel, or terminal execution events."
                 ),
             ),
             PaperOperatorWorkflowReferenceResponse(
@@ -486,6 +517,15 @@ def read_paper_operator_workflow(
                 reference="order_id + event_id + trade_id + position_id + account equations",
                 continuity=(
                     "Reconciliation deterministically reports any broken reference or account equation mismatch."
+                ),
+            ),
+            PaperOperatorWorkflowReferenceResponse(
+                stage="paper_outcome",
+                surface="/paper/trades + /decision-cards metadata",
+                reference="paper_trade_id + paper_outcome.outcome_state",
+                continuity=(
+                    "Decision-card metadata explicitly classifies paper outcomes as missing, invalid, "
+                    "open, or closed without inferring live or operational readiness."
                 ),
             ),
         ],
@@ -1384,6 +1424,26 @@ def build_decision_card_inspection_items(
                 analysis_run_id_meta
                 if isinstance(analysis_run_id_meta, str) and len(analysis_run_id_meta) > 0
                 else None
+            )
+            signal_id_meta = card.metadata.get("signal_id")
+            signal_id = (
+                signal_id_meta
+                if isinstance(signal_id_meta, str) and len(signal_id_meta) > 0
+                else None
+            )
+            metadata["bounded_signal_portfolio_paper_reconciliation_audit"] = (
+                paper_inspection_service.build_bounded_signal_portfolio_paper_reconciliation_audit(
+                    canonical_execution_repo=canonical_repo,
+                    decision_card_id=card.decision_card_id,
+                    generated_at_utc=card.generated_at_utc,
+                    symbol=card.symbol,
+                    strategy_id=card.strategy_id,
+                    action=card.action,
+                    qualification_state=card.qualification.state,
+                    analysis_run_id=analysis_run_id,
+                    signal_id=signal_id,
+                    match_reference=match_reference,
+                )
             )
             traceability_chain = evaluate_bounded_end_to_end_traceability_chain(
                 decision_card_id=card.decision_card_id,

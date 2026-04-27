@@ -104,6 +104,7 @@ This is the minimum operator inspection path for paper trading from order intent
 
 The workflow response exposes:
 
+- `surfaces.signal_inspection` for `/signals` and `/signals/decision-surface`.
 - `surfaces.canonical_inspection` for `/decision-cards` and `/trading-core/*`.
 - `surfaces.portfolio_inspection` for `/portfolio/positions`.
 - `surfaces.paper_inspection` for `/paper/trades`, `/paper/positions`, and `/paper/account`.
@@ -112,6 +113,27 @@ The workflow response exposes:
 - `inspection_summary` for canonical, portfolio, paper, and reconciliation counts derived from the same canonical execution repository.
 
 The workflow is bounded operator inspection only. It does not imply trader validation, live-trading readiness, broker readiness, or operational readiness.
+
+## Signal-to-Portfolio-to-Paper Audit
+
+Each `GET /decision-cards` item includes
+`metadata.bounded_signal_portfolio_paper_reconciliation_audit` when rendered by
+the inspection API. The audit is read-only and deterministic. It links:
+
+- signal evidence (`signal.signal_id` or deterministic fallback ID)
+- decision-card evidence (`decision_card.decision_card_id`)
+- portfolio impact (`portfolio_impact.portfolio_impact_id`)
+- paper order lifecycle (`paper_order.paper_order_id`, order IDs, execution event IDs)
+- paper outcome (`paper_outcome.paper_trade_id`, `paper_outcome.outcome_state`)
+- reconciliation (`reconciliation.status`, related mismatch codes)
+
+The explicit paper outcome states are `missing`, `invalid`, `open`, and
+`closed`. Portfolio impact is exposed before paper execution through the
+portfolio impact reference and `/portfolio/positions`; it is not an execution
+approval or mutation endpoint.
+
+This audit does not imply auto-trading, broker execution, live-trading
+readiness, paper profitability, trader validation, or operational readiness.
 
 ## Deterministic Ordering
 

@@ -35,6 +35,8 @@ def test_phase44_workflow_doc_defines_bounded_operator_flow_and_surfaces() -> No
         "GET /paper/reconciliation",
         "GET /paper/workflow",
         "## Explicit Operator Steps",
+        "bounded_signal_portfolio_paper_reconciliation_audit",
+        "missing, invalid, open, and closed",
         "## Workflow Boundary",
         "## Minimum Operator Evidence",
         "reference_chain",
@@ -138,6 +140,7 @@ def test_paper_inspection_api_doc_cross_references_long_run_workflow() -> None:
     assert_contains_all(
         content,
         "## Long-Run Evaluation and Review Workflow",
+        "## Signal-to-Portfolio-to-Paper Audit",
         "phase-44-paper-operator-workflow.md",
         "R1-R8",
     )

@@ -26,6 +26,17 @@ from cilly_trading.engine.decision_card_contract import (
 from cilly_trading.models import ExecutionEvent, Order, Position, Trade
 
 
+BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_CONTRACT_ID = (
+    "signal_portfolio_paper_reconciliation_trace.paper_audit.v1"
+)
+BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_CONTRACT_VERSION = "1.0.0"
+BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_INTERPRETATION_LIMIT = (
+    "Signal-to-portfolio-to-paper reconciliation audit is bounded to non-live deterministic "
+    "operator inspection. It does not imply auto-trading, broker execution, live-trading "
+    "readiness, profitability forecasting, trader validation, or operational readiness."
+)
+
+
 def paginate_items(items: list[object], *, limit: int, offset: int) -> tuple[list[object], int]:
     total = len(items)
     return items[offset : offset + limit], total
@@ -910,6 +921,187 @@ def build_bounded_decision_to_paper_usefulness_audit(
         matched_outcome=matched_outcome,
     )
     return audit.model_dump(mode="python")
+
+
+def _deterministic_reference_id(*parts: str | None) -> str:
+    normalized_parts = [part.strip() for part in parts if isinstance(part, str) and part.strip()]
+    return ":".join(normalized_parts) if normalized_parts else "missing"
+
+
+def _paper_outcome_state_from_match_status(
+    match_status: Literal["matched", "open", "missing", "invalid"],
+) -> Literal["closed", "open", "missing", "invalid"]:
+    if match_status == "matched":
+        return "closed"
+    if match_status == "open":
+        return "open"
+    return match_status
+
+
+def _related_reconciliation_mismatches(
+    *,
+    mismatches: Sequence[dict[str, Optional[str]]],
+    order_ids: Sequence[str],
+    execution_event_ids: Sequence[str],
+    trade_id: str | None,
+    position_id: str | None,
+) -> list[dict[str, Optional[str]]]:
+    related_ids = {item for item in [*order_ids, *execution_event_ids, trade_id, position_id] if item}
+    if not related_ids:
+        return []
+    return [
+        mismatch
+        for mismatch in mismatches
+        if mismatch.get("entity_id") in related_ids
+        or any((identifier in (mismatch.get("message") or "")) for identifier in related_ids)
+    ]
+
+
+def build_bounded_signal_portfolio_paper_reconciliation_audit(
+    *,
+    canonical_execution_repo: Any | None,
+    decision_card_id: str,
+    generated_at_utc: str,
+    symbol: str,
+    strategy_id: str,
+    action: str,
+    qualification_state: str,
+    analysis_run_id: str | None,
+    signal_id: str | None,
+    match_reference: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build an explicit bounded signal -> portfolio -> paper -> reconciliation audit.
+
+    This is an inspection payload only. It derives every resolved paper/order/
+    reconciliation field from the canonical execution repository and uses
+    deterministic fallback IDs when upstream artifacts do not carry explicit IDs.
+    """
+
+    paper_linkage_status, paper_trade_id = resolve_bounded_paper_linkage_status(
+        canonical_execution_repo=canonical_execution_repo,
+        generated_at_utc=generated_at_utc,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        match_reference=match_reference,
+    )
+    outcome_state = _paper_outcome_state_from_match_status(paper_linkage_status)
+
+    resolved_signal_id = (
+        signal_id
+        if isinstance(signal_id, str) and signal_id.strip()
+        else _deterministic_reference_id("signal", analysis_run_id, symbol, strategy_id, generated_at_utc)
+    )
+    portfolio_impact_id = _deterministic_reference_id(
+        "portfolio-impact",
+        decision_card_id,
+        strategy_id,
+        symbol,
+    )
+
+    trade: Trade | None = None
+    if canonical_execution_repo is not None and paper_trade_id is not None:
+        try:
+            trade = canonical_execution_repo.get_trade(paper_trade_id)
+        except Exception:
+            trade = None
+
+    opening_order_ids: list[str] = list(trade.opening_order_ids) if trade is not None else []
+    closing_order_ids: list[str] = list(trade.closing_order_ids) if trade is not None else []
+    execution_event_ids: list[str] = list(trade.execution_event_ids) if trade is not None else []
+    paper_order_id = opening_order_ids[0] if opening_order_ids else None
+    position_id = trade.position_id if trade is not None else None
+
+    lifecycle_status: Literal["closed", "open", "missing", "invalid"] = outcome_state
+    reconciliation_status: Literal["matched", "open", "missing", "invalid"] = paper_linkage_status
+    related_mismatches: list[dict[str, Optional[str]]] = []
+    if canonical_execution_repo is not None and trade is not None:
+        try:
+            state = build_bounded_paper_simulation_state(
+                canonical_execution_repo=canonical_execution_repo,
+            )
+            related_mismatches = _related_reconciliation_mismatches(
+                mismatches=state.reconciliation_mismatches,
+                order_ids=[*opening_order_ids, *closing_order_ids],
+                execution_event_ids=execution_event_ids,
+                trade_id=trade.trade_id,
+                position_id=trade.position_id,
+            )
+        except Exception:
+            related_mismatches = [
+                {
+                    "code": "paper_reconciliation_state_unavailable",
+                    "message": "canonical paper reconciliation state could not be derived",
+                    "entity_type": "trade",
+                    "entity_id": trade.trade_id,
+                }
+            ]
+        if related_mismatches:
+            reconciliation_status = "invalid"
+            lifecycle_status = "invalid"
+
+    portfolio_impact_status: Literal["available", "missing"] = (
+        "available" if action in {"entry", "exit"} and qualification_state != "reject" else "missing"
+    )
+
+    return {
+        "contract_id": BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_CONTRACT_ID,
+        "contract_version": BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_CONTRACT_VERSION,
+        "signal": {
+            "signal_id": resolved_signal_id,
+            "analysis_run_id": analysis_run_id,
+            "symbol": symbol,
+            "strategy_id": strategy_id,
+            "linkage_status": "matched" if analysis_run_id is not None else "missing",
+        },
+        "decision_card": {
+            "decision_card_id": decision_card_id,
+            "generated_at_utc": generated_at_utc,
+            "qualification_state": qualification_state,
+            "action": action,
+            "linkage_status": "matched",
+        },
+        "portfolio_impact": {
+            "portfolio_impact_id": portfolio_impact_id,
+            "status": portfolio_impact_status,
+            "surface": "GET /portfolio/positions",
+            "pre_paper_execution_visible": True,
+            "reference": "decision_card_id + strategy_id + symbol",
+        },
+        "paper_order": {
+            "paper_order_id": paper_order_id,
+            "opening_order_ids": opening_order_ids,
+            "closing_order_ids": closing_order_ids,
+            "execution_event_ids": execution_event_ids,
+            "lifecycle_status": lifecycle_status,
+            "surface": "GET /trading-core/orders + GET /trading-core/execution-events",
+        },
+        "paper_outcome": {
+            "paper_trade_id": paper_trade_id,
+            "position_id": position_id,
+            "outcome_state": outcome_state,
+            "linkage_status": paper_linkage_status,
+            "surface": "GET /paper/trades",
+        },
+        "reconciliation": {
+            "status": reconciliation_status,
+            "surface": "GET /paper/reconciliation",
+            "related_mismatch_count": len(related_mismatches),
+            "related_mismatch_codes": [item["code"] for item in related_mismatches],
+        },
+        "deterministic_reference_chain": [
+            resolved_signal_id,
+            decision_card_id,
+            portfolio_impact_id,
+            paper_order_id or "paper_order:missing",
+            paper_trade_id or "paper_trade:missing",
+            "GET /paper/reconciliation",
+        ],
+        "classification_vocabulary": {
+            "paper_outcome_states": ["missing", "invalid", "open", "closed"],
+            "linkage_statuses": ["missing", "invalid", "open", "matched"],
+        },
+        "interpretation_limit": BOUNDED_SIGNAL_PORTFOLIO_PAPER_RECONCILIATION_INTERPRETATION_LIMIT,
+    }
 
 
 def resolve_bounded_paper_linkage_status(

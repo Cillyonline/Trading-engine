@@ -26,6 +26,8 @@ In scope:
 - portfolio inspection derived from canonical trade evidence
 - paper inspection and reconciliation surfaces derived from canonical entities
 - explicit reference-chain continuity from decision evidence to reconciliation
+- deterministic signal-to-decision-card, decision-card-to-portfolio-impact, portfolio-impact-to-paper-order, paper-order-lifecycle, reconciliation, and paper-outcome references
+- explicit missing, invalid, open, and closed paper outcome states
 - mismatch-based validation for workflow coherence
 
 Out of scope:
@@ -43,6 +45,8 @@ Out of scope:
 - `tests/cilly_trading/engine/test_paper_order_lifecycle.py`
 
 ### Canonical inspection surfaces
+- `GET /signals`
+- `GET /signals/decision-surface`
 - `GET /decision-cards`
 - `GET /trading-core/orders`
 - `GET /trading-core/execution-events`
@@ -67,8 +71,9 @@ Out of scope:
 5. Inspect portfolio-aware and paper-facing projections via `GET /portfolio/positions`, `GET /paper/trades`, `GET /paper/positions`, and `GET /paper/account`.
 6. Reconcile the workflow state via `GET /paper/reconciliation` and require `ok: true` and `summary.mismatches: 0`.
 7. Inspect `/decision-cards` and review `metadata.bounded_decision_to_paper_usefulness_audit` for any covered cases.
-8. Inspect the top-level `traceability_chain` on each `/decision-cards` item to confirm the explicit signal/analysis -> decision -> paper -> reconciliation reference chain (see [End-to-End Traceability Chain](#end-to-end-traceability-chain)).
-9. Inspect `GET /paper/workflow` `reference_chain` and `inspection_summary` to confirm portfolio inspection is linked into the bounded workflow without introducing a competing state authority.
+8. Inspect `/decision-cards` and review `metadata.bounded_signal_portfolio_paper_reconciliation_audit` for the deterministic signal -> decision-card -> portfolio-impact -> paper-order -> paper-outcome -> reconciliation chain.
+9. Inspect the top-level `traceability_chain` on each `/decision-cards` item to confirm the explicit signal/analysis -> decision -> paper -> reconciliation reference chain (see [End-to-End Traceability Chain](#end-to-end-traceability-chain)).
+10. Inspect `GET /paper/workflow` `reference_chain` and `inspection_summary` to confirm portfolio inspection is linked into the bounded workflow without introducing a competing state authority.
 
 ## End-to-End Traceability Chain
 
@@ -95,17 +100,50 @@ The chain is bounded to non-live deterministic auditability and does not
 imply trader validation, profitability forecasting, live-trading readiness,
 or operational readiness.
 
+Each decision-card item also exposes
+`metadata.bounded_signal_portfolio_paper_reconciliation_audit`. That audit
+closes the bounded operator loop with deterministic IDs for:
+
+1. signal evidence (`signal.signal_id` or a deterministic fallback from
+   analysis run, symbol, strategy, and decision timestamp),
+2. decision card evidence (`decision_card.decision_card_id`),
+3. portfolio impact (`portfolio_impact.portfolio_impact_id`),
+4. paper order and lifecycle evidence (`paper_order.paper_order_id`,
+   `opening_order_ids`, `closing_order_ids`, and `execution_event_ids`),
+5. paper outcome evidence (`paper_outcome.paper_trade_id` and
+   `paper_outcome.outcome_state`), and
+6. reconciliation evidence (`reconciliation.status` and related mismatch
+   codes).
+
+The explicit paper outcome state vocabulary is `missing`, `invalid`, `open`,
+and `closed`. `closed` means a valid referenced paper trade exists and has
+closed. `open` means the referenced trade exists but is still open. `missing`
+means the required reference is absent or unresolved. `invalid` means the
+reference violates the bounded symbol, strategy, timing, or reconciliation
+contract. These states are inspection evidence only and do not imply paper
+profitability, trader validation, live-trading readiness, or operational
+readiness.
+
 `GET /paper/workflow` also exposes a workflow-level `reference_chain` that
 binds the covered operator inspection sequence:
 
-1. `decision_evidence` through `/decision-cards` using `decision_card_id` and
+1. `signal_evidence` through `/signals` and `/signals/decision-surface` using
+   `analysis_run_id`, `symbol`, `strategy_id`, and decision timestamp.
+2. `decision_evidence` through `/decision-cards` using `decision_card_id` and
    `metadata.bounded_decision_to_paper_match.paper_trade_id`.
-2. `portfolio_inspection` through `/portfolio/positions` using `strategy_id`
+3. `portfolio_impact` through `/portfolio/positions` using deterministic
+   `portfolio_impact_id = decision_card_id + strategy_id + symbol`.
+4. `paper_order_lifecycle` through `/trading-core/orders` and
+   `/trading-core/execution-events` using `paper_order_id` and
+   `execution_event_ids`.
+5. `portfolio_inspection` through `/portfolio/positions` using `strategy_id`
    and `symbol` aggregation derived from canonical trades.
-3. `paper_execution` through `/paper/trades` using `paper_trade_id ->
+6. `paper_execution` through `/paper/trades` using `paper_trade_id ->
    Trade.trade_id`.
-4. `reconciliation` through `/paper/reconciliation` using canonical
+7. `reconciliation` through `/paper/reconciliation` using canonical
    `order_id`, `event_id`, `trade_id`, `position_id`, and account equations.
+8. `paper_outcome` through `/paper/trades` and decision-card metadata using
+   `paper_trade_id` plus explicit `paper_outcome.outcome_state`.
 
 The workflow-level `inspection_summary` reports counts for canonical orders,
 execution events, trades, positions, portfolio positions, paper trades, paper
@@ -119,6 +157,7 @@ The bounded Phase 44 workflow claim requires all of the following evidence:
 - Paper inspection and reconciliation contract coverage is passing (`tests/test_api_paper_inspection_read.py`).
 - Reconciliation returns `ok: true` and `summary.mismatches: 0` for valid lifecycle data.
 - `GET /paper/workflow` exposes `surfaces.portfolio_inspection`, `reference_chain`, and `inspection_summary`.
+- `/decision-cards` exposes `metadata.bounded_signal_portfolio_paper_reconciliation_audit` with portfolio impact before paper execution and explicit missing/invalid/open/closed outcome states.
 - Paper inspection views are derived from canonical trading-core entities, not legacy trade payload authority.
 - Covered decision-card usefulness audit remains bounded to non-live explanatory review and exact paper-trade matches only.
 - Full repository regression gate remains green (`python -m pytest`).
