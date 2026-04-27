@@ -47,6 +47,16 @@ RUNTIME_DOC = (
 )
 
 
+def _approved_risk_evidence() -> dict[str, str]:
+    return {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "10",
+        "reason": "deterministic_risk_within_bounds",
+        "rule_version": "test-risk-v1",
+    }
+
+
 def _canonical_snapshots() -> list[dict[str, object]]:
     return sort_snapshots(
         [
@@ -56,7 +66,13 @@ def _canonical_snapshots() -> list[dict[str, object]]:
                 "symbol": "AAPL",
                 "open": "100",
                 "signals": [
-                    {"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"},
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    },
                 ],
             },
             {
@@ -65,7 +81,13 @@ def _canonical_snapshots() -> list[dict[str, object]]:
                 "symbol": "AAPL",
                 "open": "101",
                 "signals": [
-                    {"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"},
+                    {
+                        "signal_id": "sig-sell",
+                        "action": "SELL",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    },
                 ],
             },
             {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "symbol": "AAPL", "open": "102"},
@@ -95,7 +117,12 @@ def test_realism_boundary_disclosure_is_byte_stable_under_identical_assumptions(
 
     assert first == second
     assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
-    assert set(first["modeled_assumptions"].keys()) == {"fees", "slippage", "fills"}
+    assert set(first["modeled_assumptions"].keys()) == {
+        "bounded_risk_decisions",
+        "fees",
+        "slippage",
+        "fills",
+    }
     assert set(first["unmodeled_assumptions"].keys()) == {
         "market_hours",
         "broker_behavior",

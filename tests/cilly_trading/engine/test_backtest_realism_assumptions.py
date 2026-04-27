@@ -20,6 +20,16 @@ def _assumptions() -> BacktestExecutionAssumptions:
     )
 
 
+def _approved_risk_evidence() -> dict[str, str]:
+    return {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "10",
+        "reason": "deterministic_risk_within_bounds",
+        "rule_version": "test-risk-v1",
+    }
+
+
 def test_p56_bt_fill_timing_and_price_source_are_bounded_to_current_model() -> None:
     snapshots = [
         {
@@ -27,14 +37,30 @@ def test_p56_bt_fill_timing_and_price_source_are_bounded_to_current_model() -> N
             "timestamp": "2024-01-01T00:00:00Z",
             "symbol": "AAPL",
             "open": "100",
-            "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-buy",
+                    "action": "BUY",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s2",
             "timestamp": "2024-01-02T00:00:00Z",
             "symbol": "AAPL",
             "price": "101",
-            "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-sell",
+                    "action": "SELL",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s3",
@@ -66,14 +92,30 @@ def test_p56_bt_cost_assumptions_are_fixed_per_order_and_side_aware() -> None:
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s2",
                 "timestamp": "2024-01-02T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "101",
-                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-sell",
+                        "action": "SELL",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s3",
@@ -112,14 +154,30 @@ def test_p56_bt_replay_is_deterministic_and_cost_sensitive_to_assumptions() -> N
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s2",
                 "timestamp": "2024-01-02T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "101",
-                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-sell",
+                        "action": "SELL",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "symbol": "AAPL", "open": "102"},
         ]
@@ -180,14 +238,30 @@ def test_p56_bt_realism_profile_matrix_is_deterministic_and_replay_stable() -> N
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s2",
                 "timestamp": "2024-01-02T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "101",
-                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-sell",
+                        "action": "SELL",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {"id": "s3", "timestamp": "2024-01-03T00:00:00Z", "symbol": "AAPL", "open": "102"},
         ]

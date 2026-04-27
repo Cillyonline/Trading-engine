@@ -38,6 +38,16 @@ def _sample_snapshots() -> List[Dict[str, Any]]:
     ]
 
 
+def _approved_risk_evidence() -> Dict[str, str]:
+    return {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "10",
+        "reason": "deterministic_risk_within_bounds",
+        "rule_version": "test-risk-v1",
+    }
+
+
 def _run_with_spy(output_dir: Path):
     container: Dict[str, SpyStrategy] = {}
 
@@ -101,14 +111,30 @@ def test_backtest_runner_deterministic_repeat_with_identical_realism_assumptions
             "timestamp": "2024-01-01T00:00:00Z",
             "symbol": "AAPL",
             "open": "100",
-            "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-buy",
+                    "action": "BUY",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s2",
             "timestamp": "2024-01-02T00:00:00Z",
             "symbol": "AAPL",
             "open": "101",
-            "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-sell",
+                    "action": "SELL",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s3",
@@ -335,7 +361,15 @@ def test_backtest_runner_emits_deterministic_orders_fills_positions(tmp_path: Pa
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s2",
@@ -351,12 +385,108 @@ def test_backtest_runner_emits_deterministic_orders_fills_positions(tmp_path: Pa
     payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
     assert len(payload["orders"]) == 1
     assert len(payload["fills"]) == 1
+    assert len(payload["execution_events"]) == 1
+    assert len(payload["risk_decisions"]) == 1
+    assert payload["risk_decisions"][0]["decision"] == "APPROVED"
+    assert payload["risk_decisions"][0]["evidence_status"] == "present"
+    assert payload["rejected_orders"] == []
+    assert payload["rejection_events"] == []
     assert len(payload["positions"]) == 1
     assert payload["fills"][0]["occurred_at"] == "2024-01-02T00:00:00Z"
     assert "summary" in payload
     assert "equity_curve" in payload
     assert "metrics_baseline" in payload
     assert payload["summary"]["start_equity"] == 100000.0
+
+
+def test_backtest_runner_artifact_represents_missing_risk_evidence_as_rejection(
+    tmp_path: Path,
+) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            },
+            {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "missing-risk", run_id="missing-risk-run"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+
+    assert payload["fills"] == []
+    assert len(payload["risk_decisions"]) == 1
+    assert payload["risk_decisions"][0]["decision"] == "REJECTED"
+    assert payload["risk_decisions"][0]["evidence_status"] == "missing_required_risk_evidence"
+    assert len(payload["rejected_orders"]) == 1
+    assert payload["rejected_orders"][0]["status"] == "rejected"
+    assert len(payload["rejection_events"]) == 1
+    assert payload["rejection_events"][0]["event_type"] == "rejected"
+    assert payload["execution_events"] == payload["rejection_events"]
+
+
+def test_backtest_runner_artifact_represents_non_finite_risk_evidence_as_rejection(
+    tmp_path: Path,
+) -> None:
+    runner = BacktestRunner()
+
+    def strategy_factory() -> SpyStrategy:
+        return SpyStrategy()
+
+    result = runner.run(
+        snapshots=[
+            {
+                "id": "s1",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "symbol": "AAPL",
+                "open": "100",
+                "signals": [
+                    {
+                        "signal_id": "sig-non-finite",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": {
+                            "decision": "APPROVED",
+                            "score": "NaN",
+                            "max_allowed": "10",
+                            "reason": "deterministic_risk_within_bounds",
+                            "rule_version": "test-risk-v1",
+                        },
+                    }
+                ],
+            },
+            {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "101"},
+        ],
+        strategy_factory=strategy_factory,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "non-finite-risk", run_id="non-finite-risk-run"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+
+    assert payload["fills"] == []
+    assert len(payload["risk_decisions"]) == 1
+    assert payload["risk_decisions"][0]["decision"] == "REJECTED"
+    assert payload["risk_decisions"][0]["evidence_status"] == "invalid_required_risk_evidence"
+    assert (
+        payload["risk_decisions"][0]["reason"]
+        == "invalid_required_risk_evidence:non_finite_score_or_max_allowed"
+    )
+    assert len(payload["rejected_orders"]) == 1
+    assert payload["rejected_orders"][0]["status"] == "rejected"
+    assert len(payload["rejection_events"]) == 1
+    assert payload["rejection_events"][0]["event_type"] == "rejected"
+    assert payload["execution_events"] == payload["rejection_events"]
 
 
 def test_backtest_runner_metrics_baseline_cost_aware_differs_from_cost_free(tmp_path: Path) -> None:
@@ -372,14 +502,30 @@ def test_backtest_runner_metrics_baseline_cost_aware_differs_from_cost_free(tmp_
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s2",
                 "timestamp": "2024-01-02T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "101",
-                "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-sell",
+                        "action": "SELL",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {
                 "id": "s3",
@@ -430,14 +576,30 @@ def test_backtest_runner_cost_outputs_change_when_realism_assumptions_change(tmp
             "timestamp": "2024-01-01T00:00:00Z",
             "symbol": "AAPL",
             "open": "100",
-            "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-buy",
+                    "action": "BUY",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s2",
             "timestamp": "2024-01-02T00:00:00Z",
             "symbol": "AAPL",
             "open": "101",
-            "signals": [{"signal_id": "sig-sell", "action": "SELL", "quantity": "1", "symbol": "AAPL"}],
+            "signals": [
+                {
+                    "signal_id": "sig-sell",
+                    "action": "SELL",
+                    "quantity": "1",
+                    "symbol": "AAPL",
+                    "risk_evidence": _approved_risk_evidence(),
+                }
+            ],
         },
         {
             "id": "s3",
@@ -507,7 +669,15 @@ def test_backtest_runner_persists_identical_realism_assumptions_across_artifact_
                 "timestamp": "2024-01-01T00:00:00Z",
                 "symbol": "AAPL",
                 "open": "100",
-                "signals": [{"signal_id": "sig-buy", "action": "BUY", "quantity": "1", "symbol": "AAPL"}],
+                "signals": [
+                    {
+                        "signal_id": "sig-buy",
+                        "action": "BUY",
+                        "quantity": "1",
+                        "symbol": "AAPL",
+                        "risk_evidence": _approved_risk_evidence(),
+                    }
+                ],
             },
             {"id": "s2", "timestamp": "2024-01-02T00:00:00Z", "symbol": "AAPL", "open": "102"},
         ],

@@ -334,7 +334,7 @@ def _build_strategy_snapshots(
         )
         candidate_count += len(candidate_signals)
 
-        executable_signals: list[dict[str, str]] = []
+        executable_signals: list[dict[str, Any]] = []
         if not has_open_position and candidate_signals:
             executable_signals = [candidate_signals[0]]
             has_open_position = True
@@ -393,7 +393,7 @@ def _to_executable_signals(
     strategy: Any,
     history_frame: pd.DataFrame,
     strategy_config: Mapping[str, Any],
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     try:
         generated = strategy.generate_signals(history_frame, dict(strategy_config))
     except Exception as exc:
@@ -409,7 +409,7 @@ def _to_executable_signals(
         )
 
     snapshot_id = str(snapshot.get("id", "snapshot"))
-    executable_signals: list[dict[str, str]] = []
+    executable_signals: list[dict[str, Any]] = []
     for index, signal in enumerate(generated, start=1):
         if not isinstance(signal, Mapping):
             continue
@@ -426,11 +426,25 @@ def _to_executable_signals(
                 "action": "BUY",
                 "quantity": "1",
                 "symbol": symbol,
+                "risk_evidence": _approved_backtest_risk_evidence(
+                    strategy_name=strategy_name,
+                    symbol=symbol,
+                ),
             }
         )
 
     executable_signals.sort(key=lambda signal: (signal["signal_id"], signal["symbol"]))
     return executable_signals
+
+
+def _approved_backtest_risk_evidence(*, strategy_name: str, symbol: str) -> dict[str, str]:
+    return {
+        "decision": "APPROVED",
+        "score": "1",
+        "max_allowed": "1",
+        "reason": f"strategy_comparison_bounded_risk_approved:{strategy_name}:{symbol}",
+        "rule_version": "strategy-comparison-backtest-risk-v1",
+    }
 
 
 def _normalize_symbol(value: Any) -> str:
