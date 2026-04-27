@@ -8,7 +8,7 @@ Die konkrete Implementierung im MVP nutzt SQLite.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Protocol
+from typing import Any, List, Optional, Protocol
 
 from cilly_trading.models import ExecutionEvent, Order, PersistedTradePayload, Signal, Trade
 
@@ -111,6 +111,27 @@ class CanonicalExecutionRepository(Protocol):
         ...
 
 
+class OrderEventRepository(Protocol):
+    """Persistence boundary for API-readable order lifecycle events."""
+
+    def save_events(self, events: list[dict[str, Any]]) -> None:
+        """Persist order lifecycle events."""
+        ...
+
+    def read_order_events(
+        self,
+        *,
+        symbol: Optional[str] = None,
+        strategy: Optional[str] = None,
+        run_id: Optional[str] = None,
+        order_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Read order lifecycle events in deterministic order with total count."""
+        ...
+
+
 @dataclass(frozen=True)
 class Watchlist:
     """Deterministic watchlist payload for repository persistence."""
@@ -148,6 +169,7 @@ __all__ = [
     "SignalRepository",
     "TradeRepository",
     "CanonicalExecutionRepository",
+    "OrderEventRepository",
     "Watchlist",
     "WatchlistRepository",
 ]
