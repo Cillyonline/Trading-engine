@@ -10,10 +10,12 @@ from ..routers import (
     AnalysisRouterDependencies,
     ControlPlaneRouterDependencies,
     InspectionRouterDependencies,
+    PaperRuntimeEvidenceSeriesRouterDependencies,
     WatchlistsRouterDependencies,
     build_analysis_router,
     build_control_plane_router,
     build_inspection_router,
+    build_paper_runtime_evidence_series_router,
     build_watchlists_router,
 )
 
@@ -37,6 +39,7 @@ class ApiRouterWiring:
     get_order_event_repo: Callable[[], Any]
     get_canonical_execution_repo: Callable[[], Any]
     get_journal_artifacts_root: Callable[[], Any]
+    get_paper_runtime_evidence_series_dir: Callable[[], Any]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
     get_watchlist_repo: Callable[[], Any]
     get_require_ingestion_run: Callable[..., None]
@@ -77,6 +80,14 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
                 get_canonical_execution_repo=wiring.get_canonical_execution_repo,
                 get_journal_artifacts_root=wiring.get_journal_artifacts_root,
                 get_default_strategy_configs=wiring.get_default_strategy_configs,
+            ),
+        )
+    )
+    app.include_router(
+        build_paper_runtime_evidence_series_router(
+            deps=PaperRuntimeEvidenceSeriesRouterDependencies(
+                require_role=wiring.require_role,
+                get_evidence_series_dir=wiring.get_paper_runtime_evidence_series_dir,
             ),
         )
     )

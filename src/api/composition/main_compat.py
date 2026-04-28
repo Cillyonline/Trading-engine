@@ -45,6 +45,7 @@ def bind_main_runtime_exports(
         {
             "UI_DIRECTORY": settings.ui_directory,
             "JOURNAL_ARTIFACTS_ROOT": settings.journal_artifacts_root,
+            "PAPER_RUNTIME_EVIDENCE_SERIES_DIR": settings.paper_runtime_evidence_series_dir,
             "ENGINE_RUNTIME_NOT_RUNNING_STATUS": settings.engine_runtime_not_running_status,
             "ENGINE_RUNTIME_NOT_RUNNING_CODE": settings.engine_runtime_not_running_code,
             "ENGINE_RUNTIME_GUARD_ACTIVE": False,
