@@ -106,6 +106,9 @@ def build_api_router_wiring(*, compat: MainModuleCompatibilitySurface) -> ApiRou
         get_order_event_repo=lambda: compat.get("order_event_repo"),
         get_canonical_execution_repo=lambda: compat.get("canonical_execution_repo"),
         get_journal_artifacts_root=lambda: compat.get("JOURNAL_ARTIFACTS_ROOT"),
+        get_paper_runtime_evidence_series_dir=lambda: compat.get(
+            "PAPER_RUNTIME_EVIDENCE_SERIES_DIR"
+        ),
         get_default_strategy_configs=lambda: compat.get("default_strategy_configs"),
         get_watchlist_repo=lambda: compat.get("watchlist_repo"),
         get_require_ingestion_run=lambda *args, **kwargs: compat.get("_require_ingestion_run")(

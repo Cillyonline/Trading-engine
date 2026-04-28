@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from cilly_trading.strategies.registry import initialize_default_registry
 
@@ -12,6 +12,7 @@ from cilly_trading.strategies.registry import initialize_default_registry
 class ApiRuntimeSettings:
     ui_directory: Path
     journal_artifacts_root: Path
+    paper_runtime_evidence_series_dir: Optional[Path]
     engine_runtime_not_running_status: int
     engine_runtime_not_running_code: str
     phase_13_read_only_endpoints: frozenset[str]
@@ -66,9 +67,18 @@ def build_default_strategy_configs() -> dict[str, dict[str, Any]]:
 
 
 def build_api_runtime_settings() -> ApiRuntimeSettings:
+    paper_runtime_evidence_series_dir_raw = os.getenv(
+        "CILLY_PAPER_RUNTIME_EVIDENCE_SERIES_DIR",
+        "",
+    ).strip()
     return ApiRuntimeSettings(
         ui_directory=Path(__file__).resolve().parents[2] / "ui",
         journal_artifacts_root=Path(__file__).resolve().parents[3] / "runs" / "phase6",
+        paper_runtime_evidence_series_dir=(
+            Path(paper_runtime_evidence_series_dir_raw)
+            if paper_runtime_evidence_series_dir_raw
+            else None
+        ),
         engine_runtime_not_running_status=503,
         engine_runtime_not_running_code="engine_runtime_not_running",
         phase_13_read_only_endpoints=frozenset({"/health", "/runtime/introspection"}),
