@@ -39,6 +39,7 @@ Canonical first-clean-server install contract:
 - [Paper trading boundary](operations/paper-trading.md)
 - [Phase 44 bounded paper operator workflow](operations/runtime/phase-44-paper-operator-workflow.md)
 - [OPS-P63 daily bounded paper runtime workflow](operations/runtime/p63-daily-bounded-paper-runtime-workflow.md)
+- [Bounded paper runtime evidence-series runbook](operations/runtime/bounded-paper-runtime-evidence-series-runbook.md)
 - [Staging-first deployment topology and runtime contract](operations/runtime/staging-first-deployment-topology.md)
 
 ## UI Surfaces
@@ -120,6 +121,7 @@ Roadmap track alignment:
 ### OPS-P63 Reference Materials
 
 - [OPS-P63 daily bounded paper runtime workflow](operations/runtime/p63-daily-bounded-paper-runtime-workflow.md)
+- [Bounded paper runtime evidence-series runbook](operations/runtime/bounded-paper-runtime-evidence-series-runbook.md)
 
 ### OPS-P61 Reference Materials
 
