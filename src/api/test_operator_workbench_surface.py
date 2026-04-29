@@ -95,6 +95,10 @@ def test_operator_workbench_ui_surface_has_base_navigation(monkeypatch) -> None:
     assert "/journal/artifacts" in response.text
     assert "/journal/decision-trace" in response.text
     assert "Audit Trail" in response.text
+    assert "Paper Runtime Evidence Series" in response.text
+    assert "/paper/runtime/evidence-series" in response.text
+    assert 'id="paper-runtime-evidence"' in response.text
+    assert "does not trigger paper-runtime runs" in response.text
 
 
 def test_operator_workbench_strategy_metadata_read_api(monkeypatch) -> None:
