@@ -1,5 +1,10 @@
-import { FormEvent, useState } from 'react';
-import { ManualAnalysisResponse, runManualAnalysis } from '../services/dashboardApi';
+import { FormEvent, useEffect, useState } from 'react';
+import {
+  ManualAnalysisResponse,
+  PaperRuntimeEvidenceSeriesResponse,
+  fetchPaperRuntimeEvidenceSeries,
+  runManualAnalysis,
+} from '../services/dashboardApi';
 
 type AnalysisSignal = {
   symbol?: string;
@@ -18,6 +23,25 @@ type AnalysisResult = {
   signals: AnalysisSignal[];
 };
 
+const paperRuntimeQualityLabels = ['healthy', 'no_eligible', 'degraded'];
+
+function formatCounts(counts: Record<string, number>): string {
+  const entries = Object.entries(counts).sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) {
+    return 'None reported';
+  }
+  return entries.map(([key, value]) => `${key}: ${value}`).join(', ');
+}
+
+function formatTargetCount(payload: PaperRuntimeEvidenceSeriesResponse): string {
+  const payloadWithOptionalTarget = payload as PaperRuntimeEvidenceSeriesResponse & {
+    target_count?: unknown;
+  };
+  return typeof payloadWithOptionalTarget.target_count === 'number'
+    ? String(payloadWithOptionalTarget.target_count)
+    : 'Not available';
+}
+
 function OwnerDashboard() {
   const [ingestionRunId, setIngestionRunId] = useState('');
   const [symbol, setSymbol] = useState('BTCUSDT');
@@ -27,6 +51,42 @@ function OwnerDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [evidenceSeries, setEvidenceSeries] = useState<PaperRuntimeEvidenceSeriesResponse | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(true);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadEvidenceSeries() {
+      setEvidenceLoading(true);
+      setEvidenceError(null);
+
+      try {
+        const payload = await fetchPaperRuntimeEvidenceSeries();
+        if (isActive) {
+          setEvidenceSeries(payload);
+        }
+      } catch (requestError) {
+        if (isActive) {
+          const errorMessage =
+            requestError instanceof Error ? requestError.message : 'Evidence series request failed.';
+          setEvidenceError(errorMessage);
+          setEvidenceSeries(null);
+        }
+      } finally {
+        if (isActive) {
+          setEvidenceLoading(false);
+        }
+      }
+    }
+
+    void loadEvidenceSeries();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   async function handleRunAnalysis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,6 +155,7 @@ function OwnerDashboard() {
         <nav className="runtime-entry-nav" aria-label="Runtime entry navigation">
           <a href="#run-analysis">Start Analysis</a>
           <a href="#entry-flow">Entry Flow</a>
+          <a href="#paper-runtime-evidence">Paper Runtime Evidence</a>
           <a href="#analysis-results">Results</a>
         </nav>
       </section>
@@ -169,6 +230,100 @@ function OwnerDashboard() {
           </button>
           {isLoading ? <p className="form-status">Loading...</p> : null}
         </form>
+      </section>
+
+      <section
+        id="paper-runtime-evidence"
+        className="runtime-card"
+        aria-label="paper-runtime-evidence-series"
+      >
+        <div className="section-heading">
+          <h2>Paper Runtime Evidence</h2>
+          <p>
+            Read-only bounded paper-runtime evidence series inspection from{' '}
+            <code>/paper/runtime/evidence-series</code>. This panel does not trigger runs.
+          </p>
+        </div>
+        {evidenceLoading ? <p className="form-status">Loading paper-runtime evidence...</p> : null}
+        {evidenceError ? <p role="alert" className="runtime-alert">{evidenceError}</p> : null}
+        {!evidenceLoading && !evidenceError && evidenceSeries ? (
+          <>
+            <p className="empty-state">{evidenceSeries.message}</p>
+            <dl className="result-summary">
+              <div>
+                <dt>State</dt>
+                <dd>{evidenceSeries.state}</dd>
+              </div>
+              <div>
+                <dt>Run Count</dt>
+                <dd>{evidenceSeries.run_count}</dd>
+              </div>
+              <div>
+                <dt>Target Count</dt>
+                <dd>{formatTargetCount(evidenceSeries)}</dd>
+              </div>
+              <div>
+                <dt>Latest Summary File</dt>
+                <dd>
+                  {evidenceSeries.summary_files.length > 0
+                    ? evidenceSeries.summary_files[evidenceSeries.summary_files.length - 1]
+                    : 'Not available'}
+                </dd>
+              </div>
+            </dl>
+            <dl className="result-summary">
+              {paperRuntimeQualityLabels.map((quality) => (
+                <div key={quality}>
+                  <dt>{quality}</dt>
+                  <dd>{evidenceSeries.run_quality_distribution[quality] ?? 0}</dd>
+                </div>
+              ))}
+              <div>
+                <dt>Eligible</dt>
+                <dd>{evidenceSeries.eligible_skipped_rejected_totals.eligible}</dd>
+              </div>
+              <div>
+                <dt>Skipped</dt>
+                <dd>{evidenceSeries.eligible_skipped_rejected_totals.skipped}</dd>
+              </div>
+              <div>
+                <dt>Rejected</dt>
+                <dd>{evidenceSeries.eligible_skipped_rejected_totals.rejected}</dd>
+              </div>
+              <div>
+                <dt>Mismatch Total</dt>
+                <dd>{evidenceSeries.reconciliation.mismatch_total}</dd>
+              </div>
+            </dl>
+            <div className="table-wrap">
+              <table aria-label="Paper runtime evidence counts">
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Counts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Skip Reasons</td>
+                    <td>{formatCounts(evidenceSeries.skip_reason_counts)}</td>
+                  </tr>
+                  <tr>
+                    <td>Reconciliation Status</td>
+                    <td>{formatCounts(evidenceSeries.reconciliation.status_counts)}</td>
+                  </tr>
+                  <tr>
+                    <td>Mismatch Counts</td>
+                    <td>{formatCounts(evidenceSeries.mismatch_counts)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
+        {!evidenceLoading && !evidenceError && !evidenceSeries ? (
+          <p className="empty-state">Paper-runtime evidence is not configured for this browser session.</p>
+        ) : null}
       </section>
 
       {error ? <p role="alert" className="runtime-alert">{error}</p> : null}

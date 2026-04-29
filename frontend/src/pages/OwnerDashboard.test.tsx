@@ -23,13 +23,58 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
+const populatedEvidencePayload = {
+  state: 'available',
+  run_count: 3,
+  run_quality_distribution: {
+    degraded: 1,
+    healthy: 1,
+    no_eligible: 1,
+  },
+  eligible_skipped_rejected_totals: {
+    eligible: 4,
+    skipped: 2,
+    rejected: 1,
+  },
+  skip_reason_counts: {
+    duplicate_entry: 1,
+    score_below_threshold: 1,
+  },
+  reconciliation: {
+    mismatch_total: 2,
+    status_counts: {
+      fail: 1,
+      pass: 2,
+    },
+  },
+  mismatch_counts: {
+    '2026-04-08/run-003.json': 2,
+  },
+  summary_files: [
+    '/data/artifacts/daily-runtime/2026-04-06/daily-runtime-summary.json',
+    '/data/artifacts/daily-runtime/2026-04-08/daily-runtime-summary.json',
+  ],
+  message: 'Paper-runtime evidence series summary is available for read-only inspection.',
+};
+
+function stubEvidenceFetch(payload: unknown = populatedEvidencePayload) {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => payload,
+  } as unknown as MockFetchResponse);
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('OwnerDashboard', () => {
-  it('renders the runtime analysis entrypoint copy on /ui', () => {
+  it('renders the runtime analysis entrypoint copy on /ui', async () => {
+    stubEvidenceFetch();
+
     render(
       <MemoryRouter initialEntries={['/ui']}>
         <OwnerDashboard />
@@ -40,11 +85,22 @@ describe('OwnerDashboard', () => {
     expect(screen.getByText('/ui')).toBeInTheDocument();
     expect(screen.getByText(/supported runtime analysis flow/i)).toBeInTheDocument();
     expect(screen.getByText(/does not expose owner, broker, or lab workflows/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Paper-runtime evidence series summary is available for read-only inspection.')).toBeInTheDocument();
+    });
   });
 
   it('sends the canonical manual analysis request and renders the canonical response', async () => {
     const deferredResponse = createDeferred<MockFetchResponse>();
-    const fetchMock = vi.fn().mockReturnValue(deferredResponse.promise);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/paper/runtime/evidence-series') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => populatedEvidencePayload,
+        } as unknown as MockFetchResponse);
+      }
+      return deferredResponse.promise;
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     render(
@@ -67,7 +123,6 @@ describe('OwnerDashboard', () => {
     fireEvent.change(lookbackDaysInput, { target: { value: '365' } });
     fireEvent.click(runButton);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/analysis/run', {
       method: 'POST',
       headers: {
@@ -123,10 +178,18 @@ describe('OwnerDashboard', () => {
   });
 
   it('renders API detail errors and re-enables button', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ detail: 'Bad request' }),
-    } as unknown as MockFetchResponse);
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input) === '/paper/runtime/evidence-series') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => populatedEvidencePayload,
+        } as unknown as MockFetchResponse);
+      }
+      return Promise.resolve({
+        ok: false,
+        json: async () => ({ detail: 'Bad request' }),
+      } as unknown as MockFetchResponse);
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     render(
@@ -147,5 +210,64 @@ describe('OwnerDashboard', () => {
     });
 
     expect(runButton).not.toBeDisabled();
+  });
+
+  it('renders populated paper-runtime evidence metrics without execution controls', async () => {
+    const fetchMock = stubEvidenceFetch();
+
+    render(
+      <MemoryRouter>
+        <OwnerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Paper-runtime evidence series summary is available for read-only inspection.')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/paper/runtime/evidence-series', {
+      headers: {
+        'X-Cilly-Role': 'read_only',
+      },
+    });
+    expect(screen.getByRole('heading', { name: 'Paper Runtime Evidence' })).toBeInTheDocument();
+    expect(screen.getByText('/paper/runtime/evidence-series')).toBeInTheDocument();
+    expect(screen.getByText('available')).toBeInTheDocument();
+    expect(screen.getAllByText('3')[0]).toBeInTheDocument();
+    expect(screen.getByText('Not available')).toBeInTheDocument();
+    expect(screen.getByText('/data/artifacts/daily-runtime/2026-04-08/daily-runtime-summary.json')).toBeInTheDocument();
+    expect(screen.getByText('duplicate_entry: 1, score_below_threshold: 1')).toBeInTheDocument();
+    expect(screen.getByText('fail: 1, pass: 2')).toBeInTheDocument();
+    expect(screen.getByText('2026-04-08/run-003.json: 2')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /paper runtime/i })).not.toBeInTheDocument();
+  });
+
+  it('renders empty paper-runtime evidence state clearly', async () => {
+    stubEvidenceFetch({
+      ...populatedEvidencePayload,
+      state: 'empty',
+      run_count: 0,
+      run_quality_distribution: { degraded: 0, healthy: 0, no_eligible: 0 },
+      eligible_skipped_rejected_totals: { eligible: 0, skipped: 0, rejected: 0 },
+      skip_reason_counts: {},
+      reconciliation: { mismatch_total: 0, status_counts: {} },
+      mismatch_counts: {},
+      summary_files: [],
+      message: 'Configured paper-runtime evidence series directory contains no matching run files.',
+    });
+
+    render(
+      <MemoryRouter>
+        <OwnerDashboard />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Configured paper-runtime evidence series directory contains no matching run files.')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('empty')).toBeInTheDocument();
+    expect(screen.getAllByText('Not available')).toHaveLength(2);
+    expect(screen.getAllByText('None reported')).toHaveLength(3);
   });
 });

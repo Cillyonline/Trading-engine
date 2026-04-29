@@ -369,10 +369,38 @@ def test_ui_browser_flow_uses_existing_runtime_api_surface(monkeypatch) -> None:
             assert "strategy_readiness_evidence" in ui_response.text
             assert "inferred_readiness_claim" in ui_response.text
             assert "Inferred readiness claim:" in ui_response.text
+            assert 'id="paper-runtime-evidence"' in ui_response.text
+            assert 'id="paper-runtime-evidence-status"' in ui_response.text
+            assert 'id="paper-runtime-evidence-metrics"' in ui_response.text
+            assert 'id="paper-runtime-evidence-counts"' in ui_response.text
+            assert "/paper/runtime/evidence-series" in ui_response.text
+            assert "Read-only bounded paper-runtime evidence series summary" in ui_response.text
+            assert "does not trigger paper-runtime runs" in ui_response.text
+            assert "Run Count" in ui_response.text
+            assert "Target Count" in ui_response.text
+            assert 'typeof payload.target_count==="number"?String(payload.target_count):"Not available"' in ui_response.text
+            assert '$("paper-runtime-evidence-target-count").textContent=String(payload.run_count||0)' not in ui_response.text
+            assert "Latest Summary File" in ui_response.text
+            assert "Skip Reasons" in ui_response.text
+            assert "Reconciliation Status" in ui_response.text
+            assert "Mismatch Counts" in ui_response.text
+            assert "Run Paper" not in ui_response.text
 
             state_response = client.get("/system/state", headers=READ_ONLY_HEADERS)
             assert state_response.status_code == 200
             assert state_response.json()["status"] == "running"
+
+            evidence_response = client.get(
+                "/paper/runtime/evidence-series",
+                headers=READ_ONLY_HEADERS,
+            )
+            assert evidence_response.status_code == 200
+            assert evidence_response.json()["state"] in {
+                "not_configured",
+                "missing",
+                "empty",
+                "available",
+            }
 
             analysis_response = client.post(
                 "/analysis/run",
