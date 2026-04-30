@@ -227,7 +227,7 @@ def _extract_entry_price(
     """
     entry_zone = signal.get("entry_zone")
     if entry_zone is not None:
-        mid = Decimal(str(entry_zone["from_"] + entry_zone["to"])) / Decimal("2")
+        mid = (Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))) / Decimal("2")
         return mid.quantize(_PRICE_SCALE, rounding=ROUND_HALF_UP)
     return fallback_entry_price
 

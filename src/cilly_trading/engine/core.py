@@ -31,7 +31,7 @@ from cilly_trading.engine.lineage import LineageContext, LineageMissingError
 from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
-from cilly_trading.models import Signal
+from cilly_trading.models import Signal, validate_signal_required_fields
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.repositories.lineage_repository import SqliteLineageRepository
 from cilly_trading.config.external_data import EXTERNAL_DATA_ENABLED
@@ -182,7 +182,7 @@ class BaseStrategy(Protocol):
 
     def generate_signals(
         self,
-        df,
+        df: "pd.DataFrame",
         config: Dict[str, Any],
     ) -> List[Signal]:
         ...
@@ -612,8 +612,17 @@ def run_watchlist_analysis(
                         s["analysis_run_id"] = lineage_ctx.analysis_run_id
                         s["snapshot_id"] = lineage_ctx.snapshot_id
                         s["ingestion_run_id"] = lineage_ctx.ingestion_run_id
+                        validate_signal_required_fields(s)
                     except LineageMissingError:
                         raise
+                    except ValueError as exc:
+                        logger.warning(
+                            "Dropping signal with missing required fields: component=engine strategy=%s symbol=%s reason=%s",
+                            strat_name,
+                            symbol,
+                            exc,
+                        )
+                        continue
                     except Exception:
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
