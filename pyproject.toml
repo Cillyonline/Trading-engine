@@ -35,3 +35,8 @@ include = ["cilly_trading*"]
 
 [tool.setuptools.dynamic]
 version = {attr = "cilly_trading.version.__version__"}
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

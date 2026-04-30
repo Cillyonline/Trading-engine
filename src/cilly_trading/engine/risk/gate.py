@@ -120,9 +120,9 @@ class RiskEvidenceDisciplineError(ValueError):
     """Raised when bounded risk evidence is missing or contradictory."""
 
 
-def _safe_pct(numerator: float, denominator: float) -> float:
+def _safe_pct(numerator: float, denominator: float) -> float | None:
     if denominator == 0.0:
-        return float("inf")
+        return None
     return numerator / denominator
 
 
@@ -351,10 +351,12 @@ def adapt_risk_framework_response_to_risk_decision(
             score = float(framework_response.risk_score)
             max_allowed = float(limits.max_account_exposure_pct)
         elif reason == "rejected: max_strategy_exposure_pct_exceeded":
-            score = _safe_pct(normalized_strategy + normalized_proposed, normalized_equity)
+            _pct = _safe_pct(normalized_strategy + normalized_proposed, normalized_equity)
+            score = _pct if _pct is not None else 0.0
             max_allowed = float(limits.max_strategy_exposure_pct)
         elif reason == "rejected: max_symbol_exposure_pct_exceeded":
-            score = _safe_pct(normalized_symbol + normalized_proposed, normalized_equity)
+            _pct = _safe_pct(normalized_symbol + normalized_proposed, normalized_equity)
+            score = _pct if _pct is not None else 0.0
             max_allowed = float(limits.max_symbol_exposure_pct)
         else:  # pragma: no cover - guarded by reason map above
             raise ValueError(f"unsupported risk-framework reason: {reason}")
