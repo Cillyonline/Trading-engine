@@ -92,6 +92,9 @@ class CompositionRuntimeService:
         assert endpoint_path in self.phase_13_read_only_endpoints
 
     def require_role(self, minimum_role: str):
+        # STAGING-ONLY: Role is determined by a trusted HTTP header.
+        # This is NOT production-grade auth. For public deployment,
+        # replace with JWT / OAuth2 middleware.
         required_rank = self.role_precedence[minimum_role]
 
         def _enforce_role(
