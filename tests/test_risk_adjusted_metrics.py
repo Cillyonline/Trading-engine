@@ -139,9 +139,10 @@ def _signals() -> list[dict[str, object]]:
 def test_risk_adjusted_metrics_values_are_deterministic() -> None:
     metrics = compute_risk_adjusted_metrics_from_trade_ledger(_deterministic_ledger())
 
+    # sortino_ratio updated: now uses sample std dev (n-1) consistent with Sharpe
     assert metrics == {
         "sharpe_ratio": 0.387298334621,
-        "sortino_ratio": 1.0,
+        "sortino_ratio": 0.866025403784,
         "calmar_ratio": 1.945,
         "profit_factor": 6.0,
         "win_rate": 0.5,
