@@ -12,10 +12,10 @@ from cilly_trading.risk_framework.exposure_model import compute_exposure_metrics
 from cilly_trading.risk_framework.kill_switch import is_kill_switch_enabled
 
 
-def _safe_pct(numerator: float, denominator: float) -> float:
-    """Return a deterministic percentage value."""
+def _safe_pct(numerator: float, denominator: float) -> float | None:
+    """Return percentage ratio, or None when denominator is zero."""
     if denominator == 0.0:
-        return float("inf")
+        return None
     return numerator / denominator
 
 
@@ -366,7 +366,7 @@ def evaluate_risk(
         absolute_strategy_exposure + absolute_proposed_size,
         absolute_equity,
     )
-    if strategy_exposure_pct > limits.max_strategy_exposure_pct:
+    if strategy_exposure_pct is None or strategy_exposure_pct > limits.max_strategy_exposure_pct:
         max_allowed_strategy = absolute_equity * limits.max_strategy_exposure_pct
         adjusted_position_size = max(0.0, max_allowed_strategy - absolute_strategy_exposure)
         return RiskEvaluationResponse(
@@ -381,7 +381,7 @@ def evaluate_risk(
         absolute_symbol_exposure + absolute_proposed_size,
         absolute_equity,
     )
-    if symbol_exposure_pct > limits.max_symbol_exposure_pct:
+    if symbol_exposure_pct is None or symbol_exposure_pct > limits.max_symbol_exposure_pct:
         max_allowed_symbol = absolute_equity * limits.max_symbol_exposure_pct
         adjusted_position_size = max(0.0, max_allowed_symbol - absolute_symbol_exposure)
         return RiskEvaluationResponse(
