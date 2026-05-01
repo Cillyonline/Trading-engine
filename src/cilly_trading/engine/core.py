@@ -33,6 +33,7 @@ from cilly_trading.engine.strategy_params import normalize_and_validate_strategy
 from cilly_trading.models import (
     Signal,
     canonical_json,
+    compute_signal_id,
     sha256_hex,
     validate_signal_required_fields,
 )
@@ -178,35 +179,6 @@ def compute_analysis_run_id(run_request_payload: Mapping[str, Any]) -> str:
     """
     return sha256_hex(canonical_json(dict(run_request_payload)))
 
-
-def _signal_identity_payload(signal: Mapping[str, Any]) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {}
-    for key in (
-        "symbol",
-        "strategy",
-        "timestamp",
-        "timeframe",
-        "market_type",
-        "data_source",
-        "direction",
-        "stage",
-        "assets",
-    ):
-        if key in signal:
-            payload[key] = signal[key]
-    return payload
-
-
-def compute_signal_id(signal: Mapping[str, Any]) -> str:
-    """Compute a deterministic signal ID.
-
-    Args:
-        signal: Signal payload used to compute the ID.
-
-    Returns:
-        Deterministic signal ID.
-    """
-    return sha256_hex(canonical_json(_signal_identity_payload(signal)))
 
 
 def add_signal_ids(signals: List[Signal]) -> List[Signal]:

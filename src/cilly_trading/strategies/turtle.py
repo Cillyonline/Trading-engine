@@ -17,6 +17,7 @@ Score:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Any
 
 import pandas as pd
@@ -114,6 +115,7 @@ class TurtleStrategy(BaseStrategy):
                 "Breakout-Hoch oder unter einem definierten Trailing-Stop)."
             )
 
+            _scale = Decimal("0.0001")
             signal: Signal = {
                 "strategy": self.name,
                 "direction": "long",
@@ -122,8 +124,12 @@ class TurtleStrategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
                     # Entry in der Zone rund um das Breakout-Level bis leicht über dem Close
-                    "from_": breakout_level,
-                    "to": last_close * 1.02,
+                    "from_": float(
+                        Decimal(str(breakout_level)).quantize(_scale, ROUND_HALF_UP)
+                    ),
+                    "to": float(
+                        Decimal(str(last_close * 1.02)).quantize(_scale, ROUND_HALF_UP)
+                    ),
                 },
             }
             signals.append(signal)
@@ -146,6 +152,7 @@ class TurtleStrategy(BaseStrategy):
                         "Alternativ: Stop-Buy-Order knapp über dem Breakout-Hoch."
                     )
 
+                    _scale = Decimal("0.0001")
                     signal = {
                         "strategy": self.name,
                         "direction": "long",
@@ -154,8 +161,16 @@ class TurtleStrategy(BaseStrategy):
                         "confirmation_rule": confirmation_rule,
                         "entry_zone": {
                             # Einstiegszone knapp um das Breakout-Level
-                            "from_": breakout_level * (1.0 - cfg.proximity_threshold_pct),
-                            "to": breakout_level * 1.01,
+                            "from_": float(
+                                Decimal(
+                                    str(breakout_level * (1.0 - cfg.proximity_threshold_pct))
+                                ).quantize(_scale, ROUND_HALF_UP)
+                            ),
+                            "to": float(
+                                Decimal(str(breakout_level * 1.01)).quantize(
+                                    _scale, ROUND_HALF_UP
+                                )
+                            ),
                         },
                     }
                     signals.append(signal)

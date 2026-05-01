@@ -174,7 +174,34 @@ Edge cases:
 
 No annualization factor is applied.
 
-## 4.5 Win Rate
+## 4.5 Sortino Ratio (Deterministic, Non-Annualized)
+
+Uses the same period-return series `R = [r_1, ..., r_n]` defined in 4.4, with MAR = 0.
+
+Define the downside-deviation series:
+
+\[
+d_i = \min(r_i, 0), \quad i = 1..N
+\]
+
+\[
+\sigma_d = \sqrt{\frac{1}{N-1}\sum_{i=1}^{N} d_i^2}
+\]
+
+\[
+\mathrm{sortino\_ratio} = \frac{\mu}{\sigma_d}
+\]
+
+where `\mu` is the mean return (same as Sharpe, Section 4.4) and `\sigma_d` is the sample downside deviation (`N-1` denominator, consistent with Sharpe).
+
+Edge cases:
+
+- If fewer than 2 returns exist (`N < 2`), `sortino_ratio = null`.
+- If `\sigma_d = 0` (no negative returns or flat series), `sortino_ratio = null`.
+
+No annualization factor is applied. Supply `periods_per_year` to the metric function to obtain an annualized ratio.
+
+## 4.6 Win Rate
 
 \[
 \mathrm{win\_rate} = \frac{\#(\mathrm{pnl} > 0)}{\mathrm{total\_trades}}
@@ -186,7 +213,7 @@ Edge case:
 
 - If `total_trades = 0`, `win_rate = null`.
 
-## 4.6 Profit Factor
+## 4.7 Profit Factor
 
 \[
 \mathrm{profit\_factor} = \frac{\sum \mathrm{positive\_pnls}}{\sum |\mathrm{negative\_pnls}|}

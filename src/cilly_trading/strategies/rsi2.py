@@ -14,6 +14,7 @@ Die Strategie arbeitet nur auf der letzten verfügbaren Kerze.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Any
 
 import pandas as pd
@@ -111,8 +112,16 @@ class Rsi2Strategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 # Entry-Zone im MVP noch simpel: Nähe der aktuellen Kerze
                 "entry_zone": {
-                    "from_": last_close * 0.97,  # z. B. 3 % unter aktuellem Close
-                    "to": last_close * 1.01,    # z. B. bis knapp über Close
+                    "from_": float(
+                        Decimal(str(last_close * 0.97)).quantize(
+                            Decimal("0.0001"), ROUND_HALF_UP
+                        )
+                    ),
+                    "to": float(
+                        Decimal(str(last_close * 1.01)).quantize(
+                            Decimal("0.0001"), ROUND_HALF_UP
+                        )
+                    ),
                 },
             }
 
