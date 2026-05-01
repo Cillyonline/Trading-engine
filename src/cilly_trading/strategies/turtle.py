@@ -128,7 +128,7 @@ class TurtleStrategy(BaseStrategy):
                         Decimal(str(breakout_level)).quantize(_scale, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        Decimal(str(last_close * 1.02)).quantize(_scale, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal("1.02")).quantize(_scale, ROUND_HALF_UP)
                     ),
                 },
             }
@@ -162,12 +162,13 @@ class TurtleStrategy(BaseStrategy):
                         "entry_zone": {
                             # Einstiegszone knapp um das Breakout-Level
                             "from_": float(
-                                Decimal(
-                                    str(breakout_level * (1.0 - cfg.proximity_threshold_pct))
+                                (
+                                    Decimal(str(breakout_level))
+                                    * (Decimal("1") - Decimal(str(cfg.proximity_threshold_pct)))
                                 ).quantize(_scale, ROUND_HALF_UP)
                             ),
                             "to": float(
-                                Decimal(str(breakout_level * 1.01)).quantize(
+                                (Decimal(str(breakout_level)) * Decimal("1.01")).quantize(
                                     _scale, ROUND_HALF_UP
                                 )
                             ),

@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 from decimal import Decimal
-from typing import Any, Dict, List, Literal, Mapping, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Mapping, NotRequired, Optional, TypedDict, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -152,23 +152,36 @@ class SignalReason(TypedDict):
 
 
 class Signal(TypedDict, total=False):
-    """Unified signal model for the existing MVP surface."""
+    """Unified signal model for the existing MVP surface.
 
-    signal_id: str
-    analysis_run_id: str
-    ingestion_run_id: str
+    Required at validation time (enforced by validate_signal_required_fields):
+    symbol, strategy, direction, stage, timestamp.
+
+    Strategies return partial Signal dicts; the engine layer fills in the
+    remaining fields before persistence.
+    """
+
+    # Identity fields — required before persistence (see validate_signal_required_fields)
     symbol: str
     strategy: str
     direction: Direction
-    score: float
-    timestamp: str
     stage: Stage
-    entry_zone: Optional[EntryZone]
-    confirmation_rule: str
-    timeframe: str
-    market_type: MarketType
-    data_source: DataSource
-    reasons: Optional[List[SignalReason]]
+    timestamp: str
+
+    # Computed by the engine layer
+    signal_id: NotRequired[str]
+    analysis_run_id: NotRequired[str]
+    ingestion_run_id: NotRequired[str]
+    snapshot_id: NotRequired[str]
+    timeframe: NotRequired[str]
+    market_type: NotRequired[MarketType]
+    data_source: NotRequired[DataSource]
+
+    # Strategy output
+    score: NotRequired[float]
+    entry_zone: NotRequired[Optional[EntryZone]]
+    confirmation_rule: NotRequired[str]
+    reasons: NotRequired[Optional[List[SignalReason]]]
 
 
 _SIGNAL_REQUIRED_FIELDS: frozenset[str] = frozenset(
