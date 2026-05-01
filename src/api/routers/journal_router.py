@@ -12,6 +12,10 @@ from api.models.journal_models import (
     JournalTradeExitRequest,
     JournalTradeResponse,
     JournalTradesListResponse,
+    PerformanceGroupItem,
+    PerformanceMetrics,
+    PerformanceSummaryResponse,
+    SignalPerformanceResponse,
 )
 from cilly_trading.models import PersistedTradePayload
 
@@ -119,4 +123,77 @@ def build_journal_router(*, deps: JournalRouterDependencies) -> APIRouter:
         items = [JournalTradeResponse.from_payload(dict(t)) for t in trades]
         return JournalTradesListResponse(items=items, total=len(items))
 
+    @router.get(
+        "/performance",
+        response_model=PerformanceSummaryResponse,
+        summary="Gesamt-Performance",
+        description=(
+            "Aggregierte Performance über alle manuell eingetragenen Trades. "
+            "Zeigt Kennzahlen gesamt sowie aufgeschlüsselt nach Strategie und Symbol."
+        ),
+    )
+    def performance_summary_handler(
+        symbol: Optional[str] = Query(default=None),
+        strategy: Optional[str] = Query(default=None),
+        limit: int = Query(default=500, ge=1, le=1000),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> PerformanceSummaryResponse:
+        repo = deps.get_trade_repo()
+        raw = repo.list_trades(limit=limit, symbol=symbol, strategy=strategy)
+        trades = [JournalTradeResponse.from_payload(dict(t)) for t in raw]
+
+        overall = PerformanceMetrics.from_trades(trades)
+
+        by_strategy = _group_performance(trades, key_fn=lambda t: t.strategy)
+        by_symbol = _group_performance(trades, key_fn=lambda t: t.symbol)
+
+        return PerformanceSummaryResponse(
+            metrics=overall,
+            by_strategy=by_strategy,
+            by_symbol=by_symbol,
+        )
+
+    @router.get(
+        "/signals/{signal_id}/performance",
+        response_model=SignalPerformanceResponse,
+        summary="Performance für ein Signal",
+        description="Zeigt alle Trades die aus einem bestimmten Signal entstanden sind, mit aggregierten Kennzahlen.",
+    )
+    def signal_performance_handler(
+        signal_id: str,
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> SignalPerformanceResponse:
+        repo = deps.get_trade_repo()
+        raw = repo.list_trades(limit=1000, signal_id=signal_id)
+        if not raw:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No trades found for signal_id={signal_id!r}",
+            )
+        trades = [JournalTradeResponse.from_payload(dict(t)) for t in raw]
+        return SignalPerformanceResponse(
+            signal_id=signal_id,
+            metrics=PerformanceMetrics.from_trades(trades),
+            trades=trades,
+        )
+
     return router
+
+
+def _group_performance(
+    trades: list[JournalTradeResponse],
+    *,
+    key_fn,
+) -> list[PerformanceGroupItem]:
+    groups: dict[str, list[JournalTradeResponse]] = {}
+    for t in trades:
+        k = key_fn(t)
+        groups.setdefault(k, []).append(t)
+    return sorted(
+        [
+            PerformanceGroupItem(key=k, metrics=PerformanceMetrics.from_trades(v))
+            for k, v in groups.items()
+        ],
+        key=lambda item: (item.metrics.closed_trades or 0),
+        reverse=True,
+    )

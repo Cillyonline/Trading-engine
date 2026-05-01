@@ -86,3 +86,71 @@ class JournalTradesListResponse(BaseModel):
     total: int
 
     model_config = ConfigDict(extra="forbid")
+
+
+# ── Phase 2: Performance ──────────────────────────────────────────────────────
+
+class PerformanceMetrics(BaseModel):
+    """Aggregierte Performance-Kennzahlen für eine Gruppe von Trades."""
+
+    total_trades: int
+    open_trades: int
+    closed_trades: int
+    winning_trades: Optional[int] = None
+    win_rate_pct: Optional[float] = None
+    avg_pnl_pct: Optional[float] = None
+    total_pnl_pct: Optional[float] = None
+    best_trade_pnl_pct: Optional[float] = None
+    worst_trade_pnl_pct: Optional[float] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @classmethod
+    def from_trades(cls, trades: list[JournalTradeResponse]) -> "PerformanceMetrics":
+        closed = [t for t in trades if t.status == "closed" and t.pnl_pct is not None]
+        winning = [t for t in closed if t.pnl_pct > 0]  # type: ignore[operator]
+
+        win_rate = round(len(winning) / len(closed) * 100, 2) if closed else None
+        pnl_values = [t.pnl_pct for t in closed]  # type: ignore[misc]
+        avg_pnl = round(sum(pnl_values) / len(pnl_values), 4) if pnl_values else None
+        total_pnl = round(sum(pnl_values), 4) if pnl_values else None
+        best = round(max(pnl_values), 4) if pnl_values else None
+        worst = round(min(pnl_values), 4) if pnl_values else None
+
+        return cls(
+            total_trades=len(trades),
+            open_trades=sum(1 for t in trades if t.status == "open"),
+            closed_trades=len(closed),
+            winning_trades=len(winning) if closed else None,
+            win_rate_pct=win_rate,
+            avg_pnl_pct=avg_pnl,
+            total_pnl_pct=total_pnl,
+            best_trade_pnl_pct=best,
+            worst_trade_pnl_pct=worst,
+        )
+
+
+class SignalPerformanceResponse(BaseModel):
+    signal_id: str
+    metrics: PerformanceMetrics
+    trades: list[JournalTradeResponse]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PerformanceGroupItem(BaseModel):
+    """Performance-Kennzahlen für eine Strategie oder ein Symbol."""
+
+    key: str
+    metrics: PerformanceMetrics
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PerformanceSummaryResponse(BaseModel):
+    metrics: PerformanceMetrics
+    by_strategy: list[PerformanceGroupItem]
+    by_symbol: list[PerformanceGroupItem]
+
+    model_config = ConfigDict(extra="forbid")
+
