@@ -31,7 +31,10 @@ from cilly_trading.risk_framework.contract import (
     RiskEvaluationRequest as FrameworkRiskEvaluationRequest,
     RiskEvaluationResponse as FrameworkRiskEvaluationResponse,
 )
-from cilly_trading.risk_framework.risk_evaluator import evaluate_risk as evaluate_framework_risk
+from cilly_trading.risk_framework.risk_evaluator import (
+    _safe_pct,
+    evaluate_risk as evaluate_framework_risk,
+)
 
 GUARD_TRIGGER_EVENT = "guard.triggered"
 GUARD_TRIGGER_PAYLOAD_KEY = "guard_type"
@@ -118,12 +121,6 @@ _RISK_REASON_TO_EVIDENCE_METADATA: dict[str, tuple[str, str, str]] = {
 
 class RiskEvidenceDisciplineError(ValueError):
     """Raised when bounded risk evidence is missing or contradictory."""
-
-
-def _safe_pct(numerator: float, denominator: float) -> float | None:
-    if denominator == 0.0:
-        return None
-    return numerator / denominator
 
 
 def _nonzero_rejection_score(max_allowed: float) -> float:

@@ -113,12 +113,12 @@ class Rsi2Strategy(BaseStrategy):
                 # Entry-Zone im MVP noch simpel: Nähe der aktuellen Kerze
                 "entry_zone": {
                     "from_": float(
-                        Decimal(str(last_close * 0.97)).quantize(
+                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(
                             Decimal("0.0001"), ROUND_HALF_UP
                         )
                     ),
                     "to": float(
-                        Decimal(str(last_close * 1.01)).quantize(
+                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(
                             Decimal("0.0001"), ROUND_HALF_UP
                         )
                     ),

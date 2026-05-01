@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import List, Optional
 
@@ -27,6 +28,9 @@ class SqliteWatchlistRepository(WatchlistRepository):
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
+
+    def _connection(self):
+        return closing(self._get_connection())
 
     def _validate_payload(self, *, watchlist_id: str, name: str, symbols: List[str]) -> List[str]:
         normalized_symbols = [symbol.strip() for symbol in symbols]
@@ -66,36 +70,33 @@ class SqliteWatchlistRepository(WatchlistRepository):
             name=name,
             symbols=symbols,
         )
-        conn = self._get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("BEGIN;")
-            cur.execute(
-                """
-                INSERT INTO watchlists (watchlist_id, name)
-                VALUES (?, ?);
-                """,
-                (watchlist_id, name),
-            )
-            cur.executemany(
-                """
-                INSERT INTO watchlist_symbols (watchlist_id, position, symbol)
-                VALUES (?, ?, ?);
-                """,
-                [
-                    (watchlist_id, position, symbol)
-                    for position, symbol in enumerate(normalized_symbols)
-                ],
-            )
-            conn.commit()
-        except sqlite3.IntegrityError as exc:
-            conn.rollback()
-            raise ValueError("watchlist_id, name, and symbols must be unique within a watchlist") from exc
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        with self._connection() as conn:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO watchlists (watchlist_id, name)
+                    VALUES (?, ?);
+                    """,
+                    (watchlist_id, name),
+                )
+                cur.executemany(
+                    """
+                    INSERT INTO watchlist_symbols (watchlist_id, position, symbol)
+                    VALUES (?, ?, ?);
+                    """,
+                    [
+                        (watchlist_id, position, symbol)
+                        for position, symbol in enumerate(normalized_symbols)
+                    ],
+                )
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
+                conn.rollback()
+                raise ValueError("watchlist_id, name, and symbols must be unique within a watchlist") from exc
+            except Exception:
+                conn.rollback()
+                raise
 
         result = self.get_watchlist(watchlist_id)
         if result is None:
@@ -103,8 +104,7 @@ class SqliteWatchlistRepository(WatchlistRepository):
         return result
 
     def get_watchlist(self, watchlist_id: str) -> Optional[Watchlist]:
-        conn = self._get_connection()
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -119,12 +119,9 @@ class SqliteWatchlistRepository(WatchlistRepository):
             if row is None:
                 return None
             return self._build_watchlist(row, symbols=self._get_symbols(conn, watchlist_id))
-        finally:
-            conn.close()
 
     def list_watchlists(self) -> List[Watchlist]:
-        conn = self._get_connection()
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -138,8 +135,6 @@ class SqliteWatchlistRepository(WatchlistRepository):
                 self._build_watchlist(row, symbols=self._get_symbols(conn, row["watchlist_id"]))
                 for row in rows
             ]
-        finally:
-            conn.close()
 
     def update_watchlist(self, *, watchlist_id: str, name: str, symbols: List[str]) -> Watchlist:
         normalized_symbols = self._validate_payload(
@@ -147,47 +142,44 @@ class SqliteWatchlistRepository(WatchlistRepository):
             name=name,
             symbols=symbols,
         )
-        conn = self._get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("BEGIN;")
-            cur.execute(
-                """
-                UPDATE watchlists
-                SET name = ?
-                WHERE watchlist_id = ?;
-                """,
-                (name, watchlist_id),
-            )
-            if cur.rowcount == 0:
+        with self._connection() as conn:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    UPDATE watchlists
+                    SET name = ?
+                    WHERE watchlist_id = ?;
+                    """,
+                    (name, watchlist_id),
+                )
+                if cur.rowcount == 0:
+                    conn.rollback()
+                    raise KeyError(f"watchlist not found: {watchlist_id}")
+                cur.execute(
+                    """
+                    DELETE FROM watchlist_symbols
+                    WHERE watchlist_id = ?;
+                    """,
+                    (watchlist_id,),
+                )
+                cur.executemany(
+                    """
+                    INSERT INTO watchlist_symbols (watchlist_id, position, symbol)
+                    VALUES (?, ?, ?);
+                    """,
+                    [
+                        (watchlist_id, position, symbol)
+                        for position, symbol in enumerate(normalized_symbols)
+                    ],
+                )
+                conn.commit()
+            except sqlite3.IntegrityError as exc:
                 conn.rollback()
-                raise KeyError(f"watchlist not found: {watchlist_id}")
-            cur.execute(
-                """
-                DELETE FROM watchlist_symbols
-                WHERE watchlist_id = ?;
-                """,
-                (watchlist_id,),
-            )
-            cur.executemany(
-                """
-                INSERT INTO watchlist_symbols (watchlist_id, position, symbol)
-                VALUES (?, ?, ?);
-                """,
-                [
-                    (watchlist_id, position, symbol)
-                    for position, symbol in enumerate(normalized_symbols)
-                ],
-            )
-            conn.commit()
-        except sqlite3.IntegrityError as exc:
-            conn.rollback()
-            raise ValueError("watchlist name and symbols must remain unique") from exc
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+                raise ValueError("watchlist name and symbols must remain unique") from exc
+            except Exception:
+                conn.rollback()
+                raise
 
         result = self.get_watchlist(watchlist_id)
         if result is None:
@@ -195,8 +187,7 @@ class SqliteWatchlistRepository(WatchlistRepository):
         return result
 
     def delete_watchlist(self, watchlist_id: str) -> bool:
-        conn = self._get_connection()
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -207,5 +198,3 @@ class SqliteWatchlistRepository(WatchlistRepository):
             )
             conn.commit()
             return cur.rowcount > 0
-        finally:
-            conn.close()
