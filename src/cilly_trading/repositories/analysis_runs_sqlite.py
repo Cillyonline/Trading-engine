@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -38,6 +39,9 @@ class SqliteAnalysisRunRepository:
         conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
 
+    def _connection(self):
+        return closing(self._get_connection())
+
     @staticmethod
     def _deserialize_run_row(row: sqlite3.Row) -> Dict[str, Any]:
         return {
@@ -53,8 +57,7 @@ class SqliteAnalysisRunRepository:
         *,
         ingestion_run_id: str,
     ) -> Dict[str, Any] | None:
-        conn = self._get_connection()
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -72,8 +75,6 @@ class SqliteAnalysisRunRepository:
                 (ingestion_run_id,),
             )
             row = cur.fetchone()
-        finally:
-            conn.close()
 
         if row is None:
             return None
@@ -130,34 +131,7 @@ class SqliteAnalysisRunRepository:
         return enriched
 
     def ingestion_run_exists(self, ingestion_run_id: str) -> bool:
-        conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT 1
-            FROM ingestion_runs
-            WHERE ingestion_run_id = ?
-            LIMIT 1;
-            """,
-            (ingestion_run_id,),
-        )
-        row = cur.fetchone()
-        conn.close()
-        return row is not None
-
-    def ingestion_run_is_ready(
-        self,
-        ingestion_run_id: str,
-        *,
-        symbols: list[str],
-        timeframe: str,
-    ) -> bool:
-        try:
-            conn = self._get_connection()
-        except sqlite3.Error:
-            return False
-
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
             cur.execute(
                 """
@@ -168,28 +142,48 @@ class SqliteAnalysisRunRepository:
                 """,
                 (ingestion_run_id,),
             )
-            if cur.fetchone() is None:
-                return False
+            row = cur.fetchone()
+        return row is not None
 
-            for symbol in symbols:
+    def ingestion_run_is_ready(
+        self,
+        ingestion_run_id: str,
+        *,
+        symbols: list[str],
+        timeframe: str,
+    ) -> bool:
+        try:
+            with self._connection() as conn:
+                cur = conn.cursor()
                 cur.execute(
                     """
                     SELECT 1
-                    FROM ohlcv_snapshots
+                    FROM ingestion_runs
                     WHERE ingestion_run_id = ?
-                      AND symbol = ?
-                      AND timeframe = ?
                     LIMIT 1;
                     """,
-                    (ingestion_run_id, symbol, timeframe),
+                    (ingestion_run_id,),
                 )
                 if cur.fetchone() is None:
                     return False
-            return True
+
+                for symbol in symbols:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM ohlcv_snapshots
+                        WHERE ingestion_run_id = ?
+                          AND symbol = ?
+                          AND timeframe = ?
+                        LIMIT 1;
+                        """,
+                        (ingestion_run_id, symbol, timeframe),
+                    )
+                    if cur.fetchone() is None:
+                        return False
+                return True
         except sqlite3.Error:
             return False
-        finally:
-            conn.close()
 
     def get_run(self, analysis_run_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -201,23 +195,22 @@ class SqliteAnalysisRunRepository:
         Returns:
             Optionaler Dict mit gespeicherten Run-Daten.
         """
-        conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT
-                analysis_run_id,
-                ingestion_run_id,
-                request_payload,
-                result_payload,
-                created_at
-            FROM analysis_runs
-            WHERE analysis_run_id = ?;
-            """,
-            (analysis_run_id,),
-        )
-        row = cur.fetchone()
-        conn.close()
+        with self._connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT
+                    analysis_run_id,
+                    ingestion_run_id,
+                    request_payload,
+                    result_payload,
+                    created_at
+                FROM analysis_runs
+                WHERE analysis_run_id = ?;
+                """,
+                (analysis_run_id,),
+            )
+            row = cur.fetchone()
 
         if row is None:
             return None
@@ -243,70 +236,68 @@ class SqliteAnalysisRunRepository:
         """
         serialized_request = json.dumps(request_payload, sort_keys=True)
         serialized_result = json.dumps(result_payload, sort_keys=True)
-        conn = self._get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO analysis_runs (
-                    analysis_run_id,
-                    ingestion_run_id,
-                    request_payload,
-                    result_payload,
-                    created_at
+        with self._connection() as conn:
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO analysis_runs (
+                        analysis_run_id,
+                        ingestion_run_id,
+                        request_payload,
+                        result_payload,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    (
+                        analysis_run_id,
+                        ingestion_run_id,
+                        serialized_request,
+                        serialized_result,
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
                 )
-                VALUES (?, ?, ?, ?, ?);
-                """,
-                (
-                    analysis_run_id,
-                    ingestion_run_id,
-                    serialized_request,
-                    serialized_result,
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
-            conn.commit()
-            cur.execute(
-                """
-                SELECT
-                    analysis_run_id,
-                    ingestion_run_id,
-                    request_payload,
-                    result_payload,
-                    created_at
-                FROM analysis_runs
-                WHERE analysis_run_id = ?;
-                """,
-                (analysis_run_id,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise RuntimeError("persisted analysis run could not be reloaded")
-            return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=True)
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT
-                    analysis_run_id,
-                    ingestion_run_id,
-                    request_payload,
-                    result_payload,
-                    created_at
-                FROM analysis_runs
-                WHERE analysis_run_id = ?;
-                """,
-                (analysis_run_id,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise
-            if row["request_payload"] == serialized_request:
-                return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=False)
-            raise ValueError("analysis_run_id already exists with different persisted payload")
-        finally:
-            conn.close()
+                conn.commit()
+                cur.execute(
+                    """
+                    SELECT
+                        analysis_run_id,
+                        ingestion_run_id,
+                        request_payload,
+                        result_payload,
+                        created_at
+                    FROM analysis_runs
+                    WHERE analysis_run_id = ?;
+                    """,
+                    (analysis_run_id,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise RuntimeError("persisted analysis run could not be reloaded")
+                return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=True)
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT
+                        analysis_run_id,
+                        ingestion_run_id,
+                        request_payload,
+                        result_payload,
+                        created_at
+                    FROM analysis_runs
+                    WHERE analysis_run_id = ?;
+                    """,
+                    (analysis_run_id,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise
+                if row["request_payload"] == serialized_request:
+                    return self._attach_evidence(self._deserialize_run_row(row), write_artifacts=False)
+                raise ValueError("analysis_run_id already exists with different persisted payload")
 
     def save_analysis_run(
         self,
@@ -328,22 +319,21 @@ class SqliteAnalysisRunRepository:
         )
 
     def list_ingestion_runs(self, *, limit: int) -> list[Dict[str, Any]]:
-        conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT
-                ingestion_run_id,
-                created_at,
-                symbols_json
-            FROM ingestion_runs
-            ORDER BY created_at DESC, ingestion_run_id ASC
-            LIMIT ?;
-            """,
-            (limit,),
-        )
-        rows = cur.fetchall()
-        conn.close()
+        with self._connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT
+                    ingestion_run_id,
+                    created_at,
+                    symbols_json
+                FROM ingestion_runs
+                ORDER BY created_at DESC, ingestion_run_id ASC
+                LIMIT ?;
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
 
         result: list[Dict[str, Any]] = []
         for row in rows:
