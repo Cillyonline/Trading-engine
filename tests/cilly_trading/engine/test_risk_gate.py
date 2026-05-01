@@ -219,6 +219,66 @@ def test_adapter_maps_risk_framework_reason_codes_deterministically(
         assert _policy_evidence_or_empty(decision)
 
 
+def test_adapter_uses_finite_rejection_score_for_zero_equity_strategy_exposure_cap() -> None:
+    decision = adapt_risk_framework_response_to_risk_decision(
+        framework_request=FrameworkRiskEvaluationRequest(
+            strategy_id="strategy-a",
+            symbol="AAPL",
+            proposed_position_size=400.0,
+            account_equity=0.0,
+            current_exposure=0.0,
+        ),
+        framework_response=FrameworkRiskEvaluationResponse(
+            approved=False,
+            reason="rejected: max_strategy_exposure_pct_exceeded",
+            adjusted_position_size=0.0,
+            risk_score=float("inf"),
+        ),
+        limits=_framework_limits(),
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.score > decision.max_allowed
+    assert math.isfinite(decision.score)
+    policy_evidence = _policy_evidence_or_empty(decision)
+    assert policy_evidence[0].observed_value > policy_evidence[0].limit_value
+    assert math.isfinite(policy_evidence[0].observed_value)
+
+
+def test_adapter_uses_finite_rejection_score_for_zero_equity_symbol_exposure_cap() -> None:
+    decision = adapt_risk_framework_response_to_risk_decision(
+        framework_request=FrameworkRiskEvaluationRequest(
+            strategy_id="strategy-a",
+            symbol="AAPL",
+            proposed_position_size=400.0,
+            account_equity=0.0,
+            current_exposure=0.0,
+        ),
+        framework_response=FrameworkRiskEvaluationResponse(
+            approved=False,
+            reason="rejected: max_symbol_exposure_pct_exceeded",
+            adjusted_position_size=0.0,
+            risk_score=float("inf"),
+        ),
+        limits=_framework_limits(),
+        strategy_exposure=200.0,
+        symbol_exposure=100.0,
+        rule_version="adapter-v1",
+        evaluated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    assert decision.decision == "REJECTED"
+    assert decision.score > decision.max_allowed
+    assert math.isfinite(decision.score)
+    policy_evidence = _policy_evidence_or_empty(decision)
+    assert policy_evidence[0].observed_value > policy_evidence[0].limit_value
+    assert math.isfinite(policy_evidence[0].observed_value)
+
+
 def test_adapter_rejects_unknown_reason_code() -> None:
     with pytest.raises(ValueError, match="unsupported risk-framework reason"):
         adapt_risk_framework_response_to_risk_decision(
