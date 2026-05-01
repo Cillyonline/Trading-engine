@@ -2,8 +2,8 @@
 Init-Skript fuer die SQLite-Datenbank der Cilly Trading Engine.
 
 - Legt die Datei `cilly_trading.db` im Projektverzeichnis an (falls nicht vorhanden).
-- Erzeugt die Tabellen `signals`, `trades`, `analysis_runs` und `watchlists`
-  entsprechend der MVP-Spezifikation.
+- Erzeugt die Tabellen `signals`, `trades`, `analysis_runs`, `ingestion_runs`,
+  `ohlcv_snapshots`, `watchlists` und `watchlist_symbols`.
 """
 
 from __future__ import annotations
@@ -18,14 +18,12 @@ DEFAULT_DB_PATH_ENV_VAR = "CILLY_DB_PATH"
 
 def resolve_default_db_path() -> Path:
     """Resolve the canonical runtime DB path from the bounded process environment."""
-
     configured_path = os.getenv(DEFAULT_DB_PATH_ENV_VAR)
     if configured_path:
         return Path(configured_path).expanduser()
     return Path("cilly_trading.db")
 
 
-# Standard-Pfad fuer die Datenbankdatei (kann spaeter per ENV konfiguriert werden)
 DEFAULT_DB_PATH = resolve_default_db_path()
 
 
@@ -38,26 +36,18 @@ def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
     if db_path is None:
         db_path = DEFAULT_DB_PATH
 
-    # ensure parent dir exists (falls spaeter in Unterordnern gespeichert wird)
     if db_path.parent and not db_path.parent.exists():
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(db_path)
-    # bessere Row-Funktionalitaet: Zugriff per Spaltenname moeglich
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db(db_path: Optional[Path] = None) -> None:
-    """
-    Initialisiert die SQLite-Datenbank:
-    - erzeugt Datei (falls nicht vorhanden)
-    - legt Tabellen an (wenn sie noch nicht existieren)
-    """
-    conn = get_connection(db_path)
-    cur = conn.cursor()
+# ── Per-table initializers ────────────────────────────────────────────────────
 
-    # Tabelle: signals
+
+def _init_signals_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS signals (
@@ -70,44 +60,31 @@ def init_db(db_path: Optional[Path] = None) -> None:
             direction TEXT NOT NULL,
             score REAL NOT NULL,
             timestamp TEXT NOT NULL,
-            stage TEXT NOT NULL,              -- "setup" oder "entry_confirmed"
+            stage TEXT NOT NULL,
             entry_zone_from REAL,
             entry_zone_to REAL,
             confirmation_rule TEXT,
-            timeframe TEXT NOT NULL,          -- z. B. "D1"
-            market_type TEXT NOT NULL,        -- "stock" | "crypto"
-            data_source TEXT NOT NULL,        -- "yahoo" | "binance"
+            timeframe TEXT NOT NULL,
+            market_type TEXT NOT NULL,
+            data_source TEXT NOT NULL,
             reasons_json TEXT
         );
         """
     )
     cur.execute("PRAGMA table_info(signals);")
-    signal_columns = {row["name"] for row in cur.fetchall()}
-    if "signal_id" not in signal_columns:
+    if "signal_id" not in {row["name"] for row in cur.fetchall()}:
         cur.execute("ALTER TABLE signals ADD COLUMN signal_id TEXT;")
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_signals_timestamp
-          ON signals(timestamp);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_signals_timestamp ON signals(timestamp);"
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_signals_symbol_timestamp
-          ON signals(symbol, timestamp);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_signals_symbol_timestamp ON signals(symbol, timestamp);"
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_signals_strategy_timestamp
-          ON signals(strategy, timestamp);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_signals_strategy_timestamp ON signals(strategy, timestamp);"
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_signals_symbol_strategy_timestamp
-          ON signals(symbol, strategy, timestamp);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_signals_symbol_strategy_timestamp ON signals(symbol, strategy, timestamp);"
     )
     cur.execute(
         """
@@ -116,7 +93,9 @@ def init_db(db_path: Optional[Path] = None) -> None:
           WHERE analysis_run_id IS NOT NULL AND signal_id IS NOT NULL;
         """
     )
-    # Tabelle: trades
+
+
+def _init_trades_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS trades (
@@ -124,7 +103,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
             signal_id TEXT,
             symbol TEXT NOT NULL,
             strategy TEXT NOT NULL,
-            stage TEXT NOT NULL,              -- "setup" oder "entry_confirmed"
+            stage TEXT NOT NULL,
             entry_price REAL,
             entry_date TEXT,
             exit_price REAL,
@@ -139,8 +118,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
     cur.execute("PRAGMA table_info(trades);")
-    trade_columns = {row["name"] for row in cur.fetchall()}
-    if "signal_id" not in trade_columns:
+    if "signal_id" not in {row["name"] for row in cur.fetchall()}:
         cur.execute("ALTER TABLE trades ADD COLUMN signal_id TEXT;")
     cur.execute(
         """
@@ -150,7 +128,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
 
-    # Tabelle: analysis_runs
+
+def _init_analysis_runs_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS analysis_runs (
@@ -163,13 +142,11 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_analysis_runs_ingestion
-          ON analysis_runs(ingestion_run_id);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_analysis_runs_ingestion ON analysis_runs(ingestion_run_id);"
     )
 
-    # Tabelle: ingestion_runs
+
+def _init_ingestion_runs_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS ingestion_runs (
@@ -183,13 +160,11 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_ingestion_runs_created_at
-          ON ingestion_runs(created_at);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_ingestion_runs_created_at ON ingestion_runs(created_at);"
     )
 
-    # Tabelle: ohlcv_snapshots
+
+def _init_ohlcv_snapshots_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS ohlcv_snapshots (
@@ -232,7 +207,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
 
-    # Tabelle: watchlists
+
+def _init_watchlists_table(cur: sqlite3.Cursor) -> None:
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlists (
@@ -242,13 +218,8 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
     cur.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_watchlists_name
-          ON watchlists(name, watchlist_id);
-        """
+        "CREATE INDEX IF NOT EXISTS idx_watchlists_name ON watchlists(name, watchlist_id);"
     )
-
-    # Tabelle: watchlist_symbols
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_symbols (
@@ -273,12 +244,27 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
     )
 
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+
+def init_db(db_path: Optional[Path] = None) -> None:
+    """Initialisiert die SQLite-Datenbank und legt alle Tabellen an."""
+    conn = get_connection(db_path)
+    cur = conn.cursor()
+
+    _init_signals_table(cur)
+    _init_trades_table(cur)
+    _init_analysis_runs_table(cur)
+    _init_ingestion_runs_table(cur)
+    _init_ohlcv_snapshots_table(cur)
+    _init_watchlists_table(cur)
+
     conn.commit()
     conn.close()
 
 
 if __name__ == "__main__":
-    # Fuer lokalen Aufruf:
-    # python -m src.cilly_trading.db.init_db
+    # python -m cilly_trading.db.init_db
     init_db()
     print(f"SQLite-Datenbank initialisiert unter: {DEFAULT_DB_PATH.resolve()}")
