@@ -8,6 +8,7 @@ from cilly_trading.repositories.analysis_runs_sqlite import SqliteAnalysisRunRep
 from cilly_trading.repositories.execution_core_sqlite import SqliteCanonicalExecutionRepository
 from cilly_trading.repositories.order_events_sqlite import SqliteOrderEventRepository
 from cilly_trading.repositories.signals_sqlite import SqliteSignalRepository
+from cilly_trading.repositories.trades_sqlite import SqliteTradeRepository
 from cilly_trading.repositories.watchlists_sqlite import SqliteWatchlistRepository
 
 
@@ -18,6 +19,7 @@ class ApiRepositories:
     canonical_execution_repo: SqliteCanonicalExecutionRepository
     analysis_run_repo: SqliteAnalysisRunRepository
     watchlist_repo: SqliteWatchlistRepository
+    trade_repo: SqliteTradeRepository
 
 
 def create_api_repositories(*, default_db_path: Path = DEFAULT_DB_PATH) -> ApiRepositories:
@@ -27,4 +29,5 @@ def create_api_repositories(*, default_db_path: Path = DEFAULT_DB_PATH) -> ApiRe
         canonical_execution_repo=SqliteCanonicalExecutionRepository(db_path=default_db_path),
         analysis_run_repo=SqliteAnalysisRunRepository(db_path=default_db_path),
         watchlist_repo=SqliteWatchlistRepository(db_path=default_db_path),
+        trade_repo=SqliteTradeRepository(db_path=default_db_path),
     )

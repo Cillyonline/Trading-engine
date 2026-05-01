@@ -121,6 +121,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
         """
         CREATE TABLE IF NOT EXISTS trades (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_id TEXT,
             symbol TEXT NOT NULL,
             strategy TEXT NOT NULL,
             stage TEXT NOT NULL,              -- "setup" oder "entry_confirmed"
@@ -135,6 +136,17 @@ def init_db(db_path: Optional[Path] = None) -> None:
             market_type TEXT NOT NULL,
             data_source TEXT NOT NULL
         );
+        """
+    )
+    cur.execute("PRAGMA table_info(trades);")
+    trade_columns = {row["name"] for row in cur.fetchall()}
+    if "signal_id" not in trade_columns:
+        cur.execute("ALTER TABLE trades ADD COLUMN signal_id TEXT;")
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_trades_signal_id
+          ON trades(signal_id)
+          WHERE signal_id IS NOT NULL;
         """
     )
 
