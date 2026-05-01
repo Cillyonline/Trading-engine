@@ -1,11 +1,14 @@
-"""Router for the manual trade journal (Phase 1)."""
+"""Router for the manual trade journal (Phase 1-3)."""
 
 from __future__ import annotations
 
+import csv
+import io
 from dataclasses import dataclass
 from typing import Callable, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from api.models.journal_models import (
     JournalTradeCreateRequest,
@@ -177,7 +180,116 @@ def build_journal_router(*, deps: JournalRouterDependencies) -> APIRouter:
             trades=trades,
         )
 
+    @router.get(
+        "/trades/export",
+        summary="Trades als CSV exportieren",
+        description=(
+            "Lädt alle manuell eingetragenen Trades als CSV-Datei herunter. "
+            "Dieselben Filter wie GET /journal/trades sind verfügbar."
+        ),
+        response_class=StreamingResponse,
+    )
+    def export_trades_csv_handler(
+        symbol: Optional[str] = Query(default=None),
+        strategy: Optional[str] = Query(default=None),
+        signal_id: Optional[str] = Query(default=None),
+        status: Optional[Literal["open", "closed"]] = Query(default=None),
+        limit: int = Query(default=500, ge=1, le=5000),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> StreamingResponse:
+        repo = deps.get_trade_repo()
+        raw = repo.list_trades(
+            limit=limit,
+            symbol=symbol,
+            strategy=strategy,
+            signal_id=signal_id,
+            status=status,
+        )
+        trades = [JournalTradeResponse.from_payload(dict(t)) for t in raw]
+        return StreamingResponse(
+            content=_trades_to_csv(trades),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=trades.csv"},
+        )
+
+    @router.get(
+        "/performance/export",
+        summary="Performance-Zusammenfassung als CSV exportieren",
+        description=(
+            "Lädt die aggregierte Performance als CSV herunter — "
+            "Zeilen für Gesamt, je Strategie und je Symbol."
+        ),
+        response_class=StreamingResponse,
+    )
+    def export_performance_csv_handler(
+        symbol: Optional[str] = Query(default=None),
+        strategy: Optional[str] = Query(default=None),
+        _: str = Depends(deps.require_role("read_only")),
+    ) -> StreamingResponse:
+        repo = deps.get_trade_repo()
+        raw = repo.list_trades(limit=5000, symbol=symbol, strategy=strategy)
+        trades = [JournalTradeResponse.from_payload(dict(t)) for t in raw]
+
+        overall = PerformanceMetrics.from_trades(trades)
+        by_strategy = _group_performance(trades, key_fn=lambda t: t.strategy)
+        by_symbol = _group_performance(trades, key_fn=lambda t: t.symbol)
+
+        rows: list[dict] = [_metrics_row("overall", "all", overall)]
+        for item in by_strategy:
+            rows.append(_metrics_row("strategy", item.key, item.metrics))
+        for item in by_symbol:
+            rows.append(_metrics_row("symbol", item.key, item.metrics))
+
+        return StreamingResponse(
+            content=_dicts_to_csv(rows),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=performance.csv"},
+        )
+
     return router
+
+
+def _trades_to_csv(trades: list[JournalTradeResponse]) -> io.StringIO:
+    buf = io.StringIO()
+    fields = [
+        "id", "signal_id", "symbol", "strategy", "stage",
+        "entry_price", "entry_date", "exit_price", "exit_date",
+        "pnl_pct", "status", "reason_entry", "reason_exit", "notes",
+        "timeframe", "market_type", "data_source",
+    ]
+    writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    for t in trades:
+        writer.writerow(t.model_dump())
+    buf.seek(0)
+    return buf
+
+
+def _metrics_row(scope: str, key: str, m: PerformanceMetrics) -> dict:
+    return {
+        "scope": scope,
+        "key": key,
+        "total_trades": m.total_trades,
+        "open_trades": m.open_trades,
+        "closed_trades": m.closed_trades,
+        "winning_trades": m.winning_trades,
+        "win_rate_pct": m.win_rate_pct,
+        "avg_pnl_pct": m.avg_pnl_pct,
+        "total_pnl_pct": m.total_pnl_pct,
+        "best_trade_pnl_pct": m.best_trade_pnl_pct,
+        "worst_trade_pnl_pct": m.worst_trade_pnl_pct,
+    }
+
+
+def _dicts_to_csv(rows: list[dict]) -> io.StringIO:
+    if not rows:
+        return io.StringIO()
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    buf.seek(0)
+    return buf
 
 
 def _group_performance(
