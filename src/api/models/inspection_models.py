@@ -461,6 +461,7 @@ class SignalDecisionSurfaceItemResponse(BaseModel):
     qualification_state: Literal["reject", "watch", "paper_candidate", "paper_approved"]
     action: Literal["entry", "exit", "ignore"]
     win_rate: float = Field(ge=0.0, le=1.0)
+    win_rate_basis: Literal["score_proxy"] = "score_proxy"
     expected_value: float = Field(ge=-1.0, le=1.0)
     qualification_policy_version: str
     rationale_summary: str

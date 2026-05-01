@@ -63,6 +63,7 @@ def test_health_data_reports_unavailable_when_data_source_is_missing(monkeypatch
         "ready": False,
         "reason": "data_source_unavailable",
         "checked_at": fixed_now.isoformat(),
+        "external_data_gate": "disabled",
     }
 
 
