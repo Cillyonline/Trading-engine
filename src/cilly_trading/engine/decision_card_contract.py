@@ -1584,6 +1584,7 @@ class ScoreEvaluation(BaseModel):
     confidence_reason: str = Field(min_length=8)
     aggregate_score: float = Field(ge=0.0, le=100.0)
     win_rate: float = Field(ge=0.0, le=1.0)
+    win_rate_basis: Literal["score_proxy", "component_derived"] = "score_proxy"
     expected_value: float = Field(ge=-1.0, le=1.0)
 
     @field_validator("component_scores")
@@ -1714,6 +1715,7 @@ class DecisionCard(BaseModel):
         if win_rate_value is None:
             win_rate = _derive_bounded_win_rate_from_components(component_scores)
             score_payload["win_rate"] = win_rate
+            score_payload["win_rate_basis"] = "component_derived"
         else:
             win_rate = float(win_rate_value)
 

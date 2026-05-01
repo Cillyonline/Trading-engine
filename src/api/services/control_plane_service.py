@@ -15,6 +15,7 @@ from cilly_trading.compliance.drawdown_guard import (
     should_block_execution_for_drawdown,
 )
 from cilly_trading.compliance.kill_switch import is_kill_switch_active
+from cilly_trading.config.external_data import EXTERNAL_DATA_ENABLED
 from cilly_trading.portfolio import PortfolioState as CompliancePortfolioState
 
 from ..models import (
@@ -92,6 +93,7 @@ def health_data_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, An
         "ready": ready,
         "reason": reason,
         "checked_at": checked_at.isoformat(),
+        "external_data_gate": "enabled" if EXTERNAL_DATA_ENABLED else "disabled",
     }
 
 

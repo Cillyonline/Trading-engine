@@ -463,6 +463,7 @@ def test_observability_integration_is_deterministic_for_healthy_runtime(
             "ready": True,
             "reason": "data_source_available",
             "checked_at": "2026-01-01T12:00:30+00:00",
+            "external_data_gate": "disabled",
         },
         "/health/guards": {
             "subsystem": "guards",
@@ -540,6 +541,7 @@ def test_observability_integration_is_deterministic_for_failure_runtime(
             "ready": False,
             "reason": "data_source_unavailable",
             "checked_at": "2026-01-01T12:00:30+00:00",
+            "external_data_gate": "disabled",
         },
         "/health/guards": {
             "subsystem": "guards",
