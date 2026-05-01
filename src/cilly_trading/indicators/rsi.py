@@ -37,8 +37,16 @@ def rsi(
     avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
-    rs = avg_gain / avg_loss.replace(0, float("nan"))
+    zero_loss = avg_loss == 0
+    zero_gain = avg_gain == 0
+
+    rs = avg_gain / avg_loss.mask(zero_loss)
     rsi_series = 100 - (100 / (1 + rs))
+
+    # Sustained upward moves have no average loss and should saturate at 100,
+    # not become NaN. Fully flat windows are neutral after the warm-up period.
+    rsi_series = rsi_series.mask(zero_loss & (avg_gain > 0), 100.0)
+    rsi_series = rsi_series.mask(zero_loss & zero_gain, 50.0)
     rsi_series = rsi_series.clip(0, 100)
 
     return rsi_series

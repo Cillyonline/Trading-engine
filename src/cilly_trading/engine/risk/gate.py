@@ -126,6 +126,13 @@ def _safe_pct(numerator: float, denominator: float) -> float | None:
     return numerator / denominator
 
 
+def _nonzero_rejection_score(max_allowed: float) -> float:
+    """Return a finite score that preserves rejection semantics for undefined ratios."""
+    if isfinite(max_allowed):
+        return max_allowed + 1.0
+    return 1.0
+
+
 def _risk_limit_notional(account_equity: float, limit_pct: float | None) -> float:
     if limit_pct is None:
         return float("inf")
@@ -351,13 +358,13 @@ def adapt_risk_framework_response_to_risk_decision(
             score = float(framework_response.risk_score)
             max_allowed = float(limits.max_account_exposure_pct)
         elif reason == "rejected: max_strategy_exposure_pct_exceeded":
-            _pct = _safe_pct(normalized_strategy + normalized_proposed, normalized_equity)
-            score = _pct if _pct is not None else 0.0
             max_allowed = float(limits.max_strategy_exposure_pct)
+            _pct = _safe_pct(normalized_strategy + normalized_proposed, normalized_equity)
+            score = _pct if _pct is not None else _nonzero_rejection_score(max_allowed)
         elif reason == "rejected: max_symbol_exposure_pct_exceeded":
-            _pct = _safe_pct(normalized_symbol + normalized_proposed, normalized_equity)
-            score = _pct if _pct is not None else 0.0
             max_allowed = float(limits.max_symbol_exposure_pct)
+            _pct = _safe_pct(normalized_symbol + normalized_proposed, normalized_equity)
+            score = _pct if _pct is not None else _nonzero_rejection_score(max_allowed)
         else:  # pragma: no cover - guarded by reason map above
             raise ValueError(f"unsupported risk-framework reason: {reason}")
         if not _collect_covered_rejection_reason_codes(policy_evidence):
