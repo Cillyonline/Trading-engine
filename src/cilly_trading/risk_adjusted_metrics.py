@@ -98,14 +98,23 @@ def _compute_profit_factor(pnls: list[Decimal]) -> Decimal | None:
     return gross_profit / gross_loss
 
 
-def _compute_sharpe_ratio(returns: list[Decimal]) -> Decimal | None:
+def _compute_sharpe_ratio(
+    returns: list[Decimal],
+    periods_per_year: int | None = None,
+) -> Decimal | None:
+    """Compute the Sharpe ratio from a list of per-trade returns.
+
+    Uses sample standard deviation (n-1 divisor) for consistency with Sortino.
+    Without ``periods_per_year`` the result is an unannnualized per-observation
+    ratio.  Pass ``periods_per_year=252`` for daily-bar strategies to annualize.
+    """
     count = len(returns)
     if count < 2:
         return None
 
     mean_return = sum(returns, _ZERO) / Decimal(count)
     variance_sum = sum(((value - mean_return) ** 2 for value in returns), _ZERO)
-    variance = variance_sum / Decimal(count - 1)
+    variance = variance_sum / Decimal(count - 1)  # sample std dev
     if variance <= _ZERO:
         return None
 
@@ -114,12 +123,28 @@ def _compute_sharpe_ratio(returns: list[Decimal]) -> Decimal | None:
         volatility = variance.sqrt()
     if volatility == _ZERO:
         return None
-    return mean_return / volatility
+
+    ratio = mean_return / volatility
+    if periods_per_year is not None and periods_per_year > 0:
+        with localcontext() as context:
+            context.prec = 50
+            ratio = ratio * Decimal(periods_per_year).sqrt()
+    return ratio
 
 
-def _compute_sortino_ratio(returns: list[Decimal]) -> Decimal | None:
+def _compute_sortino_ratio(
+    returns: list[Decimal],
+    periods_per_year: int | None = None,
+) -> Decimal | None:
+    """Compute the Sortino ratio from a list of per-trade returns.
+
+    Uses sample standard deviation (n-1 divisor) consistent with Sharpe.
+    MAR (minimum acceptable return) is assumed to be zero.
+    Without ``periods_per_year`` the result is an unannnualized per-observation
+    ratio.  Pass ``periods_per_year=252`` for daily-bar strategies to annualize.
+    """
     count = len(returns)
-    if count == 0:
+    if count < 2:
         return None
 
     mean_return = sum(returns, _ZERO) / Decimal(count)
@@ -127,16 +152,28 @@ def _compute_sortino_ratio(returns: list[Decimal]) -> Decimal | None:
     if downside_sum == _ZERO:
         return None
 
-    downside_variance = downside_sum / Decimal(count)
+    downside_variance = downside_sum / Decimal(count - 1)  # sample std dev, consistent with Sharpe
     with localcontext() as context:
         context.prec = 50
         downside_deviation = downside_variance.sqrt()
     if downside_deviation == _ZERO:
         return None
-    return mean_return / downside_deviation
+
+    ratio = mean_return / downside_deviation
+    if periods_per_year is not None and periods_per_year > 0:
+        with localcontext() as context:
+            context.prec = 50
+            ratio = ratio * Decimal(periods_per_year).sqrt()
+    return ratio
 
 
 def _compute_calmar_ratio(returns: list[Decimal]) -> Decimal | None:
+    """Compute the Calmar ratio (total return / max drawdown).
+
+    Drawdown is measured at trade-close boundaries only; intra-trade adverse
+    moves are not captured.  The ratio is not annualized because trade
+    frequency and holding period are not available here.
+    """
     if not returns:
         return None
 
@@ -160,7 +197,19 @@ def _compute_calmar_ratio(returns: list[Decimal]) -> Decimal | None:
     return total_return / max_drawdown
 
 
-def compute_risk_adjusted_metrics_from_trade_ledger(payload: Mapping[str, Any]) -> dict[str, float | None]:
+def compute_risk_adjusted_metrics_from_trade_ledger(
+    payload: Mapping[str, Any],
+    periods_per_year: int | None = None,
+) -> dict[str, float | None]:
+    """Compute risk-adjusted performance metrics from a trade ledger payload.
+
+    Args:
+        payload: dict containing a ``"trades"`` list of trade records.
+        periods_per_year: optional annualization factor (e.g. 252 for daily
+            bars).  When omitted, Sharpe and Sortino are unannnualized
+            per-observation ratios and are not comparable to industry benchmarks
+            that assume annualized figures.
+    """
     trades_raw = payload.get("trades")
     if not isinstance(trades_raw, list):
         trades: list[Mapping[str, object]] = []
@@ -170,8 +219,8 @@ def compute_risk_adjusted_metrics_from_trade_ledger(payload: Mapping[str, Any]) 
     pnls, returns = _extract_trade_pnls_and_returns(trades)
 
     metrics = {
-        "sharpe_ratio": _to_float(_compute_sharpe_ratio(returns)),
-        "sortino_ratio": _to_float(_compute_sortino_ratio(returns)),
+        "sharpe_ratio": _to_float(_compute_sharpe_ratio(returns, periods_per_year)),
+        "sortino_ratio": _to_float(_compute_sortino_ratio(returns, periods_per_year)),
         "calmar_ratio": _to_float(_compute_calmar_ratio(returns)),
         "profit_factor": _to_float(_compute_profit_factor(pnls)),
         "win_rate": _to_float(_compute_win_rate(pnls)),

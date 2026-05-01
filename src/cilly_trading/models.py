@@ -171,6 +171,22 @@ class Signal(TypedDict, total=False):
     reasons: Optional[List[SignalReason]]
 
 
+_SIGNAL_REQUIRED_FIELDS: frozenset[str] = frozenset(
+    {"symbol", "strategy", "direction", "stage", "timestamp"}
+)
+
+
+def validate_signal_required_fields(signal: Signal) -> None:
+    """Raise ValueError when a signal is missing mandatory identity fields."""
+    missing = _SIGNAL_REQUIRED_FIELDS - signal.keys()
+    if missing:
+        raise ValueError(f"Signal missing required fields: {sorted(missing)}")
+    if not signal.get("symbol"):
+        raise ValueError("Signal 'symbol' must be non-empty")
+    if not signal.get("timestamp"):
+        raise ValueError("Signal 'timestamp' must be non-empty")
+
+
 class PersistedTradePayload(TypedDict, total=False):
     """Legacy persisted trade payload used by current paper-trading surfaces."""
 

@@ -8,7 +8,6 @@ Core-Engine der Cilly Trading Engine.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -31,7 +30,12 @@ from cilly_trading.engine.lineage import LineageContext, LineageMissingError
 from cilly_trading.engine.logging import emit_structured_engine_log
 from cilly_trading.engine.reasons import generate_reasons_for_signal
 from cilly_trading.engine.strategy_params import normalize_and_validate_strategy_params
-from cilly_trading.models import Signal
+from cilly_trading.models import (
+    Signal,
+    canonical_json,
+    sha256_hex,
+    validate_signal_required_fields,
+)
 from cilly_trading.repositories import SignalRepository
 from cilly_trading.repositories.lineage_repository import SqliteLineageRepository
 from cilly_trading.config.external_data import EXTERNAL_DATA_ENABLED
@@ -65,63 +69,6 @@ def _require_external_data_enabled(engine_config: "EngineConfig") -> None:
     raise ExternalDataGateClosedError(
         "external_data_enabled is False; external data usage is disabled"
     )
-
-
-def _normalize_assets(value: Any) -> list[str]:
-    if not isinstance(value, (list, tuple)):
-        raise TypeError("assets must be a list or tuple")
-
-    normalized = []
-    for item in value:
-        if not isinstance(item, str):
-            raise TypeError("assets list items must be strings")
-        normalized.append(item.strip().upper())
-
-    return sorted(normalized)
-
-
-def _normalize_canonical_value(value: Any, *, key: Optional[str] = None) -> Any:
-    if isinstance(value, float):
-        raise TypeError("floats are not supported in canonical_json")
-
-    if value is None or isinstance(value, (bool, int, str)):
-        return value
-
-    if isinstance(value, dict):
-        normalized_dict: Dict[str, Any] = {}
-        for raw_key, raw_value in value.items():
-            if not isinstance(raw_key, str):
-                raise TypeError("dict keys must be strings")
-            normalized_dict[raw_key] = _normalize_canonical_value(raw_value, key=raw_key)
-        return normalized_dict
-
-    if isinstance(value, (list, tuple)):
-        if key == "assets":
-            return _normalize_assets(value)
-        return [_normalize_canonical_value(item) for item in value]
-
-    raise TypeError(f"unsupported type for canonical_json: {type(value).__name__}")
-
-
-def canonical_json(obj: Any) -> str:
-    """
-    Create a deterministic JSON representation of the provided object.
-    """
-    normalized = _normalize_canonical_value(obj)
-    return json.dumps(
-        normalized,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-
-
-def sha256_hex(text: str) -> str:
-    """
-    Return a SHA-256 hex digest for the provided text.
-    """
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _normalize_strategy_config(strat_name: str, raw_config: Any) -> Dict[str, Any]:
@@ -182,7 +129,7 @@ class BaseStrategy(Protocol):
 
     def generate_signals(
         self,
-        df,
+        df: "pd.DataFrame",
         config: Dict[str, Any],
     ) -> List[Signal]:
         ...
@@ -612,8 +559,17 @@ def run_watchlist_analysis(
                         s["analysis_run_id"] = lineage_ctx.analysis_run_id
                         s["snapshot_id"] = lineage_ctx.snapshot_id
                         s["ingestion_run_id"] = lineage_ctx.ingestion_run_id
+                        validate_signal_required_fields(s)
                     except LineageMissingError:
                         raise
+                    except ValueError as exc:
+                        logger.warning(
+                            "Dropping signal with missing required fields: component=engine strategy=%s symbol=%s reason=%s",
+                            strat_name,
+                            symbol,
+                            exc,
+                        )
+                        continue
                     except Exception:
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",

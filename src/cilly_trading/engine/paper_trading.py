@@ -24,7 +24,9 @@ def _extract_price(signal: Signal) -> Decimal:
         return _to_decimal(signal["price"])  # type: ignore[arg-type]
     entry_zone = signal.get("entry_zone")
     if entry_zone is not None:
-        return _to_decimal((entry_zone["from_"] + entry_zone["to"]) / 2)
+        from_ = Decimal(str(entry_zone["from_"]))
+        to = Decimal(str(entry_zone["to"]))
+        return (from_ + to) / Decimal("2")
     raise ValueError("Signal missing price and entry_zone")
 
 

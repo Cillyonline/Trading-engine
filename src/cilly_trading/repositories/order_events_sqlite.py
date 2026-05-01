@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Optional
 
@@ -28,9 +29,15 @@ class SqliteOrderEventRepository(OrderEventRepository):
         self._ensure_order_events_table()
 
     def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, timeout=5.0)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
+
+    def _connection(self):
+        return closing(self._get_connection())
 
     def _ensure_order_events_table(self) -> None:
         conn = self._get_connection()

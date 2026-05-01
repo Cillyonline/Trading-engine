@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from cilly_trading.portfolio import PortfolioState
+
+_logger = logging.getLogger(__name__)
 
 
 _DRAWDOWN_THRESHOLD_KEY = "execution.drawdown.max_pct"
@@ -38,12 +42,24 @@ def should_block_execution_for_drawdown(
     portfolio_state: PortfolioState,
     config: dict[str, object] | None = None,
 ) -> bool:
-    """Return deterministic execution block state for drawdown guard."""
+    """Return deterministic execution block state for drawdown guard.
+
+    WARNING: When this guard triggers, open positions are NOT automatically
+    liquidated. Manual intervention is required to close existing exposure.
+    """
     threshold = configured_drawdown_threshold(config=config)
     if threshold is None:
         return False
 
-    return is_drawdown_threshold_exceeded(
+    blocked = is_drawdown_threshold_exceeded(
         portfolio_state=portfolio_state,
         max_drawdown_pct=threshold,
     )
+    if blocked:
+        _logger.critical(
+            "DRAWDOWN_GUARD_TRIGGERED: current_drawdown=%.4f limit=%.4f "
+            "open_positions_NOT_liquidated=true manual_intervention_required=true",
+            portfolio_state.drawdown(),
+            threshold,
+        )
+    return blocked
