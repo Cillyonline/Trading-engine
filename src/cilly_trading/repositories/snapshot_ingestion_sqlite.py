@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -49,6 +50,9 @@ class SqliteSnapshotIngestionRepository:
         conn.execute("PRAGMA busy_timeout = 5000;")
         return conn
 
+    def _connection(self):
+        return closing(self._get_connection())
+
     def save_snapshot_run(
         self,
         *,
@@ -58,63 +62,61 @@ class SqliteSnapshotIngestionRepository:
         if not rows:
             raise ValueError("snapshot rows must not be empty")
 
-        conn = self._get_connection()
-        try:
+        with self._connection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO ingestion_runs (
-                    ingestion_run_id,
-                    created_at,
-                    source,
-                    symbols_json,
-                    timeframe,
-                    fingerprint_hash
-                )
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                (
-                    run.ingestion_run_id,
-                    run.created_at,
-                    run.source,
-                    json.dumps(list(run.symbols), separators=(",", ":"), ensure_ascii=True),
-                    run.timeframe,
-                    run.fingerprint_hash,
-                ),
-            )
-            cur.executemany(
-                """
-                INSERT INTO ohlcv_snapshots (
-                    ingestion_run_id,
-                    symbol,
-                    timeframe,
-                    ts,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        row.ingestion_run_id,
-                        row.symbol,
-                        row.timeframe,
-                        row.ts,
-                        row.open,
-                        row.high,
-                        row.low,
-                        row.close,
-                        row.volume,
+            try:
+                cur.execute(
+                    """
+                    INSERT INTO ingestion_runs (
+                        ingestion_run_id,
+                        created_at,
+                        source,
+                        symbols_json,
+                        timeframe,
+                        fingerprint_hash
                     )
-                    for row in rows
-                ],
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+                    VALUES (?, ?, ?, ?, ?, ?);
+                    """,
+                    (
+                        run.ingestion_run_id,
+                        run.created_at,
+                        run.source,
+                        json.dumps(list(run.symbols), separators=(",", ":"), ensure_ascii=True),
+                        run.timeframe,
+                        run.fingerprint_hash,
+                    ),
+                )
+                cur.executemany(
+                    """
+                    INSERT INTO ohlcv_snapshots (
+                        ingestion_run_id,
+                        symbol,
+                        timeframe,
+                        ts,
+                        open,
+                        high,
+                        low,
+                        close,
+                        volume
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """,
+                    [
+                        (
+                            row.ingestion_run_id,
+                            row.symbol,
+                            row.timeframe,
+                            row.ts,
+                            row.open,
+                            row.high,
+                            row.low,
+                            row.close,
+                            row.volume,
+                        )
+                        for row in rows
+                    ],
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
