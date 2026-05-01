@@ -111,6 +111,7 @@ def build_api_router_wiring(*, compat: MainModuleCompatibilitySurface) -> ApiRou
         ),
         get_default_strategy_configs=lambda: compat.get("default_strategy_configs"),
         get_watchlist_repo=lambda: compat.get("watchlist_repo"),
+        get_trade_repo=lambda: compat.get("trade_repo"),
         get_require_ingestion_run=lambda *args, **kwargs: compat.get("_require_ingestion_run")(
             *args,
             **kwargs,

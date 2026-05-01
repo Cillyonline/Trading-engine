@@ -204,6 +204,7 @@ class PersistedTradePayload(TypedDict, total=False):
     """Legacy persisted trade payload used by current paper-trading surfaces."""
 
     id: int
+    signal_id: Optional[str]
     symbol: str
     strategy: str
     stage: Stage

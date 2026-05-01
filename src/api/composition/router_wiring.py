@@ -10,11 +10,13 @@ from ..routers import (
     AnalysisRouterDependencies,
     ControlPlaneRouterDependencies,
     InspectionRouterDependencies,
+    JournalRouterDependencies,
     PaperRuntimeEvidenceSeriesRouterDependencies,
     WatchlistsRouterDependencies,
     build_analysis_router,
     build_control_plane_router,
     build_inspection_router,
+    build_journal_router,
     build_paper_runtime_evidence_series_router,
     build_watchlists_router,
 )
@@ -23,6 +25,7 @@ from ..routers import (
 @dataclass
 class ApiRouterWiring:
     require_role: Callable[[str], Callable[..., str]]
+    get_trade_repo: Callable[[], Any]
     assert_phase_13_read_only_endpoint: Callable[[str], None]
     get_health_now: Callable[[], Any]
     get_resolve_analysis_db_path: Callable[[], str]
@@ -52,6 +55,14 @@ class ApiRouterWiring:
 
 def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
     app.include_router(build_alerts_router(wiring.require_role))
+    app.include_router(
+        build_journal_router(
+            deps=JournalRouterDependencies(
+                require_role=wiring.require_role,
+                get_trade_repo=wiring.get_trade_repo,
+            ),
+        )
+    )
     app.include_router(
         build_control_plane_router(
             deps=ControlPlaneRouterDependencies(
