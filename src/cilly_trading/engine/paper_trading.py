@@ -13,10 +13,14 @@ from cilly_trading.models import Signal, Trade
 from cilly_trading.repositories import TradeRepository
 
 PRICE_QUANTIZER = Decimal("0.0001")
+PRICE_QUANTIZER_CRYPTO = Decimal("0.00000001")  # 8 decimal places for crypto pairs
 
 
-def _to_decimal(value: float | int | str | Decimal) -> Decimal:
-    return Decimal(str(value)).quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
+def _to_decimal(
+    value: float | int | str | Decimal,
+    quantizer: Decimal = PRICE_QUANTIZER,
+) -> Decimal:
+    return Decimal(str(value)).quantize(quantizer, rounding=ROUND_HALF_UP)
 
 
 def _extract_price(signal: Signal) -> Decimal:
@@ -76,8 +80,8 @@ class SimulationResult:
     pnl_total: Dict[str, str]
 
 
-def _format_decimal(value: Decimal) -> str:
-    return str(value.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP))
+def _format_decimal(value: Decimal, quantizer: Decimal = PRICE_QUANTIZER) -> str:
+    return str(value.quantize(quantizer, rounding=ROUND_HALF_UP))
 
 
 def _canonical_json(payload: Dict[str, object]) -> str:
@@ -89,10 +93,17 @@ class PaperTradingSimulator:
 
     Args:
         trade_repository: Optional trade repository for persistence.
+        price_quantizer: Decimal quantizer for price rounding.
+            Use PRICE_QUANTIZER (4dp) for stocks, PRICE_QUANTIZER_CRYPTO (8dp) for crypto.
     """
 
-    def __init__(self, trade_repository: Optional[TradeRepository] = None) -> None:
+    def __init__(
+        self,
+        trade_repository: Optional[TradeRepository] = None,
+        price_quantizer: Decimal = PRICE_QUANTIZER,
+    ) -> None:
         self._trade_repository = trade_repository
+        self._price_quantizer = price_quantizer
 
     def run(self, signals: Sequence[Signal]) -> SimulationResult:
         """Run the deterministic simulation.
@@ -131,7 +142,7 @@ class PaperTradingSimulator:
                 else:
                     weighted_total = (position.avg_entry_price * position.qty) + price
                     position.avg_entry_price = (weighted_total / Decimal(new_qty)).quantize(
-                        PRICE_QUANTIZER, rounding=ROUND_HALF_UP
+                        self._price_quantizer, rounding=ROUND_HALF_UP
                     )
                 position.qty = new_qty
 
@@ -162,10 +173,10 @@ class PaperTradingSimulator:
                 if open_trades.get(symbol):
                     open_trade = open_trades[symbol].pop(0)
                     entry_price_value = open_trade.get("entry_price") or 0
-                    entry_price_decimal = _to_decimal(entry_price_value)
-                    pnl = (price - entry_price_decimal).quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
+                    entry_price_decimal = _to_decimal(entry_price_value, self._price_quantizer)
+                    pnl = (price - entry_price_decimal).quantize(self._price_quantizer, rounding=ROUND_HALF_UP)
                     position.realized_pnl = (position.realized_pnl + pnl).quantize(
-                        PRICE_QUANTIZER, rounding=ROUND_HALF_UP
+                        self._price_quantizer, rounding=ROUND_HALF_UP
                     )
                     open_trade["exit_price"] = float(price)
                     open_trade["exit_date"] = timestamp
@@ -188,29 +199,29 @@ class PaperTradingSimulator:
             unrealized = Decimal("0")
             if position.qty > 0:
                 unrealized = (position.last_price - position.avg_entry_price) * Decimal(position.qty)
-                unrealized = unrealized.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
-            realized = position.realized_pnl.quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
-            total = (realized + unrealized).quantize(PRICE_QUANTIZER, rounding=ROUND_HALF_UP)
+                unrealized = unrealized.quantize(self._price_quantizer, rounding=ROUND_HALF_UP)
+            realized = position.realized_pnl.quantize(self._price_quantizer, rounding=ROUND_HALF_UP)
+            total = (realized + unrealized).quantize(self._price_quantizer, rounding=ROUND_HALF_UP)
 
             positions_summary[symbol] = PositionSummary(
                 qty=position.qty,
-                avg_entry_price=_format_decimal(position.avg_entry_price),
-                realized_pnl=_format_decimal(realized),
-                unrealized_pnl=_format_decimal(unrealized),
-                total_pnl=_format_decimal(total),
+                avg_entry_price=_format_decimal(position.avg_entry_price, self._price_quantizer),
+                realized_pnl=_format_decimal(realized, self._price_quantizer),
+                unrealized_pnl=_format_decimal(unrealized, self._price_quantizer),
+                total_pnl=_format_decimal(total, self._price_quantizer),
             )
             pnl_by_symbol[symbol] = {
-                "realized": _format_decimal(realized),
-                "unrealized": _format_decimal(unrealized),
-                "total": _format_decimal(total),
+                "realized": _format_decimal(realized, self._price_quantizer),
+                "unrealized": _format_decimal(unrealized, self._price_quantizer),
+                "total": _format_decimal(total, self._price_quantizer),
             }
             total_realized += realized
             total_unrealized += unrealized
 
         pnl_total = {
-            "realized": _format_decimal(total_realized),
-            "unrealized": _format_decimal(total_unrealized),
-            "total": _format_decimal(total_realized + total_unrealized),
+            "realized": _format_decimal(total_realized, self._price_quantizer),
+            "unrealized": _format_decimal(total_unrealized, self._price_quantizer),
+            "total": _format_decimal(total_realized + total_unrealized, self._price_quantizer),
         }
 
         summary_payload: Dict[str, object] = {

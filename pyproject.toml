@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 test = [
   "pytest",
+  "pytest-cov",
 ]
 
 [tool.setuptools]
@@ -39,4 +40,22 @@ version = {attr = "cilly_trading.version.__version__"}
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=5.0",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "src/*/tests/*",
+    "src/api/test_*.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+    "raise NotImplementedError",
 ]
