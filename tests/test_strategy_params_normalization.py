@@ -75,6 +75,52 @@ def test_normalize_strategy_params_alias_mapping_turtle() -> None:
     assert unknown == []
 
 
+def test_normalize_strategy_params_preserves_new_rsi2_keys() -> None:
+    normalized, unknown = normalize_and_validate_strategy_params(
+        "RSI2",
+        {
+            "stop_loss_pct": "0.08",
+            "entry_zone_lower_factor": 0.96,
+            "entry_zone_upper_factor": 1.03,
+        },
+    )
+
+    assert normalized == {
+        "stop_loss_pct": 0.08,
+        "entry_zone_lower_factor": 0.96,
+        "entry_zone_upper_factor": 1.03,
+    }
+    assert unknown == []
+
+
+def test_normalize_strategy_params_preserves_new_turtle_keys() -> None:
+    normalized, unknown = normalize_and_validate_strategy_params(
+        "TURTLE",
+        {
+            "stop_loss_buffer_pct": "0.02",
+            "confirmed_score_min": 65,
+            "confirmed_score_range": 25,
+            "confirmed_max_breakout_strength_pct": 0.04,
+            "confirmed_entry_zone_upper_factor": 1.03,
+            "setup_score_base": 70,
+            "setup_score_range": 20,
+            "setup_entry_zone_upper_factor": 1.02,
+        },
+    )
+
+    assert normalized == {
+        "stop_loss_buffer_pct": 0.02,
+        "confirmed_score_min": 65.0,
+        "confirmed_score_range": 25.0,
+        "confirmed_max_breakout_strength_pct": 0.04,
+        "confirmed_entry_zone_upper_factor": 1.03,
+        "setup_score_base": 70.0,
+        "setup_score_range": 20.0,
+        "setup_entry_zone_upper_factor": 1.02,
+    }
+    assert unknown == []
+
+
 def test_normalize_strategy_params_type_validation() -> None:
     with pytest.raises(ValueError, match="strategy=RSI2"):
         normalize_and_validate_strategy_params("RSI2", {"rsi_period": "fast"})
@@ -83,6 +129,14 @@ def test_normalize_strategy_params_type_validation() -> None:
 def test_normalize_strategy_params_range_validation() -> None:
     with pytest.raises(ValueError, match="strategy=TURTLE"):
         normalize_and_validate_strategy_params("TURTLE", {"proximity_threshold_pct": 1.5})
+
+
+def test_normalize_rejects_zero_confirmed_breakout_strength() -> None:
+    with pytest.raises(ValueError, match="confirmed_max_breakout_strength_pct"):
+        normalize_and_validate_strategy_params(
+            "TURTLE",
+            {"confirmed_max_breakout_strength_pct": 0.0},
+        )
 
 
 def test_normalize_accepts_numeric_string_int_rsi2() -> None:
@@ -137,3 +191,54 @@ def test_engine_alias_matches_canonical_turtle(monkeypatch: pytest.MonkeyPatch) 
     result_alias = _run_engine_with_config(monkeypatch, TurtleStrategy(), alias, df)
 
     assert result_alias == result_canonical
+
+
+def test_engine_applies_new_rsi2_config_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = _df_rsi2_trigger()
+    result = _run_engine_with_config(
+        monkeypatch,
+        Rsi2Strategy(),
+        {
+            "RSI2": {
+                "rsi_period": 2,
+                "oversold_threshold": 10.0,
+                "min_score": 0.0,
+                "stop_loss_pct": 0.10,
+                "entry_zone_lower_factor": 0.95,
+                "entry_zone_upper_factor": 1.02,
+            }
+        },
+        df,
+    )
+
+    assert result
+    signal = result[0]
+    assert signal["entry_zone"] == {"from_": 71.25, "to": 76.5}
+    assert signal["stop_loss"] == 67.5
+
+
+def test_engine_applies_new_turtle_config_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    df = _df_turtle_trigger()
+    result = _run_engine_with_config(
+        monkeypatch,
+        TurtleStrategy(),
+        {
+            "TURTLE": {
+                "breakout_lookback": 20,
+                "proximity_threshold_pct": 0.03,
+                "min_score": 0.0,
+                "stop_loss_buffer_pct": 0.02,
+                "confirmed_score_min": 50.0,
+                "confirmed_score_range": 20.0,
+                "confirmed_max_breakout_strength_pct": 0.10,
+                "confirmed_entry_zone_upper_factor": 1.03,
+            }
+        },
+        df,
+    )
+
+    assert result
+    signal = result[0]
+    assert signal["score"] == pytest.approx(52.0)
+    assert signal["entry_zone"] == {"from_": 100.0, "to": 104.03}
+    assert signal["stop_loss"] == 98.0
