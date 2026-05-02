@@ -138,7 +138,6 @@ class TurtleStrategy(BaseStrategy):
                 "Breakout-Hoch oder unter einem definierten Trailing-Stop)."
             )
 
-
             _stop = float(
                 (
                     Decimal(str(breakout_level))
@@ -184,7 +183,6 @@ class TurtleStrategy(BaseStrategy):
                         "Alternativ: Stop-Buy-Order knapp über dem Breakout-Hoch."
                     )
 
-        
                     _stop = float(
                         (
                             Decimal(str(breakout_level))
