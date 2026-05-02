@@ -45,6 +45,8 @@ class Rsi2Config:
     oversold_threshold: float = 10.0
     min_score: float = 20.0
     stop_loss_pct: float = 0.05
+    entry_zone_lower_factor: float = 0.97
+    entry_zone_upper_factor: float = 1.01
 
 
 class Rsi2Strategy(BaseStrategy):
@@ -73,6 +75,8 @@ class Rsi2Strategy(BaseStrategy):
             oversold_threshold=float(config.get("oversold_threshold", 10.0)),
             min_score=float(config.get("min_score", 20.0)),
             stop_loss_pct=float(config.get("stop_loss_pct", 0.05)),
+            entry_zone_lower_factor=float(config.get("entry_zone_lower_factor", 0.97)),
+            entry_zone_upper_factor=float(config.get("entry_zone_upper_factor", 1.01)),
         )
 
         # Sicherstellen, dass die notwendigen Spalten existieren
@@ -118,10 +122,10 @@ class Rsi2Strategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
                     "from_": float(
-                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(PRICE_SCALE, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal(str(cfg.entry_zone_lower_factor))).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(PRICE_SCALE, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal(str(cfg.entry_zone_upper_factor))).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                 },
                 "stop_loss": float(

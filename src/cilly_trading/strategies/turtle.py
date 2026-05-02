@@ -47,6 +47,13 @@ class TurtleConfig:
     proximity_threshold_pct: float = 0.03
     min_score: float = 30.0
     stop_loss_buffer_pct: float = 0.01
+    confirmed_score_min: float = 60.0
+    confirmed_score_range: float = 40.0
+    confirmed_max_breakout_strength_pct: float = 0.05
+    confirmed_entry_zone_upper_factor: float = 1.02
+    setup_score_base: float = 80.0
+    setup_score_range: float = 40.0
+    setup_entry_zone_upper_factor: float = 1.01
 
 
 class TurtleStrategy(BaseStrategy):
@@ -70,6 +77,13 @@ class TurtleStrategy(BaseStrategy):
             proximity_threshold_pct=float(config.get("proximity_threshold_pct", 0.03)),
             min_score=float(config.get("min_score", 30.0)),
             stop_loss_buffer_pct=float(config.get("stop_loss_buffer_pct", 0.01)),
+            confirmed_score_min=float(config.get("confirmed_score_min", 60.0)),
+            confirmed_score_range=float(config.get("confirmed_score_range", 40.0)),
+            confirmed_max_breakout_strength_pct=float(config.get("confirmed_max_breakout_strength_pct", 0.05)),
+            confirmed_entry_zone_upper_factor=float(config.get("confirmed_entry_zone_upper_factor", 1.02)),
+            setup_score_base=float(config.get("setup_score_base", 80.0)),
+            setup_score_range=float(config.get("setup_score_range", 40.0)),
+            setup_entry_zone_upper_factor=float(config.get("setup_entry_zone_upper_factor", 1.01)),
         )
 
         if df.empty:
@@ -107,10 +121,10 @@ class TurtleStrategy(BaseStrategy):
         if last_close > breakout_level:
             breakout_strength = (last_close - breakout_level) / breakout_level  # in %
             # Wir gehen von 0–5 % "vernünftiger" Breakout-Stärke aus
-            breakout_strength_clamped = max(0.0, min(breakout_strength, 0.05))
+            breakout_strength_clamped = max(0.0, min(breakout_strength, cfg.confirmed_max_breakout_strength_pct))
 
-            # Score zwischen 60 und 100
-            score = 60.0 + (breakout_strength_clamped / 0.05) * 40.0
+            # Score zwischen confirmed_score_min und confirmed_score_min + confirmed_score_range
+            score = cfg.confirmed_score_min + (breakout_strength_clamped / cfg.confirmed_max_breakout_strength_pct) * cfg.confirmed_score_range
 
             if score < cfg.min_score:
                 return []
@@ -139,7 +153,7 @@ class TurtleStrategy(BaseStrategy):
                         Decimal(str(breakout_level)).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        (Decimal(str(last_close)) * Decimal("1.02")).quantize(PRICE_SCALE, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal(str(cfg.confirmed_entry_zone_upper_factor))).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                 },
                 "stop_loss": _stop,
@@ -153,8 +167,7 @@ class TurtleStrategy(BaseStrategy):
 
             if 0.0 <= distance_to_level <= cfg.proximity_threshold_pct:
                 # Je näher am Level, desto höher der Score.
-                # distance = 0 -> Score ~ 80, distance = threshold -> Score ~ 40
-                score = 80.0 - (distance_to_level / cfg.proximity_threshold_pct) * 40.0
+                score = cfg.setup_score_base - (distance_to_level / cfg.proximity_threshold_pct) * cfg.setup_score_range
                 score = max(0.0, min(100.0, score))
 
                 if score >= cfg.min_score:
@@ -185,7 +198,7 @@ class TurtleStrategy(BaseStrategy):
                                 ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                             ),
                             "to": float(
-                                (Decimal(str(breakout_level)) * Decimal("1.01")).quantize(
+                                (Decimal(str(breakout_level)) * Decimal(str(cfg.setup_entry_zone_upper_factor))).quantize(
                                     PRICE_SCALE, ROUND_HALF_UP
                                 )
                             ),
