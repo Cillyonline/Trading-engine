@@ -40,37 +40,36 @@ class SqliteOrderEventRepository(OrderEventRepository):
         return closing(self._get_connection())
 
     def _ensure_order_events_table(self) -> None:
-        conn = self._get_connection()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS order_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT NOT NULL,
-                order_id TEXT NOT NULL,
-                symbol TEXT NOT NULL,
-                strategy TEXT NOT NULL,
-                state TEXT NOT NULL,
-                event_timestamp TEXT NOT NULL,
-                event_sequence INTEGER NOT NULL,
-                metadata_json TEXT
-            );
-            """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_order_events_filters
-              ON order_events(symbol, strategy, run_id);
-            """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_order_events_ordering
-              ON order_events(event_timestamp, run_id, order_id, event_sequence, id);
-            """
-        )
-        conn.commit()
-        conn.close()
+        with self._connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS order_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    order_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    strategy TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    event_timestamp TEXT NOT NULL,
+                    event_sequence INTEGER NOT NULL,
+                    metadata_json TEXT
+                );
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_order_events_filters
+                  ON order_events(symbol, strategy, run_id);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_order_events_ordering
+                  ON order_events(event_timestamp, run_id, order_id, event_sequence, id);
+                """
+            )
+            conn.commit()
 
     def save_events(self, events: list[dict[str, Any]]) -> None:
         if not events:
@@ -105,35 +104,34 @@ class SqliteOrderEventRepository(OrderEventRepository):
                 }
             )
 
-        conn = self._get_connection()
-        cur = conn.cursor()
-        cur.executemany(
-            """
-            INSERT INTO order_events (
-                run_id,
-                order_id,
-                symbol,
-                strategy,
-                state,
-                event_timestamp,
-                event_sequence,
-                metadata_json
+        with self._connection() as conn:
+            cur = conn.cursor()
+            cur.executemany(
+                """
+                INSERT INTO order_events (
+                    run_id,
+                    order_id,
+                    symbol,
+                    strategy,
+                    state,
+                    event_timestamp,
+                    event_sequence,
+                    metadata_json
+                )
+                VALUES (
+                    :run_id,
+                    :order_id,
+                    :symbol,
+                    :strategy,
+                    :state,
+                    :event_timestamp,
+                    :event_sequence,
+                    :metadata_json
+                );
+                """,
+                payload_rows,
             )
-            VALUES (
-                :run_id,
-                :order_id,
-                :symbol,
-                :strategy,
-                :state,
-                :event_timestamp,
-                :event_sequence,
-                :metadata_json
-            );
-            """,
-            payload_rows,
-        )
-        conn.commit()
-        conn.close()
+            conn.commit()
 
     def read_order_events(
         self,
@@ -176,33 +174,32 @@ class SqliteOrderEventRepository(OrderEventRepository):
                 id ASC
         """
 
-        conn = self._get_connection()
-        cur = conn.cursor()
+        with self._connection() as conn:
+            cur = conn.cursor()
 
-        cur.execute(f"SELECT COUNT(*) FROM order_events {where_sql};", params)
-        total = int(cur.fetchone()[0])
+            cur.execute(f"SELECT COUNT(*) FROM order_events {where_sql};", params)
+            total = int(cur.fetchone()[0])
 
-        cur.execute(
-            f"""
-            SELECT
-                run_id,
-                order_id,
-                symbol,
-                strategy,
-                state,
-                event_timestamp,
-                event_sequence,
-                metadata_json
-            FROM order_events
-            {where_sql}
-            {order_sql}
-            LIMIT ?
-            OFFSET ?;
-            """,
-            [*params, limit, offset],
-        )
-        rows = cur.fetchall()
-        conn.close()
+            cur.execute(
+                f"""
+                SELECT
+                    run_id,
+                    order_id,
+                    symbol,
+                    strategy,
+                    state,
+                    event_timestamp,
+                    event_sequence,
+                    metadata_json
+                FROM order_events
+                {where_sql}
+                {order_sql}
+                LIMIT ?
+                OFFSET ?;
+                """,
+                [*params, limit, offset],
+            )
+            rows = cur.fetchall()
 
         items: list[dict[str, Any]] = []
         for row in rows:
