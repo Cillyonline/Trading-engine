@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from fastapi import HTTPException
 
 from cilly_trading.engine.core import EngineConfig, compute_analysis_run_id
+from cilly_trading.repositories import AnalysisRunRepository, SignalRepository, WatchlistRepository
 from cilly_trading.strategies.registry import StrategyNotRegisteredError, run_registry_smoke
 
 from ..models import (
@@ -33,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AnalysisServiceDependencies:
-    analysis_run_repo: Any
-    signal_repo: Any
-    watchlist_repo: Any
+    analysis_run_repo: AnalysisRunRepository
+    signal_repo: SignalRepository
+    watchlist_repo: WatchlistRepository
     default_strategy_configs: Dict[str, Dict[str, Any]]
     require_ingestion_run: Callable[[str], None]
     require_snapshot_ready: Callable[..., None]

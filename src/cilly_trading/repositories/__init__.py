@@ -8,7 +8,7 @@ Die konkrete Implementierung im MVP nutzt SQLite.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, List, Optional, Protocol
+from typing import Any, Dict, List, Optional, Protocol
 
 from cilly_trading.models import ExecutionEvent, Order, PersistedTradePayload, Signal, Trade
 
@@ -165,7 +165,33 @@ class WatchlistRepository(Protocol):
         ...
 
 
+class AnalysisRunRepository(Protocol):
+    """Interface for analysis run and ingestion run persistence."""
+
+    def ingestion_run_exists(self, ingestion_run_id: str) -> bool: ...
+
+    def ingestion_run_is_ready(
+        self,
+        ingestion_run_id: str,
+        *,
+        symbols: list[str],
+        timeframe: str,
+    ) -> bool: ...
+
+    def get_run(self, analysis_run_id: str) -> Optional[Dict[str, Any]]: ...
+
+    def save_run(
+        self,
+        *,
+        analysis_run_id: str,
+        ingestion_run_id: str,
+        request_payload: Dict[str, Any],
+        result_payload: Dict[str, Any],
+    ) -> Dict[str, Any]: ...
+
+
 __all__ = [
+    "AnalysisRunRepository",
     "SignalRepository",
     "TradeRepository",
     "CanonicalExecutionRepository",
