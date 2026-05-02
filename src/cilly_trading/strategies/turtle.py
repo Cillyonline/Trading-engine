@@ -38,10 +38,14 @@ class TurtleConfig:
         um als SETUP zu gelten (z. B. 0.03 = 3 %).
     min_score:
         Mindestscore, ab dem ein Signal überhaupt ausgegeben wird.
+    stop_loss_buffer_pct:
+        Puffer unterhalb des Breakout-Levels für den Stop-Loss.
+        Standard: 0.01 (1 % unter dem Breakout-Level).
     """
     breakout_lookback: int = 20
     proximity_threshold_pct: float = 0.03
     min_score: float = 30.0
+    stop_loss_buffer_pct: float = 0.01
 
 
 class TurtleStrategy(BaseStrategy):
@@ -64,6 +68,7 @@ class TurtleStrategy(BaseStrategy):
             breakout_lookback=int(config.get("breakout_lookback", 20)),
             proximity_threshold_pct=float(config.get("proximity_threshold_pct", 0.03)),
             min_score=float(config.get("min_score", 30.0)),
+            stop_loss_buffer_pct=float(config.get("stop_loss_buffer_pct", 0.01)),
         )
 
         if df.empty:
@@ -116,6 +121,12 @@ class TurtleStrategy(BaseStrategy):
             )
 
             _scale = Decimal("0.0001")
+            _stop = float(
+                (
+                    Decimal(str(breakout_level))
+                    * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
+                ).quantize(_scale, ROUND_HALF_UP)
+            )
             signal: Signal = {
                 "strategy": self.name,
                 "direction": "long",
@@ -123,7 +134,6 @@ class TurtleStrategy(BaseStrategy):
                 "stage": "entry_confirmed",
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
-                    # Entry in der Zone rund um das Breakout-Level bis leicht über dem Close
                     "from_": float(
                         Decimal(str(breakout_level)).quantize(_scale, ROUND_HALF_UP)
                     ),
@@ -131,6 +141,7 @@ class TurtleStrategy(BaseStrategy):
                         (Decimal(str(last_close)) * Decimal("1.02")).quantize(_scale, ROUND_HALF_UP)
                     ),
                 },
+                "stop_loss": _stop,
             }
             signals.append(signal)
 
@@ -153,6 +164,12 @@ class TurtleStrategy(BaseStrategy):
                     )
 
                     _scale = Decimal("0.0001")
+                    _stop = float(
+                        (
+                            Decimal(str(breakout_level))
+                            * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
+                        ).quantize(_scale, ROUND_HALF_UP)
+                    )
                     signal = {
                         "strategy": self.name,
                         "direction": "long",
@@ -160,7 +177,6 @@ class TurtleStrategy(BaseStrategy):
                         "stage": "setup",
                         "confirmation_rule": confirmation_rule,
                         "entry_zone": {
-                            # Einstiegszone knapp um das Breakout-Level
                             "from_": float(
                                 (
                                     Decimal(str(breakout_level))
@@ -173,6 +189,7 @@ class TurtleStrategy(BaseStrategy):
                                 )
                             ),
                         },
+                        "stop_loss": _stop,
                     }
                     signals.append(signal)
 

@@ -59,6 +59,8 @@ class SqliteSignalRepository(SignalRepository):
                 missing_columns.append(("ingestion_run_id", "TEXT"))
             if "reasons_json" not in columns:
                 missing_columns.append(("reasons_json", "TEXT"))
+            if "stop_loss" not in columns:
+                missing_columns.append(("stop_loss", "REAL"))
 
             for column_name, column_type in missing_columns:
                 cur.execute(f"ALTER TABLE signals ADD COLUMN {column_name} {column_type};")
@@ -131,6 +133,7 @@ class SqliteSignalRepository(SignalRepository):
                     stage,
                     entry_zone_from,
                     entry_zone_to,
+                    stop_loss,
                     confirmation_rule,
                     timeframe,
                     market_type,
@@ -149,6 +152,7 @@ class SqliteSignalRepository(SignalRepository):
                     :stage,
                     :entry_zone_from,
                     :entry_zone_to,
+                    :stop_loss,
                     :confirmation_rule,
                     :timeframe,
                     :market_type,
@@ -176,6 +180,7 @@ class SqliteSignalRepository(SignalRepository):
                         "entry_zone_to": (
                             s["entry_zone"]["to"] if "entry_zone" in s and s["entry_zone"] else None
                         ),
+                        "stop_loss": s.get("stop_loss"),
                         "confirmation_rule": s.get("confirmation_rule"),
                         "timeframe": s["timeframe"],
                         "market_type": s["market_type"],
@@ -205,6 +210,7 @@ class SqliteSignalRepository(SignalRepository):
                     stage,
                     entry_zone_from,
                     entry_zone_to,
+                    stop_loss,
                     confirmation_rule,
                     timeframe,
                     market_type,
@@ -251,6 +257,8 @@ class SqliteSignalRepository(SignalRepository):
                     "from_": row["entry_zone_from"],
                     "to": row["entry_zone_to"],
                 }
+            if row["stop_loss"] is not None:
+                signal["stop_loss"] = row["stop_loss"]
 
             result.append(signal)
 
@@ -384,6 +392,7 @@ class SqliteSignalRepository(SignalRepository):
                             stage,
                             entry_zone_from,
                             entry_zone_to,
+                            stop_loss,
                             confirmation_rule,
                             timeframe,
                             market_type,
@@ -421,6 +430,7 @@ class SqliteSignalRepository(SignalRepository):
                         stage,
                         entry_zone_from,
                         entry_zone_to,
+                        stop_loss,
                         confirmation_rule,
                         timeframe,
                         market_type,
@@ -453,6 +463,7 @@ class SqliteSignalRepository(SignalRepository):
                         stage,
                         entry_zone_from,
                         entry_zone_to,
+                        stop_loss,
                         confirmation_rule,
                         timeframe,
                         market_type,
@@ -500,6 +511,8 @@ class SqliteSignalRepository(SignalRepository):
                     "from_": row["entry_zone_from"],
                     "to": row["entry_zone_to"],
                 }
+            if row["stop_loss"] is not None:
+                signal["stop_loss"] = row["stop_loss"]
 
             result.append(signal)
 

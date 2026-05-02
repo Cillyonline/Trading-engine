@@ -36,10 +36,14 @@ class Rsi2Config:
     min_score:
         Mindestscore, den ein Signal erreichen muss, um ausgegeben zu werden.
         (Sicherheit, um extrem schwache Signale zu filtern.)
+    stop_loss_pct:
+        Prozentuale Stop-Loss-Distanz unter dem Close zum Zeitpunkt des Signals.
+        Standard: 0.05 (5 % unter dem Close).
     """
     rsi_period: int = 2
     oversold_threshold: float = 10.0
     min_score: float = 20.0
+    stop_loss_pct: float = 0.05
 
 
 class Rsi2Strategy(BaseStrategy):
@@ -67,6 +71,7 @@ class Rsi2Strategy(BaseStrategy):
             rsi_period=int(config.get("rsi_period", 2)),
             oversold_threshold=float(config.get("oversold_threshold", 10.0)),
             min_score=float(config.get("min_score", 20.0)),
+            stop_loss_pct=float(config.get("stop_loss_pct", 0.05)),
         )
 
         # Sicherstellen, dass die notwendigen Spalten existieren
@@ -102,6 +107,7 @@ class Rsi2Strategy(BaseStrategy):
                 "über dem Oversold-Bereich liegt."
             )
 
+            _scale = Decimal("0.0001")
             signal: Signal = {
                 # symbol, timeframe, market_type, data_source, timestamp
                 # werden im Engine-Layer gesetzt (run_watchlist_analysis)
@@ -110,19 +116,20 @@ class Rsi2Strategy(BaseStrategy):
                 "score": score,
                 "stage": "setup",
                 "confirmation_rule": confirmation_rule,
-                # Entry-Zone im MVP noch simpel: Nähe der aktuellen Kerze
                 "entry_zone": {
                     "from_": float(
-                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(
-                            Decimal("0.0001"), ROUND_HALF_UP
-                        )
+                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(_scale, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(
-                            Decimal("0.0001"), ROUND_HALF_UP
-                        )
+                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(_scale, ROUND_HALF_UP)
                     ),
                 },
+                "stop_loss": float(
+                    (
+                        Decimal(str(last_close))
+                        * (Decimal("1") - Decimal(str(cfg.stop_loss_pct)))
+                    ).quantize(_scale, ROUND_HALF_UP)
+                ),
             }
 
             signals.append(signal)
