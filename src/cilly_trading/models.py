@@ -180,6 +180,7 @@ class Signal(TypedDict, total=False):
     # Strategy output
     score: NotRequired[float]
     entry_zone: NotRequired[Optional[EntryZone]]
+    stop_loss: NotRequired[Optional[float]]
     confirmation_rule: NotRequired[str]
     reasons: NotRequired[Optional[List[SignalReason]]]
 
@@ -734,6 +735,7 @@ class SignalReadItemDTO(BaseModel):
     created_at: str
     stage: Stage
     entry_zone: Optional[EntryZoneDTO] = None
+    stop_loss: Optional[float] = None
     confirmation_rule: Optional[str] = None
     timeframe: str
     market_type: MarketType

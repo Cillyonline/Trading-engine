@@ -63,6 +63,7 @@ def _init_signals_table(cur: sqlite3.Cursor) -> None:
             stage TEXT NOT NULL,
             entry_zone_from REAL,
             entry_zone_to REAL,
+            stop_loss REAL,
             confirmation_rule TEXT,
             timeframe TEXT NOT NULL,
             market_type TEXT NOT NULL,

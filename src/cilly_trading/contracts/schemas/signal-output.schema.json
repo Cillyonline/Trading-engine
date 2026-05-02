@@ -110,6 +110,9 @@
             }
           }
         },
+        "stop_loss": {
+          "type": "number"
+        },
         "reasons": {
           "type": "array",
           "minItems": 1,

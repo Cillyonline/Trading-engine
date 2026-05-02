@@ -93,6 +93,10 @@ def test_rsi2_signal_schema_over_252bar_fixture(df_252: pd.DataFrame) -> None:
         ez = s.get("entry_zone", {})
         assert isinstance(ez, dict)
         assert float(ez["from_"]) < float(ez["to"])
+        sl = s.get("stop_loss")
+        assert sl is not None, "RSI2 must always emit a stop_loss"
+        assert float(sl) > 0.0
+        assert float(sl) < float(ez["from_"]), "stop_loss must be below entry_zone.from_"
 
 
 def test_rsi2_signal_count_is_deterministic(df_252: pd.DataFrame) -> None:
@@ -141,6 +145,11 @@ def test_turtle_signal_schema_over_252bar_fixture(df_252: pd.DataFrame) -> None:
         ez = s.get("entry_zone", {})
         assert isinstance(ez, dict)
         assert float(ez["from_"]) < float(ez["to"])
+        sl = s.get("stop_loss")
+        assert sl is not None, "TURTLE must always emit a stop_loss"
+        assert float(sl) > 0.0
+        if s["stage"] == "entry_confirmed":
+            assert float(sl) < float(ez["from_"]), "entry_confirmed stop_loss must be below entry_zone.from_"
 
 
 def test_turtle_entry_confirmed_score_is_in_expected_range(df_252: pd.DataFrame) -> None:

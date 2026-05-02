@@ -34,6 +34,18 @@ def _assert_strategy_signal_schema(signal: Dict[str, Any]) -> None:
         assert isinstance(ez["from_"], (int, float))
         assert isinstance(ez["to"], (int, float))
 
+    if "stop_loss" in signal and signal["stop_loss"] is not None:
+        sl = signal["stop_loss"]
+        assert isinstance(sl, (int, float))
+        assert sl > 0.0
+        # For entry_confirmed the stop must be below the entry zone bottom.
+        # For setup the stop sits at the structural level (e.g. below the breakout
+        # level) which may be above the current proximity zone's from_ price.
+        if signal.get("stage") == "entry_confirmed" and "entry_zone" in signal and signal["entry_zone"] is not None:
+            assert sl < signal["entry_zone"]["from_"], (
+                "entry_confirmed stop_loss must be below entry_zone.from_"
+            )
+
 
 # -------------------------
 # RSI2 Contract Tests
