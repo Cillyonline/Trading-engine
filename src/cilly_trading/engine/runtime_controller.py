@@ -133,75 +133,99 @@ class EngineRuntimeController:
         self._state = "running"
         return self._state
 
-_RUNTIME_LOCK: Final[Lock] = Lock()
-_RUNTIME_CONTROLLER: EngineRuntimeController | None = None
+
+class RuntimeControllerRegistry:
+    """Thread-safe registry for an EngineRuntimeController instance.
+
+    Use this class directly when you need an isolated controller (e.g. in
+    tests or multi-tenant scenarios) without relying on the process-wide
+    singleton functions below.
+
+    Example::
+
+        registry = RuntimeControllerRegistry()
+        registry.start()
+        state = registry.get_controller().state
+        registry.shutdown()
+    """
+
+    def __init__(self) -> None:
+        self._lock: Lock = Lock()
+        self._controller: EngineRuntimeController | None = None
+
+    def _get_or_create(self) -> EngineRuntimeController:
+        if self._controller is None:
+            self._controller = EngineRuntimeController()
+        return self._controller
+
+    def get_controller(self) -> EngineRuntimeController:
+        with self._lock:
+            return self._get_or_create()
+
+    def start(self) -> str:
+        with self._lock:
+            runtime = self._get_or_create()
+            if runtime.state == "init":
+                runtime.init()
+            if runtime.state == "ready":
+                runtime.start()
+            assert_postcondition_running(runtime.state)
+            return runtime.state
+
+    def shutdown(self) -> str:
+        with self._lock:
+            runtime = self._get_or_create()
+            if runtime.state in {"init", "ready"}:
+                return runtime.state
+            return runtime.shutdown()
+
+    def pause(self) -> str:
+        with self._lock:
+            return self._get_or_create().pause_execution()
+
+    def resume(self) -> str:
+        with self._lock:
+            return self._get_or_create().resume_execution()
+
+    def reset(self) -> None:
+        """Reset the controller to a fresh ``init`` state."""
+        with self._lock:
+            self._controller = None
 
 
-def _get_or_create_runtime_controller() -> EngineRuntimeController:
-    global _RUNTIME_CONTROLLER
+# ---------------------------------------------------------------------------
+# Process-wide singleton — kept for backward compatibility.
+# Prefer injecting a RuntimeControllerRegistry instance instead.
+# ---------------------------------------------------------------------------
 
-    if _RUNTIME_CONTROLLER is None:
-        _RUNTIME_CONTROLLER = EngineRuntimeController()
-
-    return _RUNTIME_CONTROLLER
+_REGISTRY: Final[RuntimeControllerRegistry] = RuntimeControllerRegistry()
 
 
 def get_runtime_controller() -> EngineRuntimeController:
     """Return the single process-wide runtime controller owned by the engine."""
-
-    with _RUNTIME_LOCK:
-        return _get_or_create_runtime_controller()
+    return _REGISTRY.get_controller()
 
 
 def start_engine_runtime() -> str:
     """Initialize and start the process-wide engine runtime."""
-
-    with _RUNTIME_LOCK:
-        runtime = _get_or_create_runtime_controller()
-
-        if runtime.state == "init":
-            runtime.init()
-
-        if runtime.state == "ready":
-            runtime.start()
-
-        assert_postcondition_running(runtime.state)
-
-        return runtime.state
+    return _REGISTRY.start()
 
 
 def shutdown_engine_runtime() -> str:
     """Best-effort shutdown for the process-wide engine runtime."""
-
-    with _RUNTIME_LOCK:
-        runtime = _get_or_create_runtime_controller()
-
-        if runtime.state in {"init", "ready"}:
-            return runtime.state
-
-        return runtime.shutdown()
+    return _REGISTRY.shutdown()
 
 
 def pause_engine_runtime() -> str:
     """Pause execution for the process-wide runtime."""
-
-    with _RUNTIME_LOCK:
-        runtime = _get_or_create_runtime_controller()
-        return runtime.pause_execution()
+    return _REGISTRY.pause()
 
 
 def resume_engine_runtime() -> str:
     """Resume execution for the process-wide runtime."""
-
-    with _RUNTIME_LOCK:
-        runtime = _get_or_create_runtime_controller()
-        return runtime.resume_execution()
+    return _REGISTRY.resume()
 
 
 def _reset_runtime_controller_for_tests() -> None:
     """Reset process-wide runtime controller singleton for test isolation."""
-
-    global _RUNTIME_CONTROLLER
-
-    with _RUNTIME_LOCK:
-        _RUNTIME_CONTROLLER = None
+    _REGISTRY.reset()

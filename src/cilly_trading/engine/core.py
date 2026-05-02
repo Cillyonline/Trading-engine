@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
 
+
 import pandas as pd
 
 from cilly_trading.engine.data import (
@@ -415,8 +416,8 @@ def run_watchlist_analysis(
                         market_type=engine_config.market_type,
                     )
                 except Exception:
-                    logger.error(
-                        "Error loading data: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
+                    logger.warning(
+                        "Skipping symbol due to data load failure: component=engine symbol=%s timeframe=%s ingestion_run_id=%s",
                         symbol,
                         engine_config.timeframe,
                         ingestion_run_id or "n/a",
@@ -612,8 +613,8 @@ def run_watchlist_analysis(
                     engine_config.timeframe,
                 )
                 continue
-            logger.error(
-                "Snapshot data error while processing symbol: component=engine symbol=%s timeframe=%s",
+            logger.warning(
+                "Snapshot data error propagating for symbol: component=engine symbol=%s timeframe=%s",
                 symbol,
                 engine_config.timeframe,
                 exc_info=True,
@@ -667,10 +668,12 @@ def run_watchlist_analysis(
         completion_status = "signals_persisted"
         try:
             signal_repo.save_signals(all_signals)
-        except Exception:
+        except Exception as exc:
+            # Intentional broad catch: repository boundary — any implementation can fail.
             logger.error(
-                "Error persisting signals: component=engine signals_total=%d",
+                "Signal persistence failed: component=engine signals_total=%d error=%s",
                 len(all_signals),
+                exc,
                 exc_info=True,
             )
             completion_status = "signal_persistence_failed"
