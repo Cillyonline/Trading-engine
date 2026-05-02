@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sqlite3
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -158,7 +159,7 @@ def _derive_timestamp_from_df(df: Any) -> Optional[str]:
     if getattr(df, "columns", None) is not None and "timestamp" in df.columns:
         try:
             return _normalize_timestamp_to_utc(df["timestamp"].iloc[-1])
-        except Exception:
+        except (IndexError, KeyError, AttributeError, TypeError, ValueError):
             logger.warning(
                 "Failed to derive timestamp from OHLCV column: component=engine",
                 exc_info=True,
@@ -440,7 +441,7 @@ def run_watchlist_analysis(
                 raw_config = strategy_configs_map.get(strat_name)
                 try:
                     strat_config = _normalize_strategy_config(strat_name, raw_config)
-                except Exception as exc:
+                except (ValueError, KeyError, TypeError) as exc:
                     logger.error(
                         "Invalid strategy config: component=engine strategy=%s error=%s",
                         strat_name,
@@ -542,7 +543,7 @@ def run_watchlist_analysis(
                             exc,
                         )
                         continue
-                    except Exception:
+                    except (AttributeError, TypeError, KeyError, ValueError):
                         logger.error(
                             "Invalid signal object from strategy: component=engine strategy=%s symbol=%s timeframe=%s (skipping signal)",
                             strat_name,
@@ -562,7 +563,7 @@ def run_watchlist_analysis(
                         if not reasons:
                             raise ReasonGenerationError("Reason generation returned empty reasons list")
                         s["reasons"] = reasons
-                    except Exception as exc:
+                    except (ValueError, KeyError, TypeError, AttributeError) as exc:
                         logger.error(
                             "Reason generation failed: component=engine strategy=%s symbol=%s timeframe=%s",
                             strat_name,
