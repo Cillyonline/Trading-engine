@@ -39,11 +39,17 @@ class Rsi2Config:
     stop_loss_pct:
         Prozentuale Stop-Loss-Distanz unter dem Close zum Zeitpunkt des Signals.
         Standard: 0.05 (5 % unter dem Close).
+    entry_zone_lower_factor:
+        Faktor für die untere Entry-Zone relativ zum Close. Standard: 0.97.
+    entry_zone_upper_factor:
+        Faktor für die obere Entry-Zone relativ zum Close. Standard: 1.01.
     """
     rsi_period: int = 2
     oversold_threshold: float = 10.0
     min_score: float = 20.0
     stop_loss_pct: float = 0.05
+    entry_zone_lower_factor: float = 0.97
+    entry_zone_upper_factor: float = 1.01
 
 
 class Rsi2Strategy(BaseStrategy):
@@ -72,6 +78,8 @@ class Rsi2Strategy(BaseStrategy):
             oversold_threshold=float(config.get("oversold_threshold", 10.0)),
             min_score=float(config.get("min_score", 20.0)),
             stop_loss_pct=float(config.get("stop_loss_pct", 0.05)),
+            entry_zone_lower_factor=float(config.get("entry_zone_lower_factor", 0.97)),
+            entry_zone_upper_factor=float(config.get("entry_zone_upper_factor", 1.01)),
         )
 
         # Sicherstellen, dass die notwendigen Spalten existieren
@@ -118,10 +126,16 @@ class Rsi2Strategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
                     "from_": float(
-                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(_scale, ROUND_HALF_UP)
+                        (
+                            Decimal(str(last_close))
+                            * Decimal(str(cfg.entry_zone_lower_factor))
+                        ).quantize(_scale, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(_scale, ROUND_HALF_UP)
+                        (
+                            Decimal(str(last_close))
+                            * Decimal(str(cfg.entry_zone_upper_factor))
+                        ).quantize(_scale, ROUND_HALF_UP)
                     ),
                 },
                 "stop_loss": float(
