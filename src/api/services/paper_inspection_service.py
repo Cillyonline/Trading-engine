@@ -7,9 +7,10 @@ See ``cilly_trading.portfolio.paper_state_authority`` for the full contract.
 from __future__ import annotations
 
 import os
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Optional, Sequence
 
 from fastapi import HTTPException
@@ -46,7 +47,7 @@ def resolve_paper_starting_cash() -> Decimal:
     raw_value = os.getenv("CILLY_PAPER_ACCOUNT_STARTING_CASH", "100000")
     try:
         value = Decimal(raw_value)
-    except Exception as exc:
+    except (InvalidOperation, ValueError) as exc:
         raise HTTPException(status_code=500, detail="paper_account_starting_cash_invalid") from exc
     if value < Decimal("0"):
         raise HTTPException(status_code=500, detail="paper_account_starting_cash_invalid")
@@ -758,9 +759,16 @@ def build_bounded_paper_simulation_state(
 def resolve_runtime_canonical_execution_repo() -> Any | None:
     try:
         import api.main as api_main
-    except Exception:
+    except ImportError:
         return None
     return getattr(api_main, "canonical_execution_repo", None)
+
+
+def _safe_get_trade(repo: Any, trade_id: str) -> Any | None:
+    try:
+        return repo.get_trade(trade_id)
+    except (sqlite3.Error, ValidationError, KeyError, ValueError):
+        return None
 
 
 def _parse_iso_datetime(value: str) -> datetime:
@@ -895,12 +903,11 @@ def build_bounded_decision_to_paper_usefulness_audit(
     except ValidationError:
         return None
 
-    trade: Trade | None = None
-    if canonical_execution_repo is not None:
-        try:
-            trade = canonical_execution_repo.get_trade(normalized_match_reference.paper_trade_id)
-        except Exception:
-            trade = None
+    trade: Trade | None = (
+        _safe_get_trade(canonical_execution_repo, normalized_match_reference.paper_trade_id)
+        if canonical_execution_repo is not None
+        else None
+    )
 
     match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
     matched_outcome: dict[str, Any] | None = None
@@ -998,12 +1005,11 @@ def build_bounded_signal_portfolio_paper_reconciliation_audit(
         symbol,
     )
 
-    trade: Trade | None = None
-    if canonical_execution_repo is not None and paper_trade_id is not None:
-        try:
-            trade = canonical_execution_repo.get_trade(paper_trade_id)
-        except Exception:
-            trade = None
+    trade: Trade | None = (
+        _safe_get_trade(canonical_execution_repo, paper_trade_id)
+        if canonical_execution_repo is not None and paper_trade_id is not None
+        else None
+    )
 
     opening_order_ids: list[str] = list(trade.opening_order_ids) if trade is not None else []
     closing_order_ids: list[str] = list(trade.closing_order_ids) if trade is not None else []
@@ -1133,10 +1139,7 @@ def resolve_bounded_paper_linkage_status(
     if canonical_execution_repo is None:
         return "missing", paper_trade_id
 
-    try:
-        trade = canonical_execution_repo.get_trade(paper_trade_id)
-    except Exception:
-        trade = None
+    trade = _safe_get_trade(canonical_execution_repo, paper_trade_id)
 
     if trade is None:
         return "missing", paper_trade_id
@@ -1184,14 +1187,11 @@ def build_bounded_signal_quality_stability_audit(
     match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
     matched_outcome: dict[str, Any] | None = None
     if normalized_match_reference is not None:
-        trade: Trade | None = None
-        if canonical_execution_repo is not None:
-            try:
-                trade = canonical_execution_repo.get_trade(
-                    normalized_match_reference.paper_trade_id
-                )
-            except Exception:
-                trade = None
+        trade: Trade | None = (
+            _safe_get_trade(canonical_execution_repo, normalized_match_reference.paper_trade_id)
+            if canonical_execution_repo is not None
+            else None
+        )
         if trade is not None:
             match_status, matched_outcome = _build_paper_trade_outcome_payload(
                 trade=trade,
@@ -1328,14 +1328,11 @@ def build_bounded_confidence_calibration_audit(
     match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
     matched_outcome: dict[str, Any] | None = None
     if normalized_match_reference is not None:
-        trade: Trade | None = None
-        if canonical_execution_repo is not None:
-            try:
-                trade = canonical_execution_repo.get_trade(
-                    normalized_match_reference.paper_trade_id
-                )
-            except Exception:
-                trade = None
+        trade: Trade | None = (
+            _safe_get_trade(canonical_execution_repo, normalized_match_reference.paper_trade_id)
+            if canonical_execution_repo is not None
+            else None
+        )
         if trade is not None:
             match_status, matched_outcome = _build_paper_trade_outcome_payload(
                 trade=trade,
@@ -1394,14 +1391,11 @@ def build_bounded_strategy_score_calibration_audit(
     match_status: Literal["matched", "open", "missing", "invalid"] = "missing"
     matched_outcome: dict[str, Any] | None = None
     if normalized_match_reference is not None:
-        trade: Trade | None = None
-        if canonical_execution_repo is not None:
-            try:
-                trade = canonical_execution_repo.get_trade(
-                    normalized_match_reference.paper_trade_id
-                )
-            except Exception:
-                trade = None
+        trade: Trade | None = (
+            _safe_get_trade(canonical_execution_repo, normalized_match_reference.paper_trade_id)
+            if canonical_execution_repo is not None
+            else None
+        )
         if trade is not None:
             match_status, matched_outcome = _build_paper_trade_outcome_payload(
                 trade=trade,
