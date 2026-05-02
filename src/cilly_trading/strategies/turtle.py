@@ -24,6 +24,7 @@ import pandas as pd
 
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
+from cilly_trading.strategies._constants import PRICE_SCALE
 
 
 @dataclass
@@ -137,12 +138,11 @@ class TurtleStrategy(BaseStrategy):
                 "Breakout-Hoch oder unter einem definierten Trailing-Stop)."
             )
 
-            _scale = Decimal("0.0001")
             _stop = float(
                 (
                     Decimal(str(breakout_level))
                     * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
-                ).quantize(_scale, ROUND_HALF_UP)
+                ).quantize(PRICE_SCALE, ROUND_HALF_UP)
             )
             signal: Signal = {
                 "strategy": self.name,
@@ -152,13 +152,13 @@ class TurtleStrategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
                     "from_": float(
-                        Decimal(str(breakout_level)).quantize(_scale, ROUND_HALF_UP)
+                        Decimal(str(breakout_level)).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                     "to": float(
                         (
                             Decimal(str(last_close))
                             * Decimal(str(cfg.confirmed_entry_zone_upper_factor))
-                        ).quantize(_scale, ROUND_HALF_UP)
+                        ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                 },
                 "stop_loss": _stop,
@@ -183,12 +183,11 @@ class TurtleStrategy(BaseStrategy):
                         "Alternativ: Stop-Buy-Order knapp über dem Breakout-Hoch."
                     )
 
-                    _scale = Decimal("0.0001")
                     _stop = float(
                         (
                             Decimal(str(breakout_level))
                             * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
-                        ).quantize(_scale, ROUND_HALF_UP)
+                        ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     )
                     signal = {
                         "strategy": self.name,
@@ -201,13 +200,13 @@ class TurtleStrategy(BaseStrategy):
                                 (
                                     Decimal(str(breakout_level))
                                     * (Decimal("1") - Decimal(str(cfg.proximity_threshold_pct)))
-                                ).quantize(_scale, ROUND_HALF_UP)
+                                ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                             ),
                             "to": float(
                                 (
                                     Decimal(str(breakout_level))
                                     * Decimal(str(cfg.setup_entry_zone_upper_factor))
-                                ).quantize(_scale, ROUND_HALF_UP)
+                                ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                             ),
                         },
                         "stop_loss": _stop,

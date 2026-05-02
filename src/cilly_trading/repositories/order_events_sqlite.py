@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import closing
 from pathlib import Path
 from typing import Any, Optional
 
-from cilly_trading.db import DEFAULT_DB_PATH, init_db
 from cilly_trading.repositories import OrderEventRepository
+from cilly_trading.repositories._base_sqlite import BaseSqliteRepository
 
 ORDER_LIFECYCLE_STATES = (
     "created",
@@ -18,26 +17,12 @@ ORDER_LIFECYCLE_STATES = (
 )
 
 
-class SqliteOrderEventRepository(OrderEventRepository):
+class SqliteOrderEventRepository(BaseSqliteRepository, OrderEventRepository):
     """SQLite repository for deterministic order lifecycle event reads."""
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
-        if db_path is None:
-            db_path = DEFAULT_DB_PATH
-        self._db_path = Path(db_path)
-        init_db(self._db_path)
+        super().__init__(db_path)
         self._ensure_order_events_table()
-
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=5.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA busy_timeout = 5000;")
-        return conn
-
-    def _connection(self):
-        return closing(self._get_connection())
 
     def _ensure_order_events_table(self) -> None:
         with self._connection() as conn:
