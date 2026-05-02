@@ -21,14 +21,20 @@ class DummyRepo:
 
 
 def _df_rsi2_trigger() -> pd.DataFrame:
-    return pd.DataFrame({"close": [100.0, 95.0, 90.0, 85.0, 80.0, 75.0]})
+    return pd.DataFrame(
+        {"close": [100.0, 95.0, 90.0, 85.0, 80.0, 75.0]},
+        index=pd.date_range("2025-01-01", periods=6, freq="D", tz="UTC"),
+    )
 
 
 def _df_turtle_trigger() -> pd.DataFrame:
     lookback = 20
     highs = [100.0] * lookback + [100.0]
     closes = [99.0] * lookback + [101.0]
-    return pd.DataFrame({"high": highs, "close": closes})
+    return pd.DataFrame(
+        {"high": highs, "close": closes},
+        index=pd.date_range("2025-01-01", periods=lookback + 1, freq="D", tz="UTC"),
+    )
 
 
 def _run_engine_with_config(
