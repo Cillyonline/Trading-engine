@@ -20,6 +20,10 @@ import pandas as pd
 import yfinance as yf
 
 from cilly_trading.db import DEFAULT_DB_PATH, init_db
+from cilly_trading.engine.circuit_breaker import CircuitBreaker, CircuitOpenError
+
+_yahoo_circuit = CircuitBreaker(name="yfinance", max_failures=3, cooldown_s=60.0, call_timeout_s=30.0)
+_ccxt_circuit = CircuitBreaker(name="ccxt/binance", max_failures=3, cooldown_s=60.0, call_timeout_s=30.0)
 from cilly_trading.db.init_db import get_connection
 from data_layer.ingestion_validation import (
     SnapshotValidationError,
@@ -67,7 +71,27 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_ALLOWED_SNAPSHOT_ROOTS: tuple[Path, ...] = (
+    Path.cwd(),
+    Path.home(),
+    Path("/tmp"),
+)
+
+
+def _assert_path_allowed(path: Path) -> None:
+    """Reject paths that escape all allowed snapshot directories."""
+    resolved = path.resolve()
+    if not any(
+        resolved == root.resolve() or resolved.is_relative_to(root.resolve())
+        for root in _ALLOWED_SNAPSHOT_ROOTS
+    ):
+        raise SnapshotIngestionError(
+            f"snapshot_path_not_allowed: {path} is outside allowed directories"
+        )
+
+
 def _load_local_snapshot_file(input_path: Path) -> pd.DataFrame:
+    _assert_path_allowed(input_path)
     if not input_path.exists():
         logger.error("Snapshot input file missing: component=data path=%s", input_path)
         raise SnapshotIngestionError("snapshot_input_missing")
@@ -702,15 +726,25 @@ def _load_stock_yahoo(
     start: datetime,
     end: datetime,
 ) -> pd.DataFrame:
-    try:
-        df = yf.download(
+    def _download() -> pd.DataFrame:
+        return yf.download(
             symbol,
             start=start.date(),
             end=end.date(),
             interval="1d",
             progress=False,
         )
-    except Exception:
+
+    try:
+        df = _yahoo_circuit.call(_download)
+    except CircuitOpenError as exc:
+        logger.warning(
+            "yfinance circuit open, skipping: component=data symbol=%s reason=%s",
+            symbol,
+            exc,
+        )
+        return _empty_ohlcv()
+    except (TimeoutError, Exception):
         logger.exception(
             "yfinance download failed: component=data symbol=%s",
             symbol,
@@ -764,20 +798,22 @@ def _load_crypto_binance(
     symbol: str,
     lookback_days: int,
 ) -> pd.DataFrame:
-    try:
-        exchange = ccxt.binance()
-    except Exception:
-        logger.exception(
-            "Failed to initialize ccxt binance exchange: component=data symbol=%s",
-            symbol,
-        )
-        return _empty_ohlcv()
-
     since = int((_utc_now() - timedelta(days=lookback_days * 2)).timestamp() * 1000)
 
+    def _fetch() -> list:
+        exchange = ccxt.binance()
+        return exchange.fetch_ohlcv(symbol, timeframe="1d", since=since)
+
     try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe="1d", since=since)
-    except Exception:
+        ohlcv = _ccxt_circuit.call(_fetch)
+    except CircuitOpenError as exc:
+        logger.warning(
+            "ccxt circuit open, skipping: component=data symbol=%s reason=%s",
+            symbol,
+            exc,
+        )
+        return _empty_ohlcv()
+    except (TimeoutError, Exception):
         logger.exception(
             "ccxt fetch_ohlcv failed: component=data symbol=%s",
             symbol,

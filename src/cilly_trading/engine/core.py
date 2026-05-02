@@ -469,6 +469,17 @@ def run_watchlist_analysis(
                     )
                     continue
 
+                if not isinstance(signals, list):
+                    logger.error(
+                        "Strategy returned non-list: component=engine strategy=%s symbol=%s type=%s (skipping)",
+                        strat_name,
+                        symbol,
+                        type(signals).__name__,
+                    )
+                    continue
+
+                signals = [s for s in signals if isinstance(s, dict)]
+
                 if not signals:
                     logger.debug(
                         "Strategy finished: component=engine strategy=%s symbol=%s timeframe=%s signals=0",
