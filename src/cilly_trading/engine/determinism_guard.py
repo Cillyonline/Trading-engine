@@ -6,6 +6,7 @@ import datetime
 import random
 import secrets
 import socket
+import threading
 import time
 from typing import Any, Callable
 
@@ -23,6 +24,7 @@ class DeterminismViolationError(RuntimeError):
 
 _ORIGINALS: dict[tuple[Any, str], Any] = {}
 _INSTALLED = False
+_guard_lock: threading.Lock = threading.Lock()
 
 
 def _raise_violation(message: str) -> None:
@@ -48,51 +50,53 @@ def install_guard() -> None:
     """Install deterministic validation guard by monkeypatching forbidden APIs."""
 
     global _INSTALLED
-    if _INSTALLED:
-        return
+    with _guard_lock:
+        if _INSTALLED:
+            return
 
-    # System time access.
-    _patch(time, "time", _blocked_callable("Determinism violation: system time access (time.time)"))
-    _patch(time, "time_ns", _blocked_callable("Determinism violation: system time access (time.time_ns)"))
+        # System time access.
+        _patch(time, "time", _blocked_callable("Determinism violation: system time access (time.time)"))
+        _patch(time, "time_ns", _blocked_callable("Determinism violation: system time access (time.time_ns)"))
 
-    class _DeterministicDatetime(datetime.datetime):
-        @classmethod
-        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
-            _raise_violation("Determinism violation: system time access (datetime.datetime.now)")
+        class _DeterministicDatetime(datetime.datetime):
+            @classmethod
+            def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+                _raise_violation("Determinism violation: system time access (datetime.datetime.now)")
 
-        @classmethod
-        def utcnow(cls) -> datetime.datetime:
-            _raise_violation("Determinism violation: system time access (datetime.datetime.utcnow)")
+            @classmethod
+            def utcnow(cls) -> datetime.datetime:
+                _raise_violation("Determinism violation: system time access (datetime.datetime.utcnow)")
 
-    _patch(datetime, "datetime", _DeterministicDatetime)
+        _patch(datetime, "datetime", _DeterministicDatetime)
 
-    # Randomness access.
-    _patch(random, "random", _blocked_callable("Determinism violation: randomness access (random.random)"))
-    _patch(random, "randint", _blocked_callable("Determinism violation: randomness access (random.randint)"))
-    _patch(random, "choice", _blocked_callable("Determinism violation: randomness access (random.choice)"))
-    _patch(random, "randrange", _blocked_callable("Determinism violation: randomness access (random.randrange)"))
-    _patch(secrets, "token_bytes", _blocked_callable("Determinism violation: randomness access (secrets.token_bytes)"))
-    _patch(secrets, "token_hex", _blocked_callable("Determinism violation: randomness access (secrets.token_hex)"))
-    _patch(secrets, "choice", _blocked_callable("Determinism violation: randomness access (secrets.choice)"))
+        # Randomness access.
+        _patch(random, "random", _blocked_callable("Determinism violation: randomness access (random.random)"))
+        _patch(random, "randint", _blocked_callable("Determinism violation: randomness access (random.randint)"))
+        _patch(random, "choice", _blocked_callable("Determinism violation: randomness access (random.choice)"))
+        _patch(random, "randrange", _blocked_callable("Determinism violation: randomness access (random.randrange)"))
+        _patch(secrets, "token_bytes", _blocked_callable("Determinism violation: randomness access (secrets.token_bytes)"))
+        _patch(secrets, "token_hex", _blocked_callable("Determinism violation: randomness access (secrets.token_hex)"))
+        _patch(secrets, "choice", _blocked_callable("Determinism violation: randomness access (secrets.choice)"))
 
-    # Network access.
-    _patch(socket.socket, "connect", _blocked_callable("Determinism violation: network access (socket.socket.connect)"))
-    _patch(socket, "create_connection", _blocked_callable("Determinism violation: network access (socket.create_connection)"))
-    _patch(socket, "getaddrinfo", _blocked_callable("Determinism violation: network access (socket.getaddrinfo)"))
+        # Network access.
+        _patch(socket.socket, "connect", _blocked_callable("Determinism violation: network access (socket.socket.connect)"))
+        _patch(socket, "create_connection", _blocked_callable("Determinism violation: network access (socket.create_connection)"))
+        _patch(socket, "getaddrinfo", _blocked_callable("Determinism violation: network access (socket.getaddrinfo)"))
 
-    _INSTALLED = True
+        _INSTALLED = True
 
 
 def uninstall_guard() -> None:
     """Restore all patched callables and remove the deterministic guard."""
 
     global _INSTALLED
-    if not _INSTALLED and not _ORIGINALS:
-        return
+    with _guard_lock:
+        if not _INSTALLED and not _ORIGINALS:
+            return
 
-    for (target, attr), original in reversed(list(_ORIGINALS.items())):
-        setattr(target, attr, original)
+        for (target, attr), original in reversed(list(_ORIGINALS.items())):
+            setattr(target, attr, original)
 
-    _ORIGINALS.clear()
-    _INSTALLED = False
+        _ORIGINALS.clear()
+        _INSTALLED = False
 
