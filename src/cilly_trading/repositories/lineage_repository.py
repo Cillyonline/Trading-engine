@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from cilly_trading.db import DEFAULT_DB_PATH, init_db
 from cilly_trading.engine.lineage import LineageContext
+from cilly_trading.repositories._base_sqlite import BaseSqliteRepository
 
 
 @dataclass(frozen=True)
@@ -23,27 +22,12 @@ class LineageRecord:
     created_at: str
 
 
-class SqliteLineageRepository:
+class SqliteLineageRepository(BaseSqliteRepository):
     """Persist and query lineage records in SQLite."""
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
-        if db_path is None:
-            db_path = DEFAULT_DB_PATH
-
-        self._db_path = Path(db_path)
-        init_db(self._db_path)
+        super().__init__(db_path)
         self._ensure_table()
-
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=5.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA busy_timeout = 5000;")
-        return conn
-
-    def _connection(self):
-        return closing(self._get_connection())
 
     def _ensure_table(self) -> None:
         """Ensure the lineage table and indexes exist."""

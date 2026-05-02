@@ -22,6 +22,7 @@ import pandas as pd
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
 from cilly_trading.indicators.rsi import rsi
+from cilly_trading.strategies._constants import PRICE_SCALE
 
 
 @dataclass
@@ -107,7 +108,6 @@ class Rsi2Strategy(BaseStrategy):
                 "über dem Oversold-Bereich liegt."
             )
 
-            _scale = Decimal("0.0001")
             signal: Signal = {
                 # symbol, timeframe, market_type, data_source, timestamp
                 # werden im Engine-Layer gesetzt (run_watchlist_analysis)
@@ -118,17 +118,17 @@ class Rsi2Strategy(BaseStrategy):
                 "confirmation_rule": confirmation_rule,
                 "entry_zone": {
                     "from_": float(
-                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(_scale, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal("0.97")).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                     "to": float(
-                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(_scale, ROUND_HALF_UP)
+                        (Decimal(str(last_close)) * Decimal("1.01")).quantize(PRICE_SCALE, ROUND_HALF_UP)
                     ),
                 },
                 "stop_loss": float(
                     (
                         Decimal(str(last_close))
                         * (Decimal("1") - Decimal(str(cfg.stop_loss_pct)))
-                    ).quantize(_scale, ROUND_HALF_UP)
+                    ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                 ),
             }
 

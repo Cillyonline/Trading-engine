@@ -6,44 +6,27 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import closing
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from cilly_trading.db import init_db, DEFAULT_DB_PATH  # type: ignore
 from cilly_trading.models import Signal, SignalReason, compute_signal_id, compute_signal_reason_id
 from cilly_trading.repositories import SignalRepository
+from cilly_trading.repositories._base_sqlite import BaseSqliteRepository
 
 
 class SignalReconstructionError(ValueError):
     """Raised when persisted signal data cannot be reconstructed deterministically."""
 
 
-class SqliteSignalRepository(SignalRepository):
+class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
     """
     Speichert und lädt Signals aus einer SQLite-Datenbank.
     """
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
-        if db_path is None:
-            db_path = DEFAULT_DB_PATH
-
-        self._db_path = Path(db_path)
-        # sicherstellen, dass DB und Tabellen existieren
-        init_db(self._db_path)
+        super().__init__(db_path)
         self._ensure_signal_columns()
-
-    def _get_connection(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self._db_path, timeout=5.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("PRAGMA foreign_keys = ON;")
-        conn.execute("PRAGMA busy_timeout = 5000;")
-        return conn
-
-    def _connection(self):
-        return closing(self._get_connection())
 
     def _ensure_signal_columns(self) -> None:
         with self._connection() as conn:
