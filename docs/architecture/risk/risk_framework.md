@@ -117,7 +117,7 @@ Pairs with correlation above `correlation_threshold` are reported in
 
 - `scope`: `portfolio`
 - `semantic`: `cap`
-- `rule_code`: `correlation_pair:<proposed_symbol>:<open_symbol>`
+- `rule_code`: `correlation_pair:<proposed_symbol>:<open_position_symbol>`
 - `observed_value`: computed Pearson correlation
 - `limit_value`: configured correlation threshold
 
