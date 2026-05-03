@@ -1,30 +1,81 @@
-## Issue
-Closes #<IssueID>
+﻿## Summary
 
----
+Briefly describe what changed.
 
-## Acceptance Criteria
-- [ ] AC1 satisfied
-- [ ] AC2 satisfied
-- [ ] AC3 satisfied
+## Linked Issue
 
----
+Closes #
 
-## Constraints
-- [ ] Only Acceptance Criteria implemented
-- [ ] No architecture changes introduced
-- [ ] No new features introduced
-- [ ] Only allowed files modified
+## Lane
 
----
+- [ ] Fast Lane
+- [ ] Standard Lane
+- [ ] Critical Lane
 
-## Test Evidence
+## Changes
 
-If tests were added or modified, `Not run (not requested)` is not acceptable. The PR must include the command used and full output or CI link.
+- 
+- 
+- 
 
-Command used:
-<paste test command here>
+## Acceptance Criteria Evidence
 
-Result:
+- AC1:
+- AC2:
+- AC3:
 
-<paste full output or CI link here>
+## Tests
+
+Exact test command:
+
+<command here>
+
+Exact test output:
+
+<output here>
+
+## Review Package
+
+### Modified Files
+
+- 
+
+### New Files
+
+- 
+
+### Deleted Files
+
+- 
+
+### Risk Notes
+
+- 
+
+### Out of Scope
+
+- 
+
+### Follow-up Issues
+
+- 
+
+## Governance Checks
+
+- [ ] Scope stayed inside the active issue
+- [ ] No unrelated refactor
+- [ ] No unsupported live-trading claim
+- [ ] No broker-readiness claim
+- [ ] No production-readiness claim
+- [ ] No trader-validation claim
+- [ ] No profitability claim
+- [ ] No secrets or credentials added
+
+## Critical Lane Checks
+
+Complete only if relevant.
+
+- [ ] Human review required
+- [ ] Auto-merge forbidden
+- [ ] Risk notes included
+- [ ] Rollback/recovery notes included where runtime behavior changed
