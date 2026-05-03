@@ -130,6 +130,7 @@ Limitations: this is a static rolling Pearson check over supplied price history
 only. It is not portfolio optimization, a dynamic correlation model, a
 cross-asset-class model, live-trading validation, broker integration, or a
 profitability claim.
+The documented evidence rows are deterministic review artifacts only.
 
 ## 8.2) Bounded Risk-Framework Authority Contract
 This framework is governed by one canonical bounded risk-framework authority

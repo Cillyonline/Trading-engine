@@ -1,4 +1,4 @@
-"""Correlation-based portfolio risk aggregation checks."""
+"""Pure correlation-based portfolio risk aggregation checks."""
 
 from __future__ import annotations
 

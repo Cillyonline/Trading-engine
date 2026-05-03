@@ -36,7 +36,7 @@ class RiskEvaluationRequest:
         open_position_symbols: Symbols with currently open positions available
             to this evaluation.
         price_history: In-scope price history keyed by symbol for deterministic
-            correlation checks.
+            correlation checks; normalized to immutable tuples.
     """
 
     strategy_id: str

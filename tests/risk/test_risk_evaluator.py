@@ -44,6 +44,7 @@ def _bounded_limits() -> RiskLimits:
 
 
 def _correlation_price_history() -> dict[str, tuple[float, ...]]:
+    """Return deterministic prices with known pairwise correlations."""
     proposed = tuple(float(value) for value in range(1, 11))
     return {
         "AAPL": proposed,

@@ -298,6 +298,7 @@ def evaluate_risk(
         limits: Immutable risk limits used for this evaluation.
         strategy_exposure: Current absolute exposure for the request strategy.
         symbol_exposure: Current absolute exposure for the request symbol.
+        config: Optional runtime kill-switch configuration.
 
     Returns:
         RiskEvaluationResponse: Deterministic evaluation result.
