@@ -11,6 +11,8 @@ EXPECTED_KEYS = {
     "cagr",
     "max_drawdown",
     "sharpe_ratio",
+    "sortino_ratio",
+    "calmar_ratio",
     "win_rate",
     "profit_factor",
 }
@@ -33,6 +35,8 @@ EXPECTED_FIXTURE_METRICS = {
     "cagr": 0.2,
     "max_drawdown": 0.0,
     "sharpe_ratio": None,
+    "sortino_ratio": None,
+    "calmar_ratio": None,
     "win_rate": 0.666666666667,
     "profit_factor": 5.0,
 }
@@ -76,6 +80,8 @@ def test_metrics_missing_equity_curve_yields_none_for_equity_based_metrics() -> 
     assert metrics["cagr"] is None
     assert metrics["max_drawdown"] is None
     assert metrics["sharpe_ratio"] is None
+    assert metrics["sortino_ratio"] is None
+    assert metrics["calmar_ratio"] is None
     assert metrics["win_rate"] is None
     assert metrics["profit_factor"] is None
 

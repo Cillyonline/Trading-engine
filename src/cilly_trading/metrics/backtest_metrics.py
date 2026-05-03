@@ -227,6 +227,53 @@ def _compute_profit_factor(trade_pnls: list[float]) -> float | None:
     return _safe_divide(gross_profit, gross_loss)
 
 
+def _compute_sortino_ratio(equity_points: list[tuple[float, float]]) -> float | None:
+    if len(equity_points) < 2:
+        return None
+
+    returns: list[float] = []
+    for idx in range(1, len(equity_points)):
+        previous = equity_points[idx - 1][1]
+        current = equity_points[idx][1]
+        rtn = _safe_divide(current - previous, previous)
+        if rtn is None:
+            continue
+        returns.append(rtn)
+
+    count = len(returns)
+    if count < 2:
+        return None
+
+    mean_return = _safe_divide(sum(returns), float(count))
+    if mean_return is None:
+        return None
+
+    # Sample downside variance (N-1 denominator), d_i = min(r_i, 0)
+    downside_sq_sum = 0.0
+    for r in returns:
+        d = min(r, 0.0)
+        downside_sq_sum = _round_12(downside_sq_sum + d * d)
+
+    downside_variance = _safe_divide(downside_sq_sum, float(count - 1))
+    if downside_variance is None or downside_variance <= 0.0:
+        return None
+
+    downside_deviation = _round_12(math.sqrt(downside_variance))
+    sortino = _safe_divide(mean_return, downside_deviation)
+    if sortino is None:
+        return None
+    return _round_12(sortino)
+
+
+def _compute_calmar_ratio(cagr: float | None, max_drawdown: float | None) -> float | None:
+    if cagr is None or max_drawdown is None:
+        return None
+    if max_drawdown == 0.0:
+        return None
+    result = _safe_divide(cagr, abs(max_drawdown))
+    return result
+
+
 def compute_backtest_metrics(
     *,
     summary: Mapping[str, Any] | None = None,
@@ -250,10 +297,14 @@ def compute_backtest_metrics(
         cagr = None
         max_drawdown = None
         sharpe_ratio = None
+        sortino_ratio = None
     else:
         cagr = _compute_cagr(sorted_equity_curve)
         max_drawdown = _compute_max_drawdown(sorted_equity_curve)
         sharpe_ratio = _compute_sharpe_ratio(sorted_equity_curve)
+        sortino_ratio = _compute_sortino_ratio(sorted_equity_curve)
+
+    calmar_ratio = _compute_calmar_ratio(cagr, max_drawdown)
 
     trade_pnls = _extract_trade_pnls(trades)
     win_rate = _compute_win_rate(trade_pnls)
@@ -264,6 +315,8 @@ def compute_backtest_metrics(
         "cagr": cagr,
         "max_drawdown": max_drawdown,
         "sharpe_ratio": sharpe_ratio,
+        "sortino_ratio": sortino_ratio,
+        "calmar_ratio": calmar_ratio,
         "win_rate": win_rate,
         "profit_factor": profit_factor,
     }

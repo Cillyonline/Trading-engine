@@ -174,7 +174,19 @@ Edge cases:
 
 No annualization factor is applied.
 
-## 4.5 Sortino Ratio (Deterministic, Non-Annualized)
+## 4.5 Calmar Ratio
+
+\[
+\mathrm{calmar\_ratio} = \frac{\mathrm{cagr}}{|\mathrm{max\_drawdown}|}
+\]
+
+Edge cases:
+
+- If `cagr = null`, `calmar_ratio = null`.
+- If `max_drawdown = null`, `calmar_ratio = null`.
+- If `max_drawdown = 0`, `calmar_ratio = null` (division by zero avoided).
+
+## 4.6 Sortino Ratio (Deterministic, Non-Annualized)
 
 Uses the same period-return series `R = [r_1, ..., r_n]` defined in 4.4, with MAR = 0.
 
@@ -201,7 +213,7 @@ Edge cases:
 
 No annualization factor is applied. Supply `periods_per_year` to the metric function to obtain an annualized ratio.
 
-## 4.6 Win Rate
+## 4.7 Win Rate
 
 \[
 \mathrm{win\_rate} = \frac{\#(\mathrm{pnl} > 0)}{\mathrm{total\_trades}}
@@ -213,7 +225,7 @@ Edge case:
 
 - If `total_trades = 0`, `win_rate = null`.
 
-## 4.7 Profit Factor
+## 4.8 Profit Factor
 
 \[
 \mathrm{profit\_factor} = \frac{\sum \mathrm{positive\_pnls}}{\sum |\mathrm{negative\_pnls}|}
@@ -239,6 +251,8 @@ The output artifact is `metrics-result.json` with exact structure:
   "cagr": number|null,
   "max_drawdown": number|null,
   "sharpe_ratio": number|null,
+  "sortino_ratio": number|null,
+  "calmar_ratio": number|null,
   "win_rate": number|null,
   "profit_factor": number|null
 }

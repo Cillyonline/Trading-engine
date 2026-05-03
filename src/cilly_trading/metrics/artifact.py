@@ -13,6 +13,8 @@ METRIC_KEYS = (
     "cagr",
     "max_drawdown",
     "sharpe_ratio",
+    "sortino_ratio",
+    "calmar_ratio",
     "win_rate",
     "profit_factor",
 )
