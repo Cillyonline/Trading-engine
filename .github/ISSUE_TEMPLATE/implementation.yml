@@ -1,0 +1,148 @@
+﻿name: Implementation Issue
+description: Scoped implementation work for Codex B with Codex A governance
+title: "[QUEUED][AREA] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for scoped implementation work.
+        One issue should be active at a time.
+        Do not include unrelated refactors or architecture drift.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What must be achieved?
+      placeholder: "Add / change / fix ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-now
+    attributes:
+      label: Why Now
+      description: Why is this work needed now?
+      placeholder: "This is needed because ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: in-scope
+    attributes:
+      label: In Scope
+      description: What is included?
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of Scope
+      description: What must not be changed?
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Testable, observable, bounded completion checks.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: test-requirements
+    attributes:
+      label: Test Requirements
+      description: Exact or minimum test expectations.
+      placeholder: |
+        Required:
+        - ...
+        
+        Minimum command:
+        pytest ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: files-allowed
+    attributes:
+      label: Files Allowed to Change
+      description: Strict file or path boundaries for Codex B.
+      placeholder: |
+        - src/...
+        - tests/...
+        - docs/...
+    validations:
+      required: true
+
+  - type: textarea
+    id: files-not-allowed
+    attributes:
+      label: Files NOT Allowed to Change
+      description: Explicitly forbidden paths or areas.
+      placeholder: |
+        - frontend/**
+        - broker integration files
+        - live-trading files
+        - roadmap rewrites
+        - unrelated refactors
+    validations:
+      required: true
+
+  - type: textarea
+    id: roadmap-traceability
+    attributes:
+      label: Roadmap Traceability
+      description: Relevant roadmap phase, milestone, or governance link.
+      placeholder: |
+        - Phase ...
+        - Milestone ...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Lane
+      description: Select the workflow lane.
+      options:
+        - Fast Lane
+        - Standard Lane
+        - Critical Lane
+    validations:
+      required: true
+
+  - type: textarea
+    id: risk-governance
+    attributes:
+      label: Risk / Governance Note
+      description: Risks, restrictions, and claim boundaries.
+      placeholder: |
+        This issue must not introduce live-trading, broker-readiness, production-readiness, trader-validation, real-money trading safety, or profitability claims.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-labels
+    attributes:
+      label: Suggested Labels
+      description: Optional labels for triage.
+      placeholder: |
+        - type:feature
+        - area:...
+        - ai:review
+    validations:
+      required: false
