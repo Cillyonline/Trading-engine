@@ -24,8 +24,10 @@ from typing import List, Dict, Any
 
 import pandas as pd
 
+from cilly_trading.indicators.atr import atr as compute_atr
 from cilly_trading.models import Signal
 from cilly_trading.engine.core import BaseStrategy
+from cilly_trading.risk_framework.position_sizing import AtrPositionSizer
 from cilly_trading.strategies._constants import PRICE_SCALE
 
 
@@ -47,6 +49,17 @@ class TurtleConfig:
         Number of bars for the trailing stop (lowest low window). Classic
         Turtle exit uses 10. The window is shifted by 1 bar to avoid
         lookahead bias.
+    use_atr_sizing:
+        When True, include ATR-based position size suggestion in emitted signals.
+        Requires account_equity and risk_pct to be supplied in config.
+    atr_period:
+        Lookback period for ATR calculation (default: 14).
+    atr_multiplier:
+        Multiplier applied to ATR as a risk unit (default: 2.0).
+    account_equity:
+        Account equity used for ATR position sizing. Required when use_atr_sizing=True.
+    risk_pct:
+        Fraction of equity to risk per trade (default: 0.01). Used with ATR sizing.
     """
     breakout_lookback: int = 20
     proximity_threshold_pct: float = 0.03
@@ -60,6 +73,11 @@ class TurtleConfig:
     setup_score_range: float = 40.0
     setup_entry_zone_upper_factor: float = 1.01
     exit_lookback: int = 10
+    use_atr_sizing: bool = False
+    atr_period: int = 14
+    atr_multiplier: float = 2.0
+    account_equity: float | None = None
+    risk_pct: float = 0.01
 
 
 class TurtleStrategy(BaseStrategy):
@@ -78,6 +96,7 @@ class TurtleStrategy(BaseStrategy):
         df: pd.DataFrame,
         config: Dict[str, Any],
     ) -> List[Signal]:
+        _account_equity = config.get("account_equity")
         cfg = TurtleConfig(
             breakout_lookback=int(config.get("breakout_lookback", 20)),
             proximity_threshold_pct=float(config.get("proximity_threshold_pct", 0.03)),
@@ -91,6 +110,11 @@ class TurtleStrategy(BaseStrategy):
             setup_score_range=float(config.get("setup_score_range", 40.0)),
             setup_entry_zone_upper_factor=float(config.get("setup_entry_zone_upper_factor", 1.01)),
             exit_lookback=int(config.get("exit_lookback", 10)),
+            use_atr_sizing=bool(config.get("use_atr_sizing", False)),
+            atr_period=int(config.get("atr_period", 14)),
+            atr_multiplier=float(config.get("atr_multiplier", 2.0)),
+            account_equity=float(_account_equity) if _account_equity is not None else None,
+            risk_pct=float(config.get("risk_pct", 0.01)),
         )
 
         if df.empty:
@@ -99,6 +123,22 @@ class TurtleStrategy(BaseStrategy):
         for col in ("high", "low", "close"):
             if col not in df.columns:
                 raise ValueError(f"DataFrame must contain '{col}' for TurtleStrategy")
+
+        # ATR-based position sizing (optional).
+        atr_position_size: float | None = None
+        if cfg.use_atr_sizing and cfg.account_equity is not None:
+            atr_series = compute_atr(df, period=cfg.atr_period)
+            last_atr = atr_series.iloc[-1] if not atr_series.empty else float("nan")
+            if not pd.isna(last_atr):
+                sizer = AtrPositionSizer(
+                    atr_period=cfg.atr_period,
+                    atr_multiplier=cfg.atr_multiplier,
+                )
+                atr_position_size = sizer.compute_position_size(
+                    account_equity=cfg.account_equity,
+                    risk_pct=cfg.risk_pct,
+                    atr_value=float(last_atr),
+                )
 
         # Trailing stop: lowest low over exit_lookback bars, shifted by 1 to avoid lookahead.
         trailing_stops = df["low"].rolling(
@@ -122,6 +162,8 @@ class TurtleStrategy(BaseStrategy):
                     f"{cfg.exit_lookback}-bar trailing stop ({float(trailing_stop):.2f})."
                 ),
             }
+            if atr_position_size is not None:
+                exit_signal["atr_position_size"] = atr_position_size
             return [exit_signal]
 
         # Highest high of the last N bars BEFORE the current bar.
@@ -189,6 +231,8 @@ class TurtleStrategy(BaseStrategy):
                 },
                 "stop_loss": _stop,
             }
+            if atr_position_size is not None:
+                signal["atr_position_size"] = atr_position_size
             signals.append(signal)
 
         else:
@@ -236,6 +280,8 @@ class TurtleStrategy(BaseStrategy):
                         },
                         "stop_loss": _stop,
                     }
+                    if atr_position_size is not None:
+                        signal["atr_position_size"] = atr_position_size
                     signals.append(signal)
 
         return signals
