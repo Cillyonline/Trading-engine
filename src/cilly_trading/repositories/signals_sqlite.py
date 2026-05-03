@@ -19,6 +19,15 @@ class SignalReconstructionError(ValueError):
     """Raised when persisted signal data cannot be reconstructed deterministically."""
 
 
+_ALLOWED_SIGNAL_COLUMNS: frozenset[tuple[str, str]] = frozenset({
+    ("signal_id", "TEXT"),
+    ("analysis_run_id", "TEXT"),
+    ("ingestion_run_id", "TEXT"),
+    ("reasons_json", "TEXT"),
+    ("stop_loss", "REAL"),
+})
+
+
 class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
     """
     Speichert und lädt Signals aus einer SQLite-Datenbank.
@@ -33,20 +42,21 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
             cur = conn.cursor()
             cur.execute("PRAGMA table_info(signals);")
             columns = {row["name"] for row in cur.fetchall()}
-            missing_columns = []
-            if "signal_id" not in columns:
-                missing_columns.append(("signal_id", "TEXT"))
-            if "analysis_run_id" not in columns:
-                missing_columns.append(("analysis_run_id", "TEXT"))
-            if "ingestion_run_id" not in columns:
-                missing_columns.append(("ingestion_run_id", "TEXT"))
-            if "reasons_json" not in columns:
-                missing_columns.append(("reasons_json", "TEXT"))
-            if "stop_loss" not in columns:
-                missing_columns.append(("stop_loss", "REAL"))
+            missing_columns = [
+                (col, typ)
+                for col, typ in _ALLOWED_SIGNAL_COLUMNS
+                if col not in columns
+            ]
 
             for column_name, column_type in missing_columns:
-                cur.execute(f"ALTER TABLE signals ADD COLUMN {column_name} {column_type};")
+                if (column_name, column_type) not in _ALLOWED_SIGNAL_COLUMNS:
+                    raise ValueError(
+                        f"Refusing DDL for unknown column: {column_name!r} {column_type!r}"
+                    )
+                # SQLite does not support parameterized DDL; column is validated above.
+                cur.execute(  # noqa: S608
+                    f"ALTER TABLE signals ADD COLUMN {column_name} {column_type};"
+                )
             cur.execute(
                 """
                 DELETE FROM signals

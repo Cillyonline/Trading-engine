@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sqlite3
 import uuid
 import warnings
@@ -71,11 +72,20 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_ALLOWED_SNAPSHOT_ROOTS: tuple[Path, ...] = (
-    Path.cwd(),
-    Path.home(),
-    Path("/tmp"),
-)
+def _build_allowed_snapshot_roots() -> tuple[Path, ...]:
+    """Build the snapshot root whitelist from environment or safe defaults.
+
+    Set CILLY_SNAPSHOT_ROOT in production to restrict loading to a single
+    controlled directory (e.g. /data/snapshots). Without it, cwd and home
+    are allowed for local development and testing.
+    """
+    custom = os.getenv("CILLY_SNAPSHOT_ROOT", "").strip()
+    if custom:
+        return (Path(custom).resolve(),)
+    return (Path.cwd(), Path.home(), Path("/tmp"))
+
+
+_ALLOWED_SNAPSHOT_ROOTS: tuple[Path, ...] = _build_allowed_snapshot_roots()
 
 
 def _assert_path_allowed(path: Path) -> None:
@@ -86,7 +96,8 @@ def _assert_path_allowed(path: Path) -> None:
         for root in _ALLOWED_SNAPSHOT_ROOTS
     ):
         raise SnapshotIngestionError(
-            f"snapshot_path_not_allowed: {path} is outside allowed directories"
+            f"snapshot_path_not_allowed: {path} is outside allowed directories. "
+            "Set CILLY_SNAPSHOT_ROOT to restrict snapshot loading in production."
         )
 
 
