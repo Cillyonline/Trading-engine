@@ -21,7 +21,7 @@ from cilly_trading.trading_lifecycle import (
 )
 
 
-Stage = Literal["setup", "entry_confirmed"]
+Stage = Literal["setup", "entry_confirmed", "exit"]
 MarketType = Literal["stock", "crypto"]
 Direction = Literal["long"]
 DataSource = Literal["yahoo", "binance"]

@@ -30,9 +30,10 @@ def _df_rsi2_trigger() -> pd.DataFrame:
 def _df_turtle_trigger() -> pd.DataFrame:
     lookback = 20
     highs = [100.0] * lookback + [100.0]
+    lows = [97.0] * lookback + [97.0]
     closes = [99.0] * lookback + [101.0]
     return pd.DataFrame(
-        {"high": highs, "close": closes},
+        {"high": highs, "low": lows, "close": closes},
         index=pd.date_range("2025-01-01", periods=lookback + 1, freq="D", tz="UTC"),
     )
 

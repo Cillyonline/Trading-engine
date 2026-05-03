@@ -12,12 +12,17 @@ from cilly_trading.models import DataRef, RuleRef, SignalReason, compute_signal_
 
 
 RSI2_RULE_REF: RuleRef = {"rule_id": "RSI2_OVERSOLD", "rule_version": "1.0.0"}
+RSI2_EXIT_RULE_REF: RuleRef = {"rule_id": "RSI2_OVERBOUGHT_EXIT", "rule_version": "1.0.0"}
 TURTLE_CONFIRM_RULE_REF: RuleRef = {
     "rule_id": "TURTLE_BREAKOUT_CONFIRMED",
     "rule_version": "1.0.0",
 }
 TURTLE_SETUP_RULE_REF: RuleRef = {
     "rule_id": "TURTLE_BREAKOUT_PROXIMITY",
+    "rule_version": "1.0.0",
+}
+TURTLE_EXIT_RULE_REF: RuleRef = {
+    "rule_id": "TURTLE_TRAILING_STOP_EXIT",
     "rule_version": "1.0.0",
 }
 
@@ -50,6 +55,7 @@ def generate_reasons_for_signal(
             _build_rsi2_reason(
                 signal_id=signal_id,
                 timestamp=timestamp,
+                signal=signal,
                 df=df,
                 strat_config=strat_config,
             )
@@ -130,39 +136,66 @@ def _build_rsi2_reason(
     *,
     signal_id: str,
     timestamp: str,
+    signal: dict,
     df: pd.DataFrame,
     strat_config: Dict[str, Any],
 ) -> SignalReason:
     rsi_period = int(strat_config.get("rsi_period", 2))
-    oversold_threshold = float(strat_config.get("oversold_threshold", 10.0))
     last_close = _last_close(df)
     last_rsi = _last_rsi(df, rsi_period)
+    stage = signal.get("stage")
 
-    data_refs = [
-        _build_data_ref(
-            data_type="INDICATOR_VALUE",
-            data_id="rsi2",
-            value=last_rsi,
-            timestamp=timestamp,
-        ),
-        _build_data_ref(
-            data_type="INDICATOR_VALUE",
-            data_id="oversold_threshold",
-            value=oversold_threshold,
-            timestamp=timestamp,
-        ),
-        _build_data_ref(
-            data_type="PRICE_VALUE",
-            data_id="close",
-            value=last_close,
-            timestamp=timestamp,
-        ),
-    ]
+    if stage == "exit":
+        overbought_threshold = float(strat_config.get("overbought_threshold", 70.0))
+        data_refs = [
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="rsi2",
+                value=last_rsi,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="overbought_threshold",
+                value=overbought_threshold,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="PRICE_VALUE",
+                data_id="close",
+                value=last_close,
+                timestamp=timestamp,
+            ),
+        ]
+        rule_ref = dict(RSI2_EXIT_RULE_REF)
+    else:
+        oversold_threshold = float(strat_config.get("oversold_threshold", 10.0))
+        data_refs = [
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="rsi2",
+                value=last_rsi,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="oversold_threshold",
+                value=oversold_threshold,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="PRICE_VALUE",
+                data_id="close",
+                value=last_close,
+                timestamp=timestamp,
+            ),
+        ]
+        rule_ref = dict(RSI2_RULE_REF)
 
     reason: SignalReason = {
         "reason_type": "INDICATOR_THRESHOLD",
         "signal_id": signal_id,
-        "rule_ref": dict(RSI2_RULE_REF),
+        "rule_ref": rule_ref,
         "data_refs": data_refs,
         "ordering_key": 0,
     }
@@ -227,6 +260,30 @@ def _build_turtle_reason(
             ),
         ]
         rule_ref = dict(TURTLE_SETUP_RULE_REF)
+    elif stage == "exit":
+        exit_lookback = int(strat_config.get("exit_lookback", 10))
+        trailing_stop = _trailing_stop(df, exit_lookback)
+        data_refs = [
+            _build_data_ref(
+                data_type="PRICE_VALUE",
+                data_id="close",
+                value=last_close,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="trailing_stop",
+                value=trailing_stop,
+                timestamp=timestamp,
+            ),
+            _build_data_ref(
+                data_type="INDICATOR_VALUE",
+                data_id="exit_lookback",
+                value=exit_lookback,
+                timestamp=timestamp,
+            ),
+        ]
+        rule_ref = dict(TURTLE_EXIT_RULE_REF)
     else:
         raise ValueError(f"Unknown TURTLE stage for reason generation: {stage}")
 
@@ -324,3 +381,14 @@ def _prior_breakout_high(df: pd.DataFrame, lookback: int) -> float:
     if pd.isna(prior_breakout_level):
         raise ValueError("Prior breakout level is NaN for reason generation")
     return float(prior_breakout_level)
+
+
+def _trailing_stop(df: pd.DataFrame, lookback: int) -> float:
+    if "low" not in df.columns:
+        raise ValueError("DataFrame must contain 'low' column for reason generation")
+    lows_rolling = df["low"].rolling(window=lookback, min_periods=lookback).min()
+    trailing_stops = lows_rolling.shift(1)
+    trailing_stop = trailing_stops.iloc[-1]
+    if pd.isna(trailing_stop):
+        raise ValueError("Trailing stop is NaN for reason generation")
+    return float(trailing_stop)

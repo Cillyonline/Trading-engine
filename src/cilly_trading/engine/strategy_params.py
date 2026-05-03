@@ -56,6 +56,13 @@ STRATEGY_PARAMETER_SPECS: dict[str, tuple[ParameterSpec, ...]] = {
             min_value=0.0,
             max_value=10.0,
         ),
+        ParameterSpec(
+            canonical_name="overbought_threshold",
+            aliases=("overbought",),
+            type_=float,
+            min_value=0.0,
+            max_value=100.0,
+        ),
     ),
     "TURTLE": (
         ParameterSpec(
@@ -133,6 +140,12 @@ STRATEGY_PARAMETER_SPECS: dict[str, tuple[ParameterSpec, ...]] = {
             type_=float,
             min_value=0.0,
             max_value=10.0,
+        ),
+        ParameterSpec(
+            canonical_name="exit_lookback",
+            aliases=(),
+            type_=int,
+            min_value=1,
         ),
     ),
 }
