@@ -13,6 +13,7 @@ from cilly_trading.engine.determinism_guard import (
     install_guard,
     uninstall_guard,
 )
+from cilly_trading.engine.walkforward import WalkForwardConfig, WalkForwardRunner
 from cilly_trading.strategies.evaluation_harness import (
     StrategyEvaluationInputError,
     StrategyEvaluationSelectionError,
@@ -124,4 +125,95 @@ def run_compare_strategies(
         return 1
     finally:
         uninstall_guard()
+
+
+class WalkForwardInputError(ValueError):
+    """Raised when walk-forward input files cannot be loaded."""
+
+
+def _load_equity_curve(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WalkForwardInputError("Invalid equity_curve input") from exc
+
+    if not isinstance(payload, list):
+        raise WalkForwardInputError("Invalid equity_curve input: expected a JSON array")
+
+    curve: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, Mapping):
+            raise WalkForwardInputError("Invalid equity_curve input: items must be objects")
+        if "timestamp" not in item or "equity" not in item:
+            raise WalkForwardInputError(
+                "Invalid equity_curve input: each item must have 'timestamp' and 'equity'"
+            )
+        curve.append(dict(item))
+    return curve
+
+
+def _load_trades(path: Path) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WalkForwardInputError("Invalid trades input") from exc
+
+    if not isinstance(payload, list):
+        raise WalkForwardInputError("Invalid trades input: expected a JSON array")
+
+    return [dict(item) for item in payload if isinstance(item, Mapping)]
+
+
+def run_walk_forward(
+    *,
+    equity_curve_path: Path,
+    out_dir: Path,
+    run_id: str,
+    trades_path: Path | None = None,
+    in_sample_ratio: float = 0.7,
+    n_windows: int = 5,
+    anchored: bool = False,
+) -> int:
+    """Run walk-forward validation and write result artifact.
+
+    Loads equity curve (and optionally trades) from JSON files, runs
+    WalkForwardRunner, and writes the result artifact to ``out_dir``.
+
+    Returns an integer exit code: 0 on success, non-zero on error.
+
+    NOTE: Out-of-sample results do NOT guarantee future performance.
+    """
+    try:
+        equity_curve = _load_equity_curve(equity_curve_path)
+        trades = _load_trades(trades_path) if trades_path is not None else []
+
+        cfg = WalkForwardConfig(
+            in_sample_ratio=in_sample_ratio,
+            n_windows=n_windows,
+            anchored=anchored,
+        )
+
+        runner = WalkForwardRunner()
+        result = runner.run(equity_curve=equity_curve, trades=trades, config=cfg)
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+        artifact = result.to_artifact()
+        artifact_path = out_dir / f"walkforward-{run_id}.json"
+        artifact_path.write_text(
+            json.dumps(artifact, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"WROTE {artifact_path}")
+        return 0
+
+    except WalkForwardInputError as exc:
+        print(str(exc), file=sys.stderr)
+        return 20
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 20
+    except Exception as exc:  # pragma: no cover - fallback protection
+        print(f"Unexpected error: {exc}", file=sys.stderr)
+        return 1
 
