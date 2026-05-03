@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 import inspect
 from typing import Any, Literal, Mapping, Sequence
@@ -10,6 +10,7 @@ from typing import Any, Literal, Mapping, Sequence
 from risk.contracts import RiskDecision
 
 from cilly_trading.engine.risk import enforce_approved_risk_decision
+from cilly_trading.engine.slippage import StochasticSlippageModel
 from cilly_trading.models import ExecutionEvent, Order, Position, compute_execution_event_id
 
 
@@ -23,6 +24,9 @@ class DeterministicExecutionConfig:
     money_scale: Decimal = Decimal("0.01")
     quantity_scale: Decimal = Decimal("0.00000001")
     fill_timing: Literal["next_snapshot", "same_snapshot"] = "next_snapshot"
+    stochastic_slippage_model: StochasticSlippageModel | None = field(
+        default=None, compare=False, hash=False
+    )
 
 
 def _enforce_orchestrator_caller() -> None:
@@ -222,7 +226,12 @@ class _DeterministicExecutionModel:
         side: Literal["BUY", "SELL"],
         config: DeterministicExecutionConfig,
     ) -> Decimal:
-        slippage_fraction = Decimal(config.slippage_bps) / Decimal("10000")
+        stochastic_model = getattr(config, "stochastic_slippage_model", None)
+        if stochastic_model is not None:
+            bps = Decimal(str(stochastic_model.sample_slippage_bps()))
+        else:
+            bps = Decimal(config.slippage_bps)
+        slippage_fraction = bps / Decimal("10000")
         if side == "BUY":
             return self._q(price * (Decimal("1") + slippage_fraction), config.price_scale)
         return self._q(price * (Decimal("1") - slippage_fraction), config.price_scale)
@@ -251,4 +260,5 @@ __all__ = [
     "ExecutionEvent",
     "Order",
     "Position",
+    "StochasticSlippageModel",
 ]

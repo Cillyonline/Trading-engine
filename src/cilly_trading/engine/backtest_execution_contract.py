@@ -19,6 +19,7 @@ from cilly_trading.engine.pipeline.orchestrator import (
     Position,
     run_pipeline,
 )
+from cilly_trading.engine.slippage import StochasticSlippageModel
 from cilly_trading.engine.strategy_lifecycle.model import StrategyLifecycleState
 
 SUPPORTED_RUN_CONTRACT_VERSION = "1.0.0"
@@ -98,6 +99,9 @@ class BacktestExecutionAssumptions:
     slippage_bps: int = 0
     commission_per_order: Decimal = Decimal("0")
     partial_fills_allowed: bool = False
+    stochastic_slippage_model: StochasticSlippageModel | None = field(
+        default=None, compare=False, hash=False
+    )
 
     def __post_init__(self) -> None:
         if self.fill_model != "deterministic_market":
@@ -117,6 +121,13 @@ class BacktestExecutionAssumptions:
             raise ValueError("Execution assumption slippage_bps must be >= 0")
         if self.slippage_bps > MAX_SLIPPAGE_BPS:
             raise ValueError(f"Execution assumption slippage_bps must be <= {MAX_SLIPPAGE_BPS}")
+
+        if self.stochastic_slippage_model is not None and not isinstance(
+            self.stochastic_slippage_model, StochasticSlippageModel
+        ):
+            raise ValueError(
+                "Execution assumption stochastic_slippage_model must be a StochasticSlippageModel instance or None"
+            )
 
         normalized_commission = self._normalize_commission(self.commission_per_order)
         if normalized_commission < Decimal("0"):
@@ -142,10 +153,11 @@ class BacktestExecutionAssumptions:
             slippage_bps=self.slippage_bps,
             commission_per_order=self.commission_per_order,
             fill_timing=self.fill_timing,
+            stochastic_slippage_model=self.stochastic_slippage_model,
         )
 
     def to_payload(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "fill_model": self.fill_model,
             "fill_timing": self.fill_timing,
             "price_source": self.price_source,
@@ -153,6 +165,9 @@ class BacktestExecutionAssumptions:
             "commission_per_order": str(self.commission_per_order),
             "partial_fills_allowed": self.partial_fills_allowed,
         }
+        if self.stochastic_slippage_model is not None:
+            payload["stochastic_slippage_model"] = self.stochastic_slippage_model.to_payload()
+        return payload
 
 
 @dataclass(frozen=True)
@@ -270,7 +285,18 @@ def build_backtest_realism_boundary(
             },
             "slippage": {
                 "slippage_bps": execution_assumptions.slippage_bps,
-                "slippage_model": "fixed_basis_points_by_side",
+                "slippage_model": (
+                    "stochastic"
+                    if execution_assumptions.stochastic_slippage_model is not None
+                    else "fixed_basis_points_by_side"
+                ),
+                **(
+                    {
+                        "stochastic_slippage_model": execution_assumptions.stochastic_slippage_model.to_payload()
+                    }
+                    if execution_assumptions.stochastic_slippage_model is not None
+                    else {}
+                ),
             },
             "fills": {
                 "fill_model": execution_assumptions.fill_model,
