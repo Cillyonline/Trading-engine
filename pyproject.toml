@@ -28,6 +28,9 @@ test = [
 monitoring = [
   "prometheus-client>=0.20",
 ]
+postgresql = [
+  "psycopg2-binary>=2.9",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
