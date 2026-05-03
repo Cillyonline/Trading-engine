@@ -32,6 +32,7 @@ scripts/*
 !scripts/capture_restart_evidence.py
 !scripts/run_paper_execution_cycle.py
 !scripts/run_daily_bounded_paper_runtime.py
+!scripts/data_quality_report.py
 !scripts/validation/
 !scripts/validation/summarize_bounded_paper_runtime_evidence.py
 *.code-workspace
