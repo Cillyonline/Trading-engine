@@ -54,6 +54,24 @@ def build_control_plane_router(
 ) -> APIRouter:
     router = APIRouter()
 
+    @router.get("/health/live")
+    def health_live_handler() -> dict[str, str]:
+        """Liveness probe — always 200 if the process is running."""
+        return {"status": "alive"}
+
+    @router.get("/health/ready")
+    def health_ready_handler() -> dict[str, Any]:
+        """Readiness probe — 200 when engine runtime is ready, 503 otherwise."""
+        payload = health_payload(deps=_health_dependencies(deps))
+        runtime_status = payload.get("runtime", {}).get("status") if isinstance(payload.get("runtime"), dict) else None
+        if runtime_status not in ("running", "ready"):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "runtime": runtime_status},
+            )
+        return {"status": "ready", "runtime": runtime_status}
+
     @router.get("/health")
     def health_handler(
         _: str = Depends(deps.require_role("read_only")),
