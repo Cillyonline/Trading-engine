@@ -106,7 +106,58 @@ The canonical bounded authority id is `risk_framework_bounded_non_live_v1`.
 This authority is bounded non-live technical evidence only and is not
 live-trading, broker, trader-validation, or operational-readiness evidence.
 
-## 9) MVP Guardrails
+## 9) Daily Loss Guard — Breach-Action Policy
+
+The daily loss guard (`src/cilly_trading/compliance/daily_loss_guard.py`) supports
+a configurable `breach_action` policy that determines the system response when the
+daily loss limit (`execution.daily_loss.max_abs`) is breached.
+
+Configure via the `execution.daily_loss.breach_action` config key.
+
+### Policy options
+
+#### `log_only`
+Logs a `CRITICAL` message and blocks new orders. No other automated action.
+Preserved exactly for backward compatibility with existing configurations.
+**Operational risk**: The log entry may be missed in unattended operation. Not
+recommended for semi-automated or unattended paper trading.
+
+#### `activate_kill_switch` (default for new configurations)
+Activates the global kill switch by setting `execution.kill_switch.active = True`
+in the runtime config dict. All subsequent order processing is blocked until the
+kill switch is manually reset by the operator. Ensures breach response even when
+log output is not monitored.
+
+#### `require_acknowledgment`
+Sets a persistent `awaiting_acknowledgment` flag and blocks all new orders until
+the operator explicitly acknowledges the breach via the API endpoint:
+
+```
+POST /compliance/daily-loss/acknowledge
+```
+
+After acknowledgment, execution resumes on the next guard check. If the portfolio
+still exceeds the loss limit, the guard triggers again immediately.
+**Use case**: Unattended paper trading where the operator must explicitly confirm
+awareness of the breach before execution continues.
+
+### Configuration example
+
+```python
+config = {
+    "execution.daily_loss.max_abs": 1000.0,
+    "execution.daily_loss.breach_action": "activate_kill_switch",
+}
+```
+
+### Implementation
+
+- `DailyLossBreachAction` enum: `log_only`, `activate_kill_switch`, `require_acknowledgment`
+- `DailyLossBreachState`: mutable state for the `require_acknowledgment` flag
+- `configured_breach_action(config)`: reads the policy key; defaults to `activate_kill_switch`
+- `acknowledge_daily_loss_breach(breach_state=None)`: clears the awaiting flag
+
+## 10) MVP Guardrails
 For MVP scope control, the Risk Framework shall exclude the following:
 
 - No live trading

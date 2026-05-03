@@ -1,6 +1,7 @@
 """Internal API router builders."""
 
 from .analysis_router import AnalysisRouterDependencies, build_analysis_router
+from .compliance_router import build_compliance_router
 from .control_plane_router import ControlPlaneRouterDependencies, build_control_plane_router
 from .inspection_router import InspectionRouterDependencies, build_inspection_router
 from .journal_router import JournalRouterDependencies, build_journal_router
@@ -18,6 +19,7 @@ __all__ = [
     "PaperRuntimeEvidenceSeriesRouterDependencies",
     "WatchlistsRouterDependencies",
     "build_analysis_router",
+    "build_compliance_router",
     "build_control_plane_router",
     "build_inspection_router",
     "build_journal_router",

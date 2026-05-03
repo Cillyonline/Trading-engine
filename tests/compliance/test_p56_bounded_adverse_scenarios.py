@@ -161,11 +161,16 @@ def test_p56_drawdown_recovery_behavior_matches_current_implementation() -> None
 
 
 def test_p56_daily_loss_recovery_behavior_matches_current_implementation() -> None:
+    # Explicitly use log_only to test the backward-compatible recovery behavior:
+    # the guard blocks only while the portfolio exceeds the limit, and unblocks
+    # automatically when it recovers.  activate_kill_switch (the new default)
+    # would permanently block after the first breach until operator reset.
     config = {
         "execution.kill_switch.active": False,
         "execution.emergency_block.active": False,
         "execution.drawdown.max_pct": 0.90,
         "execution.daily_loss.max_abs": 1_000.0,
+        "execution.daily_loss.breach_action": "log_only",
     }
 
     blocked_first, adapter_called_first, reason_first = _attempt(

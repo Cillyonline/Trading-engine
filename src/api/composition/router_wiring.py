@@ -14,6 +14,7 @@ from ..routers import (
     PaperRuntimeEvidenceSeriesRouterDependencies,
     WatchlistsRouterDependencies,
     build_analysis_router,
+    build_compliance_router,
     build_control_plane_router,
     build_inspection_router,
     build_journal_router,
@@ -54,6 +55,7 @@ class ApiRouterWiring:
 
 
 def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
+    app.include_router(build_compliance_router())
     app.include_router(build_alerts_router(wiring.require_role))
     app.include_router(
         build_journal_router(
