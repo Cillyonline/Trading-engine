@@ -1,17 +1,19 @@
-"""
-Turtle-Breakout-Strategie für die Cilly Trading Engine.
+"""Turtle breakout strategy for the Cilly Trading Engine.
 
-MVP-Version:
+MVP version:
 
-- Betrachtet das höchste Hoch der letzten N Kerzen (klassisch z. B. 20).
-- Wenn der Schlusskurs über dieses Breakout-Level steigt:
+- Tracks the highest high of the last N bars (classic: 20).
+- When close breaks above that level:
     -> ENTRY CONFIRMED (stage="entry_confirmed")
-- Wenn der Schlusskurs knapp unterhalb des Breakout-Levels notiert:
+- When close is just below the breakout level (within proximity threshold):
     -> SETUP (stage="setup")
+- When close drops below the trailing stop (lowest low of last M bars):
+    -> EXIT (stage="exit")
 
 Score:
-- Je näher bzw. je klarer über dem Breakout-Level, desto höher der Score.
-- Wertebereich: 0–100 (im MVP vereinfacht heuristisch berechnet).
+- Entry: higher score the more clearly close is above/near the breakout level.
+- Exit: 100.0 (definitive — trailing stop has been breached).
+- Range: 0–100.
 """
 
 from __future__ import annotations
@@ -29,19 +31,22 @@ from cilly_trading.strategies._constants import PRICE_SCALE
 
 @dataclass
 class TurtleConfig:
-    """
-    Konfiguration für die Turtle-Strategie.
+    """Configuration for the Turtle strategy.
 
     breakout_lookback:
-        Anzahl der Kerzen für das Breakout-Hoch (klassisch z. B. 20).
+        Number of bars for the breakout high window (classic: 20).
     proximity_threshold_pct:
-        Wie nah der Schlusskurs unterhalb des Breakout-Levels liegen darf,
-        um als SETUP zu gelten (z. B. 0.03 = 3 %).
+        How close the close may be below the breakout level to qualify as
+        a SETUP signal (e.g. 0.03 = within 3%).
     min_score:
-        Mindestscore, ab dem ein Signal überhaupt ausgegeben wird.
+        Minimum score required to emit any signal.
     stop_loss_buffer_pct:
-        Puffer unterhalb des Breakout-Levels für den Stop-Loss.
-        Standard: 0.01 (1 % unter dem Breakout-Level).
+        Buffer below the breakout level for the initial stop-loss.
+        Default: 0.01 (1% below the breakout level).
+    exit_lookback:
+        Number of bars for the trailing stop (lowest low window). Classic
+        Turtle exit uses 10. The window is shifted by 1 bar to avoid
+        lookahead bias.
     """
     breakout_lookback: int = 20
     proximity_threshold_pct: float = 0.03
@@ -54,6 +59,7 @@ class TurtleConfig:
     setup_score_base: float = 80.0
     setup_score_range: float = 40.0
     setup_entry_zone_upper_factor: float = 1.01
+    exit_lookback: int = 10
 
 
 class TurtleStrategy(BaseStrategy):
@@ -84,40 +90,61 @@ class TurtleStrategy(BaseStrategy):
             setup_score_base=float(config.get("setup_score_base", 80.0)),
             setup_score_range=float(config.get("setup_score_range", 40.0)),
             setup_entry_zone_upper_factor=float(config.get("setup_entry_zone_upper_factor", 1.01)),
+            exit_lookback=int(config.get("exit_lookback", 10)),
         )
 
         if df.empty:
             return []
 
-        for col in ("high", "close"):
+        for col in ("high", "low", "close"):
             if col not in df.columns:
                 raise ValueError(f"DataFrame must contain '{col}' for TurtleStrategy")
 
-        # Höchstes Hoch der letzten N Kerzen VOR der aktuellen Kerze
-        # rolling(...).max() -> max pro Fenster
-        # shift(1) -> Fenster endet mit der VORHERIGEN Kerze
+        # Trailing stop: lowest low over exit_lookback bars, shifted by 1 to avoid lookahead.
+        trailing_stops = df["low"].rolling(
+            window=cfg.exit_lookback,
+            min_periods=cfg.exit_lookback,
+        ).min().shift(1)
+
+        last_idx = df.index[-1]
+        last_close = float(df.loc[last_idx, "close"])
+        trailing_stop = trailing_stops.loc[last_idx]
+
+        # EXIT: close has fallen below the trailing stop level.
+        if not pd.isna(trailing_stop) and last_close < float(trailing_stop):
+            exit_signal: Signal = {
+                "strategy": self.name,
+                "direction": "long",
+                "score": 100.0,
+                "stage": "exit",
+                "confirmation_rule": (
+                    f"Exit long position: close ({last_close:.2f}) has broken below the "
+                    f"{cfg.exit_lookback}-bar trailing stop ({float(trailing_stop):.2f})."
+                ),
+            }
+            return [exit_signal]
+
+        # Highest high of the last N bars BEFORE the current bar.
+        # rolling().max() computes the window max, shift(1) moves it one bar back
+        # so the window ends at the previous bar — no lookahead bias.
         highs_rolling = df["high"].rolling(
             window=cfg.breakout_lookback,
             min_periods=cfg.breakout_lookback,
         ).max()
         prior_breakout_levels = highs_rolling.shift(1)
 
-        last_idx = df.index[-1]
         prior_breakout_level = prior_breakout_levels.loc[last_idx]
 
-        # Wenn wir nicht genug Historie haben, gibt es kein Setup
+        # Not enough history for a breakout level — no signal possible.
         if pd.isna(prior_breakout_level):
             return []
 
         last_high = float(df.loc[last_idx, "high"])
-        last_close = float(df.loc[last_idx, "close"])
+        breakout_level = float(prior_breakout_level)
 
         signals: List[Signal] = []
 
-        # Breakout-Level als float
-        breakout_level = float(prior_breakout_level)
-
-        # 1) Entry CONFIRMED: Schlusskurs über dem Breakout-Level
+        # 1) ENTRY CONFIRMED: close is above the breakout level.
         if last_close > breakout_level:
             breakout_strength = (last_close - breakout_level) / breakout_level  # in %
             breakout_strength_clamped = max(
@@ -133,9 +160,8 @@ class TurtleStrategy(BaseStrategy):
                 return []
 
             confirmation_rule = (
-                "Position halten, solange der Schlusskurs nicht deutlich "
-                "unter das Breakout-Level fällt (z. B. Tagesschluss unter dem "
-                "Breakout-Hoch oder unter einem definierten Trailing-Stop)."
+                "Hold position as long as close does not break significantly below the "
+                "breakout level (e.g. daily close below breakout high or trailing stop)."
             )
 
             _stop = float(
@@ -166,9 +192,8 @@ class TurtleStrategy(BaseStrategy):
             signals.append(signal)
 
         else:
-            # 2) SETUP: Schlusskurs knapp unterhalb des Breakout-Levels
-            # z. B. innerhalb von proximity_threshold_pct unterhalb des Levels
-            distance_to_level = (breakout_level - last_close) / breakout_level  # positiv, wenn darunter
+            # 2) SETUP: close is just below the breakout level (within proximity threshold).
+            distance_to_level = (breakout_level - last_close) / breakout_level
 
             if 0.0 <= distance_to_level <= cfg.proximity_threshold_pct:
                 score = cfg.setup_score_base - (
@@ -178,9 +203,9 @@ class TurtleStrategy(BaseStrategy):
 
                 if score >= cfg.min_score:
                     confirmation_rule = (
-                        "Long-Einstieg bei Tagesschluss oberhalb des Breakout-Levels "
-                        f"(Breakout-Level ~ {breakout_level:.2f}). "
-                        "Alternativ: Stop-Buy-Order knapp über dem Breakout-Hoch."
+                        f"Enter long on a daily close above the breakout level "
+                        f"(breakout level ~ {breakout_level:.2f}). "
+                        "Alternative: stop-buy order just above the breakout high."
                     )
 
                     _stop = float(

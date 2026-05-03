@@ -98,7 +98,7 @@ def test_turtle_returns_list_on_empty_df() -> None:
 
 def test_turtle_no_uncaught_exception_on_short_df() -> None:
     strat = TurtleStrategy()
-    df = pd.DataFrame({"high": [100.0, 101.0, 102.0], "close": [99.0, 100.0, 101.0]})
+    df = pd.DataFrame({"high": [100.0, 101.0, 102.0], "low": [98.0, 99.0, 100.0], "close": [99.0, 100.0, 101.0]})
     result = strat.generate_signals(df=df, config={"breakout_lookback": 20})
     _assert_list_of_signals(result)
     assert result == []
@@ -109,9 +109,10 @@ def test_turtle_entry_confirmed_schema() -> None:
     lookback = 20
 
     highs = [100.0] * lookback + [100.0]
+    lows = [97.0] * lookback + [97.0]
     closes = [99.0] * lookback + [101.0]  # Breakout über 100
 
-    df = pd.DataFrame({"high": highs, "close": closes})
+    df = pd.DataFrame({"high": highs, "low": lows, "close": closes})
 
     result = strat.generate_signals(
         df=df,
@@ -131,9 +132,10 @@ def test_turtle_setup_schema_if_emitted() -> None:
     lookback = 20
 
     highs = [100.0] * lookback + [100.0]
+    lows = [97.0] * lookback + [97.0]
     closes = [99.0] * lookback + [99.5]  # 0.5% unter Level, innerhalb 3%
 
-    df = pd.DataFrame({"high": highs, "close": closes})
+    df = pd.DataFrame({"high": highs, "low": lows, "close": closes})
 
     result = strat.generate_signals(
         df=df,

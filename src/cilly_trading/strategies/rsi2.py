@@ -1,14 +1,12 @@
-"""
-RSI2-Strategie (Rebound) für die Cilly Trading Engine.
+"""RSI2 mean-reversion strategy for the Cilly Trading Engine.
 
-Grundidee (MVP-Version):
-- Nutzt einen sehr kurzen RSI (Standard: 2 Perioden) als Rebound-Signal.
-- Erzeugt ein SETUP-Signal, wenn der RSI2 stark überverkauft ist.
-- Die eigentliche Entry-Bestätigung erfolgt später durch eine klare Regel
-  (z. B. Close über dem Hoch der Vorkerze), die im Feld `confirmation_rule`
-  als Text mitgegeben wird.
+Core idea (MVP):
+- Uses a very short RSI (default: 2 periods) as a rebound signal.
+- Emits a SETUP signal when RSI2 is strongly oversold.
+- Emits an EXIT signal when RSI2 is overbought, indicating the rebound has played out.
+- Entry confirmation guidance is provided in the ``confirmation_rule`` field.
 
-Die Strategie arbeitet nur auf der letzten verfügbaren Kerze.
+The strategy evaluates only the last available bar in the DataFrame.
 """
 
 from __future__ import annotations
@@ -27,26 +25,28 @@ from cilly_trading.strategies._constants import PRICE_SCALE
 
 @dataclass
 class Rsi2Config:
-    """
-    Konfiguration für die RSI2-Strategie.
+    """Configuration for the RSI2 strategy.
 
     rsi_period:
-        Länge des RSI-Fensters. Klassisch für RSI2: 2.
+        RSI window length. Classic RSI2 uses 2.
     oversold_threshold:
-        Schwelle für "extrem überverkauft". Standard: 10.
+        Threshold for "extremely oversold". Default: 10.
+    overbought_threshold:
+        Threshold for "overbought" — triggers an exit signal. Default: 70.
     min_score:
-        Mindestscore, den ein Signal erreichen muss, um ausgegeben zu werden.
-        (Sicherheit, um extrem schwache Signale zu filtern.)
+        Minimum score a signal must reach to be emitted.
+        Filters out extremely weak signals.
     stop_loss_pct:
-        Prozentuale Stop-Loss-Distanz unter dem Close zum Zeitpunkt des Signals.
-        Standard: 0.05 (5 % unter dem Close).
+        Percentage stop-loss distance below the close at signal time.
+        Default: 0.05 (5% below close).
     entry_zone_lower_factor:
-        Faktor für die untere Entry-Zone relativ zum Close. Standard: 0.97.
+        Lower bound of the entry zone relative to close. Default: 0.97.
     entry_zone_upper_factor:
-        Faktor für die obere Entry-Zone relativ zum Close. Standard: 1.01.
+        Upper bound of the entry zone relative to close. Default: 1.01.
     """
     rsi_period: int = 2
     oversold_threshold: float = 10.0
+    overbought_threshold: float = 70.0
     min_score: float = 20.0
     stop_loss_pct: float = 0.05
     entry_zone_lower_factor: float = 0.97
@@ -54,13 +54,12 @@ class Rsi2Config:
 
 
 class Rsi2Strategy(BaseStrategy):
-    """
-    RSI2-Strategie gemäß MVP-Definition.
+    """RSI2 strategy per MVP definition.
 
-    Hinweis:
-    - Diese Implementierung betrachtet nur die letzte Kerze im DataFrame.
-    - Das vermeidet eine Flut an historischen Signalen und ist für
-      den MVP (aktuelle Setups finden) absolut ausreichend.
+    Note:
+    - Evaluates only the last bar in the DataFrame.
+    - This avoids flooding the system with historical signals and is
+      sufficient for finding current setups and exit conditions.
     """
 
     name: str = "RSI2"
@@ -73,52 +72,59 @@ class Rsi2Strategy(BaseStrategy):
         if df.empty:
             return []
 
-        # Konfiguration aus Dict in Rsi2Config überführen (mit Defaults)
         cfg = Rsi2Config(
             rsi_period=int(config.get("rsi_period", 2)),
             oversold_threshold=float(config.get("oversold_threshold", 10.0)),
+            overbought_threshold=float(config.get("overbought_threshold", 70.0)),
             min_score=float(config.get("min_score", 20.0)),
             stop_loss_pct=float(config.get("stop_loss_pct", 0.05)),
             entry_zone_lower_factor=float(config.get("entry_zone_lower_factor", 0.97)),
             entry_zone_upper_factor=float(config.get("entry_zone_upper_factor", 1.01)),
         )
 
-        # Sicherstellen, dass die notwendigen Spalten existieren
         if "close" not in df.columns:
             raise ValueError("DataFrame must contain a 'close' column for RSI2Strategy")
 
-        # RSI2 berechnen
+        # Compute RSI series; only uses past data — no lookahead bias.
         rsi_series = rsi(df, period=cfg.rsi_period, price_column="close")
 
-        # Letzte Zeile betrachten
         last_idx = df.index[-1]
         last_close = float(df.loc[last_idx, "close"])
         last_rsi = float(rsi_series.loc[last_idx])
 
-        signals: List[Signal] = []
+        # EXIT: RSI is overbought — the mean-reversion move has likely played out.
+        if last_rsi > cfg.overbought_threshold:
+            # Score: how far above the overbought threshold (0 = barely, 100 = RSI at 100).
+            raw_score = (last_rsi - cfg.overbought_threshold) / (100.0 - cfg.overbought_threshold) * 100.0
+            score = max(0.0, min(100.0, raw_score))
 
-        # Check: ist RSI extrem überverkauft?
+            exit_signal: Signal = {
+                "strategy": self.name,
+                "direction": "long",
+                "score": score,
+                "stage": "exit",
+                "confirmation_rule": (
+                    "Exit long position: RSI2 has crossed above the overbought threshold, "
+                    "indicating the mean-reversion rebound has likely completed."
+                ),
+            }
+            return [exit_signal]
+
+        # SETUP: RSI is extremely oversold — potential mean-reversion entry.
         if last_rsi < cfg.oversold_threshold:
-            # Score ableiten:
-            # Je tiefer der RSI, desto höher der Score.
-            # Beispiel: RSI=0 → Score=100, RSI=oversold_threshold → Score ~ 0
+            # Score: deeper oversold → higher score.
             raw_score = (cfg.oversold_threshold - last_rsi) / cfg.oversold_threshold * 100.0
             score = max(0.0, min(100.0, raw_score))
 
             if score < cfg.min_score:
-                # Signal zu schwach, nicht ausgeben
                 return []
 
-            # Textliche Bestätigungsregel (Entry-Logik) als Guidance
             confirmation_rule = (
-                "Long-Einstieg, wenn der Schlusskurs einer der folgenden Kerzen "
-                "über dem Hoch der Auslösekerze schließt UND der RSI2 wieder "
-                "über dem Oversold-Bereich liegt."
+                "Enter long when a subsequent bar closes above the high of the trigger bar "
+                "AND RSI2 is no longer in the oversold zone."
             )
 
-            signal: Signal = {
-                # symbol, timeframe, market_type, data_source, timestamp
-                # werden im Engine-Layer gesetzt (run_watchlist_analysis)
+            setup_signal: Signal = {
                 "strategy": self.name,
                 "direction": "long",
                 "score": score,
@@ -145,7 +151,6 @@ class Rsi2Strategy(BaseStrategy):
                     ).quantize(PRICE_SCALE, ROUND_HALF_UP)
                 ),
             }
+            return [setup_signal]
 
-            signals.append(signal)
-
-        return signals
+        return []

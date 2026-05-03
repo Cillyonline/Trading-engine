@@ -87,16 +87,20 @@ def test_rsi2_signal_schema_over_252bar_fixture(df_252: pd.DataFrame) -> None:
     signals = _rsi2_walk_forward(df_252)
     for s in signals:
         assert s["strategy"] == "RSI2"
-        assert s["stage"] == "setup"
+        assert s["stage"] in ("setup", "exit"), f"Unexpected stage: {s['stage']}"
         assert s["direction"] == "long"
         assert 0.0 <= float(s["score"]) <= 100.0
-        ez = s.get("entry_zone", {})
-        assert isinstance(ez, dict)
-        assert float(ez["from_"]) < float(ez["to"])
-        sl = s.get("stop_loss")
-        assert sl is not None, "RSI2 must always emit a stop_loss"
-        assert float(sl) > 0.0
-        assert float(sl) < float(ez["from_"]), "stop_loss must be below entry_zone.from_"
+        if s["stage"] == "setup":
+            ez = s.get("entry_zone", {})
+            assert isinstance(ez, dict)
+            assert float(ez["from_"]) < float(ez["to"])
+            sl = s.get("stop_loss")
+            assert sl is not None, "RSI2 setup must always emit a stop_loss"
+            assert float(sl) > 0.0
+            assert float(sl) < float(ez["from_"]), "stop_loss must be below entry_zone.from_"
+        else:
+            assert s.get("entry_zone") is None or "entry_zone" not in s
+            assert s.get("stop_loss") is None or "stop_loss" not in s
 
 
 def test_rsi2_signal_count_is_deterministic(df_252: pd.DataFrame) -> None:
@@ -139,17 +143,21 @@ def test_turtle_signal_schema_over_252bar_fixture(df_252: pd.DataFrame) -> None:
     signals = _turtle_walk_forward(df_252)
     for s in signals:
         assert s["strategy"] == "TURTLE"
-        assert s["stage"] in ("setup", "entry_confirmed")
+        assert s["stage"] in ("setup", "entry_confirmed", "exit"), f"Unexpected stage: {s['stage']}"
         assert s["direction"] == "long"
         assert 0.0 <= float(s["score"]) <= 100.0
-        ez = s.get("entry_zone", {})
-        assert isinstance(ez, dict)
-        assert float(ez["from_"]) < float(ez["to"])
-        sl = s.get("stop_loss")
-        assert sl is not None, "TURTLE must always emit a stop_loss"
-        assert float(sl) > 0.0
-        if s["stage"] == "entry_confirmed":
-            assert float(sl) < float(ez["from_"]), "entry_confirmed stop_loss must be below entry_zone.from_"
+        if s["stage"] in ("setup", "entry_confirmed"):
+            ez = s.get("entry_zone", {})
+            assert isinstance(ez, dict)
+            assert float(ez["from_"]) < float(ez["to"])
+            sl = s.get("stop_loss")
+            assert sl is not None, "TURTLE entry signal must always emit a stop_loss"
+            assert float(sl) > 0.0
+            if s["stage"] == "entry_confirmed":
+                assert float(sl) < float(ez["from_"]), "entry_confirmed stop_loss must be below entry_zone.from_"
+        else:
+            assert s.get("entry_zone") is None or "entry_zone" not in s
+            assert s.get("stop_loss") is None or "stop_loss" not in s
 
 
 def test_turtle_entry_confirmed_score_is_in_expected_range(df_252: pd.DataFrame) -> None:
