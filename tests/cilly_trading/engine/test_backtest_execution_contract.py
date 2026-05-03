@@ -445,6 +445,7 @@ def test_backtest_realism_boundary_reports_modeled_and_unmodeled_assumptions() -
     }
     assert boundary["modeled_assumptions"]["slippage"] == {
         "slippage_bps": 10,
+        "spread_bps": 0,
         "slippage_model": "fixed_basis_points_by_side",
     }
     assert boundary["modeled_assumptions"]["fills"] == {

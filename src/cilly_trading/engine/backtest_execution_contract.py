@@ -28,6 +28,7 @@ REALISM_BOUNDARY_VERSION = "1.0.0"
 REALISM_SENSITIVITY_MATRIX_VERSION = "1.0.0"
 DEFAULT_ACTION_TO_SIDE: dict[str, Literal["BUY", "SELL"]] = {"BUY": "BUY", "SELL": "SELL"}
 MAX_SLIPPAGE_BPS = 250
+MAX_SPREAD_BPS = 200
 MAX_COMMISSION_PER_ORDER = Decimal("25")
 DEFAULT_STARTING_EQUITY = Decimal("100000")
 BACKTEST_RISK_EVIDENCE_VERSION = "1.0.0"
@@ -38,6 +39,7 @@ REALISM_PROFILE_COST_FREE_ID = "cost_free_reference"
 REALISM_PROFILE_COST_STRESS_ID = "bounded_cost_stress"
 REALISM_PROFILE_COST_STRESS_SLIPPAGE_BPS = 25
 REALISM_PROFILE_COST_STRESS_COMMISSION_PER_ORDER = Decimal("2.50")
+REALISM_PROFILE_COST_STRESS_SPREAD_BPS = 10
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,7 @@ class BacktestExecutionAssumptions:
     stochastic_slippage_model: StochasticSlippageModel | None = field(
         default=None, compare=False, hash=False
     )
+    spread_bps: int = 0
 
     def __post_init__(self) -> None:
         if self.fill_model != "deterministic_market":
@@ -121,6 +124,13 @@ class BacktestExecutionAssumptions:
             raise ValueError("Execution assumption slippage_bps must be >= 0")
         if self.slippage_bps > MAX_SLIPPAGE_BPS:
             raise ValueError(f"Execution assumption slippage_bps must be <= {MAX_SLIPPAGE_BPS}")
+
+        if isinstance(self.spread_bps, bool) or not isinstance(self.spread_bps, int):
+            raise ValueError("Execution assumption spread_bps must be an integer")
+        if self.spread_bps < 0:
+            raise ValueError("Execution assumption spread_bps must be >= 0")
+        if self.spread_bps > MAX_SPREAD_BPS:
+            raise ValueError(f"Execution assumption spread_bps must be <= {MAX_SPREAD_BPS}")
 
         if self.stochastic_slippage_model is not None and not isinstance(
             self.stochastic_slippage_model, StochasticSlippageModel
@@ -154,6 +164,7 @@ class BacktestExecutionAssumptions:
             commission_per_order=self.commission_per_order,
             fill_timing=self.fill_timing,
             stochastic_slippage_model=self.stochastic_slippage_model,
+            spread_bps=self.spread_bps,
         )
 
     def to_payload(self) -> dict[str, Any]:
@@ -164,6 +175,7 @@ class BacktestExecutionAssumptions:
             "slippage_bps": self.slippage_bps,
             "commission_per_order": str(self.commission_per_order),
             "partial_fills_allowed": self.partial_fills_allowed,
+            "spread_bps": self.spread_bps,
         }
         if self.stochastic_slippage_model is not None:
             payload["stochastic_slippage_model"] = self.stochastic_slippage_model.to_payload()
@@ -285,6 +297,7 @@ def build_backtest_realism_boundary(
             },
             "slippage": {
                 "slippage_bps": execution_assumptions.slippage_bps,
+                "spread_bps": execution_assumptions.spread_bps,
                 "slippage_model": (
                     "stochastic"
                     if execution_assumptions.stochastic_slippage_model is not None
@@ -900,6 +913,7 @@ def build_cost_slippage_metrics_baseline(
                 "total_transaction_cost": 0.0,
                 "total_commission": 0.0,
                 "total_slippage_cost": 0.0,
+                "total_spread_cost": 0.0,
                 "fill_count": 0,
             },
             "equity_curve": {
@@ -942,6 +956,7 @@ def build_cost_slippage_metrics_baseline(
     net_quantity = Decimal("0")
     total_commission = Decimal("0")
     total_slippage_cost = Decimal("0")
+    total_spread_cost = Decimal("0")
 
     cost_free_curve: list[dict[str, Any]] = []
     cost_aware_curve: list[dict[str, Any]] = []
@@ -965,6 +980,8 @@ def build_cost_slippage_metrics_baseline(
 
             total_commission += commission
             total_slippage_cost += abs(execution_price - reference_price) * quantity
+            if fill.spread_cost is not None:
+                total_spread_cost += fill.spread_cost
 
             if fill.side == "BUY":
                 cash_cost_free -= reference_notional
@@ -1041,6 +1058,7 @@ def build_cost_slippage_metrics_baseline(
             "total_transaction_cost": _round_money(total_transaction_cost),
             "total_commission": _round_money(total_commission),
             "total_slippage_cost": _round_money(total_slippage_cost),
+            "total_spread_cost": _round_money(total_spread_cost),
             "fill_count": len(fills),
         },
         "equity_curve": {
@@ -1147,6 +1165,10 @@ def _build_realism_profile_assumptions(
         execution_assumptions.commission_per_order,
         REALISM_PROFILE_COST_STRESS_COMMISSION_PER_ORDER,
     )
+    stress_spread_bps = max(
+        execution_assumptions.spread_bps,
+        REALISM_PROFILE_COST_STRESS_SPREAD_BPS,
+    )
     return (
         (
             REALISM_PROFILE_BASELINE_ID,
@@ -1157,20 +1179,22 @@ def _build_realism_profile_assumptions(
         (
             REALISM_PROFILE_COST_FREE_ID,
             "Cost-free reference",
-            "Deterministic reference with zero slippage and zero commission.",
+            "Deterministic reference with zero slippage, zero spread, and zero commission.",
             BacktestExecutionAssumptions(
                 fill_timing=fill_timing,
                 slippage_bps=0,
+                spread_bps=0,
                 commission_per_order=Decimal("0"),
             ),
         ),
         (
             REALISM_PROFILE_COST_STRESS_ID,
             "Bounded cost stress",
-            "Deterministic bounded stress with elevated fixed slippage and commission.",
+            "Deterministic bounded stress with elevated fixed slippage, spread, and commission.",
             BacktestExecutionAssumptions(
                 fill_timing=fill_timing,
                 slippage_bps=stress_slippage_bps,
+                spread_bps=stress_spread_bps,
                 commission_per_order=stress_commission,
             ),
         ),

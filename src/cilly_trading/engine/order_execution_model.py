@@ -27,6 +27,7 @@ class DeterministicExecutionConfig:
     stochastic_slippage_model: StochasticSlippageModel | None = field(
         default=None, compare=False, hash=False
     )
+    spread_bps: int = 0
 
 
 def _enforce_orchestrator_caller() -> None:
@@ -90,6 +91,7 @@ class _DeterministicExecutionModel:
 
             execution_price = self._apply_slippage(price=base_price, side=order.side, config=config)
             commission = self._q(config.commission_per_order, config.money_scale)
+            spread_cost = self._compute_spread_cost(price=base_price, quantity=quantity, config=config)
             event = ExecutionEvent(
                 event_id=compute_execution_event_id(
                     order_id=order.order_id,
@@ -107,6 +109,7 @@ class _DeterministicExecutionModel:
                 execution_quantity=quantity,
                 execution_price=execution_price,
                 commission=commission,
+                spread_cost=spread_cost,
                 position_id=order.position_id or current.position_id,
                 trade_id=order.trade_id,
             )
@@ -228,13 +231,27 @@ class _DeterministicExecutionModel:
     ) -> Decimal:
         stochastic_model = getattr(config, "stochastic_slippage_model", None)
         if stochastic_model is not None:
-            bps = Decimal(str(stochastic_model.sample_slippage_bps()))
+            slippage_bps = Decimal(str(stochastic_model.sample_slippage_bps()))
         else:
-            bps = Decimal(config.slippage_bps)
-        slippage_fraction = bps / Decimal("10000")
+            slippage_bps = Decimal(getattr(config, "slippage_bps", 0))
+        spread_bps = Decimal(getattr(config, "spread_bps", 0))
+        total_bps = slippage_bps + spread_bps / Decimal("2")
+        fraction = total_bps / Decimal("10000")
         if side == "BUY":
-            return self._q(price * (Decimal("1") + slippage_fraction), config.price_scale)
-        return self._q(price * (Decimal("1") - slippage_fraction), config.price_scale)
+            return self._q(price * (Decimal("1") + fraction), config.price_scale)
+        return self._q(price * (Decimal("1") - fraction), config.price_scale)
+
+    def _compute_spread_cost(
+        self,
+        *,
+        price: Decimal,
+        quantity: Decimal,
+        config: DeterministicExecutionConfig,
+    ) -> Decimal | None:
+        spread_bps = Decimal(getattr(config, "spread_bps", 0))
+        if spread_bps <= Decimal("0"):
+            return None
+        return self._q(price * (spread_bps / Decimal("2")) / Decimal("10000") * quantity, config.money_scale)
 
     def _snapshot_key(self, snapshot: Mapping[str, Any]) -> str:
         if snapshot.get("timestamp") is not None:

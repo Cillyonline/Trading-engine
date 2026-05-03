@@ -402,6 +402,7 @@ class CanonicalExecutionEvent(TradingCoreBase):
     execution_quantity: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
     execution_price: Optional[Decimal] = Field(default=None, gt=Decimal("0"))
     commission: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
+    spread_cost: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
     fill_exposure: Optional[Decimal] = Field(default=None, ge=Decimal("0"))
     realized_pnl_delta: Optional[Decimal] = None
     position_id: Optional[str] = Field(default=None, min_length=1)

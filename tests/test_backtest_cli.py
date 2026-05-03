@@ -210,6 +210,7 @@ def test_cli_backtest_repeated_runs_emit_reproducible_evidence_with_explicit_ass
         "slippage_bps": 0,
         "commission_per_order": "0",
         "partial_fills_allowed": False,
+        "spread_bps": 0,
     }
     assert payload["metrics_baseline"]["assumptions"] == execution_assumptions
 
