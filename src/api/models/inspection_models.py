@@ -530,6 +530,7 @@ class BacktestArtifactContentResponse(BaseModel):
     artifact_name: str
     content_type: Literal["json", "text"]
     content: Any
+    data_quality_warnings: List[str] = Field(default_factory=list)
 
 
 class DecisionTraceResponse(BaseModel):

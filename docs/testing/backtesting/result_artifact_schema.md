@@ -26,11 +26,38 @@
 - Arrays MUST be emitted in deterministic order.
   - The engine is responsible for deterministic array ordering before serialization.
 
+## Data quality warnings and survivorship bias disclosure
+
+The artifact always includes a `data_quality_warnings` array at the top level.
+When `yfinance` is the active data source (the current default), the array
+contains the following survivorship-bias warning:
+
+> **SURVIVORSHIP BIAS**: This backtest uses yfinance as the data source.
+> yfinance only returns data for currently listed and actively traded assets.
+> Delisted stocks, bankrupt companies, and assets removed from indices are absent
+> from the data universe. Backtest performance figures are therefore structurally
+> inflated and must not be interpreted as unbiased historical returns.
+
+### Interpretation guidance
+
+- Backtest metrics (win rate, Sharpe, CAGR, etc.) reflect only assets that
+  survived to the present and were liquid enough for yfinance to return data.
+- Strategies that select assets based on current availability are inherently
+  exposed to this bias; there is no way to eliminate it without a survivorship-
+  bias-free data provider.
+- The `data_quality_warnings` field is machine-readable to allow downstream
+  consumers (API clients, dashboards) to surface this disclosure automatically.
+- The absence of a survivorship-bias-free data source is an explicit gap, not an
+  oversight. It is tracked as a future roadmap item.
+
 ## Minimal schema
 
 Top-level object keys and minimal semantics:
 
 - `artifact_version` (required): string literal `"1"`
+- `data_quality_warnings` (required): array of strings
+  - Contains the survivorship-bias warning when `yfinance` is the data source.
+  - Empty array when a survivorship-bias-free data source is configured.
 - `engine` (required): object
   - `name` (required): string
   - `version` (required): string or `null`

@@ -11,7 +11,11 @@ from cilly_trading.engine.backtest_execution_contract import (
     BacktestExecutionAssumptions,
     BacktestRunContract,
 )
-from cilly_trading.engine.backtest_runner import BacktestRunner, BacktestRunnerConfig
+from cilly_trading.engine.backtest_runner import (
+    BacktestRunner,
+    BacktestRunnerConfig,
+    SURVIVORSHIP_BIAS_WARNING,
+)
 from cilly_trading.engine.journal.execution_journal import EXECUTION_JOURNAL_SCHEMA
 from tests.utils.json_schema_validator import validate_json_schema
 
@@ -702,3 +706,119 @@ def test_backtest_runner_persists_identical_realism_assumptions_across_artifact_
         payload["realism_boundary"]["modeled_assumptions"]["slippage"]["slippage_bps"]
         == expected["slippage_bps"]
     )
+
+
+# ── Survivorship-bias disclosure tests (#1091) ────────────────────────────────
+
+
+def test_data_quality_warnings_present_in_artifact_with_yfinance_source(
+    tmp_path: Path,
+) -> None:
+    """data_quality_warnings must be a non-empty list when data_source='yfinance'."""
+    runner = BacktestRunner()
+
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "disclosure-yfinance",
+            data_source="yfinance",
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert "data_quality_warnings" in payload, (
+        "data_quality_warnings field is missing from backtest artifact."
+    )
+    warnings = payload["data_quality_warnings"]
+    assert isinstance(warnings, list), "data_quality_warnings must be a list."
+    assert len(warnings) >= 1, (
+        "data_quality_warnings must be non-empty for yfinance data source."
+    )
+
+
+def test_data_quality_warnings_contains_survivorship_bias_text(tmp_path: Path) -> None:
+    """The warning must reference survivorship bias and yfinance explicitly."""
+    runner = BacktestRunner()
+
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "disclosure-text",
+            data_source="yfinance",
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    warnings = payload["data_quality_warnings"]
+    combined = " ".join(warnings).lower()
+    assert "survivorship" in combined, "Warning must mention survivorship bias."
+    assert "yfinance" in combined, "Warning must mention yfinance."
+
+
+def test_data_quality_warnings_matches_constant(tmp_path: Path) -> None:
+    """The warning text must equal the canonical SURVIVORSHIP_BIAS_WARNING constant."""
+    runner = BacktestRunner()
+
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "disclosure-constant",
+            data_source="yfinance",
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert SURVIVORSHIP_BIAS_WARNING in payload["data_quality_warnings"]
+
+
+def test_data_quality_warnings_empty_for_non_yfinance_source(tmp_path: Path) -> None:
+    """data_quality_warnings must be an empty list when a non-yfinance source is set."""
+    runner = BacktestRunner()
+
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=BacktestRunnerConfig(
+            output_dir=tmp_path / "disclosure-custom",
+            data_source="custom_provider",
+        ),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert payload["data_quality_warnings"] == [], (
+        "data_quality_warnings must be empty for non-yfinance data sources."
+    )
+
+
+def test_data_quality_warnings_field_is_at_top_level_of_artifact(tmp_path: Path) -> None:
+    """data_quality_warnings must be a top-level key in the artifact JSON."""
+    runner = BacktestRunner()
+
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=BacktestRunnerConfig(output_dir=tmp_path / "disclosure-toplevel"),
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert "data_quality_warnings" in payload
+    assert isinstance(payload["data_quality_warnings"], list)
+
+
+def test_data_quality_warnings_default_config_uses_yfinance(tmp_path: Path) -> None:
+    """Default BacktestRunnerConfig must use data_source='yfinance' and populate warnings."""
+    config = BacktestRunnerConfig(output_dir=tmp_path / "default")
+    assert config.data_source == "yfinance"
+
+    runner = BacktestRunner()
+    result = runner.run(
+        snapshots=[{"id": "s1", "timestamp": "2024-01-01T00:00:00Z"}],
+        strategy_factory=SpyStrategy,
+        config=config,
+    )
+
+    payload = json.loads(result.artifact_path.read_text(encoding="utf-8"))
+    assert len(payload["data_quality_warnings"]) >= 1

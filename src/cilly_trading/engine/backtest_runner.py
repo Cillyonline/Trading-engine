@@ -6,6 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Protocol, Sequence, Tuple
 
+SURVIVORSHIP_BIAS_WARNING: str = (
+    "SURVIVORSHIP BIAS: This backtest uses yfinance as the data source. "
+    "yfinance only returns data for currently listed and actively traded assets. "
+    "Delisted stocks, bankrupt companies, and assets removed from indices are absent "
+    "from the data universe. Backtest performance figures are therefore structurally "
+    "inflated and must not be interpreted as unbiased historical returns."
+)
+
 from cilly_trading.engine.backtest_execution_contract import (
     BacktestRunContract,
     build_backtest_realism_boundary,
@@ -60,6 +68,7 @@ class BacktestRunnerConfig:
     engine_name: str = "cilly_trading_engine"
     engine_version: str | None = None
     run_contract: BacktestRunContract = field(default_factory=BacktestRunContract)
+    data_source: str = "yfinance"
 
 
 class BacktestRunner:
@@ -257,8 +266,13 @@ class BacktestRunner:
         )
         metrics_baseline["realism_sensitivity_matrix"] = realism_sensitivity_matrix
 
+        data_quality_warnings: List[str] = []
+        if config.data_source == "yfinance":
+            data_quality_warnings.append(SURVIVORSHIP_BIAS_WARNING)
+
         payload = {
             "artifact_version": "1",
+            "data_quality_warnings": data_quality_warnings,
             "engine": {
                 "name": config.engine_name,
                 "version": config.engine_version,
