@@ -9,6 +9,7 @@ from .paper_runtime_evidence_series_router import (
     PaperRuntimeEvidenceSeriesRouterDependencies,
     build_paper_runtime_evidence_series_router,
 )
+from .metrics_router import MetricsRouterDependencies, build_metrics_router
 from .watchlists_router import WatchlistsRouterDependencies, build_watchlists_router
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "ControlPlaneRouterDependencies",
     "InspectionRouterDependencies",
     "JournalRouterDependencies",
+    "MetricsRouterDependencies",
     "PaperRuntimeEvidenceSeriesRouterDependencies",
     "WatchlistsRouterDependencies",
     "build_analysis_router",
@@ -23,6 +25,7 @@ __all__ = [
     "build_control_plane_router",
     "build_inspection_router",
     "build_journal_router",
+    "build_metrics_router",
     "build_paper_runtime_evidence_series_router",
     "build_watchlists_router",
 ]

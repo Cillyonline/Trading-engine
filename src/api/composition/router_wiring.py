@@ -21,6 +21,11 @@ from ..routers import (
     build_paper_runtime_evidence_series_router,
     build_watchlists_router,
 )
+from ..routers.metrics_router import MetricsRouterDependencies, build_metrics_router
+from ..services.control_plane_service import (
+    build_compliance_guard_status_response,
+    load_compliance_guard_status_sources,
+)
 
 
 @dataclass
@@ -52,6 +57,42 @@ class ApiRouterWiring:
     get_create_strategy: Callable[[str], Any]
     get_create_registered_strategies: Callable[[], list[Any]]
     get_trigger_operator_analysis_run: Callable[..., Any]
+
+
+def _build_metrics_router() -> Any:
+    """Build the Prometheus metrics router wired to live compliance state."""
+
+    def _engine_healthy() -> bool:
+        guard_status = build_compliance_guard_status_response()
+        return not guard_status.compliance.blocking
+
+    def _daily_loss_current() -> float:
+        _, portfolio_state = load_compliance_guard_status_sources()
+        return float(portfolio_state.daily_loss())
+
+    def _daily_loss_limit() -> "float | None":
+        from cilly_trading.compliance.daily_loss_guard import configured_daily_loss_limit
+
+        guard_config, _ = load_compliance_guard_status_sources()
+        return configured_daily_loss_limit(config=guard_config)
+
+    def _kill_switch_active() -> bool:
+        from cilly_trading.compliance.kill_switch import is_kill_switch_active
+
+        guard_config, _ = load_compliance_guard_status_sources()
+        return is_kill_switch_active(config=guard_config)
+
+    return build_metrics_router(
+        deps=MetricsRouterDependencies(
+            get_engine_healthy=_engine_healthy,
+            get_daily_loss_current=_daily_loss_current,
+            get_daily_loss_limit=_daily_loss_limit,
+            get_kill_switch_active=_kill_switch_active,
+            get_paper_positions_open=lambda: 0,
+            get_signals_by_strategy=lambda: {},
+            get_orders_rejected_by_reason=lambda: {},
+        )
+    )
 
 
 def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
@@ -122,6 +163,7 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
             ),
         )
     )
+    app.include_router(_build_metrics_router())
     app.include_router(
         build_analysis_router(
             deps=AnalysisRouterDependencies(
