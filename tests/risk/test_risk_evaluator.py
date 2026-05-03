@@ -43,6 +43,18 @@ def _bounded_limits() -> RiskLimits:
     )
 
 
+def _correlation_price_history() -> dict[str, tuple[float, ...]]:
+    proposed = tuple(float(value) for value in range(1, 11))
+    return {
+        "AAPL": proposed,
+        "MSFT": tuple(value * 2.0 for value in proposed),
+        "QQQ": tuple(value * 3.0 + 7.0 for value in proposed),
+        "NVDA": tuple(value * 4.0 - 3.0 for value in proposed),
+        "TLT": tuple(reversed(proposed)),
+        "GLD": (3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0, 3.0),
+    }
+
+
 def test_approval_case() -> None:
     response = evaluate_risk(
         _request(),
@@ -371,3 +383,134 @@ def test_bounded_portfolio_risk_budget_rejection_is_deterministic() -> None:
     assert first == second
     assert first.approved is False
     assert first.reason == "rejected: portfolio_risk_budget_exceeded"
+
+
+def test_correlation_check_reports_pairs_above_threshold() -> None:
+    request = RiskEvaluationRequest(
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=5_000.0,
+        account_equity=100_000.0,
+        current_exposure=10_000.0,
+        open_position_symbols=("MSFT", "TLT", "GLD"),
+        price_history=_correlation_price_history(),
+    )
+    limits = RiskLimits(
+        max_account_exposure_pct=0.80,
+        max_position_size=10_000.0,
+        max_strategy_exposure_pct=0.80,
+        max_symbol_exposure_pct=0.80,
+        correlation_threshold=0.90,
+        max_correlated_pairs=2,
+        correlation_window=10,
+    )
+
+    response = evaluate_risk(
+        request,
+        limits=limits,
+        strategy_exposure=10_000.0,
+        symbol_exposure=5_000.0,
+    )
+
+    assert response.approved is True
+    assert [row.rule_code for row in response.policy_evidence] == [
+        "correlation_pair:AAPL:MSFT",
+    ]
+    assert response.policy_evidence[0].observed_value == pytest.approx(1.0)
+    assert response.policy_evidence[0].limit_value == 0.90
+
+
+def test_correlation_check_rejects_when_pair_count_exceeds_limit() -> None:
+    request = RiskEvaluationRequest(
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=5_000.0,
+        account_equity=100_000.0,
+        current_exposure=10_000.0,
+        open_position_symbols=("MSFT", "QQQ", "NVDA"),
+        price_history=_correlation_price_history(),
+    )
+    limits = RiskLimits(
+        max_account_exposure_pct=0.80,
+        max_position_size=10_000.0,
+        max_strategy_exposure_pct=0.80,
+        max_symbol_exposure_pct=0.80,
+        correlation_threshold=0.90,
+        max_correlated_pairs=2,
+        correlation_window=10,
+    )
+
+    response = evaluate_risk(
+        request,
+        limits=limits,
+        strategy_exposure=10_000.0,
+        symbol_exposure=5_000.0,
+    )
+
+    assert response.approved is False
+    assert response.reason == "rejected: correlated_pair_limit_exceeded"
+    assert response.adjusted_position_size == 0.0
+    assert [row.rule_code for row in response.policy_evidence] == [
+        "correlation_pair:AAPL:MSFT",
+        "correlation_pair:AAPL:QQQ",
+        "correlation_pair:AAPL:NVDA",
+    ]
+    assert response.policy_evidence[-1].decision == "reject"
+
+
+def test_correlation_check_allows_below_threshold() -> None:
+    request = RiskEvaluationRequest(
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=5_000.0,
+        account_equity=100_000.0,
+        current_exposure=10_000.0,
+        open_position_symbols=("TLT", "GLD"),
+        price_history=_correlation_price_history(),
+    )
+
+    response = evaluate_risk(
+        request,
+        limits=_limits(),
+        strategy_exposure=10_000.0,
+        symbol_exposure=5_000.0,
+    )
+
+    assert response.approved is True
+    assert response.reason == "approved: within_risk_limits"
+    assert response.policy_evidence == ()
+
+
+def test_disabled_correlation_check_preserves_existing_behavior() -> None:
+    request = RiskEvaluationRequest(
+        strategy_id="strategy-a",
+        symbol="AAPL",
+        proposed_position_size=5_000.0,
+        account_equity=100_000.0,
+        current_exposure=20_000.0,
+        open_position_symbols=("MSFT", "QQQ", "NVDA"),
+        price_history=_correlation_price_history(),
+    )
+    limits = RiskLimits(
+        max_account_exposure_pct=0.50,
+        max_position_size=10_000.0,
+        max_strategy_exposure_pct=0.30,
+        max_symbol_exposure_pct=0.20,
+        correlation_check_enabled=False,
+        correlation_threshold=0.90,
+        max_correlated_pairs=0,
+        correlation_window=10,
+    )
+
+    response = evaluate_risk(
+        request,
+        limits=limits,
+        strategy_exposure=10_000.0,
+        symbol_exposure=8_000.0,
+    )
+
+    assert response.approved is True
+    assert response.reason == "approved: within_risk_limits"
+    assert response.adjusted_position_size == 5_000.0
+    assert response.risk_score == 0.25
+    assert response.policy_evidence == ()
