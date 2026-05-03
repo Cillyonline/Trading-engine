@@ -48,8 +48,8 @@ for configuration precedence or validation ownership.
 ## Secondary / utility entrypoints (not canonical)
 
 - `PYTHONPATH=src python -m api.main` (starts same FastAPI app via module `__main__` block)
-- `docker compose up --build` (legacy local container path only; non-canonical for bounded staging server deployment)
 - `PYTHONPATH=src python -m cilly_trading.engine.deterministic_run --fixtures-dir fixtures/deterministic-analysis --output tests/output/deterministic-analysis.json` (deterministic offline utility run)
+- For Docker: use `docker compose -f docker/staging/docker-compose.staging.yml up -d --build` (canonical staging path)
 
 There is no installed top-level project CLI command (for example `cilly-trading ...`).
 
