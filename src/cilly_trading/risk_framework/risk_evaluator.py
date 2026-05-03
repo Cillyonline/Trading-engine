@@ -7,6 +7,7 @@ from math import isfinite
 
 from cilly_trading.non_live_evaluation_contract import NonLiveEvaluationEvidence
 from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.risk_framework.correlation_risk import evaluate_correlation_risk
 from cilly_trading.risk_framework.contract import RiskEvaluationRequest, RiskEvaluationResponse
 from cilly_trading.risk_framework.exposure_model import compute_exposure_metrics
 from cilly_trading.risk_framework.kill_switch import is_kill_switch_enabled
@@ -297,6 +298,7 @@ def evaluate_risk(
         limits: Immutable risk limits used for this evaluation.
         strategy_exposure: Current absolute exposure for the request strategy.
         symbol_exposure: Current absolute exposure for the request symbol.
+        config: Optional runtime kill-switch configuration.
 
     Returns:
         RiskEvaluationResponse: Deterministic evaluation result.
@@ -339,6 +341,20 @@ def evaluate_risk(
         return _fail_closed_response(
             reason=bounded_rejection_reason,
             risk_score=bounded_risk_score,
+            policy_evidence=policy_evidence,
+        )
+
+    correlation_result = evaluate_correlation_risk(
+        proposed_symbol=request.symbol,
+        open_position_symbols=request.open_position_symbols,
+        price_history=request.price_history,
+        limits=limits,
+    )
+    policy_evidence = policy_evidence + correlation_result.policy_evidence
+    if correlation_result.rejection_reason is not None:
+        return _fail_closed_response(
+            reason=correlation_result.rejection_reason,
+            risk_score=risk_score,
             policy_evidence=policy_evidence,
         )
 

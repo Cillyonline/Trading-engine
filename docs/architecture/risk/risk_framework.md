@@ -94,6 +94,44 @@ Evidence discipline for this bounded contract:
   position-sizing, trade, strategy, symbol, and portfolio evidence rows
 - rejected outcomes emit canonical cap/boundary evidence rows
 
+## 8.1.1) Correlation-Based Portfolio Risk Aggregation
+The risk evaluator includes an optional correlation concentration check inside
+the existing deterministic evaluation boundary. The check compares the proposed
+symbol against symbols with open positions when both `open_position_symbols` and
+in-scope `price_history` are supplied on `RiskEvaluationRequest`.
+
+Configuration is part of `RiskLimits`:
+
+- `correlation_check_enabled`: defaults to `true`
+- `correlation_threshold`: defaults to `0.7`
+- `max_correlated_pairs`: defaults to `2`
+- `correlation_window`: defaults to `60`
+
+For each proposed/open symbol pair, the evaluator computes rolling Pearson
+correlation over the last `correlation_window` finite price values available for
+both symbols. Pairs with missing, insufficient, or zero-variance history are not
+counted because the evaluator can only use provided in-scope price history.
+
+Pairs with correlation above `correlation_threshold` are reported in
+`RiskEvaluationResponse.policy_evidence` with:
+
+- `scope`: `portfolio`
+- `semantic`: `cap`
+- `rule_code`: `correlation_pair:<proposed_symbol>:<open_position_symbol>`
+- `observed_value`: computed Pearson correlation
+- `limit_value`: configured correlation threshold
+
+The order is rejected with `rejected: correlated_pair_limit_exceeded` when the
+number of reported correlated proposed/open pairs exceeds
+`max_correlated_pairs`. When `correlation_check_enabled` is `false`, the check
+emits no evidence and preserves the existing portfolio-risk behavior.
+
+Limitations: this is a static rolling Pearson check over supplied price history
+only. It is not portfolio optimization, a dynamic correlation model, a
+cross-asset-class model, live-trading validation, broker integration, or a
+profitability claim.
+The documented evidence rows are deterministic review artifacts only.
+
 ## 8.2) Bounded Risk-Framework Authority Contract
 This framework is governed by one canonical bounded risk-framework authority
 contract that consolidates the currently implemented bounded risk primitives,

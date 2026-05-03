@@ -7,7 +7,7 @@ for risk evaluation. It contains no business logic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Mapping, Optional, Protocol, Sequence
 
 from cilly_trading.non_live_evaluation_contract import NonLiveEvaluationEvidence
 
@@ -33,6 +33,10 @@ class RiskEvaluationRequest:
             proposal.
         require_bounded_risk_evidence: Require stop-loss and bounded risk-budget
             evidence to fail closed when missing or contradictory.
+        open_position_symbols: Symbols with currently open positions available
+            to this evaluation.
+        price_history: In-scope price history keyed by symbol for deterministic
+            correlation checks; normalized to immutable tuples.
     """
 
     strategy_id: str
@@ -46,6 +50,25 @@ class RiskEvaluationRequest:
     symbol_risk_used: float = 0.0
     portfolio_risk_used: float = 0.0
     require_bounded_risk_evidence: bool = False
+    open_position_symbols: Sequence[str] = ()
+    price_history: (
+        Mapping[str, Sequence[float]] | Sequence[tuple[str, Sequence[float]]]
+    ) = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "open_position_symbols", tuple(self.open_position_symbols))
+        price_history = self.price_history
+        if isinstance(price_history, Mapping):
+            normalized_price_history = tuple(
+                (symbol, tuple(values))
+                for symbol, values in sorted(price_history.items())
+            )
+        else:
+            normalized_price_history = tuple(
+                (symbol, tuple(values))
+                for symbol, values in sorted(price_history)
+            )
+        object.__setattr__(self, "price_history", normalized_price_history)
 
 
 @dataclass(frozen=True)

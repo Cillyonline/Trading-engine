@@ -27,6 +27,14 @@ class RiskLimits:
             loss percentage after applying the proposed position.
         max_portfolio_risk_pct: Optional maximum portfolio-level stop-loss
             bounded loss percentage after applying the proposed position.
+        correlation_threshold: Minimum Pearson correlation that counts a
+            proposed/open symbol pair as correlated.
+        max_correlated_pairs: Maximum number of correlated proposed/open
+            symbol pairs allowed after applying the proposed position.
+        correlation_check_enabled: Enable correlation-based portfolio risk
+            aggregation when in-scope price history is provided.
+        correlation_window: Rolling price-history window used for pairwise
+            Pearson correlation over supplied in-scope prices.
     """
 
     max_account_exposure_pct: float
@@ -37,3 +45,7 @@ class RiskLimits:
     max_strategy_risk_pct: Optional[float] = None
     max_symbol_risk_pct: Optional[float] = None
     max_portfolio_risk_pct: Optional[float] = None
+    correlation_threshold: float = 0.7
+    max_correlated_pairs: int = 2
+    correlation_check_enabled: bool = True
+    correlation_window: int = 60
