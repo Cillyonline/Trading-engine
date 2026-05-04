@@ -27,6 +27,13 @@ def _require_finite_pct(*, name: str, value: Decimal, allow_zero: bool = False) 
         raise ValueError(f"{name} must be in range (0, 1]")
 
 
+def _require_finite_non_negative_pct(*, name: str, value: Decimal) -> None:
+    if not value.is_finite():
+        raise ValueError(f"{name} must be finite")
+    if value < Decimal("0") or value > Decimal("1"):
+        raise ValueError(f"{name} must be in range [0, 1]")
+
+
 def _require_finite_positive_decimal(*, name: str, value: Decimal) -> None:
     if not value.is_finite():
         raise ValueError(f"{name} must be finite")
@@ -60,6 +67,8 @@ class PaperExecutionRiskProfile:
     account_equity: Decimal = Decimal("100000")
     default_paper_quantity: Decimal = Decimal("1")
     default_paper_entry_price: Decimal = Decimal("100")
+    commission_rate: Decimal = Decimal("0.001")
+    slippage_rate: Decimal = Decimal("0.0005")
 
     def __post_init__(self) -> None:
         if self.contract_id != PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID:
@@ -118,6 +127,14 @@ class PaperExecutionRiskProfile:
             name="default_paper_entry_price",
             value=self.default_paper_entry_price,
         )
+        _require_finite_non_negative_pct(
+            name="commission_rate",
+            value=self.commission_rate,
+        )
+        _require_finite_non_negative_pct(
+            name="slippage_rate",
+            value=self.slippage_rate,
+        )
 
     def to_payload(self) -> dict[str, Any]:
         """Return a deterministic JSON-safe payload for evidence/logging."""
@@ -137,6 +154,8 @@ class PaperExecutionRiskProfile:
             "account_equity": str(self.account_equity),
             "default_paper_quantity": str(self.default_paper_quantity),
             "default_paper_entry_price": str(self.default_paper_entry_price),
+            "commission_rate": str(self.commission_rate),
+            "slippage_rate": str(self.slippage_rate),
         }
 
 

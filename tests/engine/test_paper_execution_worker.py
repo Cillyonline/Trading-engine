@@ -247,7 +247,11 @@ def test_eligible_signal_creates_open_trade_in_repository(
     assert trade.symbol == "AAPL"
     assert trade.strategy_id == "rsi2"
     assert trade.quantity_opened > Decimal("0")
-    assert trade.average_entry_price == DEFAULT_PAPER_ENTRY_PRICE
+    # Long entries pay slippage: fill_price = entry_price * (1 + slippage_rate)
+    expected_fill = DEFAULT_PAPER_ENTRY_PRICE * (
+        Decimal("1") + worker.risk_profile.slippage_rate
+    )
+    assert trade.average_entry_price == expected_fill.quantize(Decimal("0.0001"))
 
 
 def test_eligible_signal_result_contains_signal_and_entity_ids(
@@ -521,6 +525,8 @@ def test_total_exposure_limit_enforced(
             max_trade_risk_pct=Decimal("1.00"),
             max_total_exposure_pct=Decimal("0.80"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
@@ -757,3 +763,216 @@ def test_worker_does_not_touch_live_attributes(
     assert not hasattr(worker, "broker")
     assert not hasattr(worker, "live_order_router")
     assert not hasattr(worker, "external_api")
+
+
+# ---------------------------------------------------------------------------
+# #1143: Risk-based position sizing — derive trade_risk_pct from stop_loss
+# ---------------------------------------------------------------------------
+
+
+def _make_signal_with_stop_loss(
+    *,
+    entry_low: float = 95.0,
+    entry_high: float = 105.0,
+    stop_loss: float = 95.0,
+    signal_id: str = "sig-stop-loss-001",
+) -> Signal:
+    """Build a signal with stop_loss but no explicit trade_risk_pct."""
+    sig: Signal = {
+        "symbol": "AAPL",
+        "strategy": "rsi2",
+        "direction": "long",  # type: ignore[typeddict-item]
+        "score": 75.0,
+        "timestamp": "2024-01-15T10:00:00Z",
+        "stage": "setup",  # type: ignore[typeddict-item]
+        "stop_loss": stop_loss,
+        "entry_zone": {
+            "from_": entry_low,
+            "to": entry_high,
+        },
+        "signal_id": signal_id,
+    }
+    return sig
+
+
+def test_signal_with_stop_loss_only_is_eligible(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """A signal carrying stop_loss but no trade_risk_pct must size deterministically."""
+    signal = _make_signal_with_stop_loss(
+        entry_low=95.0,
+        entry_high=105.0,
+        stop_loss=95.0,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible", result.reason
+
+
+def test_signal_with_stop_loss_derives_trade_risk_pct(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """trade_risk_pct = |entry - stop| / entry; with entry=100, stop=95 -> 0.05."""
+    signal = _make_signal_with_stop_loss(
+        entry_low=95.0,
+        entry_high=105.0,
+        stop_loss=95.0,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+    assert result.decision_inputs is not None
+    assert Decimal(result.decision_inputs["trade_risk_pct"]) == Decimal("0.05")
+
+
+def test_signal_with_explicit_trade_risk_pct_overrides_stop_loss(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Explicit trade_risk_pct on the signal wins over stop-loss derivation."""
+    signal = _make_signal_with_stop_loss(
+        entry_low=95.0,
+        entry_high=105.0,
+        stop_loss=95.0,
+        signal_id="sig-explicit-wins",
+    )
+    signal["trade_risk_pct"] = 0.10
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+    assert result.decision_inputs is not None
+    assert Decimal(result.decision_inputs["trade_risk_pct"]) == Decimal("0.10")
+
+
+def test_signal_with_invalid_stop_loss_is_rejected(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Stop-loss <= 0 fails closed without falling back to default sizing."""
+    signal = _make_signal_with_stop_loss(stop_loss=-1.0)
+    result = worker.process_signal(signal)
+    assert result.outcome == "reject:invalid_trade_risk_input"
+
+
+def test_signal_with_stop_loss_equal_to_entry_is_rejected(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Stop at entry would imply 0 risk distance and infinite size; reject explicitly."""
+    signal = _make_signal_with_stop_loss(
+        entry_low=100.0,
+        entry_high=100.0,
+        stop_loss=100.0,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "reject:invalid_trade_risk_input"
+
+
+def test_signal_position_size_scales_inversely_with_stop_distance(
+    tmp_path: Path,
+) -> None:
+    """Tighter stops produce larger positions for the same risk budget."""
+    repo_a = SqliteCanonicalExecutionRepository(db_path=tmp_path / "tight.db")
+    worker_a = BoundedPaperExecutionWorker(repository=repo_a)
+    sig_tight = _make_signal_with_stop_loss(
+        entry_low=98.0,
+        entry_high=102.0,
+        stop_loss=98.0,
+        signal_id="sig-tight",
+    )
+    result_tight = worker_a.process_signal(sig_tight)
+
+    repo_b = SqliteCanonicalExecutionRepository(db_path=tmp_path / "wide.db")
+    worker_b = BoundedPaperExecutionWorker(repository=repo_b)
+    sig_wide = _make_signal_with_stop_loss(
+        entry_low=90.0,
+        entry_high=110.0,
+        stop_loss=90.0,
+        signal_id="sig-wide",
+    )
+    result_wide = worker_b.process_signal(sig_wide)
+
+    assert result_tight.outcome == "eligible"
+    assert result_wide.outcome == "eligible"
+
+    tight_notional = Decimal(result_tight.decision_inputs["proposed_position_notional"])  # type: ignore[index]
+    wide_notional = Decimal(result_wide.decision_inputs["proposed_position_notional"])  # type: ignore[index]
+    assert tight_notional > wide_notional
+
+
+# ---------------------------------------------------------------------------
+# #1141: Commission and slippage applied at fill time
+# ---------------------------------------------------------------------------
+
+
+def test_long_entry_pays_slippage_above_reference_price(
+    worker: BoundedPaperExecutionWorker,
+    repo: SqliteCanonicalExecutionRepository,
+) -> None:
+    """A long entry fills above the entry-zone midpoint by exactly slippage_rate."""
+    signal = _make_signal(signal_id="sig-slip-long", direction="long")
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+
+    trade = repo.get_trade(result.trade_id)  # type: ignore[arg-type]
+    assert trade is not None
+    expected_fill = DEFAULT_PAPER_ENTRY_PRICE * (
+        Decimal("1") + worker.risk_profile.slippage_rate
+    )
+    assert trade.average_entry_price == expected_fill.quantize(Decimal("0.0001"))
+
+
+def test_apply_slippage_helper_handles_long_and_short(
+) -> None:
+    """The _apply_slippage helper adjusts price in the trade direction."""
+    from cilly_trading.engine.paper_execution_worker import _apply_slippage
+
+    long_fill = _apply_slippage(
+        reference_price=Decimal("100"),
+        direction="long",
+        slippage_rate=Decimal("0.001"),
+    )
+    short_fill = _apply_slippage(
+        reference_price=Decimal("100"),
+        direction="short",
+        slippage_rate=Decimal("0.001"),
+    )
+    assert long_fill == Decimal("100.1000")
+    assert short_fill == Decimal("99.9000")
+
+
+def test_filled_event_records_non_zero_commission(
+    worker: BoundedPaperExecutionWorker,
+    repo: SqliteCanonicalExecutionRepository,
+) -> None:
+    """The filled execution event carries the commission charge for the trade."""
+    signal = _make_signal(signal_id="sig-commission")
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+
+    events = repo.list_execution_events(order_id=result.order_id)
+    fill_events = [event for event in events if event.event_type == "filled"]
+    assert len(fill_events) == 1
+    fill_event = fill_events[0]
+    assert fill_event.commission is not None
+    assert fill_event.commission > Decimal("0")
+    expected_commission = (
+        fill_event.execution_quantity
+        * fill_event.execution_price
+        * worker.risk_profile.commission_rate
+    ).quantize(Decimal("0.0001"))
+    assert fill_event.commission == expected_commission
+
+
+def test_zero_cost_profile_preserves_legacy_fill_behaviour(
+    repo: SqliteCanonicalExecutionRepository,
+) -> None:
+    """Setting commission_rate=0 and slippage_rate=0 reproduces pre-#1141 behaviour."""
+    worker = BoundedPaperExecutionWorker(
+        repository=repo,
+        risk_profile=PaperExecutionRiskProfile(
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
+        ),
+    )
+    signal = _make_signal(signal_id="sig-zero-cost")
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+
+    trade = repo.get_trade(result.trade_id)  # type: ignore[arg-type]
+    assert trade is not None
+    assert trade.average_entry_price == DEFAULT_PAPER_ENTRY_PRICE
