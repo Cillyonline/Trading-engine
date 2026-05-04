@@ -131,6 +131,7 @@ OutcomeCode = Literal[
     "skip:score_below_threshold",
     "skip:duplicate_entry",
     "skip:cooldown_active",
+    "skip:entry_zone_not_reached",
     "reject:invalid_signal_fields",
     "reject:missing_trade_risk_input",
     "reject:invalid_trade_risk_input",
@@ -158,6 +159,19 @@ _RISK_REASON_TO_OUTCOME: dict[CanonicalRiskRejectionReasonCode, OutcomeCode] = {
     ),
     "rejected:risk_framework_kill_switch_enabled": "reject:risk_kill_switch_enabled",
 }
+
+
+@dataclass(frozen=True)
+class EntryBar:
+    """Minimal OHLCV snapshot used to validate paper-execution fills.
+
+    Carries only the high/low needed to verify entry-zone intersection. A
+    consumer of the worker can construct one from any bar source (replay
+    feed, live data adapter, backtest dataframe).
+    """
+
+    high: Decimal
+    low: Decimal
 
 
 @dataclass(frozen=True)
@@ -275,6 +289,48 @@ def _compute_commission(
         ctx.rounding = ROUND_HALF_UP
         notional = quantity * fill_price
         return (notional * commission_rate).quantize(Decimal("0.0001"))
+
+
+def bar_intersects_entry_zone(
+    *,
+    bar_low: Decimal,
+    bar_high: Decimal,
+    zone_low: Decimal,
+    zone_high: Decimal,
+) -> bool:
+    """Return True when the bar's [low, high] range overlaps the entry zone.
+
+    The classic "did we get filled?" check: a market-on-open or limit order
+    inside the zone executes only if the next bar's price range traverses it.
+    Bars that gap past the zone produce no fill.
+    """
+    if bar_low > bar_high:
+        raise ValueError(f"bar_low ({bar_low}) must be <= bar_high ({bar_high})")
+    if zone_low > zone_high:
+        raise ValueError(f"zone_low ({zone_low}) must be <= zone_high ({zone_high})")
+    return bar_low <= zone_high and bar_high >= zone_low
+
+
+def stop_loss_breached(
+    *,
+    direction: str,
+    stop_loss: Decimal,
+    bar_low: Decimal,
+    bar_high: Decimal,
+) -> bool:
+    """Return True when the bar's range crosses the stop-loss level.
+
+    For long positions a stop is breached when the bar's low touches or
+    falls below it; for short positions the bar's high crossing the stop
+    triggers exit.
+    """
+    if bar_low > bar_high:
+        raise ValueError(f"bar_low ({bar_low}) must be <= bar_high ({bar_high})")
+    if direction == "long":
+        return bar_low <= stop_loss
+    if direction == "short":
+        return bar_high >= stop_loss
+    raise ValueError(f"unknown direction: {direction!r}")
 
 
 def _direction_to_order_side(direction: str) -> str:
@@ -474,14 +530,24 @@ class BoundedPaperExecutionWorker:
     # Public API
     # ------------------------------------------------------------------
 
-    def process_signal(self, signal: Signal) -> SignalEvaluationResult:
+    def process_signal(
+        self,
+        signal: Signal,
+        *,
+        entry_bar: EntryBar | None = None,
+    ) -> SignalEvaluationResult:
         """Evaluate and process a single signal against the bounded policy.
 
         Returns a ``SignalEvaluationResult`` with an explicit outcome code.
         When the outcome is ``"eligible"``, canonical paper entities are
         created and persisted before returning.
+
+        ``entry_bar`` is optional. When provided alongside an ``entry_zone``
+        on the signal, the worker rejects fills whose next bar gapped past
+        the zone (``skip:entry_zone_not_reached``). Callers without bar
+        context behave as before.
         """
-        result = self._evaluate(signal)
+        result = self._evaluate(signal, entry_bar=entry_bar)
         if result.outcome == "eligible":
             result = self._persist_paper_entry(
                 signal,
@@ -489,7 +555,10 @@ class BoundedPaperExecutionWorker:
             )
         return result
 
-    def process_batch(self, signals: Sequence[Signal]) -> list[SignalEvaluationResult]:
+    def process_batch(
+        self,
+        signals: Sequence[Signal],
+    ) -> list[SignalEvaluationResult]:
         """Process a batch of signals sequentially.
 
         Returns one ``SignalEvaluationResult`` per signal in input order.
@@ -578,7 +647,12 @@ class BoundedPaperExecutionWorker:
     # Policy evaluation (read-only)
     # ------------------------------------------------------------------
 
-    def _evaluate(self, signal: Signal) -> SignalEvaluationResult:
+    def _evaluate(
+        self,
+        signal: Signal,
+        *,
+        entry_bar: EntryBar | None = None,
+    ) -> SignalEvaluationResult:
         """Apply the 5-step ordered policy evaluation.
 
         Steps:
@@ -586,7 +660,8 @@ class BoundedPaperExecutionWorker:
             2. Score threshold check
             3. Duplicate-entry check
             4. Cooldown check
-            5. Exposure and position-limit checks
+            5. Entry-bar fill check (if entry_bar provided)
+            6. Exposure and position-limit checks
         """
         # Step 1: eligibility — required signal fields
         field_error = _validate_signal_fields(signal)
@@ -647,7 +722,28 @@ class BoundedPaperExecutionWorker:
                     ),
                 )
 
-        # Step 5: exposure and position-limit checks
+        # Step 5: entry-bar fill check — only when bar context is supplied.
+        entry_zone = signal.get("entry_zone")
+        if entry_bar is not None and entry_zone is not None:
+            zone_low = Decimal(str(entry_zone["from_"]))
+            zone_high = Decimal(str(entry_zone["to"]))
+            if zone_low > zone_high:
+                zone_low, zone_high = zone_high, zone_low
+            if not bar_intersects_entry_zone(
+                bar_low=entry_bar.low,
+                bar_high=entry_bar.high,
+                zone_low=zone_low,
+                zone_high=zone_high,
+            ):
+                return SignalEvaluationResult(
+                    outcome="skip:entry_zone_not_reached",
+                    reason=(
+                        f"bar [{entry_bar.low}, {entry_bar.high}] did not intersect "
+                        f"entry_zone [{zone_low}, {zone_high}]"
+                    ),
+                )
+
+        # Step 6: exposure and position-limit checks
         entry_price = _extract_entry_price(
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
@@ -908,6 +1004,9 @@ __all__ = [
     "COOLDOWN_HOURS",
     "DEFAULT_PAPER_QUANTITY",
     "DEFAULT_PAPER_ENTRY_PRICE",
+    "EntryBar",
     "PaperExecutionRiskProfile",
+    "bar_intersects_entry_zone",
+    "stop_loss_breached",
     "_direction_to_order_side",
 ]

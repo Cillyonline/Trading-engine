@@ -976,3 +976,170 @@ def test_zero_cost_profile_preserves_legacy_fill_behaviour(
     trade = repo.get_trade(result.trade_id)  # type: ignore[arg-type]
     assert trade is not None
     assert trade.average_entry_price == DEFAULT_PAPER_ENTRY_PRICE
+
+
+# ---------------------------------------------------------------------------
+# #1144: Entry-bar fill validation — only fill when bar reaches entry zone
+# ---------------------------------------------------------------------------
+
+
+def _make_signal_with_entry_zone(
+    *,
+    entry_low: float = 95.0,
+    entry_high: float = 105.0,
+    signal_id: str = "sig-entry-zone-001",
+    timestamp: str = "2024-01-15T10:00:00Z",
+) -> Signal:
+    return {
+        "symbol": "AAPL",
+        "strategy": "rsi2",
+        "direction": "long",  # type: ignore[typeddict-item]
+        "score": 75.0,
+        "timestamp": timestamp,
+        "stage": "setup",  # type: ignore[typeddict-item]
+        "trade_risk_pct": 0.05,
+        "entry_zone": {"from_": entry_low, "to": entry_high},
+        "signal_id": signal_id,
+    }
+
+
+def test_entry_bar_intersecting_zone_is_eligible(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Bar that crosses the zone produces a normal eligible fill."""
+    from cilly_trading.engine.paper_execution_worker import EntryBar
+
+    signal = _make_signal_with_entry_zone()
+    bar = EntryBar(high=Decimal("106"), low=Decimal("94"))
+    result = worker.process_signal(signal, entry_bar=bar)
+    assert result.outcome == "eligible", result.reason
+
+
+def test_entry_bar_above_zone_skips_with_no_fill(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Gap-up bar entirely above the zone never reaches the entry — no fill."""
+    from cilly_trading.engine.paper_execution_worker import EntryBar
+
+    signal = _make_signal_with_entry_zone()
+    bar = EntryBar(high=Decimal("110"), low=Decimal("106"))
+    result = worker.process_signal(signal, entry_bar=bar)
+    assert result.outcome == "skip:entry_zone_not_reached"
+
+
+def test_entry_bar_below_zone_skips_with_no_fill(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Gap-down bar entirely below the zone never reaches the entry — no fill."""
+    from cilly_trading.engine.paper_execution_worker import EntryBar
+
+    signal = _make_signal_with_entry_zone()
+    bar = EntryBar(high=Decimal("90"), low=Decimal("85"))
+    result = worker.process_signal(signal, entry_bar=bar)
+    assert result.outcome == "skip:entry_zone_not_reached"
+
+
+def test_entry_bar_touching_zone_boundary_is_eligible(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Bar low exactly at zone_high is treated as a fill (boundary inclusive)."""
+    from cilly_trading.engine.paper_execution_worker import EntryBar
+
+    signal = _make_signal_with_entry_zone()
+    bar = EntryBar(high=Decimal("110"), low=Decimal("105"))
+    result = worker.process_signal(signal, entry_bar=bar)
+    assert result.outcome == "eligible"
+
+
+def test_no_entry_bar_supplied_keeps_legacy_behaviour(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    """Callers without bar context skip the new check — backwards compatible."""
+    signal = _make_signal_with_entry_zone()
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible"
+
+
+def test_bar_intersects_entry_zone_helper_is_pure() -> None:
+    """The exposed helper returns booleans for any input pair."""
+    from cilly_trading.engine.paper_execution_worker import bar_intersects_entry_zone
+
+    assert bar_intersects_entry_zone(
+        bar_low=Decimal("95"),
+        bar_high=Decimal("105"),
+        zone_low=Decimal("96"),
+        zone_high=Decimal("104"),
+    )
+    assert not bar_intersects_entry_zone(
+        bar_low=Decimal("110"),
+        bar_high=Decimal("115"),
+        zone_low=Decimal("95"),
+        zone_high=Decimal("105"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# #1142: Stop-loss breach evaluation helper
+# ---------------------------------------------------------------------------
+
+
+def test_long_stop_loss_breached_when_bar_low_touches_stop() -> None:
+    from cilly_trading.engine.paper_execution_worker import stop_loss_breached
+
+    assert stop_loss_breached(
+        direction="long",
+        stop_loss=Decimal("95"),
+        bar_low=Decimal("94"),
+        bar_high=Decimal("100"),
+    )
+    assert stop_loss_breached(
+        direction="long",
+        stop_loss=Decimal("95"),
+        bar_low=Decimal("95"),
+        bar_high=Decimal("100"),
+    )
+
+
+def test_long_stop_loss_not_breached_when_bar_stays_above_stop() -> None:
+    from cilly_trading.engine.paper_execution_worker import stop_loss_breached
+
+    assert not stop_loss_breached(
+        direction="long",
+        stop_loss=Decimal("95"),
+        bar_low=Decimal("96"),
+        bar_high=Decimal("100"),
+    )
+
+
+def test_short_stop_loss_breached_when_bar_high_touches_stop() -> None:
+    from cilly_trading.engine.paper_execution_worker import stop_loss_breached
+
+    assert stop_loss_breached(
+        direction="short",
+        stop_loss=Decimal("105"),
+        bar_low=Decimal("100"),
+        bar_high=Decimal("106"),
+    )
+
+
+def test_short_stop_loss_not_breached_when_bar_stays_below_stop() -> None:
+    from cilly_trading.engine.paper_execution_worker import stop_loss_breached
+
+    assert not stop_loss_breached(
+        direction="short",
+        stop_loss=Decimal("105"),
+        bar_low=Decimal("100"),
+        bar_high=Decimal("104"),
+    )
+
+
+def test_stop_loss_helper_rejects_unknown_direction() -> None:
+    from cilly_trading.engine.paper_execution_worker import stop_loss_breached
+
+    with pytest.raises(ValueError, match="unknown direction"):
+        stop_loss_breached(
+            direction="sideways",
+            stop_loss=Decimal("100"),
+            bar_low=Decimal("99"),
+            bar_high=Decimal("101"),
+        )
