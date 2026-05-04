@@ -49,6 +49,8 @@ def test_paper_execution_account_exposure_rejection_uses_canonical_reason(
             max_strategy_exposure_pct=Decimal("1.00"),
             max_symbol_exposure_pct=Decimal("1.00"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
@@ -81,6 +83,8 @@ def test_paper_execution_strategy_exposure_rejection_uses_canonical_reason(
             max_strategy_exposure_pct=Decimal("0.20"),
             max_symbol_exposure_pct=Decimal("1.00"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
@@ -106,6 +110,8 @@ def test_paper_execution_symbol_exposure_rejection_uses_canonical_reason(
             max_strategy_exposure_pct=Decimal("1.00"),
             max_symbol_exposure_pct=Decimal("0.20"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
@@ -131,6 +137,8 @@ def test_paper_execution_multi_violation_precedence_prefers_account_before_strat
             max_strategy_exposure_pct=Decimal("0.20"),
             max_symbol_exposure_pct=Decimal("1.00"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
@@ -156,6 +164,8 @@ def test_paper_execution_and_gate_share_canonical_reason_for_equivalent_state(
             max_strategy_exposure_pct=Decimal("0.20"),
             max_symbol_exposure_pct=Decimal("1.00"),
             max_concurrent_positions=20,
+            commission_rate=Decimal("0"),
+            slippage_rate=Decimal("0"),
         ),
     )
 
