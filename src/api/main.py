@@ -40,6 +40,7 @@ from .models import (
     TradingCorePositionsReadResponse,
     TradingCoreTradesReadResponse,
 )
+from .rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
 from .services.composition_runtime_service import configure_logging
 from .state import initialize_alert_state
 
@@ -73,6 +74,9 @@ app = FastAPI(
     version="0.1.0",
     description="MVP-API fuer die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
