@@ -62,15 +62,16 @@ def build_control_plane_router(
     @router.get("/health/ready")
     def health_ready_handler() -> dict[str, Any]:
         """Readiness probe — 200 when engine runtime is ready, 503 otherwise."""
+        from fastapi.responses import JSONResponse
+
         payload = health_payload(deps=_health_dependencies(deps))
-        runtime_status = payload.get("runtime", {}).get("status") if isinstance(payload.get("runtime"), dict) else None
-        if runtime_status not in ("running", "ready"):
-            from fastapi.responses import JSONResponse
+        mode = payload.get("mode")
+        if not payload.get("ready"):
             return JSONResponse(
                 status_code=503,
-                content={"status": "not_ready", "runtime": runtime_status},
+                content={"status": "not_ready", "runtime": mode},
             )
-        return {"status": "ready", "runtime": runtime_status}
+        return {"status": "ready", "runtime": mode}
 
     @router.get("/health")
     def health_handler(
