@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
 import random
 import sqlite3
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional, TypeVar
 
 from cilly_trading.db import DEFAULT_DB_PATH, init_db
 
@@ -14,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 4
 _BASE_DELAY_S = 0.1
+
+# Dedicated thread pool for SQLite I/O — keeps blocking DB calls off the
+# event loop when repositories are called from async handlers.
+_SQLITE_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="sqlite"
+)
+
+_T = TypeVar("_T")
 
 
 class BaseSqliteRepository:
@@ -47,3 +58,16 @@ class BaseSqliteRepository:
 
     def _connection(self):
         return closing(self._get_connection())
+
+    async def run_in_thread(
+        self, fn: Callable[..., _T], /, *args: Any, **kwargs: Any
+    ) -> _T:
+        """Run a blocking repository method in the SQLite thread pool.
+
+        Prevents I/O-bound SQLite calls from blocking the asyncio event loop
+        when this repository is used from async handlers or tasks.
+        """
+        loop = asyncio.get_event_loop()
+        wrapped = functools.partial(fn, *args, **kwargs) if kwargs else fn
+        call_args = () if kwargs else args
+        return await loop.run_in_executor(_SQLITE_EXECUTOR, wrapped, *call_args)
