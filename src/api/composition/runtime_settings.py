@@ -23,6 +23,9 @@ class ApiRuntimeSettings:
     scheduled_analysis_poll_interval_seconds: int
     scheduled_analysis_snapshot_scan_limit: int
     scheduled_analysis_tasks_json: str
+    api_host: str
+    api_port: int
+    cors_origins: list[str]
 
 
 def _read_bool_env(name: str, *, default: bool) -> bool:
@@ -66,6 +69,11 @@ def build_default_strategy_configs() -> dict[str, dict[str, Any]]:
     }
 
 
+def _read_cors_origins() -> list[str]:
+    raw = os.getenv("CILLY_CORS_ORIGINS", "http://localhost:5173").strip()
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
 def build_api_runtime_settings() -> ApiRuntimeSettings:
     paper_runtime_evidence_series_dir_raw = os.getenv(
         "CILLY_PAPER_RUNTIME_EVIDENCE_SERIES_DIR",
@@ -107,4 +115,7 @@ def build_api_runtime_settings() -> ApiRuntimeSettings:
             "CILLY_SCHEDULED_ANALYSIS_TASKS_JSON",
             "",
         ).strip(),
+        api_host=os.getenv("CILLY_API_HOST", "0.0.0.0"),
+        api_port=_read_int_env("CILLY_API_PORT", default=8000, minimum=1),
+        cors_origins=_read_cors_origins(),
     )

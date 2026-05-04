@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .composition import (
@@ -39,6 +40,7 @@ from .models import (
     TradingCorePositionsReadResponse,
     TradingCoreTradesReadResponse,
 )
+from .rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
 from .services.composition_runtime_service import configure_logging
 from .state import initialize_alert_state
 
@@ -73,6 +75,17 @@ app = FastAPI(
     description="MVP-API fuer die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 initialize_alert_state(app)
 app.mount("/ui", StaticFiles(directory=str(UI_DIRECTORY), html=True), name="ui")
 
@@ -92,4 +105,4 @@ include_api_routers(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("api.main:app", host=settings.api_host, port=settings.api_port)
