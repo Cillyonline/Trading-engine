@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Literal, Optional, Sequence
 
 from cilly_trading.engine.paper_execution_risk_profile import (
@@ -227,8 +227,11 @@ def _extract_entry_price(
     """
     entry_zone = signal.get("entry_zone")
     if entry_zone is not None:
-        mid = (Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))) / Decimal("2")
-        return mid.quantize(_PRICE_SCALE, rounding=ROUND_HALF_UP)
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            mid = (Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))) / Decimal("2")
+            return mid.quantize(_PRICE_SCALE)
     return fallback_entry_price
 
 
@@ -404,11 +407,14 @@ class BoundedPaperExecutionWorker:
 
     def _build_risk_limits(self) -> RiskLimits:
         """Build deterministic risk-framework limits for paper execution."""
-        max_notional_from_risk_budget = (
-            self._risk_profile.account_equity
-            * self._risk_profile.max_risk_per_trade_pct
-            / self._risk_profile.min_trade_risk_pct
-        )
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            max_notional_from_risk_budget = (
+                self._risk_profile.account_equity
+                * self._risk_profile.max_risk_per_trade_pct
+                / self._risk_profile.min_trade_risk_pct
+            )
         return RiskLimits(
             max_account_exposure_pct=float(self._risk_profile.max_total_exposure_pct),
             max_position_size=float(max_notional_from_risk_budget),
@@ -641,15 +647,17 @@ class BoundedPaperExecutionWorker:
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
         )
-        proposed_notional = (
-            Decimal(decision_inputs["proposed_position_notional"])
-            if decision_inputs is not None
-            else self._risk_profile.default_paper_quantity * entry_price
-        )
-        quantity = (proposed_notional / entry_price).quantize(
-            Decimal("0.00000001"),
-            rounding=ROUND_HALF_UP,
-        )
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            proposed_notional = (
+                Decimal(decision_inputs["proposed_position_notional"])
+                if decision_inputs is not None
+                else self._risk_profile.default_paper_quantity * entry_price
+            )
+            quantity = (proposed_notional / entry_price).quantize(
+                Decimal("0.00000001"),
+            )
         side = _direction_to_order_side(direction)
 
         # --- Execution events ------------------------------------------
