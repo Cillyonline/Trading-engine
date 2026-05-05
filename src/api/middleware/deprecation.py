@@ -51,7 +51,7 @@ class LegacyApiDeprecationMiddleware:
         if path.startswith(self._version_prefix + "/") or path == self._version_prefix:
             return False
         for prefix in self._non_api_prefixes:
-            if path == prefix or path.startswith(prefix + "/") or path.startswith(prefix):
+            if path.startswith(prefix):
                 return False
         return True
 

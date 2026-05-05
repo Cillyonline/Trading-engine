@@ -37,7 +37,7 @@ def test_check_db_connectivity_reports_missing_file(tmp_path: Path) -> None:
     missing = tmp_path / "absent.sqlite"
     ok, reason = check_db_connectivity(missing)
     assert ok is False
-    assert "db_file_missing" in reason
+    assert reason == "db_file_missing"
 
 
 def test_check_db_connectivity_reports_unreadable_directory(tmp_path: Path) -> None:
@@ -46,7 +46,7 @@ def test_check_db_connectivity_reports_unreadable_directory(tmp_path: Path) -> N
     bad = tmp_path / "no_such_dir" / "x.sqlite"
     ok, reason = check_db_connectivity(bad)
     assert ok is False
-    assert "db_file_missing" in reason
+    assert reason == "db_file_missing"
 
 
 def test_db_connectivity_payload_uses_resolved_path(tmp_path: Path) -> None:
@@ -59,7 +59,9 @@ def test_db_connectivity_payload_uses_resolved_path(tmp_path: Path) -> None:
         evaluate_runtime_health=lambda *a, **k: None,
     )
     payload = db_connectivity_payload(deps=deps)
-    assert payload == {"ok": True, "reason": "ok", "db_path": str(db)}
+    # The DB path is intentionally NOT included to avoid leaking server
+    # filesystem layout in /health/ready responses.
+    assert payload == {"ok": True, "reason": "ok"}
 
 
 def test_health_ready_returns_503_when_db_missing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,8 +73,7 @@ def test_health_ready_returns_503_when_db_missing(monkeypatch: pytest.MonkeyPatc
         "db_connectivity_payload",
         lambda *, deps: {
             "ok": False,
-            "reason": "db_file_missing: /tmp/__test_missing__.sqlite",
-            "db_path": "/tmp/__test_missing__.sqlite",
+            "reason": "db_file_missing",
         },
     )
     with TestClient(api_main.app) as client:

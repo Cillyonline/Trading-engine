@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, Tuple
+from typing import Any, Callable, Dict, Iterable
 
 from fastapi import APIRouter, FastAPI
 
@@ -64,7 +64,7 @@ class ApiRouterWiring:
     get_role_precedence: Callable[[], dict[str, int]]
 
 
-def _build_routers(*, wiring: ApiRouterWiring) -> Tuple[APIRouter, ...]:
+def _build_routers(*, wiring: ApiRouterWiring) -> tuple[APIRouter, ...]:
     """Build router instances once so they can be mounted multiple times.
 
     Each router is mounted both at the root (legacy compatibility) and

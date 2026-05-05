@@ -96,7 +96,7 @@ class RequestTimeoutMiddleware:
 
     def _resolve_timeout(self, path: str) -> float:
         for prefix, budget in self._path_timeouts:
-            if path == prefix or path.startswith(prefix.rstrip("/") + "/") or path.startswith(prefix):
+            if path.startswith(prefix):
                 return budget
         return self._default_timeout_s
 

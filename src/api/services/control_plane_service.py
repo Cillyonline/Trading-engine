@@ -48,22 +48,38 @@ def check_db_connectivity(
 
     The probe deliberately uses a short connection timeout so that a slow
     or wedged file system surfaces quickly to orchestrators instead of
-    extending the overall readiness latency. Implementation is local to
-    this module to avoid pulling in the full repository layer just to ping
-    the database.
+    extending the overall readiness latency.
+
+    The ``reason`` is a *categorical* code (not a raw exception message)
+    so that the HTTP readiness response cannot leak filesystem paths or
+    internal SQL details to unauthenticated callers. Full exception
+    detail is sent to the structured logs for operators to inspect.
     """
 
+    import logging as _logging  # local import to avoid module-level cycles
+
+    log = _logging.getLogger(__name__)
+
     if not db_path.exists():
-        return False, f"db_file_missing: {db_path}"
+        log.warning("health_db_probe_missing", extra={"db_path": str(db_path)})
+        return False, "db_file_missing"
     try:
         conn = sqlite3.connect(db_path, timeout=timeout_s)
     except sqlite3.OperationalError as exc:
-        return False, f"db_connect_failed: {exc}"
+        log.warning(
+            "health_db_probe_connect_failed",
+            extra={"db_path": str(db_path), "error": str(exc)},
+        )
+        return False, "db_connect_failed"
     try:
         try:
             conn.execute("SELECT 1;").fetchone()
         except sqlite3.Error as exc:
-            return False, f"db_query_failed: {exc}"
+            log.warning(
+                "health_db_probe_query_failed",
+                extra={"db_path": str(db_path), "error": str(exc)},
+            )
+            return False, "db_query_failed"
     finally:
         conn.close()
     return True, "ok"
@@ -72,15 +88,16 @@ def check_db_connectivity(
 def db_connectivity_payload(
     *, deps: ControlPlaneHealthDependencies
 ) -> dict[str, Any]:
-    """Build the readiness sub-payload describing DB reachability."""
+    """Build the readiness sub-payload describing DB reachability.
+
+    Only the categorical reason and ok flag are exposed; the resolved
+    DB path is intentionally **not** included to avoid leaking server
+    filesystem layout to unauthenticated readiness probes.
+    """
 
     db_path_str = deps.resolve_analysis_db_path()
     ok, reason = check_db_connectivity(Path(db_path_str))
-    return {
-        "ok": ok,
-        "reason": reason,
-        "db_path": db_path_str,
-    }
+    return {"ok": ok, "reason": reason}
 
 
 def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:
