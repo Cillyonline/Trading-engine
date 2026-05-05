@@ -8,6 +8,7 @@ from typing import Any, Optional
 from cilly_trading.strategies.registry import initialize_default_registry
 
 from ..services.jwt_auth import JwtSettings, build_jwt_settings
+from ..security import install_sensitive_data_filter
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,7 @@ def _read_cors_origins() -> list[str]:
 
 
 def build_api_runtime_settings() -> ApiRuntimeSettings:
+    install_sensitive_data_filter()
     paper_runtime_evidence_series_dir_raw = os.getenv(
         "CILLY_PAPER_RUNTIME_EVIDENCE_SERIES_DIR",
         "",

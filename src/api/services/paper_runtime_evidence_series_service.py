@@ -106,6 +106,19 @@ def _relative_path(path: Path, base: Path) -> str:
         return path.as_posix()
 
 
+def _assert_path_within_base(path: Path, base: Path) -> None:
+    """Raise ValueError if *path* (resolved) is not inside *base* (resolved).
+
+    Prevents path-traversal via symlinks or manipulated glob results.
+    """
+    resolved = path.resolve()
+    resolved_base = base.resolve()
+    if not resolved.is_relative_to(resolved_base):
+        raise ValueError(
+            f"Path traversal attempt: {resolved} is outside {resolved_base}"
+        )
+
+
 def _load_run_files(
     *,
     input_dir: Path,
@@ -113,11 +126,13 @@ def _load_run_files(
     recursive: bool,
 ) -> list[tuple[Path, dict[str, Any]]]:
     paths = input_dir.rglob(pattern) if recursive else input_dir.glob(pattern)
+    base = input_dir.resolve()
     loaded: list[tuple[Path, dict[str, Any]]] = []
     for path in sorted(
         (candidate for candidate in paths if candidate.is_file()),
         key=lambda item: item.as_posix(),
     ):
+        _assert_path_within_base(path, base)
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             loaded.append((path, payload))
