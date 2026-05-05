@@ -76,6 +76,40 @@ def _redact(text: str) -> str:
     return text
 
 
+# Sentinel attribute used to mark loggers/handlers that already carry a
+# ``SensitiveDataFilter`` so repeated calls to :func:`install_sensitive_data_filter`
+# do not stack duplicate filters.
+_FILTER_INSTALLED_ATTR = "_cilly_sensitive_data_filter_installed"
+
+
+def _attach_filter(target: logging.Logger | logging.Handler) -> None:
+    """Attach a ``SensitiveDataFilter`` to ``target`` if not already attached."""
+    if getattr(target, _FILTER_INSTALLED_ATTR, False):
+        return
+    target.addFilter(SensitiveDataFilter())
+    setattr(target, _FILTER_INSTALLED_ATTR, True)
+
+
 def install_sensitive_data_filter(logger_name: str = "") -> None:
-    """Install ``SensitiveDataFilter`` on the named logger (root logger by default)."""
-    logging.getLogger(logger_name).addFilter(SensitiveDataFilter())
+    """Install ``SensitiveDataFilter`` so all log records are redacted.
+
+    Filters attached to a logger only run for records originating on that logger;
+    they do not run for records produced by named child loggers and forwarded via
+    propagation. To guarantee coverage, the filter is therefore attached to both
+    the named logger *and* every handler on it (and, by default, on the root
+    logger), since handler-level filters always execute on every record that the
+    handler emits, regardless of the logger that produced the record.
+
+    The function is idempotent: repeated calls do not stack duplicate filters.
+    """
+    logger = logging.getLogger(logger_name)
+    _attach_filter(logger)
+    for handler in logger.handlers:
+        _attach_filter(handler)
+    # Always cover root-logger handlers as well, because module loggers
+    # (``logging.getLogger(__name__)``) typically propagate to the root logger
+    # where the application's handlers live.
+    if logger_name != "":
+        root = logging.getLogger()
+        for handler in root.handlers:
+            _attach_filter(handler)
