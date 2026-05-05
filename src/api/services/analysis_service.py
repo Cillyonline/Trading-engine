@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 from fastapi import HTTPException
 
 from cilly_trading.engine.core import EngineConfig, compute_analysis_run_id
+from cilly_trading.exceptions import NotFoundError, ValidationError
 from cilly_trading.repositories import AnalysisRunRepository, SignalRepository, WatchlistRepository
 from cilly_trading.strategies.registry import StrategyNotRegisteredError, run_registry_smoke
 
@@ -57,9 +58,9 @@ def is_uuid4(value: str) -> bool:
 
 def require_ingestion_run(*, ingestion_run_id: str, analysis_run_repo: Any) -> None:
     if not is_uuid4(ingestion_run_id):
-        raise HTTPException(status_code=422, detail="invalid_ingestion_run_id")
+        raise ValidationError("invalid_ingestion_run_id")
     if not analysis_run_repo.ingestion_run_exists(ingestion_run_id):
-        raise HTTPException(status_code=422, detail="ingestion_run_not_found")
+        raise ValidationError("ingestion_run_not_found")
 
 
 def require_snapshot_ready(
@@ -74,7 +75,7 @@ def require_snapshot_ready(
         symbols=symbols,
         timeframe=timeframe,
     ):
-        raise HTTPException(status_code=422, detail="ingestion_run_not_ready")
+        raise ValidationError("ingestion_run_not_ready")
 
 
 def normalize_for_hashing(value: Any) -> Any:
@@ -462,7 +463,7 @@ def execute_watchlist(
 ) -> WatchlistExecutionResponse:
     watchlist = deps.watchlist_repo.get_watchlist(watchlist_id)
     if watchlist is None:
-        raise HTTPException(status_code=404, detail="watchlist_not_found")
+        raise NotFoundError("watchlist_not_found")
 
     deps.require_ingestion_run(req.ingestion_run_id)
 
