@@ -14,8 +14,19 @@ _SENSITIVE_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
-class Secret(str):
-    """String wrapper that masks sensitive values in logs and reprs."""
+class Secret:
+    """Wrapper for sensitive string values that masks the value in logs and reprs.
+
+    Uses composition instead of ``str`` inheritance to prevent accidental leakage
+    through string operations such as slicing, concatenation, or format directives.
+    """
+
+    __slots__ = ("_value",)
+
+    def __init__(self, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError(f"Secret requires a str, got {type(value).__name__!r}")
+        self._value = value
 
     def __repr__(self) -> str:
         return "***REDACTED***"
@@ -23,9 +34,20 @@ class Secret(str):
     def __str__(self) -> str:
         return "***REDACTED***"
 
+    def __format__(self, format_spec: str) -> str:
+        return "***REDACTED***"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Secret):
+            return self._value == other._value
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._value)
+
     def get_secret_value(self) -> str:
         """Return the actual secret value."""
-        return super().__str__()
+        return self._value
 
 
 class SensitiveDataFilter(logging.Filter):

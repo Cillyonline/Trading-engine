@@ -119,7 +119,7 @@ def _round_value(value: Any) -> Any:
                 ctx.prec = 28
                 ctx.rounding = ROUND_HALF_UP
                 return float(
-                    Decimal(str(float(value))).quantize(Decimal("0.00000001"))
+                    Decimal(str(value)).quantize(Decimal("0.00000001"))
                 )
         except InvalidOperation:
             return float(value)
