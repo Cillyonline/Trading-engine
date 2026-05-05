@@ -30,6 +30,7 @@ from .composition import (
 from .middleware import (
     REQUEST_ID_HEADER,
     RequestIdMiddleware,
+    RequestTimeoutMiddleware,
     current_request_id,
     install_request_id_log_filter,
 )
@@ -123,6 +124,8 @@ async def _handle_cilly_error(_request: Request, exc: CillyError) -> JSONRespons
     # Fallback for any future CillyError subclass not handled above.
     return _cilly_error_response(exc)
 
+
+app.add_middleware(RequestTimeoutMiddleware)
 
 app.add_middleware(RequestIdMiddleware)
 

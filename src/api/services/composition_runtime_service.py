@@ -16,7 +16,43 @@ from . import analysis_service, control_plane_service
 
 
 class _JsonLogFormatter(logging.Formatter):
-    """Simple JSON formatter for bounded operational deployment logs."""
+    """JSON formatter for structured log output.
+
+    Emits the standard envelope (``timestamp``, ``level``, ``logger``,
+    ``message``) plus any structured ``extra={...}`` fields supplied by
+    callers and the per-request id installed by
+    :class:`api.middleware.RequestIdLogFilter`. Output keys are sorted to
+    keep diffs stable in log-tail tooling and golden-file tests.
+    """
+
+    # Standard ``LogRecord`` attributes we never propagate as user fields.
+    _RESERVED_ATTRS: frozenset[str] = frozenset(
+        {
+            "args",
+            "asctime",
+            "created",
+            "exc_info",
+            "exc_text",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "message",
+            "module",
+            "msecs",
+            "msg",
+            "name",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "stack_info",
+            "thread",
+            "threadName",
+            "taskName",
+        }
+    )
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -25,9 +61,27 @@ class _JsonLogFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+        # Promote request_id (installed by RequestIdLogFilter) to a
+        # top-level field so log-aggregation indices can pivot on it.
+        request_id = getattr(record, "request_id", None)
+        if request_id and request_id != "-":
+            payload["request_id"] = request_id
+        # Surface any structured ``extra={...}`` fields. ``logging`` merges
+        # them onto the LogRecord as plain attributes, so we filter out
+        # the reserved built-ins to avoid leaking internals.
+        for key, value in record.__dict__.items():
+            if key in self._RESERVED_ATTRS or key.startswith("_") or key == "request_id":
+                continue
+            if key in payload:
+                continue
+            try:
+                json.dumps(value)
+            except TypeError:
+                value = repr(value)
+            payload[key] = value
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
-        return json.dumps(payload, sort_keys=True, ensure_ascii=True)
+        return json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
 
 
 def configure_logging() -> None:

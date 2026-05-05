@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Optional
 
 from cilly_trading.compliance.daily_loss_guard import (
     configured_daily_loss_limit,
@@ -36,6 +37,50 @@ class ControlPlaneHealthDependencies:
     now: Callable[[], datetime]
     get_runtime_introspection_payload: Callable[[], dict[str, Any]]
     evaluate_runtime_health: Callable[..., Any]
+
+
+def check_db_connectivity(
+    db_path: Path,
+    *,
+    timeout_s: float = 2.0,
+) -> tuple[bool, str]:
+    """Return ``(ok, reason)`` after a lightweight ``SELECT 1`` against the DB.
+
+    The probe deliberately uses a short connection timeout so that a slow
+    or wedged file system surfaces quickly to orchestrators instead of
+    extending the overall readiness latency. Implementation is local to
+    this module to avoid pulling in the full repository layer just to ping
+    the database.
+    """
+
+    if not db_path.exists():
+        return False, f"db_file_missing: {db_path}"
+    try:
+        conn = sqlite3.connect(db_path, timeout=timeout_s)
+    except sqlite3.OperationalError as exc:
+        return False, f"db_connect_failed: {exc}"
+    try:
+        try:
+            conn.execute("SELECT 1;").fetchone()
+        except sqlite3.Error as exc:
+            return False, f"db_query_failed: {exc}"
+    finally:
+        conn.close()
+    return True, "ok"
+
+
+def db_connectivity_payload(
+    *, deps: ControlPlaneHealthDependencies
+) -> dict[str, Any]:
+    """Build the readiness sub-payload describing DB reachability."""
+
+    db_path_str = deps.resolve_analysis_db_path()
+    ok, reason = check_db_connectivity(Path(db_path_str))
+    return {
+        "ok": ok,
+        "reason": reason,
+        "db_path": db_path_str,
+    }
 
 
 def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:
