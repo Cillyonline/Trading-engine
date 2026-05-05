@@ -74,7 +74,14 @@ def build_default_strategy_configs() -> dict[str, dict[str, Any]]:
 
 def _read_cors_origins() -> list[str]:
     raw = os.getenv("CILLY_CORS_ORIGINS", "http://localhost:5173").strip()
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    for origin in origins:
+        if origin == "*":
+            raise ValueError(
+                "Wildcard CORS origin ('*') is not permitted. "
+                "Set CILLY_CORS_ORIGINS to an explicit comma-separated list of allowed origins."
+            )
+    return origins
 
 
 def build_api_runtime_settings() -> ApiRuntimeSettings:
