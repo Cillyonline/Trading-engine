@@ -3,9 +3,17 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+from cilly_trading.exceptions import (
+    CillyError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 
 from .composition import (
     bind_main_runtime_exports,
@@ -18,6 +26,12 @@ from .composition import (
     create_runtime_service,
     include_api_routers,
     register_runtime_lifecycle,
+)
+from .middleware import (
+    REQUEST_ID_HEADER,
+    RequestIdMiddleware,
+    current_request_id,
+    install_request_id_log_filter,
 )
 from .models import (
     BacktestArtifactContentResponse,
@@ -46,6 +60,7 @@ from .state import initialize_alert_state
 
 
 configure_logging()
+install_request_id_log_filter()
 logger = logging.getLogger(__name__)
 
 settings = build_api_runtime_settings()
@@ -78,12 +93,45 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+
+def _cilly_error_response(exc: CillyError) -> JSONResponse:
+    request_id = current_request_id() or ""
+    payload = {"detail": exc.detail, "request_id": request_id}
+    response = JSONResponse(status_code=exc.http_status_code, content=payload)
+    if request_id:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
+
+
+@app.exception_handler(NotFoundError)
+async def _handle_not_found_error(_request: Request, exc: NotFoundError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(ValidationError)
+async def _handle_validation_error(_request: Request, exc: ValidationError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(ConflictError)
+async def _handle_conflict_error(_request: Request, exc: ConflictError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(CillyError)
+async def _handle_cilly_error(_request: Request, exc: CillyError) -> JSONResponse:
+    # Fallback for any future CillyError subclass not handled above.
+    return _cilly_error_response(exc)
+
+
+app.add_middleware(RequestIdMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "X-Cilly-Role"],
+    allow_headers=["Authorization", "Content-Type", "X-Cilly-Role", REQUEST_ID_HEADER],
 )
 
 initialize_alert_state(app)

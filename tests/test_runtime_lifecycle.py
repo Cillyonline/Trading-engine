@@ -405,7 +405,10 @@ def test_engine_requests_work_normally_when_runtime_running(monkeypatch) -> None
         )
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "invalid_ingestion_run_id"}
+    body = response.json()
+    assert body["detail"] == "invalid_ingestion_run_id"
+    # Structured error responses also carry the request_id (issue #1127).
+    assert isinstance(body.get("request_id"), str) and body["request_id"]
 
 
 def test_engine_requests_are_blocked_when_runtime_paused(tmp_path: Path, monkeypatch) -> None:
