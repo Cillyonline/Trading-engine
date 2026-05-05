@@ -14,9 +14,9 @@ from ..config import SCREENER_RESULTS_READ_MAX_LIMIT, SIGNALS_READ_MAX_LIMIT
 class SignalsReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    symbol: Optional[str] = Field(default=None)
-    strategy: Optional[str] = Field(default=None)
-    timeframe: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None, max_length=20)
+    strategy: Optional[str] = Field(default=None, max_length=50)
+    timeframe: Optional[str] = Field(default=None, max_length=20)
     ingestion_run_id: Optional[str] = Field(default=None)
     from_: Optional[datetime] = Field(default=None, alias="from")
     to: Optional[datetime] = Field(default=None, alias="to")
@@ -33,8 +33,8 @@ class SignalsReadQuery(BaseModel):
 class ExecutionOrdersReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    symbol: Optional[str] = Field(default=None)
-    strategy: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None, max_length=20)
+    strategy: Optional[str] = Field(default=None, max_length=50)
     run_id: Optional[str] = Field(default=None)
     order_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
@@ -66,8 +66,8 @@ class ExecutionOrdersReadResponse(BaseModel):
 class TradingCoreOrdersReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     order_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
@@ -76,8 +76,8 @@ class TradingCoreOrdersReadQuery(BaseModel):
 class TradingCoreExecutionEventsReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     order_id: Optional[str] = Field(default=None)
     trade_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
@@ -87,8 +87,8 @@ class TradingCoreExecutionEventsReadQuery(BaseModel):
 class TradingCoreTradesReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     position_id: Optional[str] = Field(default=None)
     trade_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
@@ -98,8 +98,8 @@ class TradingCoreTradesReadQuery(BaseModel):
 class TradingCorePositionsReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     position_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
@@ -108,8 +108,8 @@ class TradingCorePositionsReadQuery(BaseModel):
 class PaperTradesReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     position_id: Optional[str] = Field(default=None)
     trade_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
@@ -119,8 +119,8 @@ class PaperTradesReadQuery(BaseModel):
 class PaperPositionsReadQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    strategy_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
+    symbol: Optional[str] = Field(default=None, max_length=20)
     position_id: Optional[str] = Field(default=None)
     limit: int = Field(default=50, ge=1, le=500)
     offset: int = Field(default=0, ge=0)
@@ -663,8 +663,8 @@ class DecisionCardInspectionQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_id: Optional[str] = Field(default=None)
-    symbol: Optional[str] = Field(default=None)
-    strategy_id: Optional[str] = Field(default=None)
+    symbol: Optional[str] = Field(default=None, max_length=20)
+    strategy_id: Optional[str] = Field(default=None, max_length=100)
     decision_card_id: Optional[str] = Field(default=None)
     qualification_state: Optional[
         Literal["reject", "watch", "paper_candidate", "paper_approved"]

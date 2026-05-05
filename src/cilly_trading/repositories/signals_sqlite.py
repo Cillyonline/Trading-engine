@@ -111,6 +111,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                 raise ValueError("ingestion_run_id is required for signal persistence")
 
         with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE;")
             cur = conn.cursor()
             cur.executemany(
                 """
@@ -280,7 +281,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
             sort=sort,
             limit=limit,
             offset=offset,
-            dedupe_unfiltered_reads=ingestion_run_id is None,
+            dedupe_unfiltered_reads=True,
         )
 
     def read_signals_raw(

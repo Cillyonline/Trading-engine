@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from numbers import Real
 from typing import Any, Dict, List
 
@@ -113,7 +114,15 @@ def _round_value(value: Any) -> Any:
     if isinstance(value, int):
         return value
     if isinstance(value, Real):
-        return round(float(value), 8)
+        try:
+            with localcontext() as ctx:
+                ctx.prec = 28
+                ctx.rounding = ROUND_HALF_UP
+                return float(
+                    Decimal(str(value)).quantize(Decimal("0.00000001"))
+                )
+        except InvalidOperation:
+            return float(value)
     return value
 
 
@@ -146,7 +155,9 @@ def _build_rsi2_reason(
     stage = signal.get("stage")
 
     if stage == "exit":
-        overbought_threshold = float(strat_config.get("overbought_threshold", 70.0))
+        overbought_threshold = float(
+            Decimal(str(strat_config.get("overbought_threshold", 70.0)))
+        )
         data_refs = [
             _build_data_ref(
                 data_type="INDICATOR_VALUE",
@@ -169,7 +180,9 @@ def _build_rsi2_reason(
         ]
         rule_ref = dict(RSI2_EXIT_RULE_REF)
     else:
-        oversold_threshold = float(strat_config.get("oversold_threshold", 10.0))
+        oversold_threshold = float(
+            Decimal(str(strat_config.get("oversold_threshold", 10.0)))
+        )
         data_refs = [
             _build_data_ref(
                 data_type="INDICATOR_VALUE",
@@ -238,7 +251,9 @@ def _build_turtle_reason(
         ]
         rule_ref = dict(TURTLE_CONFIRM_RULE_REF)
     elif stage == "setup":
-        proximity_threshold_pct = float(strat_config.get("proximity_threshold_pct", 0.03))
+        proximity_threshold_pct = float(
+            Decimal(str(strat_config.get("proximity_threshold_pct", 0.03)))
+        )
         data_refs = [
             _build_data_ref(
                 data_type="BAR_VALUE",
