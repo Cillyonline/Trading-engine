@@ -7,6 +7,8 @@ from typing import Any, Optional
 
 from cilly_trading.strategies.registry import initialize_default_registry
 
+from ..services.jwt_auth import JwtSettings, build_jwt_settings
+
 
 @dataclass(frozen=True)
 class ApiRuntimeSettings:
@@ -18,6 +20,7 @@ class ApiRuntimeSettings:
     phase_13_read_only_endpoints: frozenset[str]
     role_header_name: str
     role_precedence: dict[str, int]
+    jwt_settings: JwtSettings
     default_strategy_configs: dict[str, dict[str, Any]]
     scheduled_analysis_enabled: bool
     scheduled_analysis_poll_interval_seconds: int
@@ -96,6 +99,7 @@ def build_api_runtime_settings() -> ApiRuntimeSettings:
             "operator": 2,
             "owner": 3,
         },
+        jwt_settings=build_jwt_settings(),
         default_strategy_configs=build_default_strategy_configs(),
         scheduled_analysis_enabled=_read_bool_env(
             "CILLY_SCHEDULED_ANALYSIS_ENABLED",
