@@ -7,7 +7,7 @@ parameters from this profile.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from math import isfinite
 from typing import Any, Literal
@@ -84,6 +84,8 @@ class PaperExecutionRiskProfile:
     drawdown_guard_enabled: bool = False
     max_consecutive_losses: int = 3
     max_drawdown_pct: Decimal = Decimal("0.10")
+    # #1151 — regime filter (empty frozenset = allow all regimes)
+    allowed_regimes: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.contract_id != PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID:
@@ -166,6 +168,10 @@ class PaperExecutionRiskProfile:
         if self.max_consecutive_losses <= 0:
             raise ValueError("max_consecutive_losses must be > 0")
         _require_finite_pct(name="max_drawdown_pct", value=self.max_drawdown_pct)
+        from cilly_trading.engine.regime_classifier import _ALL_REGIME_LABELS
+        unknown = self.allowed_regimes - _ALL_REGIME_LABELS
+        if unknown:
+            raise ValueError(f"unknown regime labels in allowed_regimes: {sorted(unknown)}")
 
     def to_payload(self) -> dict[str, Any]:
         """Return a deterministic JSON-safe payload for evidence/logging."""
@@ -196,6 +202,7 @@ class PaperExecutionRiskProfile:
             "drawdown_guard_enabled": self.drawdown_guard_enabled,
             "max_consecutive_losses": self.max_consecutive_losses,
             "max_drawdown_pct": str(self.max_drawdown_pct),
+            "allowed_regimes": sorted(self.allowed_regimes),
         }
 
 
@@ -207,4 +214,5 @@ __all__ = [
     "PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID",
     "PaperExecutionRiskProfile",
     "SizingMethod",
+    "RegimeLabel",
 ]

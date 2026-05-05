@@ -57,6 +57,13 @@ from cilly_trading.portfolio_framework.capital_allocation_policy import (
 )
 from cilly_trading.repositories import CanonicalExecutionRepository
 from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.engine.paper_performance import (
+    PaperPerformanceAttribution,
+    PaperPerformanceSummary,
+    compute_paper_performance_attribution,
+    compute_paper_performance_summary,
+)
+from cilly_trading.engine.regime_classifier import RegimeState
 from cilly_trading.risk_framework.correlation_risk import (
     PriceHistory,
     evaluate_correlation_risk,
@@ -140,6 +147,7 @@ OutcomeCode = Literal[
     "skip:entry_zone_not_reached",
     "skip:correlation_risk_blocked",
     "skip:drawdown_guard_active",
+    "skip:regime_filtered",
     "skip:no_open_position_to_exit",
     "skip:exit_quantity_zero",
     "reject:invalid_signal_fields",
@@ -681,6 +689,7 @@ class BoundedPaperExecutionWorker:
         *,
         entry_bar: EntryBar | None = None,
         price_history: PriceHistory | None = None,
+        regime_state: RegimeState | None = None,
     ) -> SignalEvaluationResult:
         """Evaluate and process a single signal against the bounded policy.
 
@@ -697,8 +706,12 @@ class BoundedPaperExecutionWorker:
         ``risk_profile.correlation_check_enabled`` is True, the worker
         evaluates pairwise correlation against open positions and blocks
         entries that would exceed ``max_correlated_pairs``.
+
+        ``regime_state`` is optional. When provided and
+        ``risk_profile.allowed_regimes`` is non-empty, the worker skips
+        entries whose regime label is not in the allowed set.
         """
-        result = self._evaluate(signal, entry_bar=entry_bar, price_history=price_history)
+        result = self._evaluate(signal, entry_bar=entry_bar, price_history=price_history, regime_state=regime_state)
         if result.outcome == "eligible":
             result = self._persist_paper_entry(
                 signal,
@@ -886,6 +899,18 @@ class BoundedPaperExecutionWorker:
         """Return the canonical validated risk profile used by this worker."""
         return self._risk_profile
 
+    def get_performance_summary(self) -> PaperPerformanceSummary:
+        """Compute performance metrics from all closed trades in the repository."""
+        trades = self._repo.list_trades(limit=10000)
+        return compute_paper_performance_summary(
+            trades, initial_equity=self._risk_profile.account_equity
+        )
+
+    def get_performance_attribution(self) -> PaperPerformanceAttribution:
+        """Compute per-strategy and per-symbol attribution from all closed trades."""
+        trades = self._repo.list_trades(limit=10000)
+        return compute_paper_performance_attribution(trades)
+
     def _build_risk_limits(self) -> RiskLimits:
         """Build deterministic risk-framework limits for paper execution."""
         with localcontext() as ctx:
@@ -975,6 +1000,7 @@ class BoundedPaperExecutionWorker:
         *,
         entry_bar: EntryBar | None = None,
         price_history: PriceHistory | None = None,
+        regime_state: RegimeState | None = None,
     ) -> SignalEvaluationResult:
         """Apply the ordered policy evaluation.
 
@@ -984,10 +1010,11 @@ class BoundedPaperExecutionWorker:
             3. Duplicate-entry check
             4. Cooldown check
             5. Entry-bar fill check (if entry_bar provided)
-            6. Drawdown guard (if drawdown_guard_enabled)
-            7. Trade sizing
-            8. Exposure and position-limit checks
-            9. Correlation risk check (if price_history provided and correlation_check_enabled)
+            6. Regime filter (if regime_state provided and allowed_regimes non-empty)
+            7. Drawdown guard (if drawdown_guard_enabled)
+            8. Trade sizing
+            9. Exposure and position-limit checks
+            10. Correlation risk check (if price_history provided and correlation_check_enabled)
         """
         # Step 1: eligibility — required signal fields
         field_error = _validate_signal_fields(signal)
@@ -1066,7 +1093,18 @@ class BoundedPaperExecutionWorker:
                     ),
                 )
 
-        # Step 6: drawdown guard — block new entries during losing streaks / drawdown periods.
+        # Step 6: regime filter — skip entries in disallowed market regimes.
+        if regime_state is not None and self._risk_profile.allowed_regimes:
+            if regime_state.label not in self._risk_profile.allowed_regimes:
+                return SignalEvaluationResult(
+                    outcome="skip:regime_filtered",
+                    reason=(
+                        f"regime={regime_state.label!r} not in "
+                        f"allowed_regimes={sorted(self._risk_profile.allowed_regimes)}"
+                    ),
+                )
+
+        # Step 7: drawdown guard — block new entries during losing streaks / drawdown periods.
         if self._risk_profile.drawdown_guard_enabled:
             all_closed = [t for t in self._repo.list_trades(limit=5000) if t.status == "closed"]
             consecutive_losses, drawdown_pct = _compute_drawdown_state(
@@ -1365,6 +1403,9 @@ __all__ = [
     "EntryBar",
     "PaperExecutionRiskProfile",
     "PriceHistory",
+    "RegimeState",
+    "PaperPerformanceSummary",
+    "PaperPerformanceAttribution",
     "bar_intersects_entry_zone",
     "stop_loss_breached",
     "_direction_to_order_side",
