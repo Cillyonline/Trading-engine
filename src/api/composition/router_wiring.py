@@ -20,6 +20,8 @@ from ..routers import (
     build_paper_runtime_evidence_series_router,
     build_watchlists_router,
 )
+from ..routers.auth_router import AuthRouterDependencies, build_auth_router
+from ..services.jwt_auth import JwtSettings
 
 
 @dataclass
@@ -51,9 +53,19 @@ class ApiRouterWiring:
     get_create_strategy: Callable[[str], Any]
     get_create_registered_strategies: Callable[[], list[Any]]
     get_trigger_operator_analysis_run: Callable[..., Any]
+    get_jwt_settings: Callable[[], JwtSettings]
+    get_role_precedence: Callable[[], dict[str, int]]
 
 
 def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
+    app.include_router(
+        build_auth_router(
+            deps=AuthRouterDependencies(
+                get_jwt_settings=wiring.get_jwt_settings,
+                get_role_precedence=wiring.get_role_precedence,
+            )
+        )
+    )
     app.include_router(build_alerts_router(wiring.require_role))
     app.include_router(
         build_journal_router(

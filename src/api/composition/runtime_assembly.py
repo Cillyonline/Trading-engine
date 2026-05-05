@@ -24,6 +24,7 @@ def create_runtime_service(
         default_db_path=str(DEFAULT_DB_PATH),
         role_header_name=compat.get("ROLE_HEADER_NAME"),
         role_precedence=compat.get("ROLE_PRECEDENCE"),
+        jwt_settings=compat.get("JWT_SETTINGS"),
         phase_13_read_only_endpoints=compat.get("PHASE_13_READ_ONLY_ENDPOINTS"),
         engine_runtime_not_running_status=compat.get("ENGINE_RUNTIME_NOT_RUNNING_STATUS"),
         engine_runtime_not_running_code=compat.get("ENGINE_RUNTIME_NOT_RUNNING_CODE"),
@@ -132,4 +133,6 @@ def build_api_router_wiring(*, compat: MainModuleCompatibilitySurface) -> ApiRou
             *args,
             **kwargs,
         ),
+        get_jwt_settings=lambda: compat.get("JWT_SETTINGS"),
+        get_role_precedence=lambda: compat.get("ROLE_PRECEDENCE"),
     )

@@ -7,10 +7,10 @@ parameters from this profile.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from math import isfinite
-from typing import Any
+from typing import Any, Literal
 
 
 PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID = "paper-execution-risk-profile-v1"
@@ -27,6 +27,13 @@ def _require_finite_pct(*, name: str, value: Decimal, allow_zero: bool = False) 
         raise ValueError(f"{name} must be in range (0, 1]")
 
 
+def _require_finite_non_negative_pct(*, name: str, value: Decimal) -> None:
+    if not value.is_finite():
+        raise ValueError(f"{name} must be finite")
+    if value < Decimal("0") or value > Decimal("1"):
+        raise ValueError(f"{name} must be in range [0, 1]")
+
+
 def _require_finite_positive_decimal(*, name: str, value: Decimal) -> None:
     if not value.is_finite():
         raise ValueError(f"{name} must be finite")
@@ -39,6 +46,9 @@ def _require_finite_score(*, name: str, value: float) -> None:
         raise ValueError(f"{name} must be finite")
     if value < 0.0 or value > 100.0:
         raise ValueError(f"{name} must be in range [0.0, 100.0]")
+
+
+SizingMethod = Literal["stop_distance", "atr", "fixed"]
 
 
 @dataclass(frozen=True)
@@ -60,6 +70,22 @@ class PaperExecutionRiskProfile:
     account_equity: Decimal = Decimal("100000")
     default_paper_quantity: Decimal = Decimal("1")
     default_paper_entry_price: Decimal = Decimal("100")
+    commission_rate: Decimal = Decimal("0.001")
+    slippage_rate: Decimal = Decimal("0.0005")
+    # #1147 — ATR-based position sizing
+    sizing_method: SizingMethod = "stop_distance"
+    atr_multiple: Decimal = Decimal("2.0")
+    # #1145 — correlation risk gate (requires price_history passed to process_signal)
+    correlation_check_enabled: bool = False
+    correlation_threshold: float = 0.7
+    max_correlated_pairs: int = 2
+    correlation_window: int = 60
+    # #1146 — drawdown guard (circuit-breaker for losing streaks)
+    drawdown_guard_enabled: bool = False
+    max_consecutive_losses: int = 3
+    max_drawdown_pct: Decimal = Decimal("0.10")
+    # #1151 — regime filter (empty frozenset = allow all regimes)
+    allowed_regimes: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
         if self.contract_id != PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID:
@@ -118,6 +144,34 @@ class PaperExecutionRiskProfile:
             name="default_paper_entry_price",
             value=self.default_paper_entry_price,
         )
+        _require_finite_non_negative_pct(
+            name="commission_rate",
+            value=self.commission_rate,
+        )
+        _require_finite_non_negative_pct(
+            name="slippage_rate",
+            value=self.slippage_rate,
+        )
+        if self.sizing_method not in ("stop_distance", "atr", "fixed"):
+            raise ValueError(
+                f"sizing_method must be 'stop_distance', 'atr', or 'fixed', got {self.sizing_method!r}"
+            )
+        _require_finite_positive_decimal(name="atr_multiple", value=self.atr_multiple)
+        if not isfinite(self.correlation_threshold):
+            raise ValueError("correlation_threshold must be finite")
+        if not (0.0 <= self.correlation_threshold <= 1.0):
+            raise ValueError("correlation_threshold must be in range [0.0, 1.0]")
+        if self.max_correlated_pairs < 0:
+            raise ValueError("max_correlated_pairs must be >= 0")
+        if self.correlation_window <= 0:
+            raise ValueError("correlation_window must be > 0")
+        if self.max_consecutive_losses <= 0:
+            raise ValueError("max_consecutive_losses must be > 0")
+        _require_finite_pct(name="max_drawdown_pct", value=self.max_drawdown_pct)
+        from cilly_trading.engine.regime_classifier import _ALL_REGIME_LABELS
+        unknown = self.allowed_regimes - _ALL_REGIME_LABELS
+        if unknown:
+            raise ValueError(f"unknown regime labels in allowed_regimes: {sorted(unknown)}")
 
     def to_payload(self) -> dict[str, Any]:
         """Return a deterministic JSON-safe payload for evidence/logging."""
@@ -137,6 +191,18 @@ class PaperExecutionRiskProfile:
             "account_equity": str(self.account_equity),
             "default_paper_quantity": str(self.default_paper_quantity),
             "default_paper_entry_price": str(self.default_paper_entry_price),
+            "commission_rate": str(self.commission_rate),
+            "slippage_rate": str(self.slippage_rate),
+            "sizing_method": self.sizing_method,
+            "atr_multiple": str(self.atr_multiple),
+            "correlation_check_enabled": self.correlation_check_enabled,
+            "correlation_threshold": self.correlation_threshold,
+            "max_correlated_pairs": self.max_correlated_pairs,
+            "correlation_window": self.correlation_window,
+            "drawdown_guard_enabled": self.drawdown_guard_enabled,
+            "max_consecutive_losses": self.max_consecutive_losses,
+            "max_drawdown_pct": str(self.max_drawdown_pct),
+            "allowed_regimes": sorted(self.allowed_regimes),
         }
 
 
@@ -147,4 +213,6 @@ __all__ = [
     "DEFAULT_PAPER_EXECUTION_RISK_PROFILE",
     "PAPER_EXECUTION_RISK_PROFILE_CONTRACT_ID",
     "PaperExecutionRiskProfile",
+    "SizingMethod",
+    "RegimeLabel",
 ]

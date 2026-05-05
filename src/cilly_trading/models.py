@@ -181,6 +181,9 @@ class Signal(TypedDict, total=False):
     score: NotRequired[float]
     entry_zone: NotRequired[Optional[EntryZone]]
     stop_loss: NotRequired[Optional[float]]
+    trade_risk_pct: NotRequired[Optional[float]]
+    atr: NotRequired[Optional[float]]
+    exit_pct: NotRequired[Optional[float]]
     confirmation_rule: NotRequired[str]
     reasons: NotRequired[Optional[List[SignalReason]]]
 

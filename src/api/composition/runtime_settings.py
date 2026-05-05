@@ -7,6 +7,9 @@ from typing import Any, Optional
 
 from cilly_trading.strategies.registry import initialize_default_registry
 
+from ..services.jwt_auth import JwtSettings, build_jwt_settings
+from ..security import install_sensitive_data_filter
+
 
 @dataclass(frozen=True)
 class ApiRuntimeSettings:
@@ -18,11 +21,15 @@ class ApiRuntimeSettings:
     phase_13_read_only_endpoints: frozenset[str]
     role_header_name: str
     role_precedence: dict[str, int]
+    jwt_settings: JwtSettings
     default_strategy_configs: dict[str, dict[str, Any]]
     scheduled_analysis_enabled: bool
     scheduled_analysis_poll_interval_seconds: int
     scheduled_analysis_snapshot_scan_limit: int
     scheduled_analysis_tasks_json: str
+    api_host: str
+    api_port: int
+    cors_origins: list[str]
 
 
 def _read_bool_env(name: str, *, default: bool) -> bool:
@@ -66,7 +73,20 @@ def build_default_strategy_configs() -> dict[str, dict[str, Any]]:
     }
 
 
+def _read_cors_origins() -> list[str]:
+    raw = os.getenv("CILLY_CORS_ORIGINS", "http://localhost:5173").strip()
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    for origin in origins:
+        if origin == "*":
+            raise ValueError(
+                "Wildcard CORS origin ('*') is not permitted. "
+                "Set CILLY_CORS_ORIGINS to an explicit comma-separated list of allowed origins."
+            )
+    return origins
+
+
 def build_api_runtime_settings() -> ApiRuntimeSettings:
+    install_sensitive_data_filter()
     paper_runtime_evidence_series_dir_raw = os.getenv(
         "CILLY_PAPER_RUNTIME_EVIDENCE_SERIES_DIR",
         "",
@@ -88,6 +108,7 @@ def build_api_runtime_settings() -> ApiRuntimeSettings:
             "operator": 2,
             "owner": 3,
         },
+        jwt_settings=build_jwt_settings(),
         default_strategy_configs=build_default_strategy_configs(),
         scheduled_analysis_enabled=_read_bool_env(
             "CILLY_SCHEDULED_ANALYSIS_ENABLED",
@@ -107,4 +128,7 @@ def build_api_runtime_settings() -> ApiRuntimeSettings:
             "CILLY_SCHEDULED_ANALYSIS_TASKS_JSON",
             "",
         ).strip(),
+        api_host=os.getenv("CILLY_API_HOST", "0.0.0.0"),
+        api_port=_read_int_env("CILLY_API_PORT", default=8000, minimum=1),
+        cors_origins=_read_cors_origins(),
     )

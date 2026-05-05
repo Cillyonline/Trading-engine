@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 from fastapi import Header, HTTPException
 
 from ..models import ComplianceGuardStatusResponse, RuntimeIntrospectionResponse, ScreenerRequest, ScreenerResponse, SystemStateResponse
+from ..services.jwt_auth import JwtSettings, TokenValidationError, decode_access_token
 from . import analysis_service, control_plane_service
 
 
@@ -66,6 +67,7 @@ class CompositionRuntimeService:
     default_db_path: str
     role_header_name: str
     role_precedence: dict[str, int]
+    jwt_settings: JwtSettings
     phase_13_read_only_endpoints: frozenset[str]
     engine_runtime_not_running_status: int
     engine_runtime_not_running_code: str
@@ -92,19 +94,45 @@ class CompositionRuntimeService:
         assert endpoint_path in self.phase_13_read_only_endpoints
 
     def require_role(self, minimum_role: str):
-        # STAGING-ONLY: Role is determined by a trusted HTTP header.
-        # This is NOT production-grade auth. For public deployment,
-        # replace with JWT / OAuth2 middleware.
         required_rank = self.role_precedence[minimum_role]
+        role_header_name = self.role_header_name
+        role_precedence = self.role_precedence
+        # Capture a reference to self so that jwt_settings is evaluated at
+        # request time.  This allows runtime monkeypatching in tests and
+        # supports in-process reconfiguration without rebuilding the router.
+        service = self
 
         def _enforce_role(
-            x_cilly_role: str | None = Header(default=None, alias=self.role_header_name)
+            authorization: str | None = Header(default=None),
+            x_cilly_role: str | None = Header(default=None, alias=role_header_name),
         ) -> str:
+            if service.jwt_settings.enabled:
+                # JWT mode: require a valid Bearer token; reject legacy header.
+                if authorization is None or not authorization.startswith("Bearer "):
+                    raise HTTPException(status_code=401, detail="unauthorized")
+                token = authorization.split(" ", 1)[1]
+                try:
+                    payload = decode_access_token(
+                        token,
+                        public_key=service.jwt_settings.public_key,
+                        algorithm=service.jwt_settings.algorithm,
+                    )
+                except TokenValidationError:
+                    raise HTTPException(status_code=401, detail="unauthorized")
+                role = payload.get("role", "").strip().lower()
+                caller_rank = role_precedence.get(role)
+                if caller_rank is None:
+                    raise HTTPException(status_code=401, detail="unauthorized")
+                if caller_rank < required_rank:
+                    raise HTTPException(status_code=403, detail="forbidden")
+                return role
+
+            # Header fallback: staging / trusted-proxy mode.
+            # Active only when CILLY_JWT_PUBLIC_KEY is not configured.
             if x_cilly_role is None:
                 raise HTTPException(status_code=401, detail="unauthorized")
-
             normalized_role = x_cilly_role.strip().lower()
-            caller_rank = self.role_precedence.get(normalized_role)
+            caller_rank = role_precedence.get(normalized_role)
             if caller_rank is None:
                 raise HTTPException(status_code=401, detail="unauthorized")
             if caller_rank < required_rank:
