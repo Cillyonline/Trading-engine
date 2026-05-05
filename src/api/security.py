@@ -76,18 +76,15 @@ def _redact(text: str) -> str:
     return text
 
 
-# Sentinel attribute used to mark loggers/handlers that already carry a
-# ``SensitiveDataFilter`` so repeated calls to :func:`install_sensitive_data_filter`
-# do not stack duplicate filters.
-_FILTER_INSTALLED_ATTR = "_cilly_sensitive_data_filter_installed"
-
-
 def _attach_filter(target: logging.Logger | logging.Handler) -> None:
-    """Attach a ``SensitiveDataFilter`` to ``target`` if not already attached."""
-    if getattr(target, _FILTER_INSTALLED_ATTR, False):
+    """Attach a ``SensitiveDataFilter`` to ``target`` if not already attached.
+
+    Idempotency is achieved by checking whether the target already carries a
+    ``SensitiveDataFilter`` instance, so repeated calls do not stack duplicates.
+    """
+    if any(isinstance(f, SensitiveDataFilter) for f in target.filters):
         return
     target.addFilter(SensitiveDataFilter())
-    setattr(target, _FILTER_INSTALLED_ATTR, True)
 
 
 def install_sensitive_data_filter(logger_name: str = "") -> None:

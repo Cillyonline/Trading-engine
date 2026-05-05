@@ -20,13 +20,10 @@ def _reset_root_logger():
     root = logging.getLogger()
     saved_filters = list(root.filters)
     saved_handlers = list(root.handlers)
-    saved_attr = getattr(root, "_cilly_sensitive_data_filter_installed", False)
     for handler in saved_handlers:
         root.removeHandler(handler)
     for f in saved_filters:
         root.removeFilter(f)
-    if hasattr(root, "_cilly_sensitive_data_filter_installed"):
-        delattr(root, "_cilly_sensitive_data_filter_installed")
     try:
         yield
     finally:
@@ -38,10 +35,6 @@ def _reset_root_logger():
             root.addHandler(handler)
         for f in saved_filters:
             root.addFilter(f)
-        if saved_attr:
-            setattr(root, "_cilly_sensitive_data_filter_installed", True)
-        elif hasattr(root, "_cilly_sensitive_data_filter_installed"):
-            delattr(root, "_cilly_sensitive_data_filter_installed")
 
 
 def _make_handler() -> tuple[logging.Handler, io.StringIO]:
