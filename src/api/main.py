@@ -29,7 +29,11 @@ from .composition import (
 )
 from .middleware import (
     REQUEST_ID_HEADER,
+    GracefulShutdownMiddleware,
+    InFlightRequestTracker,
+    LegacyApiDeprecationMiddleware,
     RequestIdMiddleware,
+    RequestTimeoutMiddleware,
     current_request_id,
     install_request_id_log_filter,
 )
@@ -123,6 +127,32 @@ async def _handle_cilly_error(_request: Request, exc: CillyError) -> JSONRespons
     # Fallback for any future CillyError subclass not handled above.
     return _cilly_error_response(exc)
 
+
+app.add_middleware(RequestTimeoutMiddleware)
+
+# Tracker is created here so the shutdown lifecycle can call ``drain()``
+# on the same instance the middleware uses. The shutdown flag itself is
+# stored on ``app.state`` so that tests constructing a fresh
+# ``TestClient`` without entering the lifespan never inherit a stale
+# shutdown state from a previous test that exited it.
+inflight_tracker = InFlightRequestTracker()
+app.state.inflight_tracker = inflight_tracker
+app.state.shutdown_started = False
+
+
+def _is_shutdown_started() -> bool:
+    return bool(getattr(app.state, "shutdown_started", False))
+
+
+app.add_middleware(
+    GracefulShutdownMiddleware,
+    tracker=inflight_tracker,
+    is_shutting_down=_is_shutdown_started,
+)
+
+# Tag responses on legacy un-versioned API paths with deprecation hints
+# (issue #1135). ``/v1/...`` traffic is unaffected.
+app.add_middleware(LegacyApiDeprecationMiddleware)
 
 app.add_middleware(RequestIdMiddleware)
 

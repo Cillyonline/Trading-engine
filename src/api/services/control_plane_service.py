@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, Optional
 
 from cilly_trading.compliance.daily_loss_guard import (
     configured_daily_loss_limit,
@@ -36,6 +37,67 @@ class ControlPlaneHealthDependencies:
     now: Callable[[], datetime]
     get_runtime_introspection_payload: Callable[[], dict[str, Any]]
     evaluate_runtime_health: Callable[..., Any]
+
+
+def check_db_connectivity(
+    db_path: Path,
+    *,
+    timeout_s: float = 2.0,
+) -> tuple[bool, str]:
+    """Return ``(ok, reason)`` after a lightweight ``SELECT 1`` against the DB.
+
+    The probe deliberately uses a short connection timeout so that a slow
+    or wedged file system surfaces quickly to orchestrators instead of
+    extending the overall readiness latency.
+
+    The ``reason`` is a *categorical* code (not a raw exception message)
+    so that the HTTP readiness response cannot leak filesystem paths or
+    internal SQL details to unauthenticated callers. Full exception
+    detail is sent to the structured logs for operators to inspect.
+    """
+
+    import logging as _logging  # local import to avoid module-level cycles
+
+    log = _logging.getLogger(__name__)
+
+    if not db_path.exists():
+        log.warning("health_db_probe_missing", extra={"db_path": str(db_path)})
+        return False, "db_file_missing"
+    try:
+        conn = sqlite3.connect(db_path, timeout=timeout_s)
+    except sqlite3.OperationalError as exc:
+        log.warning(
+            "health_db_probe_connect_failed",
+            extra={"db_path": str(db_path), "error": str(exc)},
+        )
+        return False, "db_connect_failed"
+    try:
+        try:
+            conn.execute("SELECT 1;").fetchone()
+        except sqlite3.Error as exc:
+            log.warning(
+                "health_db_probe_query_failed",
+                extra={"db_path": str(db_path), "error": str(exc)},
+            )
+            return False, "db_query_failed"
+    finally:
+        conn.close()
+    return True, "ok"
+
+
+def db_connectivity_payload(
+    *, deps: ControlPlaneHealthDependencies
+) -> dict[str, Any]:
+    """Build the readiness sub-payload describing DB reachability.
+
+    Only the categorical reason and ok flag are exposed; the resolved
+    DB path is intentionally **not** included to avoid leaking server
+    filesystem layout to unauthenticated readiness probes.
+    """
+
+    db_path_str = deps.resolve_analysis_db_path()
+    ok, reason = check_db_connectivity(Path(db_path_str))
+    return {"ok": ok, "reason": reason}
 
 
 def runtime_health_payload(*, deps: ControlPlaneHealthDependencies) -> dict[str, Any]:

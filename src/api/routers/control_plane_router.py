@@ -16,6 +16,7 @@ from ..services.control_plane_service import (
     build_compliance_guard_status_response,
     build_runtime_introspection_response,
     build_system_state_response,
+    db_connectivity_payload,
     health_data_payload,
     health_engine_payload,
     health_guards_payload,
@@ -61,17 +62,38 @@ def build_control_plane_router(
 
     @router.get("/health/ready")
     def health_ready_handler() -> dict[str, Any]:
-        """Readiness probe — 200 when engine runtime is ready, 503 otherwise."""
+        """Readiness probe — 200 when engine runtime is ready *and* the
+        analysis database is reachable, 503 otherwise.
+
+        DB connectivity is verified via a short ``SELECT 1`` so that a
+        broken DB file or missing volume mount surfaces here rather than on
+        the first user request (issue #1132).
+        """
         from fastapi.responses import JSONResponse
 
-        payload = health_payload(deps=_health_dependencies(deps))
+        health_deps = _health_dependencies(deps)
+        payload = health_payload(deps=health_deps)
         mode = payload.get("mode")
+
         if not payload.get("ready"):
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "runtime": mode},
             )
-        return {"status": "ready", "runtime": mode}
+
+        db_payload = db_connectivity_payload(deps=health_deps)
+        if not db_payload["ok"]:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "runtime": mode,
+                    "reason": f"db_unavailable: {db_payload['reason']}",
+                    "db": db_payload,
+                },
+            )
+
+        return {"status": "ready", "runtime": mode, "db": db_payload}
 
     @router.get("/health")
     def health_handler(
