@@ -12,6 +12,26 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _default_risk_profile() -> dict[str, object]:
+    return {
+        "allowed_regimes": [],
+        "commission_rate": "0.001",
+        "correlation_check_enabled": False,
+        "correlation_threshold": 0.7,
+        "correlation_window": 60,
+        "drawdown_guard_enabled": False,
+        "max_concurrent_positions": 10,
+        "max_correlated_pairs": 2,
+        "max_drawdown_pct": "0.10",
+        "max_strategy_exposure_pct": "0.80",
+        "max_symbol_exposure_pct": "0.80",
+        "max_total_exposure_pct": "0.80",
+        "min_score_threshold": 60.0,
+        "sizing_method": "stop_distance",
+        "slippage_rate": "0.0005",
+    }
+
+
 def _load_script_module():
     module_path = REPO_ROOT / "scripts" / "run_daily_bounded_paper_runtime.py"
     spec = importlib.util.spec_from_file_location(
@@ -57,7 +77,17 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
             return subprocess.CompletedProcess(
                 command,
                 1,
-                stdout=json.dumps({"eligible": 0, "status": "no_eligible"}) + "\n",
+                stdout=json.dumps(
+                    {
+                        "eligible": 0,
+                        "rejected": 0,
+                        "results": [{"outcome": "skip:score_below_threshold", "signal_id": "sig-1"}],
+                        "risk_profile": _default_risk_profile(),
+                        "skipped": 1,
+                        "status": "no_eligible",
+                    }
+                )
+                + "\n",
                 stderr="",
             )
         if script_name == "run_post_run_reconciliation.py":
@@ -188,6 +218,29 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
         "review_required_count": 0,
         "stale_after_seconds": 86400,
     }
+    risk_controls = {item["control_id"]: item for item in payload["risk_control_activation"]}
+    assert set(risk_controls) == {
+        "commission_model",
+        "correlation_gate",
+        "drawdown_guard",
+        "duplicate_entry_gate",
+        "exposure_limits",
+        "max_concurrent_positions",
+        "regime_filter",
+        "score_threshold_gate",
+        "slippage_model",
+        "stop_distance_sizing",
+    }
+    assert risk_controls["score_threshold_gate"]["active"] is True
+    assert risk_controls["score_threshold_gate"]["applied_count"] == 1
+    assert risk_controls["score_threshold_gate"]["blocked_count"] == 1
+    assert risk_controls["correlation_gate"]["active"] is False
+    assert risk_controls["correlation_gate"]["inactive_reason"] == (
+        "disabled by config: correlation_check_enabled=false"
+    )
+    assert "Not validated by this run" in risk_controls["correlation_gate"]["validation_note"]
+    assert risk_controls["drawdown_guard"]["active"] is False
+    assert risk_controls["regime_filter"]["active"] is False
     assert executed_scripts == [
         "run_snapshot_ingestion.py",
         "run_paper_execution_cycle.py",
@@ -209,6 +262,230 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert summary_file_payload["operator_action_contract"] == payload["operator_action_contract"]
     assert summary_file_payload["run_quality_inputs"] == payload["run_quality_inputs"]
     assert summary_file_payload["paper_state_freshness"] == payload["paper_state_freshness"]
+    assert summary_file_payload["risk_control_activation"] == payload["risk_control_activation"]
+
+
+def test_risk_control_activation_evidence_reports_required_controls_and_inactive_defaults() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload={
+            "results": [],
+            "risk_profile": _default_risk_profile(),
+        }
+    )
+
+    controls = {item["control_id"]: item for item in evidence}
+    assert list(controls) == [
+        "score_threshold_gate",
+        "duplicate_entry_gate",
+        "stop_distance_sizing",
+        "commission_model",
+        "slippage_model",
+        "exposure_limits",
+        "max_concurrent_positions",
+        "correlation_gate",
+        "drawdown_guard",
+        "regime_filter",
+    ]
+    assert controls["score_threshold_gate"]["implemented"] is True
+    assert controls["score_threshold_gate"]["configured"] is True
+    assert controls["score_threshold_gate"]["active"] is True
+    assert controls["duplicate_entry_gate"]["active"] is True
+    assert controls["stop_distance_sizing"]["active"] is True
+    assert controls["commission_model"]["active"] is True
+    assert controls["slippage_model"]["active"] is True
+    assert controls["exposure_limits"]["active"] is True
+    assert controls["max_concurrent_positions"]["active"] is True
+    assert controls["correlation_gate"]["configured"] is True
+    assert controls["correlation_gate"]["active"] is False
+    assert controls["correlation_gate"]["inactive_reason"] == (
+        "disabled by config: correlation_check_enabled=false"
+    )
+    assert controls["drawdown_guard"]["active"] is False
+    assert controls["drawdown_guard"]["inactive_reason"] == (
+        "disabled by config: drawdown_guard_enabled=false"
+    )
+    assert controls["regime_filter"]["active"] is False
+    assert controls["regime_filter"]["inactive_reason"] == (
+        "no allowed regimes configured: allowed_regimes is empty"
+    )
+    assert all("Not validated by this run" in controls[item]["validation_note"] for item in (
+        "correlation_gate",
+        "drawdown_guard",
+        "regime_filter",
+    ))
+
+
+def test_risk_control_activation_reports_all_configurable_controls_inactive() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload={
+            "results": [
+                {"outcome": "eligible", "signal_id": "sig-ok"},
+                {"outcome": "skip:score_below_threshold", "signal_id": "sig-score"},
+                {"outcome": "skip:duplicate_entry", "signal_id": "sig-dup"},
+            ],
+            "risk_profile": {},
+        }
+    )
+    controls = {item["control_id"]: item for item in evidence}
+
+    assert controls["score_threshold_gate"]["active"] is False
+    assert controls["score_threshold_gate"]["inactive_reason"] == "min_score_threshold not configured"
+    assert controls["score_threshold_gate"]["applied_count"] == 0
+
+    assert controls["duplicate_entry_gate"]["implemented"] is True
+    assert controls["duplicate_entry_gate"]["configured"] is True
+    assert controls["duplicate_entry_gate"]["active"] is True
+
+    assert controls["stop_distance_sizing"]["active"] is False
+    assert controls["stop_distance_sizing"]["inactive_reason"] == "sizing_method is not stop_distance"
+    assert controls["stop_distance_sizing"]["applied_count"] == 0
+
+    assert controls["commission_model"]["active"] is False
+    assert controls["commission_model"]["inactive_reason"] == (
+        "commission_rate is not configured as a numeric value"
+    )
+    assert controls["commission_model"]["applied_count"] == 0
+
+    assert controls["slippage_model"]["active"] is False
+    assert controls["slippage_model"]["inactive_reason"] == (
+        "slippage_rate is not configured as a numeric value"
+    )
+    assert controls["slippage_model"]["applied_count"] == 0
+
+    assert controls["exposure_limits"]["active"] is False
+    assert controls["exposure_limits"]["inactive_reason"] == (
+        "one or more exposure limit fields are not configured"
+    )
+    assert controls["exposure_limits"]["applied_count"] == 0
+
+    assert controls["max_concurrent_positions"]["active"] is False
+    assert controls["max_concurrent_positions"]["inactive_reason"] == (
+        "max_concurrent_positions is not configured"
+    )
+    assert controls["max_concurrent_positions"]["applied_count"] == 0
+
+    assert controls["correlation_gate"]["active"] is False
+    assert controls["correlation_gate"]["inactive_reason"] == (
+        "disabled by config: correlation_check_enabled=false"
+    )
+    assert controls["correlation_gate"]["validation_note"].startswith("Not validated by this run")
+
+    assert controls["drawdown_guard"]["active"] is False
+    assert controls["drawdown_guard"]["inactive_reason"] == (
+        "disabled by config: drawdown_guard_enabled=false"
+    )
+    assert controls["drawdown_guard"]["validation_note"].startswith("Not validated by this run")
+
+    assert controls["regime_filter"]["active"] is False
+    assert controls["regime_filter"]["inactive_reason"] == (
+        "no allowed regimes configured: allowed_regimes is empty"
+    )
+    assert controls["regime_filter"]["validation_note"].startswith("Not validated by this run")
+
+
+def test_risk_control_activation_counts_active_applied_and_blocking_outcomes() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload={
+            "results": [
+                {"outcome": "eligible", "signal_id": "sig-ok"},
+                {"outcome": "skip:score_below_threshold", "signal_id": "sig-score"},
+                {"outcome": "skip:duplicate_entry", "signal_id": "sig-dup"},
+                {"outcome": "reject:missing_trade_risk_input", "signal_id": "sig-risk"},
+            ],
+            "risk_profile": _default_risk_profile(),
+        }
+    )
+    controls = {item["control_id"]: item for item in evidence}
+
+    assert controls["score_threshold_gate"]["applied_count"] == 4
+    assert controls["score_threshold_gate"]["blocked_count"] == 1
+    assert controls["duplicate_entry_gate"]["applied_count"] == 3
+    assert controls["duplicate_entry_gate"]["blocked_count"] == 1
+    assert controls["stop_distance_sizing"]["applied_count"] == 2
+    assert controls["stop_distance_sizing"]["blocked_count"] == 1
+    assert controls["commission_model"]["applied_count"] == 1
+    assert controls["slippage_model"]["applied_count"] == 1
+
+
+def test_risk_control_activation_reports_active_controls_not_reached() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload={
+            "results": [
+                {"outcome": "skip:score_below_threshold", "signal_id": "sig-score"},
+                {"outcome": "skip:duplicate_entry", "signal_id": "sig-dup"},
+            ],
+            "risk_profile": _default_risk_profile(),
+        }
+    )
+    controls = {item["control_id"]: item for item in evidence}
+
+    assert controls["stop_distance_sizing"]["active"] is True
+    assert controls["stop_distance_sizing"]["applied_count"] == 0
+    assert controls["stop_distance_sizing"]["skipped_count"] == 2
+    assert "candidates reaching sizing" in controls["stop_distance_sizing"]["validation_note"]
+    assert controls["exposure_limits"]["active"] is True
+    assert controls["exposure_limits"]["applied_count"] == 0
+    assert controls["exposure_limits"]["skipped_count"] == 2
+
+
+def test_risk_control_activation_reports_implemented_control_inactive_due_to_config() -> None:
+    module = _load_script_module()
+    risk_profile = {**_default_risk_profile(), "sizing_method": "fixed"}
+
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload={
+            "results": [{"outcome": "eligible", "signal_id": "sig-ok"}],
+            "risk_profile": risk_profile,
+        }
+    )
+    controls = {item["control_id"]: item for item in evidence}
+
+    assert controls["stop_distance_sizing"]["implemented"] is True
+    assert controls["stop_distance_sizing"]["configured"] is False
+    assert controls["stop_distance_sizing"]["active"] is False
+    assert controls["stop_distance_sizing"]["inactive_reason"] == "sizing_method is not stop_distance"
+    assert controls["stop_distance_sizing"]["applied_count"] == 0
+    assert "Not validated by this run" in controls["stop_distance_sizing"]["validation_note"]
+
+
+def test_risk_control_activation_preserves_execution_and_reconciliation_inputs() -> None:
+    module = _load_script_module()
+    execution_step = {
+        "returncode": 1,
+        "payload": {
+            "eligible": 0,
+            "results": [{"outcome": "skip:score_below_threshold"}],
+            "risk_profile": _default_risk_profile(),
+            "status": "no_eligible",
+        },
+    }
+    reconciliation_step = {"payload": {"ok": True, "mismatches": 0}}
+
+    before_run_quality = module._classify_run_quality(
+        execution_step=execution_step,
+        reconciliation_step=reconciliation_step,
+    )
+    evidence = module.build_risk_control_activation_evidence(
+        execution_payload=execution_step["payload"],
+    )
+    after_run_quality = module._classify_run_quality(
+        execution_step=execution_step,
+        reconciliation_step=reconciliation_step,
+    )
+
+    assert before_run_quality == after_run_quality
+    assert before_run_quality["run_quality_status"] == "no_eligible"
+    assert before_run_quality["run_quality_inputs"]["reconciliation_ok"] is True
+    assert execution_step["payload"]["results"] == [{"outcome": "skip:score_below_threshold"}]
+    assert evidence[0]["control_id"] == "score_threshold_gate"
 
 
 def test_paper_state_freshness_evidence_handles_no_open_trades() -> None:

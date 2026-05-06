@@ -540,6 +540,329 @@ def _paper_state_blocker_classification(
     return "unknown_freshness_review_required"
 
 
+def _risk_profile_has_key(risk_profile: dict[str, Any], key: str) -> bool:
+    return key in risk_profile and risk_profile.get(key) is not None
+
+
+def _risk_profile_numeric(risk_profile: dict[str, Any], key: str) -> bool:
+    if not _risk_profile_has_key(risk_profile, key):
+        return False
+    value = risk_profile.get(key)
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    if isinstance(value, str):
+        try:
+            float(value)
+        except ValueError:
+            return False
+        return True
+    return False
+
+
+def _risk_control_item(
+    *,
+    control_id: str,
+    control_name: str,
+    implemented: bool,
+    configured: bool,
+    active: bool,
+    applied_count: int,
+    blocked_count: int,
+    skipped_count: int,
+    inactive_reason: str | None,
+    validation_note: str,
+) -> dict[str, Any]:
+    return {
+        "control_id": control_id,
+        "control_name": control_name,
+        "implemented": implemented,
+        "configured": configured,
+        "active": active,
+        "applied_count": applied_count,
+        "blocked_count": blocked_count,
+        "skipped_count": skipped_count,
+        "inactive_reason": inactive_reason,
+        "evidence_scope": "bounded_paper_execution_cycle",
+        "validation_note": validation_note,
+    }
+
+
+def _execution_results(execution_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(execution_payload, dict):
+        return []
+    raw_results = execution_payload.get("results")
+    if not isinstance(raw_results, list):
+        return []
+    return [item for item in raw_results if isinstance(item, dict)]
+
+
+def _outcome_counts(results: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for result in results:
+        outcome = result.get("outcome")
+        if isinstance(outcome, str) and outcome:
+            counts[outcome] = counts.get(outcome, 0) + 1
+    return counts
+
+
+def _count_outcomes(counts: dict[str, int], outcomes: set[str]) -> int:
+    return sum(counts.get(outcome, 0) for outcome in outcomes)
+
+
+def build_risk_control_activation_evidence(
+    *,
+    execution_payload: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    payload = execution_payload if isinstance(execution_payload, dict) else {}
+    risk_profile = payload.get("risk_profile")
+    risk_profile = risk_profile if isinstance(risk_profile, dict) else {}
+
+    results = _execution_results(payload)
+    total_results = len(results)
+    counts = _outcome_counts(results)
+    eligible_count = counts.get("eligible", 0)
+    fill_count = eligible_count + counts.get("eligible:partial_exit", 0) + counts.get("eligible:full_exit", 0)
+    invalid_signal_count = counts.get("reject:invalid_signal_fields", 0)
+    exit_signal_count = counts.get("skip:exit_signal_not_entry_candidate", 0)
+    score_blocked_count = counts.get("skip:score_below_threshold", 0)
+    duplicate_blocked_count = counts.get("skip:duplicate_entry", 0)
+    pre_duplicate_not_reached = invalid_signal_count + exit_signal_count + score_blocked_count
+    pre_sizing_not_reached = _count_outcomes(
+        counts,
+        {
+            "reject:invalid_signal_fields",
+            "skip:exit_signal_not_entry_candidate",
+            "skip:score_below_threshold",
+            "skip:duplicate_entry",
+            "skip:cooldown_active",
+            "skip:entry_zone_not_reached",
+            "skip:regime_filtered",
+            "skip:drawdown_guard_active",
+        },
+    )
+    sizing_blocked_count = _count_outcomes(
+        counts,
+        {
+            "reject:missing_trade_risk_input",
+            "reject:invalid_trade_risk_input",
+            "reject:max_risk_per_trade_exceeded",
+        },
+    )
+    max_concurrent_blocked_count = counts.get("reject:concurrent_position_limit_exceeded", 0)
+    exposure_blocked_count = _count_outcomes(
+        counts,
+        {
+            "reject:account_exposure_limit_exceeded",
+            "reject:strategy_exposure_limit_exceeded",
+            "reject:symbol_exposure_limit_exceeded",
+        },
+    )
+    correlation_blocked_count = counts.get("skip:correlation_risk_blocked", 0)
+    drawdown_blocked_count = counts.get("skip:drawdown_guard_active", 0)
+    regime_blocked_count = counts.get("skip:regime_filtered", 0)
+    post_sizing_reached_count = (
+        fill_count
+        + max_concurrent_blocked_count
+        + exposure_blocked_count
+        + correlation_blocked_count
+    )
+
+    score_configured = _risk_profile_has_key(risk_profile, "min_score_threshold")
+    duplicate_configured = True
+    sizing_configured = risk_profile.get("sizing_method") == "stop_distance"
+    commission_configured = _risk_profile_has_key(risk_profile, "commission_rate")
+    slippage_configured = _risk_profile_has_key(risk_profile, "slippage_rate")
+    exposure_configured = all(
+        _risk_profile_has_key(risk_profile, key)
+        for key in (
+            "max_total_exposure_pct",
+            "max_strategy_exposure_pct",
+            "max_symbol_exposure_pct",
+        )
+    )
+    max_concurrent_configured = _risk_profile_has_key(risk_profile, "max_concurrent_positions")
+    correlation_configured = _risk_profile_has_key(risk_profile, "correlation_check_enabled")
+    drawdown_configured = _risk_profile_has_key(risk_profile, "drawdown_guard_enabled")
+    regime_configured = _risk_profile_has_key(risk_profile, "allowed_regimes")
+
+    score_active = score_configured
+    sizing_active = sizing_configured
+    commission_active = _risk_profile_numeric(risk_profile, "commission_rate")
+    slippage_active = _risk_profile_numeric(risk_profile, "slippage_rate")
+    exposure_active = exposure_configured
+    max_concurrent_active = max_concurrent_configured
+    correlation_active = risk_profile.get("correlation_check_enabled") is True
+    drawdown_active = risk_profile.get("drawdown_guard_enabled") is True
+    allowed_regimes = risk_profile.get("allowed_regimes")
+    regime_active = isinstance(allowed_regimes, list) and len(allowed_regimes) > 0
+
+    score_applied_count = max(total_results - invalid_signal_count - exit_signal_count, 0)
+    duplicate_applied_count = max(total_results - pre_duplicate_not_reached, 0)
+    sizing_applied_count = max(total_results - pre_sizing_not_reached, 0)
+    exposure_skipped_count = max(total_results - post_sizing_reached_count, 0)
+
+    return [
+        _risk_control_item(
+            control_id="score_threshold_gate",
+            control_name="Score threshold gate",
+            implemented=True,
+            configured=score_configured,
+            active=score_active,
+            applied_count=score_applied_count if score_active else 0,
+            blocked_count=score_blocked_count if score_active else 0,
+            skipped_count=invalid_signal_count + exit_signal_count if score_active else total_results,
+            inactive_reason=None if score_active else "min_score_threshold not configured",
+            validation_note=(
+                "Applied to entry candidates; skip:score_below_threshold outcomes are counted as blocking."
+                if score_active
+                else "Not validated by this run because min_score_threshold is not configured."
+            ),
+        ),
+        _risk_control_item(
+            control_id="duplicate_entry_gate",
+            control_name="Duplicate-entry gate",
+            implemented=True,
+            configured=duplicate_configured,
+            active=True,
+            applied_count=duplicate_applied_count,
+            blocked_count=duplicate_blocked_count,
+            skipped_count=pre_duplicate_not_reached,
+            inactive_reason=None,
+            validation_note="Applied after score gating; skip:duplicate_entry outcomes are counted as blocking.",
+        ),
+        _risk_control_item(
+            control_id="stop_distance_sizing",
+            control_name="Stop-distance sizing",
+            implemented=True,
+            configured=sizing_configured,
+            active=sizing_active,
+            applied_count=sizing_applied_count if sizing_active else 0,
+            blocked_count=sizing_blocked_count if sizing_active else 0,
+            skipped_count=pre_sizing_not_reached if sizing_active else total_results,
+            inactive_reason=None if sizing_active else "sizing_method is not stop_distance",
+            validation_note=(
+                "Applied to candidates reaching sizing; missing or invalid trade-risk inputs are counted as blocking."
+                if sizing_active
+                else "Not validated by this run because stop-distance sizing is disabled by config."
+            ),
+        ),
+        _risk_control_item(
+            control_id="commission_model",
+            control_name="Commission model",
+            implemented=True,
+            configured=commission_configured,
+            active=commission_active,
+            applied_count=fill_count if commission_active else 0,
+            blocked_count=0,
+            skipped_count=max(total_results - fill_count, 0) if commission_active else total_results,
+            inactive_reason=None if commission_active else "commission_rate is not configured as a numeric value",
+            validation_note=(
+                "Configured and applied to paper fills; applied_count is zero when no fills occurred."
+                if commission_active
+                else "Not validated by this run because commission_rate is not active."
+            ),
+        ),
+        _risk_control_item(
+            control_id="slippage_model",
+            control_name="Slippage model",
+            implemented=True,
+            configured=slippage_configured,
+            active=slippage_active,
+            applied_count=fill_count if slippage_active else 0,
+            blocked_count=0,
+            skipped_count=max(total_results - fill_count, 0) if slippage_active else total_results,
+            inactive_reason=None if slippage_active else "slippage_rate is not configured as a numeric value",
+            validation_note=(
+                "Configured and applied to paper fills; applied_count is zero when no fills occurred."
+                if slippage_active
+                else "Not validated by this run because slippage_rate is not active."
+            ),
+        ),
+        _risk_control_item(
+            control_id="exposure_limits",
+            control_name="Exposure limits",
+            implemented=True,
+            configured=exposure_configured,
+            active=exposure_active,
+            applied_count=(post_sizing_reached_count - max_concurrent_blocked_count) if exposure_active else 0,
+            blocked_count=exposure_blocked_count if exposure_active else 0,
+            skipped_count=exposure_skipped_count + max_concurrent_blocked_count if exposure_active else total_results,
+            inactive_reason=None if exposure_active else "one or more exposure limit fields are not configured",
+            validation_note=(
+                "Applied to candidates reaching exposure checks; earlier gates and max-concurrent blocks are counted as not reached."
+                if exposure_active
+                else "Not validated by this run because exposure limits are not fully configured."
+            ),
+        ),
+        _risk_control_item(
+            control_id="max_concurrent_positions",
+            control_name="Max concurrent positions",
+            implemented=True,
+            configured=max_concurrent_configured,
+            active=max_concurrent_active,
+            applied_count=post_sizing_reached_count if max_concurrent_active else 0,
+            blocked_count=max_concurrent_blocked_count if max_concurrent_active else 0,
+            skipped_count=exposure_skipped_count if max_concurrent_active else total_results,
+            inactive_reason=None if max_concurrent_active else "max_concurrent_positions is not configured",
+            validation_note=(
+                "Applied to candidates reaching post-sizing risk checks; rejects are counted as blocking."
+                if max_concurrent_active
+                else "Not validated by this run because max_concurrent_positions is not configured."
+            ),
+        ),
+        _risk_control_item(
+            control_id="correlation_gate",
+            control_name="Correlation gate",
+            implemented=True,
+            configured=correlation_configured,
+            active=correlation_active,
+            applied_count=correlation_blocked_count if correlation_active else 0,
+            blocked_count=correlation_blocked_count if correlation_active else 0,
+            skipped_count=max(total_results - correlation_blocked_count, 0) if correlation_active else total_results,
+            inactive_reason=None if correlation_active else "disabled by config: correlation_check_enabled=false",
+            validation_note=(
+                "Applied when price history is supplied and the gate is enabled; correlation blocks are counted as blocking."
+                if correlation_active
+                else "Not validated by this run because correlation_check_enabled is disabled by config."
+            ),
+        ),
+        _risk_control_item(
+            control_id="drawdown_guard",
+            control_name="Drawdown guard",
+            implemented=True,
+            configured=drawdown_configured,
+            active=drawdown_active,
+            applied_count=drawdown_blocked_count if drawdown_active else 0,
+            blocked_count=drawdown_blocked_count if drawdown_active else 0,
+            skipped_count=max(total_results - drawdown_blocked_count, 0) if drawdown_active else total_results,
+            inactive_reason=None if drawdown_active else "disabled by config: drawdown_guard_enabled=false",
+            validation_note=(
+                "Applied when enabled before sizing; drawdown guard skips are counted as blocking."
+                if drawdown_active
+                else "Not validated by this run because drawdown_guard_enabled is disabled by config."
+            ),
+        ),
+        _risk_control_item(
+            control_id="regime_filter",
+            control_name="Regime filter",
+            implemented=True,
+            configured=regime_configured,
+            active=regime_active,
+            applied_count=regime_blocked_count if regime_active else 0,
+            blocked_count=regime_blocked_count if regime_active else 0,
+            skipped_count=max(total_results - regime_blocked_count, 0) if regime_active else total_results,
+            inactive_reason=None if regime_active else "no allowed regimes configured: allowed_regimes is empty",
+            validation_note=(
+                "Applied when regime state is supplied and allowed_regimes is non-empty; filtered regimes are counted as blocking."
+                if regime_active
+                else "Not validated by this run because allowed_regimes is empty."
+            ),
+        ),
+    ]
+
+
 def build_paper_state_freshness_evidence(
     *,
     trades_payload: dict[str, Any] | None,
@@ -1009,11 +1332,15 @@ def run_daily_bounded_paper_runtime(
             signals_payload=endpoint_payloads["signals"],
             observed_at=completed_at,
         )
+        risk_control_activation = build_risk_control_activation_evidence(
+            execution_payload=script_outputs["bounded_paper_execution_cycle"]["payload"],
+        )
         summary_payload: dict[str, Any] = {
             "analysis_run_id": str(analysis_payload.get("analysis_run_id", "")),
             "completed_at": completed_at.isoformat(),
             "ingestion_run_id": ingestion_run_id,
             "paper_state_freshness": paper_state_freshness,
+            "risk_control_activation": risk_control_activation,
             **run_quality,
             "run_record_dir": str(run_record_path),
             "status": "ok",
