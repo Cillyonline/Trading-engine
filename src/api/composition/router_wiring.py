@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable
 
 from fastapi import APIRouter, FastAPI
+
+if TYPE_CHECKING:
+    from cilly_trading.repositories import (
+        AnalysisRunRepository,
+        CanonicalExecutionRepository,
+        OrderEventRepository,
+        SignalRepository,
+        TradeRepository,
+        WatchlistRepository,
+    )
 
 from ..alerts_api import build_alerts_router
 from ..routers import (
@@ -34,9 +46,9 @@ API_VERSION_PREFIX = "/v1"
 @dataclass
 class ApiRouterWiring:
     require_role: Callable[[str], Callable[..., str]]
-    get_trade_repo: Callable[[], Any]
+    get_trade_repo: Callable[[], "TradeRepository"]
     assert_phase_13_read_only_endpoint: Callable[[str], None]
-    get_health_now: Callable[[], Any]
+    get_health_now: Callable[[], datetime]
     get_resolve_analysis_db_path: Callable[[], str]
     get_runtime_introspection_payload: Callable[[], dict[str, Any]]
     get_runtime_health_evaluator: Callable[..., Any]
@@ -46,14 +58,14 @@ class ApiRouterWiring:
     get_pause_engine_runtime: Callable[[], str]
     get_resume_engine_runtime: Callable[[], str]
     get_lifecycle_transition_error: Callable[[], type[Exception]]
-    get_analysis_run_repo: Callable[[], Any]
-    get_signal_repo: Callable[[], Any]
-    get_order_event_repo: Callable[[], Any]
-    get_canonical_execution_repo: Callable[[], Any]
-    get_journal_artifacts_root: Callable[[], Any]
-    get_paper_runtime_evidence_series_dir: Callable[[], Any]
+    get_analysis_run_repo: Callable[[], "AnalysisRunRepository"]
+    get_signal_repo: Callable[[], "SignalRepository"]
+    get_order_event_repo: Callable[[], "OrderEventRepository"]
+    get_canonical_execution_repo: Callable[[], "CanonicalExecutionRepository"]
+    get_journal_artifacts_root: Callable[[], Path]
+    get_paper_runtime_evidence_series_dir: Callable[[], Path]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
-    get_watchlist_repo: Callable[[], Any]
+    get_watchlist_repo: Callable[[], "WatchlistRepository"]
     get_require_ingestion_run: Callable[..., None]
     get_require_snapshot_ready: Callable[..., None]
     get_run_snapshot_analysis: Callable[..., Any]
