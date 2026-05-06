@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import urllib.error
@@ -55,6 +56,25 @@ EXIT_CODE_EVIDENCE_FAILED = 14
 
 RUN_QUALITY_CLASSIFICATION_VERSION = 1
 OPERATOR_ACTION_CONTRACT_VERSION = 1
+PAPER_STATE_FRESHNESS_CLASSIFICATION_VERSION = 1
+PAPER_STATE_FRESHNESS_STALE_AFTER_SECONDS = 24 * 60 * 60
+PAPER_STATE_DUPLICATE_ENTRY_REASON_PATTERN = re.compile(
+    r"^open trade exists for \((?P<symbol>[^,]+),\s*(?P<strategy>[^,]+),\s*(?P<direction>[^)]+)\)$"
+)
+PAPER_STATE_OPERATOR_REVIEW_GUIDANCE = {
+    "fresh": (
+        "Open paper state is current within the bounded daily freshness window; "
+        "record duplicate-entry blocking as technically valid paper-state evidence."
+    ),
+    "stale": (
+        "Open paper state is older than the bounded daily freshness window; "
+        "operator must review lifecycle evidence before interpreting duplicate-entry blockers."
+    ),
+    "unknown": (
+        "Open paper state freshness cannot be established from available metadata; "
+        "operator must review account and trade lifecycle evidence before interpretation."
+    ),
+}
 
 RUN_QUALITY_OPERATOR_ACTION_CONTRACTS: dict[str, dict[str, str]] = {
     "healthy": {
@@ -380,6 +400,251 @@ def _to_int_or_none(value: Any) -> int | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _items_from_payload(payload: dict[str, Any] | None, key: str = "items") -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    raw_items = payload.get(key)
+    if not isinstance(raw_items, list):
+        return []
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def _normalized_trade_tuple(item: dict[str, Any]) -> tuple[str, str, str] | None:
+    symbol = item.get("symbol")
+    strategy = item.get("strategy_id", item.get("strategy"))
+    direction = item.get("direction")
+    if not all(isinstance(value, str) and value for value in (symbol, strategy, direction)):
+        return None
+    return (str(symbol), str(strategy), str(direction))
+
+
+def _duplicate_entry_reason_tuple(reason: Any) -> tuple[str, str, str] | None:
+    if not isinstance(reason, str):
+        return None
+    match = PAPER_STATE_DUPLICATE_ENTRY_REASON_PATTERN.match(reason.strip())
+    if match is None:
+        return None
+    return (
+        match.group("symbol").strip(),
+        match.group("strategy").strip(),
+        match.group("direction").strip(),
+    )
+
+
+def _duplicate_entry_blocker_keys(
+    *,
+    execution_payload: dict[str, Any] | None,
+    signals_payload: dict[str, Any] | None,
+) -> set[tuple[str, str, str]]:
+    signals_by_id: dict[str, dict[str, Any]] = {}
+    for signal in _items_from_payload(signals_payload):
+        signal_id = signal.get("signal_id")
+        if isinstance(signal_id, str) and signal_id:
+            signals_by_id[signal_id] = signal
+
+    blocker_keys: set[tuple[str, str, str]] = set()
+    results = _items_from_payload(execution_payload, key="results")
+    for result in results:
+        outcome = result.get("outcome")
+        reason = result.get("reason")
+        if outcome != "skip:duplicate_entry" and reason != "skip:duplicate_entry":
+            continue
+        result_key = _normalized_trade_tuple(result)
+        if result_key is not None:
+            blocker_keys.add(result_key)
+            continue
+        reason_key = _duplicate_entry_reason_tuple(reason)
+        if reason_key is not None:
+            blocker_keys.add(reason_key)
+            continue
+        signal_id = result.get("signal_id")
+        if isinstance(signal_id, str):
+            signal_key = _normalized_trade_tuple(signals_by_id.get(signal_id, {}))
+            if signal_key is not None:
+                blocker_keys.add(signal_key)
+    return blocker_keys
+
+
+def _classify_paper_state_freshness(
+    *,
+    account_as_of: Any,
+    observed_at: datetime,
+) -> tuple[str, int | None]:
+    as_of = _parse_iso_datetime(account_as_of)
+    if as_of is None:
+        return "unknown", None
+    age_seconds = int((observed_at.astimezone(timezone.utc) - as_of).total_seconds())
+    if age_seconds < 0:
+        return "unknown", age_seconds
+    if age_seconds > PAPER_STATE_FRESHNESS_STALE_AFTER_SECONDS:
+        return "stale", age_seconds
+    return "fresh", age_seconds
+
+
+def _classify_timestamp_freshness(
+    *,
+    timestamp: Any,
+    observed_at: datetime,
+) -> tuple[str, int | None]:
+    parsed = _parse_iso_datetime(timestamp)
+    if parsed is None:
+        return "unknown", None
+    age_seconds = int((observed_at.astimezone(timezone.utc) - parsed).total_seconds())
+    if age_seconds < 0:
+        return "unknown", age_seconds
+    if age_seconds > PAPER_STATE_FRESHNESS_STALE_AFTER_SECONDS:
+        return "stale", age_seconds
+    return "fresh", age_seconds
+
+
+def _combined_open_trade_freshness(*, account_freshness: str, trade_freshness: str) -> str:
+    if "unknown" in {account_freshness, trade_freshness}:
+        return "unknown"
+    if "stale" in {account_freshness, trade_freshness}:
+        return "stale"
+    return "fresh"
+
+
+def _paper_state_blocker_classification(
+    *,
+    freshness: str,
+    duplicate_entry_blocker: bool,
+) -> str:
+    if duplicate_entry_blocker and freshness == "fresh":
+        return "fresh_open_trade_blocker"
+    if duplicate_entry_blocker and freshness == "stale":
+        return "stale_open_trade_review_required"
+    if duplicate_entry_blocker:
+        return "unknown_freshness_review_required"
+    if freshness == "fresh":
+        return "fresh_open_trade"
+    if freshness == "stale":
+        return "stale_open_trade_review_required"
+    return "unknown_freshness_review_required"
+
+
+def build_paper_state_freshness_evidence(
+    *,
+    trades_payload: dict[str, Any] | None,
+    positions_payload: dict[str, Any] | None,
+    account_payload: dict[str, Any] | None,
+    execution_payload: dict[str, Any] | None,
+    signals_payload: dict[str, Any] | None,
+    observed_at: datetime,
+) -> dict[str, Any]:
+    account = account_payload.get("account") if isinstance(account_payload, dict) else None
+    account = account if isinstance(account, dict) else {}
+    account_as_of = account.get("as_of")
+    account_freshness, account_age_seconds = _classify_paper_state_freshness(
+        account_as_of=account_as_of,
+        observed_at=observed_at,
+    )
+    duplicate_blocker_keys = _duplicate_entry_blocker_keys(
+        execution_payload=execution_payload,
+        signals_payload=signals_payload,
+    )
+
+    positions_by_id: dict[str, dict[str, Any]] = {}
+    for position in _items_from_payload(positions_payload):
+        position_id = position.get("position_id")
+        if isinstance(position_id, str) and position_id:
+            positions_by_id[position_id] = position
+
+    open_trade_evidence: list[dict[str, Any]] = []
+    duplicate_blocker_count = 0
+    review_required_count = 0
+    for trade in _items_from_payload(trades_payload):
+        if trade.get("status") != "open":
+            continue
+        trade_freshness, trade_age_seconds = _classify_timestamp_freshness(
+            timestamp=trade.get("opened_at"),
+            observed_at=observed_at,
+        )
+        freshness = _combined_open_trade_freshness(
+            account_freshness=account_freshness,
+            trade_freshness=trade_freshness,
+        )
+        trade_key = _normalized_trade_tuple(trade)
+        duplicate_entry_blocker = trade_key in duplicate_blocker_keys if trade_key is not None else False
+        if duplicate_entry_blocker:
+            duplicate_blocker_count += 1
+        classification = _paper_state_blocker_classification(
+            freshness=freshness,
+            duplicate_entry_blocker=duplicate_entry_blocker,
+        )
+        if classification.endswith("_review_required"):
+            review_required_count += 1
+
+        position_id = trade.get("position_id")
+        position = positions_by_id.get(position_id) if isinstance(position_id, str) else None
+        open_trade_evidence.append(
+            {
+                "account_as_of": account_as_of,
+                "account_age_seconds": account_age_seconds,
+                "account_freshness": account_freshness,
+                "age_seconds": account_age_seconds,
+                "average_entry_price": trade.get("average_entry_price"),
+                "classification": classification,
+                "current_state": "open" if trade.get("status") == "open" else "closed",
+                "direction": trade.get("direction"),
+                "duplicate_entry_blocker": duplicate_entry_blocker,
+                "freshness": freshness,
+                "opened_at": trade.get("opened_at"),
+                "operator_review_guidance": PAPER_STATE_OPERATOR_REVIEW_GUIDANCE[freshness],
+                "position_id": position_id,
+                "position_status": position.get("status") if isinstance(position, dict) else None,
+                "quantity_closed": trade.get("quantity_closed"),
+                "quantity_opened": trade.get("quantity_opened"),
+                "status": trade.get("status"),
+                "strategy": trade.get("strategy_id", trade.get("strategy")),
+                "symbol": trade.get("symbol"),
+                "trade_age_seconds": trade_age_seconds,
+                "trade_freshness": trade_freshness,
+                "trade_id": trade.get("trade_id"),
+            }
+        )
+
+    open_trade_evidence.sort(
+        key=lambda item: (
+            str(item.get("symbol") or ""),
+            str(item.get("strategy") or ""),
+            str(item.get("direction") or ""),
+            str(item.get("trade_id") or ""),
+        )
+    )
+
+    return {
+        "classification_version": PAPER_STATE_FRESHNESS_CLASSIFICATION_VERSION,
+        "account_as_of": account_as_of,
+        "observed_at": observed_at.isoformat(),
+        "account_freshness": account_freshness,
+        "account_age_seconds": account_age_seconds,
+        "freshness": account_freshness,
+        "age_seconds": account_age_seconds,
+        "stale_after_seconds": PAPER_STATE_FRESHNESS_STALE_AFTER_SECONDS,
+        "open_trade_count": len(open_trade_evidence),
+        "duplicate_entry_blocker_count": duplicate_blocker_count,
+        "review_required_count": review_required_count,
+        "operator_review_guidance": PAPER_STATE_OPERATOR_REVIEW_GUIDANCE[account_freshness],
+        "open_trades": open_trade_evidence,
+    }
 
 
 def _classify_run_quality(
@@ -714,6 +979,10 @@ def run_daily_bounded_paper_runtime(
                 f"{base_url}/paper/positions",
                 headers={ROLE_HEADER_NAME: ROLE_READ_ONLY},
             ),
+            "paper-account": request_json(
+                f"{base_url}/paper/account",
+                headers={ROLE_HEADER_NAME: ROLE_READ_ONLY},
+            ),
             "paper-reconciliation": request_json(
                 f"{base_url}/paper/reconciliation",
                 headers={ROLE_HEADER_NAME: ROLE_READ_ONLY},
@@ -732,10 +1001,19 @@ def run_daily_bounded_paper_runtime(
             execution_step=script_outputs["bounded_paper_execution_cycle"],
             reconciliation_step=script_outputs["reconciliation"],
         )
+        paper_state_freshness = build_paper_state_freshness_evidence(
+            trades_payload=endpoint_payloads["paper-trades"],
+            positions_payload=endpoint_payloads["paper-positions"],
+            account_payload=endpoint_payloads["paper-account"],
+            execution_payload=script_outputs["bounded_paper_execution_cycle"]["payload"],
+            signals_payload=endpoint_payloads["signals"],
+            observed_at=completed_at,
+        )
         summary_payload: dict[str, Any] = {
             "analysis_run_id": str(analysis_payload.get("analysis_run_id", "")),
             "completed_at": completed_at.isoformat(),
             "ingestion_run_id": ingestion_run_id,
+            "paper_state_freshness": paper_state_freshness,
             **run_quality,
             "run_record_dir": str(run_record_path),
             "status": "ok",

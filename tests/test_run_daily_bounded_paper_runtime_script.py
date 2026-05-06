@@ -105,6 +105,8 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
             return {"items": [], "total": 0}
         if url.endswith("/paper/positions"):
             return {"items": [], "total": 0}
+        if url.endswith("/paper/account"):
+            return {"account": {"as_of": "2026-04-06T12:00:00+00:00"}}
         if url.endswith("/paper/reconciliation"):
             return {"mismatches": 0, "ok": True}
         raise AssertionError(f"Unexpected request URL: {url}")
@@ -166,7 +168,26 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert Path(payload["verification_surfaces"]["signals"]).exists()
     assert Path(payload["verification_surfaces"]["paper-trades"]).exists()
     assert Path(payload["verification_surfaces"]["paper-positions"]).exists()
+    assert Path(payload["verification_surfaces"]["paper-account"]).exists()
     assert Path(payload["verification_surfaces"]["paper-reconciliation"]).exists()
+    assert payload["paper_state_freshness"] == {
+        "account_as_of": "2026-04-06T12:00:00+00:00",
+        "account_age_seconds": 0,
+        "account_freshness": "fresh",
+        "age_seconds": 0,
+        "classification_version": 1,
+        "duplicate_entry_blocker_count": 0,
+        "freshness": "fresh",
+        "observed_at": "2026-04-06T12:00:00+00:00",
+        "open_trade_count": 0,
+        "open_trades": [],
+        "operator_review_guidance": (
+            "Open paper state is current within the bounded daily freshness window; "
+            "record duplicate-entry blocking as technically valid paper-state evidence."
+        ),
+        "review_required_count": 0,
+        "stale_after_seconds": 86400,
+    }
     assert executed_scripts == [
         "run_snapshot_ingestion.py",
         "run_paper_execution_cycle.py",
@@ -178,6 +199,7 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
         ("GET", "http://127.0.0.1:18000/signals?ingestion_run_id=ing-123&limit=100"),
         ("GET", "http://127.0.0.1:18000/paper/trades"),
         ("GET", "http://127.0.0.1:18000/paper/positions"),
+        ("GET", "http://127.0.0.1:18000/paper/account"),
         ("GET", "http://127.0.0.1:18000/paper/reconciliation"),
     ]
     summary_file_payload = json.loads(Path(payload["summary_file"]).read_text(encoding="utf-8"))
@@ -186,6 +208,296 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert summary_file_payload["operator_action_contract_version"] == payload["operator_action_contract_version"]
     assert summary_file_payload["operator_action_contract"] == payload["operator_action_contract"]
     assert summary_file_payload["run_quality_inputs"] == payload["run_quality_inputs"]
+    assert summary_file_payload["paper_state_freshness"] == payload["paper_state_freshness"]
+
+
+def test_paper_state_freshness_evidence_handles_no_open_trades() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={"items": [], "total": 0},
+        positions_payload={"items": [], "total": 0},
+        account_payload={"account": {"as_of": "2026-04-06T12:00:00+00:00"}},
+        execution_payload={"results": []},
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 4, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["freshness"] == "fresh"
+    assert evidence["account_freshness"] == "fresh"
+    assert evidence["account_age_seconds"] == 0
+    assert evidence["open_trade_count"] == 0
+    assert evidence["duplicate_entry_blocker_count"] == 0
+    assert evidence["review_required_count"] == 0
+    assert evidence["open_trades"] == []
+
+
+def test_paper_state_freshness_evidence_classifies_fresh_open_trade_blocker() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "100",
+                    "direction": "long",
+                    "opened_at": "2026-04-06T10:00:00+00:00",
+                    "position_id": "pos-1",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "WMT",
+                    "trade_id": "trade-1",
+                }
+            ],
+            "total": 1,
+        },
+        positions_payload={"items": [{"position_id": "pos-1", "status": "open"}], "total": 1},
+        account_payload={"account": {"as_of": "2026-04-06T11:30:00+00:00"}},
+        execution_payload={
+            "results": [{"outcome": "skip:duplicate_entry", "signal_id": "sig-1"}]
+        },
+        signals_payload={
+            "items": [
+                {
+                    "direction": "long",
+                    "signal_id": "sig-1",
+                    "strategy": "TURTLE",
+                    "symbol": "WMT",
+                }
+            ]
+        },
+        observed_at=datetime(2026, 4, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["freshness"] == "fresh"
+    assert evidence["duplicate_entry_blocker_count"] == 1
+    assert evidence["review_required_count"] == 0
+    assert evidence["open_trades"][0]["classification"] == "fresh_open_trade_blocker"
+    assert evidence["open_trades"][0]["duplicate_entry_blocker"] is True
+    assert evidence["open_trades"][0]["position_id"] == "pos-1"
+    assert evidence["open_trades"][0]["account_age_seconds"] == 1800
+    assert evidence["open_trades"][0]["trade_age_seconds"] == 7200
+    assert evidence["open_trades"][0]["account_freshness"] == "fresh"
+    assert evidence["open_trades"][0]["trade_freshness"] == "fresh"
+
+
+def test_paper_state_freshness_evidence_classifies_old_open_trade_blocker_for_review() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "425",
+                    "direction": "long",
+                    "opened_at": "2026-04-02T00:00:00+00:00",
+                    "position_id": "pos-gs",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "GS",
+                    "trade_id": "trade-gs",
+                }
+            ]
+        },
+        positions_payload={"items": [{"position_id": "pos-gs", "status": "open"}]},
+        account_payload={"account": {"as_of": "2026-04-02T00:00:00+00:00"}},
+        execution_payload={
+            "results": [
+                {
+                    "direction": "long",
+                    "outcome": "skip:duplicate_entry",
+                    "strategy": "TURTLE",
+                    "symbol": "GS",
+                }
+            ]
+        },
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["freshness"] == "stale"
+    assert evidence["age_seconds"] == 2980800
+    assert evidence["account_freshness"] == "stale"
+    assert evidence["account_age_seconds"] == 2980800
+    assert evidence["duplicate_entry_blocker_count"] == 1
+    assert evidence["review_required_count"] == 1
+    assert evidence["open_trades"][0]["classification"] == "stale_open_trade_review_required"
+    assert evidence["open_trades"][0]["trade_age_seconds"] == 2980800
+    assert evidence["open_trades"][0]["trade_freshness"] == "stale"
+    assert "operator must review lifecycle evidence" in evidence["open_trades"][0]["operator_review_guidance"]
+
+
+def test_paper_state_freshness_evidence_classifies_unknown_metadata_for_review() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "900",
+                    "direction": "long",
+                    "opened_at": None,
+                    "position_id": "pos-cost",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "COST",
+                    "trade_id": "trade-cost",
+                }
+            ]
+        },
+        positions_payload={"items": [{"position_id": "pos-cost", "status": "open"}]},
+        account_payload={"account": {"as_of": None}},
+        execution_payload={
+            "results": [
+                {
+                    "direction": "long",
+                    "outcome": "skip:duplicate_entry",
+                    "strategy": "TURTLE",
+                    "symbol": "COST",
+                }
+            ]
+        },
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["freshness"] == "unknown"
+    assert evidence["age_seconds"] is None
+    assert evidence["account_freshness"] == "unknown"
+    assert evidence["account_age_seconds"] is None
+    assert evidence["duplicate_entry_blocker_count"] == 1
+    assert evidence["review_required_count"] == 1
+    assert evidence["open_trades"][0]["classification"] == "unknown_freshness_review_required"
+    assert evidence["open_trades"][0]["trade_age_seconds"] is None
+    assert evidence["open_trades"][0]["trade_freshness"] == "unknown"
+    assert "freshness cannot be established" in evidence["operator_review_guidance"]
+
+
+def test_paper_state_freshness_evidence_parses_duplicate_entry_reason_strings() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "100",
+                    "direction": "long",
+                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "position_id": "pos-wmt",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "WMT",
+                    "trade_id": "trade-wmt",
+                },
+                {
+                    "average_entry_price": "425",
+                    "direction": "long",
+                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "position_id": "pos-gs",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "GS",
+                    "trade_id": "trade-gs",
+                },
+                {
+                    "average_entry_price": "900",
+                    "direction": "long",
+                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "position_id": "pos-cost",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "COST",
+                    "trade_id": "trade-cost",
+                },
+            ]
+        },
+        positions_payload={
+            "items": [
+                {"position_id": "pos-wmt", "status": "open"},
+                {"position_id": "pos-gs", "status": "open"},
+                {"position_id": "pos-cost", "status": "open"},
+            ]
+        },
+        account_payload={"account": {"as_of": "2026-05-06T12:00:00+00:00"}},
+        execution_payload={
+            "results": [
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (WMT, TURTLE, long)",
+                },
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (GS, TURTLE, long)",
+                },
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (COST, TURTLE, long)",
+                },
+            ]
+        },
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["duplicate_entry_blocker_count"] == 3
+    assert [item["symbol"] for item in evidence["open_trades"]] == ["COST", "GS", "WMT"]
+    assert {item["classification"] for item in evidence["open_trades"]} == {"fresh_open_trade_blocker"}
+    assert all(item["duplicate_entry_blocker"] is True for item in evidence["open_trades"])
+
+
+def test_paper_state_freshness_evidence_separates_fresh_account_from_old_trade_age() -> None:
+    module = _load_script_module()
+
+    evidence = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "100",
+                    "direction": "long",
+                    "opened_at": "2026-04-02T00:00:00+00:00",
+                    "position_id": "pos-wmt",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "WMT",
+                    "trade_id": "trade-wmt",
+                }
+            ]
+        },
+        positions_payload={"items": [{"position_id": "pos-wmt", "status": "open"}]},
+        account_payload={"account": {"as_of": "2026-05-06T12:00:00+00:00"}},
+        execution_payload={
+            "results": [
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (WMT, TURTLE, long)",
+                }
+            ]
+        },
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert evidence["account_freshness"] == "fresh"
+    assert evidence["account_age_seconds"] == 0
+    assert evidence["open_trades"][0]["account_freshness"] == "fresh"
+    assert evidence["open_trades"][0]["account_age_seconds"] == 0
+    assert evidence["open_trades"][0]["trade_freshness"] == "stale"
+    assert evidence["open_trades"][0]["trade_age_seconds"] == 2980800
+    assert evidence["open_trades"][0]["classification"] == "stale_open_trade_review_required"
 
 
 def test_run_quality_classification_state_transitions_are_deterministic() -> None:
