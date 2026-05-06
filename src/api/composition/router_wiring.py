@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
+
+if TYPE_CHECKING:
+    from cilly_trading.repositories import (
+        AnalysisRunRepository,
+        CanonicalExecutionRepository,
+        OrderEventRepository,
+        SignalRepository,
+        TradeRepository,
+        WatchlistRepository,
+    )
 
 from ..alerts_api import build_alerts_router
 from ..routers import (
@@ -20,14 +32,23 @@ from ..routers import (
     build_paper_runtime_evidence_series_router,
     build_watchlists_router,
 )
+from ..routers.auth_router import AuthRouterDependencies, build_auth_router
+from ..services.jwt_auth import JwtSettings
+
+
+# Legacy (un-prefixed) URLs continue to serve responses; ``/v1/...`` is
+# the new canonical API surface (issue #1135). Bumping ``API_VERSION``
+# adds a new mount path without removing the legacy one, so clients can
+# migrate at their own pace.
+API_VERSION_PREFIX = "/v1"
 
 
 @dataclass
 class ApiRouterWiring:
     require_role: Callable[[str], Callable[..., str]]
-    get_trade_repo: Callable[[], Any]
+    get_trade_repo: Callable[[], "TradeRepository"]
     assert_phase_13_read_only_endpoint: Callable[[str], None]
-    get_health_now: Callable[[], Any]
+    get_health_now: Callable[[], datetime]
     get_resolve_analysis_db_path: Callable[[], str]
     get_runtime_introspection_payload: Callable[[], dict[str, Any]]
     get_runtime_health_evaluator: Callable[..., Any]
@@ -37,33 +58,48 @@ class ApiRouterWiring:
     get_pause_engine_runtime: Callable[[], str]
     get_resume_engine_runtime: Callable[[], str]
     get_lifecycle_transition_error: Callable[[], type[Exception]]
-    get_analysis_run_repo: Callable[[], Any]
-    get_signal_repo: Callable[[], Any]
-    get_order_event_repo: Callable[[], Any]
-    get_canonical_execution_repo: Callable[[], Any]
-    get_journal_artifacts_root: Callable[[], Any]
-    get_paper_runtime_evidence_series_dir: Callable[[], Any]
+    get_analysis_run_repo: Callable[[], "AnalysisRunRepository"]
+    get_signal_repo: Callable[[], "SignalRepository"]
+    get_order_event_repo: Callable[[], "OrderEventRepository"]
+    get_canonical_execution_repo: Callable[[], "CanonicalExecutionRepository"]
+    get_journal_artifacts_root: Callable[[], Path]
+    get_paper_runtime_evidence_series_dir: Callable[[], Path]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
-    get_watchlist_repo: Callable[[], Any]
+    get_watchlist_repo: Callable[[], "WatchlistRepository"]
     get_require_ingestion_run: Callable[..., None]
     get_require_snapshot_ready: Callable[..., None]
     get_run_snapshot_analysis: Callable[..., Any]
     get_create_strategy: Callable[[str], Any]
     get_create_registered_strategies: Callable[[], list[Any]]
     get_trigger_operator_analysis_run: Callable[..., Any]
+    get_jwt_settings: Callable[[], JwtSettings]
+    get_role_precedence: Callable[[], dict[str, int]]
 
 
-def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
-    app.include_router(build_alerts_router(wiring.require_role))
-    app.include_router(
+def _build_routers(*, wiring: ApiRouterWiring) -> tuple[APIRouter, ...]:
+    """Build router instances once so they can be mounted multiple times.
+
+    Each router is mounted both at the root (legacy compatibility) and
+    under :data:`API_VERSION_PREFIX` (issue #1135). FastAPI's
+    ``include_router`` happily accepts the same router twice with
+    different prefixes; each call registers a distinct copy of the
+    routes on the app.
+    """
+
+    return (
+        build_auth_router(
+            deps=AuthRouterDependencies(
+                get_jwt_settings=wiring.get_jwt_settings,
+                get_role_precedence=wiring.get_role_precedence,
+            )
+        ),
+        build_alerts_router(wiring.require_role),
         build_journal_router(
             deps=JournalRouterDependencies(
                 require_role=wiring.require_role,
                 get_trade_repo=wiring.get_trade_repo,
             ),
-        )
-    )
-    app.include_router(
+        ),
         build_control_plane_router(
             deps=ControlPlaneRouterDependencies(
                 require_role=wiring.require_role,
@@ -79,9 +115,7 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
                 get_resume_engine_runtime=lambda: wiring.get_resume_engine_runtime,
                 get_lifecycle_transition_error=wiring.get_lifecycle_transition_error,
             ),
-        )
-    )
-    app.include_router(
+        ),
         build_inspection_router(
             deps=InspectionRouterDependencies(
                 require_role=wiring.require_role,
@@ -92,17 +126,13 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
                 get_journal_artifacts_root=wiring.get_journal_artifacts_root,
                 get_default_strategy_configs=wiring.get_default_strategy_configs,
             ),
-        )
-    )
-    app.include_router(
+        ),
         build_paper_runtime_evidence_series_router(
             deps=PaperRuntimeEvidenceSeriesRouterDependencies(
                 require_role=wiring.require_role,
                 get_evidence_series_dir=wiring.get_paper_runtime_evidence_series_dir,
             ),
-        )
-    )
-    app.include_router(
+        ),
         build_watchlists_router(
             deps=WatchlistsRouterDependencies(
                 require_role=wiring.require_role,
@@ -118,9 +148,7 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
                 get_create_registered_strategies=lambda: wiring.get_create_registered_strategies,
                 get_trigger_operator_analysis_run=lambda: wiring.get_trigger_operator_analysis_run,
             ),
-        )
-    )
-    app.include_router(
+        ),
         build_analysis_router(
             deps=AnalysisRouterDependencies(
                 require_role=wiring.require_role,
@@ -136,5 +164,15 @@ def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
                 get_create_registered_strategies=lambda: wiring.get_create_registered_strategies,
                 get_trigger_operator_analysis_run=lambda: wiring.get_trigger_operator_analysis_run,
             ),
-        )
+        ),
     )
+
+
+def include_api_routers(*, app: FastAPI, wiring: ApiRouterWiring) -> None:
+    routers = _build_routers(wiring=wiring)
+    # Legacy mount — preserved for backward compatibility (deprecated).
+    for router in routers:
+        app.include_router(router)
+    # Versioned mount — canonical surface going forward (issue #1135).
+    for router in routers:
+        app.include_router(router, prefix=API_VERSION_PREFIX)

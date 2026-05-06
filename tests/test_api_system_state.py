@@ -48,7 +48,7 @@ def test_require_role_rejects_insufficient_role() -> None:
     enforce_owner_role = api_main._require_role("owner")
 
     with pytest.raises(api_main.HTTPException) as exc_info:
-        enforce_owner_role("read_only")
+        enforce_owner_role(x_cilly_role="read_only")
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "forbidden"

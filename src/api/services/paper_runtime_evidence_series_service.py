@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -106,6 +108,38 @@ def _relative_path(path: Path, base: Path) -> str:
         return path.as_posix()
 
 
+def _assert_path_within_base(path: Path, base: Path) -> None:
+    """Raise ValueError if *path* (resolved) is not inside *base* (resolved).
+
+    Prevents path-traversal via symlinks or manipulated glob results.
+    """
+    resolved = path.resolve()
+    resolved_base = base.resolve()
+    if not resolved.is_relative_to(resolved_base):
+        raise ValueError(
+            f"Path traversal attempt: {resolved} is outside {resolved_base}"
+        )
+
+
+# Maximum number of worker threads used to read evidence JSON files in
+# parallel. The work is blocking file I/O, so a small thread pool removes the
+# per-request latency that previously scaled linearly with the file count.
+_MAX_LOAD_WORKERS = 16
+
+
+def _read_run_file(path: Path, base: Path) -> tuple[Path, dict[str, Any]] | None:
+    """Validate *path* is inside *base*, read it, and parse it as JSON.
+
+    Returns ``None`` for payloads that are not JSON objects so the caller can
+    drop them while preserving order for the remaining files.
+    """
+    _assert_path_within_base(path, base)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        return path, payload
+    return None
+
+
 def _load_run_files(
     *,
     input_dir: Path,
@@ -113,15 +147,26 @@ def _load_run_files(
     recursive: bool,
 ) -> list[tuple[Path, dict[str, Any]]]:
     paths = input_dir.rglob(pattern) if recursive else input_dir.glob(pattern)
-    loaded: list[tuple[Path, dict[str, Any]]] = []
-    for path in sorted(
+    base = input_dir.resolve()
+    candidates = sorted(
         (candidate for candidate in paths if candidate.is_file()),
         key=lambda item: item.as_posix(),
-    ):
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            loaded.append((path, payload))
-    return loaded
+    )
+    if not candidates:
+        return []
+
+    # Read files in parallel via a thread pool. File I/O releases the GIL, so
+    # this materially reduces request latency for evidence series with many
+    # JSON files. ``executor.map`` preserves the input order, so the returned
+    # list remains deterministic and matches the previous sequential output.
+    workers = min(_MAX_LOAD_WORKERS, len(candidates))
+    read_one = partial(_read_run_file, base=base)
+    if workers <= 1:
+        results: list[tuple[Path, dict[str, Any]] | None] = [read_one(candidates[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            results = list(executor.map(read_one, candidates))
+    return [entry for entry in results if entry is not None]
 
 
 def _execution_payload(run: dict[str, Any]) -> dict[str, Any]:

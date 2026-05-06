@@ -139,7 +139,7 @@ def test_paper_runtime_evidence_series_summarizes_fixture_inputs_deterministical
     with TestClient(api_main.app) as client:
         first = client.get("/paper/runtime/evidence-series", headers=READ_ONLY_HEADERS)
         second = client.get("/paper/runtime/evidence-series", headers=READ_ONLY_HEADERS)
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     assert first.status_code == 200
     assert second.status_code == 200

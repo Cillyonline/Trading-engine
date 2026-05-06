@@ -1,20 +1,28 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict
+from typing import TYPE_CHECKING, Any, Callable, Dict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+
+if TYPE_CHECKING:
+    from cilly_trading.repositories import (
+        AnalysisRunRepository,
+        SignalRepository,
+        WatchlistRepository,
+    )
 
 from ..models import ManualAnalysisRequest, ManualAnalysisResponse, ScreenerRequest, ScreenerResponse, StrategyAnalyzeRequest, StrategyAnalyzeResponse
+from ..rate_limit import limiter
 from ..services.analysis_service import AnalysisServiceDependencies, analyze_strategy, basic_screener, manual_analysis
 
 
 @dataclass
 class AnalysisRouterDependencies:
     require_role: Callable[[str], Callable[..., str]]
-    get_analysis_run_repo: Callable[[], Any]
-    get_signal_repo: Callable[[], Any]
-    get_watchlist_repo: Callable[[], Any]
+    get_analysis_run_repo: Callable[[], "AnalysisRunRepository"]
+    get_signal_repo: Callable[[], "SignalRepository"]
+    get_watchlist_repo: Callable[[], "WatchlistRepository"]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
     get_require_ingestion_run: Callable[[], Callable[..., None]]
     get_require_snapshot_ready: Callable[[], Callable[..., None]]
@@ -51,7 +59,9 @@ def build_analysis_router(
         "/strategy/analyze",
         response_model=StrategyAnalyzeResponse,
     )
+    @limiter.limit("5/minute")
     def analyze_strategy_handler(
+        request: Request,
         req: StrategyAnalyzeRequest,
         _: str = Depends(deps.require_role("operator")),
     ) -> StrategyAnalyzeResponse:
@@ -61,7 +71,9 @@ def build_analysis_router(
         "/analysis/run",
         response_model=ManualAnalysisResponse,
     )
+    @limiter.limit("5/minute")
     def manual_analysis_handler(
+        request: Request,
         req: ManualAnalysisRequest,
         _: str = Depends(deps.require_role("operator")),
     ) -> ManualAnalysisResponse:
@@ -71,7 +83,9 @@ def build_analysis_router(
         "/screener/basic",
         response_model=ScreenerResponse,
     )
+    @limiter.limit("10/minute")
     def basic_screener_handler(
+        request: Request,
         req: ScreenerRequest,
         _: str = Depends(deps.require_role("operator")),
     ) -> ScreenerResponse:

@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Literal, Optional, Sequence
 
 from cilly_trading.engine.paper_execution_risk_profile import (
@@ -57,6 +57,17 @@ from cilly_trading.portfolio_framework.capital_allocation_policy import (
 )
 from cilly_trading.repositories import CanonicalExecutionRepository
 from cilly_trading.risk_framework.allocation_rules import RiskLimits
+from cilly_trading.engine.paper_performance import (
+    PaperPerformanceAttribution,
+    PaperPerformanceSummary,
+    compute_paper_performance_attribution,
+    compute_paper_performance_summary,
+)
+from cilly_trading.engine.regime_classifier import RegimeState
+from cilly_trading.risk_framework.correlation_risk import (
+    PriceHistory,
+    evaluate_correlation_risk,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -128,12 +139,21 @@ _PRICE_SCALE: Decimal = Decimal("0.0001")
 
 OutcomeCode = Literal[
     "eligible",
+    "eligible:partial_exit",
+    "eligible:full_exit",
     "skip:score_below_threshold",
     "skip:duplicate_entry",
     "skip:cooldown_active",
+    "skip:entry_zone_not_reached",
+    "skip:correlation_risk_blocked",
+    "skip:drawdown_guard_active",
+    "skip:regime_filtered",
+    "skip:no_open_position_to_exit",
+    "skip:exit_quantity_zero",
     "reject:invalid_signal_fields",
     "reject:missing_trade_risk_input",
     "reject:invalid_trade_risk_input",
+    "reject:atr_not_provided",
     "reject:max_risk_per_trade_exceeded",
     "reject:position_size_exceeds_limit",
     "reject:total_exposure_exceeds_limit",
@@ -158,6 +178,19 @@ _RISK_REASON_TO_OUTCOME: dict[CanonicalRiskRejectionReasonCode, OutcomeCode] = {
     ),
     "rejected:risk_framework_kill_switch_enabled": "reject:risk_kill_switch_enabled",
 }
+
+
+@dataclass(frozen=True)
+class EntryBar:
+    """Minimal OHLCV snapshot used to validate paper-execution fills.
+
+    Carries only the high/low needed to verify entry-zone intersection. A
+    consumer of the worker can construct one from any bar source (replay
+    feed, live data adapter, backtest dataframe).
+    """
+
+    high: Decimal
+    low: Decimal
 
 
 @dataclass(frozen=True)
@@ -205,6 +238,11 @@ def _compute_paper_position_id(signal_id: str) -> str:
     return f"pos_{sha256_hex(canonical_json({'scope': 'paper_entry', 'signal_id': signal_id}))}"
 
 
+def _compute_paper_exit_order_id(signal_id: str) -> str:
+    """Compute a deterministic paper exit order ID from a signal ID."""
+    return f"ord_{sha256_hex(canonical_json({'scope': 'paper_exit', 'signal_id': signal_id}))}"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -227,8 +265,11 @@ def _extract_entry_price(
     """
     entry_zone = signal.get("entry_zone")
     if entry_zone is not None:
-        mid = (Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))) / Decimal("2")
-        return mid.quantize(_PRICE_SCALE, rounding=ROUND_HALF_UP)
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            mid = (Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))) / Decimal("2")
+            return mid.quantize(_PRICE_SCALE)
     return fallback_entry_price
 
 
@@ -236,6 +277,84 @@ _DIRECTION_TO_SIDE: dict[str, str] = {
     "long": "BUY",
     "short": "SELL",
 }
+
+
+def _apply_slippage(
+    *,
+    reference_price: Decimal,
+    direction: str,
+    slippage_rate: Decimal,
+) -> Decimal:
+    """Adjust the reference price for slippage in the direction of the trade.
+
+    Long entries pay slightly more; short entries receive slightly less.
+    """
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        if direction == "long":
+            adjusted = reference_price * (Decimal("1") + slippage_rate)
+        elif direction == "short":
+            adjusted = reference_price * (Decimal("1") - slippage_rate)
+        else:
+            raise ValueError(f"unknown direction: {direction!r}")
+        return adjusted.quantize(_PRICE_SCALE)
+
+
+def _compute_commission(
+    *,
+    quantity: Decimal,
+    fill_price: Decimal,
+    commission_rate: Decimal,
+) -> Decimal:
+    """Compute a flat-rate commission against the realized notional."""
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        notional = quantity * fill_price
+        return (notional * commission_rate).quantize(Decimal("0.0001"))
+
+
+def bar_intersects_entry_zone(
+    *,
+    bar_low: Decimal,
+    bar_high: Decimal,
+    zone_low: Decimal,
+    zone_high: Decimal,
+) -> bool:
+    """Return True when the bar's [low, high] range overlaps the entry zone.
+
+    The classic "did we get filled?" check: a market-on-open or limit order
+    inside the zone executes only if the next bar's price range traverses it.
+    Bars that gap past the zone produce no fill.
+    """
+    if bar_low > bar_high:
+        raise ValueError(f"bar_low ({bar_low}) must be <= bar_high ({bar_high})")
+    if zone_low > zone_high:
+        raise ValueError(f"zone_low ({zone_low}) must be <= zone_high ({zone_high})")
+    return bar_low <= zone_high and bar_high >= zone_low
+
+
+def stop_loss_breached(
+    *,
+    direction: str,
+    stop_loss: Decimal,
+    bar_low: Decimal,
+    bar_high: Decimal,
+) -> bool:
+    """Return True when the bar's range crosses the stop-loss level.
+
+    For long positions a stop is breached when the bar's low touches or
+    falls below it; for short positions the bar's high crossing the stop
+    triggers exit.
+    """
+    if bar_low > bar_high:
+        raise ValueError(f"bar_low ({bar_low}) must be <= bar_high ({bar_high})")
+    if direction == "long":
+        return bar_low <= stop_loss
+    if direction == "short":
+        return bar_high >= stop_loss
+    raise ValueError(f"unknown direction: {direction!r}")
 
 
 def _direction_to_order_side(direction: str) -> str:
@@ -284,13 +403,158 @@ def _risk_rejection_outcome(reason: str) -> OutcomeCode:
     return outcome
 
 
-def _resolve_trade_risk_pct(signal: Signal) -> tuple[OutcomeCode | None, Decimal | None, str | None]:
+def _derive_trade_risk_pct_from_stop_loss(
+    signal: Signal,
+    *,
+    entry_price: Decimal,
+) -> tuple[OutcomeCode | None, Decimal | None, str | None]:
+    """Derive trade_risk_pct from the signal's stop_loss and entry_price.
+
+    Returns the canonical |entry - stop| / entry fractional risk, suitable for
+    consumption by ``compute_deterministic_trade_notional``.
+    """
+    raw_stop_loss = signal.get("stop_loss")
+    if raw_stop_loss is None:
+        return None, None, None
+    try:
+        stop_loss = Decimal(str(raw_stop_loss))
+    except Exception:
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"stop_loss is not numeric: {raw_stop_loss!r}",
+        )
+    if not stop_loss.is_finite() or stop_loss <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"stop_loss must be finite and > 0, got {stop_loss}",
+        )
+    if entry_price <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"entry_price must be > 0 to derive trade_risk_pct, got {entry_price}",
+        )
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        derived = abs(entry_price - stop_loss) / entry_price
+    if derived <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"derived trade_risk_pct must be > 0, got {derived}",
+        )
+    return None, derived, None
+
+
+def _derive_trade_risk_pct_from_atr(
+    signal: Signal,
+    *,
+    entry_price: Decimal,
+    atr_multiple: Decimal,
+) -> tuple[OutcomeCode | None, Decimal | None, str | None]:
+    """Derive trade_risk_pct from the signal's ATR field.
+
+    Converts ATR * multiple to a fractional risk-per-unit relative to entry:
+    ``trade_risk_pct = (atr * atr_multiple) / entry_price``
+
+    This is equivalent to using ATR-scaled stop distance as the risk denominator,
+    which normalises position sizes across symbols with different volatility.
+    """
+    raw_atr = signal.get("atr")
+    if raw_atr is None:
+        return (
+            "reject:atr_not_provided",
+            None,
+            "sizing_method='atr' requires signal.atr to be set",
+        )
+    try:
+        atr = Decimal(str(raw_atr))
+    except Exception:
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"atr is not numeric: {raw_atr!r}",
+        )
+    if not atr.is_finite() or atr <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"atr must be finite and > 0, got {atr}",
+        )
+    if entry_price <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"entry_price must be > 0, got {entry_price}",
+        )
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        risk_per_unit = atr * atr_multiple
+        derived = risk_per_unit / entry_price
+    if derived <= Decimal("0"):
+        return (
+            "reject:invalid_trade_risk_input",
+            None,
+            f"atr-derived trade_risk_pct must be > 0, got {derived}",
+        )
+    return None, derived, None
+
+
+def _resolve_trade_risk_pct(
+    signal: Signal,
+    *,
+    entry_price: Decimal,
+    sizing_method: str = "stop_distance",
+    atr_multiple: Decimal = Decimal("2.0"),
+) -> tuple[OutcomeCode | None, Decimal | None, str | None]:
+    if sizing_method == "atr":
+        return _derive_trade_risk_pct_from_atr(
+            signal, entry_price=entry_price, atr_multiple=atr_multiple
+        )
+
+    if sizing_method == "fixed":
+        # Use trade_risk_pct directly from the signal — no derivation.
+        raw_trade_risk_pct = signal.get("trade_risk_pct")
+        if raw_trade_risk_pct is None:
+            return (
+                "reject:missing_trade_risk_input",
+                None,
+                "sizing_method='fixed' requires signal.trade_risk_pct to be set",
+            )
+        try:
+            trade_risk_pct = Decimal(str(raw_trade_risk_pct))
+        except Exception:
+            return (
+                "reject:invalid_trade_risk_input",
+                None,
+                f"trade_risk_pct is not numeric: {raw_trade_risk_pct!r}",
+            )
+        if not trade_risk_pct.is_finite() or trade_risk_pct <= Decimal("0"):
+            return (
+                "reject:invalid_trade_risk_input",
+                None,
+                f"trade_risk_pct must be finite and > 0, got {trade_risk_pct}",
+            )
+        return None, trade_risk_pct, None
+
+    # Default: "stop_distance" — prefer explicit trade_risk_pct, fall back to stop_loss.
     raw_trade_risk_pct = signal.get("trade_risk_pct")
     if raw_trade_risk_pct is None:
+        derived_outcome, derived_pct, derived_reason = (
+            _derive_trade_risk_pct_from_stop_loss(signal, entry_price=entry_price)
+        )
+        if derived_outcome is not None:
+            return derived_outcome, None, derived_reason
+        if derived_pct is not None:
+            return None, derived_pct, None
         return (
             "reject:missing_trade_risk_input",
             None,
-            "trade_risk_pct is required for deterministic sizing",
+            "trade_risk_pct or stop_loss is required for deterministic sizing",
         )
     try:
         trade_risk_pct = Decimal(str(raw_trade_risk_pct))
@@ -340,6 +604,50 @@ def _build_decision_inputs_payload(
     }
 
 
+def _compute_drawdown_state(
+    closed_trades: list[Trade],
+    *,
+    initial_equity: Decimal,
+) -> tuple[int, Decimal]:
+    """Return (consecutive_losses, current_drawdown_pct) from closed trade history.
+
+    consecutive_losses: how many of the most recent closed trades are losses
+    current_drawdown_pct: (equity_peak - current_equity) / equity_peak
+    """
+    if not closed_trades:
+        return 0, Decimal("0")
+
+    sorted_trades = sorted(closed_trades, key=lambda t: t.closed_at or "")
+
+    running_pnl = Decimal("0")
+    peak_equity = initial_equity
+    for t in sorted_trades:
+        pnl = t.realized_pnl or Decimal("0")
+        running_pnl += pnl
+        current = initial_equity + running_pnl
+        if current > peak_equity:
+            peak_equity = current
+
+    current_equity = initial_equity + running_pnl
+    if peak_equity <= Decimal("0"):
+        drawdown_pct = Decimal("0")
+    else:
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            drawdown_pct = (peak_equity - current_equity) / peak_equity
+
+    consecutive_losses = 0
+    for t in reversed(sorted_trades):
+        pnl = t.realized_pnl or Decimal("0")
+        if pnl < Decimal("0"):
+            consecutive_losses += 1
+        else:
+            break
+
+    return consecutive_losses, drawdown_pct
+
+
 # ---------------------------------------------------------------------------
 # Worker
 # ---------------------------------------------------------------------------
@@ -348,9 +656,9 @@ def _build_decision_inputs_payload(
 class BoundedPaperExecutionWorker:
     """Deterministic worker: converts eligible signals into bounded paper execution state.
 
-    Each call to ``process_signal`` applies the ordered 5-step evaluation
-    policy defined in ``signal_to_paper_execution_policy.md`` and returns an
-    explicit ``SignalEvaluationResult``.
+    Each call to ``process_signal`` applies the ordered evaluation policy
+    defined in ``signal_to_paper_execution_policy.md`` and returns an explicit
+    ``SignalEvaluationResult``.
 
     When a signal is eligible all canonical paper entities (Order,
     ExecutionEvents, Trade) are created deterministically and persisted to the
@@ -375,14 +683,35 @@ class BoundedPaperExecutionWorker:
     # Public API
     # ------------------------------------------------------------------
 
-    def process_signal(self, signal: Signal) -> SignalEvaluationResult:
+    def process_signal(
+        self,
+        signal: Signal,
+        *,
+        entry_bar: EntryBar | None = None,
+        price_history: PriceHistory | None = None,
+        regime_state: RegimeState | None = None,
+    ) -> SignalEvaluationResult:
         """Evaluate and process a single signal against the bounded policy.
 
         Returns a ``SignalEvaluationResult`` with an explicit outcome code.
         When the outcome is ``"eligible"``, canonical paper entities are
         created and persisted before returning.
+
+        ``entry_bar`` is optional. When provided alongside an ``entry_zone``
+        on the signal, the worker rejects fills whose next bar gapped past
+        the zone (``skip:entry_zone_not_reached``). Callers without bar
+        context behave as before.
+
+        ``price_history`` is optional. When provided and
+        ``risk_profile.correlation_check_enabled`` is True, the worker
+        evaluates pairwise correlation against open positions and blocks
+        entries that would exceed ``max_correlated_pairs``.
+
+        ``regime_state`` is optional. When provided and
+        ``risk_profile.allowed_regimes`` is non-empty, the worker skips
+        entries whose regime label is not in the allowed set.
         """
-        result = self._evaluate(signal)
+        result = self._evaluate(signal, entry_bar=entry_bar, price_history=price_history, regime_state=regime_state)
         if result.outcome == "eligible":
             result = self._persist_paper_entry(
                 signal,
@@ -390,7 +719,175 @@ class BoundedPaperExecutionWorker:
             )
         return result
 
-    def process_batch(self, signals: Sequence[Signal]) -> list[SignalEvaluationResult]:
+    def process_exit_signal(
+        self,
+        signal: Signal,
+    ) -> SignalEvaluationResult:
+        """Execute a full or partial position exit for a matching open trade.
+
+        Uses ``signal.exit_pct`` (fraction of remaining quantity to close,
+        default 1.0 = full exit). The exit fill price has slippage applied
+        inverse to the entry direction (long exits receive slightly below
+        reference; short exits pay slightly above).
+
+        Returns ``"eligible:partial_exit"`` when the position remains open
+        after the exit, or ``"eligible:full_exit"`` when fully closed.
+        """
+        field_error = _validate_signal_fields(signal)
+        if field_error is not None:
+            return SignalEvaluationResult(
+                outcome="reject:invalid_signal_fields",
+                reason=field_error,
+            )
+
+        symbol: str = signal["symbol"]  # type: ignore[assignment]
+        strategy: str = signal["strategy"]  # type: ignore[assignment]
+        direction: str = signal["direction"]  # type: ignore[assignment]
+        occurred_at: str = signal["timestamp"]  # type: ignore[assignment]
+
+        trades = self._repo.list_trades(strategy_id=strategy, symbol=symbol, limit=100)
+        open_trades = [t for t in trades if t.status == "open" and t.direction == direction]
+
+        if not open_trades:
+            return SignalEvaluationResult(
+                outcome="skip:no_open_position_to_exit",
+                reason=f"no open position for ({symbol}, {strategy}, {direction})",
+            )
+
+        trade = open_trades[0]
+        remaining_qty = trade.quantity_opened - trade.quantity_closed
+
+        raw_exit_pct = signal.get("exit_pct")
+        if raw_exit_pct is not None:
+            with localcontext() as ctx:
+                ctx.prec = 28
+                ctx.rounding = ROUND_HALF_UP
+                exit_pct = Decimal(str(raw_exit_pct))
+                exit_qty = (remaining_qty * exit_pct).quantize(Decimal("0.00000001"))
+        else:
+            exit_qty = remaining_qty
+
+        exit_qty = min(exit_qty, remaining_qty)
+        if exit_qty <= Decimal("0"):
+            return SignalEvaluationResult(
+                outcome="skip:exit_quantity_zero",
+                reason=f"exit_qty={exit_qty} after applying exit_pct={raw_exit_pct}",
+            )
+
+        # Exit fill: inverse slippage direction (long exit = short side slippage)
+        ref_price = _extract_entry_price(
+            signal,
+            fallback_entry_price=trade.average_entry_price or self._risk_profile.default_paper_entry_price,
+        )
+        exit_slippage_direction = "short" if direction == "long" else "long"
+        fill_price = _apply_slippage(
+            reference_price=ref_price,
+            direction=exit_slippage_direction,
+            slippage_rate=self._risk_profile.slippage_rate,
+        )
+        commission = _compute_commission(
+            quantity=exit_qty,
+            fill_price=fill_price,
+            commission_rate=self._risk_profile.commission_rate,
+        )
+
+        entry_price = trade.average_entry_price or Decimal("0")
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            if direction == "long":
+                partial_pnl = exit_qty * (fill_price - entry_price) - commission
+            else:
+                partial_pnl = exit_qty * (entry_price - fill_price) - commission
+
+            new_qty_closed = trade.quantity_closed + exit_qty
+
+            prior_exit_notional = (trade.average_exit_price or Decimal("0")) * trade.quantity_closed
+            new_exit_notional = prior_exit_notional + fill_price * exit_qty
+            new_avg_exit_price = new_exit_notional / new_qty_closed
+
+        new_realized_pnl = (trade.realized_pnl or Decimal("0")) + partial_pnl
+        is_full_exit = new_qty_closed >= trade.quantity_opened
+
+        remaining_qty = trade.quantity_opened - new_qty_closed
+        entry_px = trade.average_entry_price or Decimal("0")
+        new_exposure = remaining_qty * entry_px
+
+        trade_data: dict = {
+            **trade.model_dump(mode="python"),
+            "quantity_closed": new_qty_closed,
+            "average_exit_price": new_avg_exit_price,
+            "realized_pnl": new_realized_pnl,
+            "exposure_notional": new_exposure,
+        }
+        if is_full_exit:
+            trade_data["status"] = "closed"
+            trade_data["closed_at"] = occurred_at
+
+        updated_trade = Trade.model_validate(trade_data)
+
+        # Exit order and execution event
+        signal_id = _resolve_signal_id(signal)
+        exit_order_id = _compute_paper_exit_order_id(signal_id)
+        exit_event_id = compute_execution_event_id(
+            order_id=exit_order_id,
+            event_type="filled",
+            occurred_at=occurred_at,
+            sequence=1,
+        )
+        exit_side = "SELL" if direction == "long" else "BUY"
+        exit_order = Order.model_validate(
+            {
+                "order_id": exit_order_id,
+                "strategy_id": strategy,
+                "symbol": symbol,
+                "sequence": 1,
+                "side": exit_side,
+                "order_type": "market",
+                "time_in_force": "day",
+                "status": "filled",
+                "quantity": exit_qty,
+                "filled_quantity": exit_qty,
+                "created_at": occurred_at,
+                "submitted_at": occurred_at,
+                "average_fill_price": fill_price,
+                "last_execution_event_id": exit_event_id,
+                "position_id": trade.position_id,
+                "trade_id": trade.trade_id,
+            }
+        )
+        exit_event = ExecutionEvent.model_validate(
+            {
+                "event_id": exit_event_id,
+                "order_id": exit_order_id,
+                "strategy_id": strategy,
+                "symbol": symbol,
+                "side": exit_side,
+                "event_type": "filled",
+                "occurred_at": occurred_at,
+                "sequence": 1,
+                "execution_quantity": exit_qty,
+                "execution_price": fill_price,
+                "commission": commission,
+                "position_id": trade.position_id,
+                "trade_id": trade.trade_id,
+            }
+        )
+
+        self._repo.save_order(exit_order)
+        self._repo.save_execution_events([exit_event])
+        self._repo.save_trade(updated_trade)
+
+        return SignalEvaluationResult(
+            outcome="eligible:full_exit" if is_full_exit else "eligible:partial_exit",
+            signal_id=signal_id,
+            trade_id=trade.trade_id,
+        )
+
+    def process_batch(
+        self,
+        signals: Sequence[Signal],
+    ) -> list[SignalEvaluationResult]:
         """Process a batch of signals sequentially.
 
         Returns one ``SignalEvaluationResult`` per signal in input order.
@@ -402,13 +899,28 @@ class BoundedPaperExecutionWorker:
         """Return the canonical validated risk profile used by this worker."""
         return self._risk_profile
 
+    def get_performance_summary(self) -> PaperPerformanceSummary:
+        """Compute performance metrics from all closed trades in the repository."""
+        trades = self._repo.list_trades(limit=10000)
+        return compute_paper_performance_summary(
+            trades, initial_equity=self._risk_profile.account_equity
+        )
+
+    def get_performance_attribution(self) -> PaperPerformanceAttribution:
+        """Compute per-strategy and per-symbol attribution from all closed trades."""
+        trades = self._repo.list_trades(limit=10000)
+        return compute_paper_performance_attribution(trades)
+
     def _build_risk_limits(self) -> RiskLimits:
         """Build deterministic risk-framework limits for paper execution."""
-        max_notional_from_risk_budget = (
-            self._risk_profile.account_equity
-            * self._risk_profile.max_risk_per_trade_pct
-            / self._risk_profile.min_trade_risk_pct
-        )
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            max_notional_from_risk_budget = (
+                self._risk_profile.account_equity
+                * self._risk_profile.max_risk_per_trade_pct
+                / self._risk_profile.min_trade_risk_pct
+            )
         return RiskLimits(
             max_account_exposure_pct=float(self._risk_profile.max_total_exposure_pct),
             max_position_size=float(max_notional_from_risk_budget),
@@ -416,6 +928,10 @@ class BoundedPaperExecutionWorker:
                 self._risk_profile.max_strategy_exposure_pct
             ),
             max_symbol_exposure_pct=float(self._risk_profile.max_symbol_exposure_pct),
+            correlation_threshold=self._risk_profile.correlation_threshold,
+            max_correlated_pairs=self._risk_profile.max_correlated_pairs,
+            correlation_check_enabled=self._risk_profile.correlation_check_enabled,
+            correlation_window=self._risk_profile.correlation_window,
         )
 
     def _compute_trade_sizing_for_signal(
@@ -424,7 +940,12 @@ class BoundedPaperExecutionWorker:
         *,
         entry_price: Decimal,
     ) -> tuple[SignalEvaluationResult | None, Decimal | None, dict[str, str] | None]:
-        rejection_outcome, trade_risk_pct, rejection_reason = _resolve_trade_risk_pct(signal)
+        rejection_outcome, trade_risk_pct, rejection_reason = _resolve_trade_risk_pct(
+            signal,
+            entry_price=entry_price,
+            sizing_method=self._risk_profile.sizing_method,
+            atr_multiple=self._risk_profile.atr_multiple,
+        )
         if rejection_outcome is not None or trade_risk_pct is None:
             return (
                 SignalEvaluationResult(
@@ -473,15 +994,27 @@ class BoundedPaperExecutionWorker:
     # Policy evaluation (read-only)
     # ------------------------------------------------------------------
 
-    def _evaluate(self, signal: Signal) -> SignalEvaluationResult:
-        """Apply the 5-step ordered policy evaluation.
+    def _evaluate(
+        self,
+        signal: Signal,
+        *,
+        entry_bar: EntryBar | None = None,
+        price_history: PriceHistory | None = None,
+        regime_state: RegimeState | None = None,
+    ) -> SignalEvaluationResult:
+        """Apply the ordered policy evaluation.
 
         Steps:
             1. Eligibility check (required fields)
             2. Score threshold check
             3. Duplicate-entry check
             4. Cooldown check
-            5. Exposure and position-limit checks
+            5. Entry-bar fill check (if entry_bar provided)
+            6. Regime filter (if regime_state provided and allowed_regimes non-empty)
+            7. Drawdown guard (if drawdown_guard_enabled)
+            8. Trade sizing
+            9. Exposure and position-limit checks
+            10. Correlation risk check (if price_history provided and correlation_check_enabled)
         """
         # Step 1: eligibility — required signal fields
         field_error = _validate_signal_fields(signal)
@@ -506,9 +1039,6 @@ class BoundedPaperExecutionWorker:
             )
 
         # Load canonical state for this (symbol, strategy) pair.
-        # The limit of 1000 is sufficient for bounded paper simulation;
-        # a paper session with more than 1000 trades per pair is outside
-        # the supported bounded scope.
         symbol_strategy_trades = self._repo.list_trades(
             strategy_id=strategy,
             symbol=symbol,
@@ -526,7 +1056,7 @@ class BoundedPaperExecutionWorker:
                     ),
                 )
 
-        # Step 4: cooldown — min 24h since last accepted entry for (symbol, strategy)
+        # Step 4: cooldown — min N hours since last accepted entry for (symbol, strategy)
         if symbol_strategy_trades:
             most_recent_opened_at = max(t.opened_at for t in symbol_strategy_trades)
             signal_ts = _parse_timestamp(signal["timestamp"])  # type: ignore[arg-type]
@@ -542,7 +1072,62 @@ class BoundedPaperExecutionWorker:
                     ),
                 )
 
-        # Step 5: exposure and position-limit checks
+        # Step 5: entry-bar fill check — only when bar context is supplied.
+        entry_zone = signal.get("entry_zone")
+        if entry_bar is not None and entry_zone is not None:
+            zone_low = Decimal(str(entry_zone["from_"]))
+            zone_high = Decimal(str(entry_zone["to"]))
+            if zone_low > zone_high:
+                zone_low, zone_high = zone_high, zone_low
+            if not bar_intersects_entry_zone(
+                bar_low=entry_bar.low,
+                bar_high=entry_bar.high,
+                zone_low=zone_low,
+                zone_high=zone_high,
+            ):
+                return SignalEvaluationResult(
+                    outcome="skip:entry_zone_not_reached",
+                    reason=(
+                        f"bar [{entry_bar.low}, {entry_bar.high}] did not intersect "
+                        f"entry_zone [{zone_low}, {zone_high}]"
+                    ),
+                )
+
+        # Step 6: regime filter — skip entries in disallowed market regimes.
+        if regime_state is not None and self._risk_profile.allowed_regimes:
+            if regime_state.label not in self._risk_profile.allowed_regimes:
+                return SignalEvaluationResult(
+                    outcome="skip:regime_filtered",
+                    reason=(
+                        f"regime={regime_state.label!r} not in "
+                        f"allowed_regimes={sorted(self._risk_profile.allowed_regimes)}"
+                    ),
+                )
+
+        # Step 7: drawdown guard — block new entries during losing streaks / drawdown periods.
+        if self._risk_profile.drawdown_guard_enabled:
+            all_closed = [t for t in self._repo.list_trades(limit=5000) if t.status == "closed"]
+            consecutive_losses, drawdown_pct = _compute_drawdown_state(
+                all_closed, initial_equity=self._risk_profile.account_equity
+            )
+            if consecutive_losses >= self._risk_profile.max_consecutive_losses:
+                return SignalEvaluationResult(
+                    outcome="skip:drawdown_guard_active",
+                    reason=(
+                        f"drawdown_guard: consecutive_losses={consecutive_losses} >= "
+                        f"max_consecutive_losses={self._risk_profile.max_consecutive_losses}"
+                    ),
+                )
+            if drawdown_pct >= self._risk_profile.max_drawdown_pct:
+                return SignalEvaluationResult(
+                    outcome="skip:drawdown_guard_active",
+                    reason=(
+                        f"drawdown_guard: drawdown_pct={drawdown_pct:.4f} >= "
+                        f"max_drawdown_pct={self._risk_profile.max_drawdown_pct}"
+                    ),
+                )
+
+        # Step 7: trade sizing
         entry_price = _extract_entry_price(
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
@@ -557,14 +1142,10 @@ class BoundedPaperExecutionWorker:
                 reason="trade sizing failed",
             )
 
-        # Load all open trades for canonical exposure/concurrent-position checks.
-        # The limit of 1000 reflects the bounded paper simulation scope
-        # (max_concurrent_positions=10 by default; even large sessions remain
-        # well within this bound).
+        # Step 8: exposure and position-limit checks.
         all_trades = self._repo.list_trades(limit=1000)
         all_open_trades = [t for t in all_trades if t.status == "open"]
 
-        # Concurrent position limit
         if len(all_open_trades) >= self._risk_profile.max_concurrent_positions:
             return SignalEvaluationResult(
                 outcome="reject:concurrent_position_limit_exceeded",
@@ -610,6 +1191,22 @@ class BoundedPaperExecutionWorker:
                 decision_inputs=decision_inputs,
             )
 
+        # Step 9: correlation risk — only when price history is supplied and the gate is enabled.
+        if price_history is not None and self._risk_profile.correlation_check_enabled:
+            open_symbols = [t.symbol for t in all_open_trades]
+            corr_check = evaluate_correlation_risk(
+                proposed_symbol=symbol,
+                open_position_symbols=open_symbols,
+                price_history=price_history,
+                limits=self._risk_limits,
+            )
+            if corr_check.rejection_reason is not None:
+                return SignalEvaluationResult(
+                    outcome="skip:correlation_risk_blocked",
+                    reason=corr_check.rejection_reason,
+                    decision_inputs=decision_inputs,
+                )
+
         return SignalEvaluationResult(outcome="eligible", decision_inputs=decision_inputs)
 
     # ------------------------------------------------------------------
@@ -641,14 +1238,26 @@ class BoundedPaperExecutionWorker:
             signal,
             fallback_entry_price=self._risk_profile.default_paper_entry_price,
         )
-        proposed_notional = (
-            Decimal(decision_inputs["proposed_position_notional"])
-            if decision_inputs is not None
-            else self._risk_profile.default_paper_quantity * entry_price
+        fill_price = _apply_slippage(
+            reference_price=entry_price,
+            direction=direction,
+            slippage_rate=self._risk_profile.slippage_rate,
         )
-        quantity = (proposed_notional / entry_price).quantize(
-            Decimal("0.00000001"),
-            rounding=ROUND_HALF_UP,
+        with localcontext() as ctx:
+            ctx.prec = 28
+            ctx.rounding = ROUND_HALF_UP
+            proposed_notional = (
+                Decimal(decision_inputs["proposed_position_notional"])
+                if decision_inputs is not None
+                else self._risk_profile.default_paper_quantity * entry_price
+            )
+            quantity = (proposed_notional / fill_price).quantize(
+                Decimal("0.00000001"),
+            )
+        commission = _compute_commission(
+            quantity=quantity,
+            fill_price=fill_price,
+            commission_rate=self._risk_profile.commission_rate,
         )
         side = _direction_to_order_side(direction)
 
@@ -711,8 +1320,8 @@ class BoundedPaperExecutionWorker:
                 "occurred_at": occurred_at,
                 "sequence": 3,
                 "execution_quantity": quantity,
-                "execution_price": entry_price,
-                "commission": Decimal("0"),
+                "execution_price": fill_price,
+                "commission": commission,
                 "position_id": position_id,
                 "trade_id": trade_id,
             }
@@ -733,7 +1342,7 @@ class BoundedPaperExecutionWorker:
                 "filled_quantity": quantity,
                 "created_at": occurred_at,
                 "submitted_at": occurred_at,
-                "average_fill_price": entry_price,
+                "average_fill_price": fill_price,
                 "last_execution_event_id": filled_event_id,
                 "position_id": position_id,
                 "trade_id": trade_id,
@@ -741,7 +1350,7 @@ class BoundedPaperExecutionWorker:
         )
 
         # --- Open trade -------------------------------------------------
-        exposure_notional = quantity * entry_price
+        exposure_notional = quantity * fill_price
         trade = Trade.model_validate(
             {
                 "trade_id": trade_id,
@@ -753,7 +1362,7 @@ class BoundedPaperExecutionWorker:
                 "opened_at": occurred_at,
                 "quantity_opened": quantity,
                 "quantity_closed": Decimal("0"),
-                "average_entry_price": entry_price,
+                "average_entry_price": fill_price,
                 "exposure_notional": exposure_notional,
                 "opening_order_ids": [order_id],
                 "execution_event_ids": [filled_event_id],
@@ -791,6 +1400,14 @@ __all__ = [
     "COOLDOWN_HOURS",
     "DEFAULT_PAPER_QUANTITY",
     "DEFAULT_PAPER_ENTRY_PRICE",
+    "EntryBar",
     "PaperExecutionRiskProfile",
+    "PriceHistory",
+    "RegimeState",
+    "PaperPerformanceSummary",
+    "PaperPerformanceAttribution",
+    "bar_intersects_entry_zone",
+    "stop_loss_breached",
     "_direction_to_order_side",
+    "_compute_drawdown_state",
 ]

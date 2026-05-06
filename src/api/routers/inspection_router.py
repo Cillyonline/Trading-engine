@@ -3,9 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+
+if TYPE_CHECKING:
+    from cilly_trading.repositories import (
+        AnalysisRunRepository,
+        CanonicalExecutionRepository,
+        OrderEventRepository,
+        SignalRepository,
+    )
 
 from cilly_trading.models import SignalReadResponseDTO
 
@@ -49,10 +57,10 @@ from ..services import inspection_service
 @dataclass
 class InspectionRouterDependencies:
     require_role: Callable[[str], Callable[..., str]]
-    get_analysis_run_repo: Callable[[], Any]
-    get_signal_repo: Callable[[], Any]
-    get_order_event_repo: Callable[[], Any]
-    get_canonical_execution_repo: Callable[[], Any]
+    get_analysis_run_repo: Callable[[], "AnalysisRunRepository"]
+    get_signal_repo: Callable[[], "SignalRepository"]
+    get_order_event_repo: Callable[[], "OrderEventRepository"]
+    get_canonical_execution_repo: Callable[[], "CanonicalExecutionRepository"]
     get_journal_artifacts_root: Callable[[], Path]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
 

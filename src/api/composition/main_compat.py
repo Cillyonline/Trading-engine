@@ -52,6 +52,7 @@ def bind_main_runtime_exports(
             "PHASE_13_READ_ONLY_ENDPOINTS": settings.phase_13_read_only_endpoints,
             "ROLE_HEADER_NAME": settings.role_header_name,
             "ROLE_PRECEDENCE": settings.role_precedence,
+            "JWT_SETTINGS": settings.jwt_settings,
             "default_strategy_configs": settings.default_strategy_configs,
             "ANALYSIS_DB_PATH": None,
             "signal_repo": repositories.signal_repo,

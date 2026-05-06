@@ -34,11 +34,8 @@ function formatCounts(counts: Record<string, number>): string {
 }
 
 function formatTargetCount(payload: PaperRuntimeEvidenceSeriesResponse): string {
-  const payloadWithOptionalTarget = payload as PaperRuntimeEvidenceSeriesResponse & {
-    target_count?: unknown;
-  };
-  return typeof payloadWithOptionalTarget.target_count === 'number'
-    ? String(payloadWithOptionalTarget.target_count)
+  return typeof payload.target_count === 'number'
+    ? String(payload.target_count)
     : 'Not available';
 }
 
@@ -210,7 +207,10 @@ function OwnerDashboard() {
             id="manual-analysis-market-type"
             name="manual-analysis-market-type"
             value={marketType}
-            onChange={(event) => setMarketType(event.target.value as 'stock' | 'crypto')}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === 'stock' || value === 'crypto') setMarketType(value);
+            }}
           >
             <option value="crypto">crypto</option>
             <option value="stock">stock</option>

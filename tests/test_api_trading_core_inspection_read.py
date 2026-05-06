@@ -235,7 +235,7 @@ def test_trading_core_inspection_endpoints_exposed_read_only(tmp_path: Path, mon
         events = client.get("/trading-core/execution-events", headers=READ_ONLY_HEADERS)
         trades = client.get("/trading-core/trades", headers=READ_ONLY_HEADERS)
         positions = client.get("/trading-core/positions", headers=READ_ONLY_HEADERS)
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     assert orders.status_code == 200
     assert events.status_code == 200

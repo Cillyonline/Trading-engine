@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,8 +21,8 @@ class StrategyAnalyzeRequest(BaseModel):
         min_length=1,
         description="Snapshot reference ID.",
     )
-    symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
-    strategy: str = Field(..., description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
+    symbol: str = Field(..., min_length=1, max_length=20, description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
+    strategy: str = Field(..., min_length=1, max_length=50, description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
     market_type: str = Field(
         "stock",
         description="Markttyp: 'stock' oder 'crypto'",
@@ -100,8 +100,8 @@ class ManualAnalysisRequest(BaseModel):
         description="Optional client-provided run ID (ignored).",
     )
     ingestion_run_id: str = Field(..., min_length=1, description="Snapshot reference ID.")
-    symbol: str = Field(..., description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
-    strategy: str = Field(..., description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
+    symbol: str = Field(..., min_length=1, max_length=20, description="Ticker, z. B. 'AAPL' oder 'BTC/USDT'")
+    strategy: str = Field(..., min_length=1, max_length=50, description="Name der Strategie, z. B. 'RSI2' oder 'TURTLE'")
     market_type: str = Field(
         "stock",
         description="Markttyp: 'stock' oder 'crypto'",
@@ -143,7 +143,7 @@ class ScreenerRequest(BaseModel):
         min_length=1,
         description="Snapshot reference ID.",
     )
-    symbols: Optional[List[str]] = Field(
+    symbols: Optional[List[Annotated[str, Field(min_length=1, max_length=20)]]] = Field(
         default=None,
         description="Liste von Symbolen. Wenn None, wird eine Default-Watchlist verwendet.",
     )

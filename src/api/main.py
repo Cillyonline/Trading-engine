@@ -3,8 +3,17 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+from cilly_trading.exceptions import (
+    CillyError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 
 from .composition import (
     bind_main_runtime_exports,
@@ -17,6 +26,16 @@ from .composition import (
     create_runtime_service,
     include_api_routers,
     register_runtime_lifecycle,
+)
+from .middleware import (
+    REQUEST_ID_HEADER,
+    GracefulShutdownMiddleware,
+    InFlightRequestTracker,
+    LegacyApiDeprecationMiddleware,
+    RequestIdMiddleware,
+    RequestTimeoutMiddleware,
+    current_request_id,
+    install_request_id_log_filter,
 )
 from .models import (
     BacktestArtifactContentResponse,
@@ -39,11 +58,18 @@ from .models import (
     TradingCorePositionsReadResponse,
     TradingCoreTradesReadResponse,
 )
+from .rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
+from .metrics import (
+    PrometheusMetrics,
+    PrometheusMetricsMiddleware,
+    metrics_endpoint_response,
+)
 from .services.composition_runtime_service import configure_logging
 from .state import initialize_alert_state
 
 
 configure_logging()
+install_request_id_log_filter()
 logger = logging.getLogger(__name__)
 
 settings = build_api_runtime_settings()
@@ -71,6 +97,93 @@ app = FastAPI(
     title="Cilly Trading Engine API",
     version="0.1.0",
     description="MVP-API fuer die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
+    # Issue #1138: pin documentation endpoints to internal `/api/...` paths.
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _cilly_error_response(exc: CillyError) -> JSONResponse:
+    request_id = current_request_id() or ""
+    payload = {"detail": exc.detail, "request_id": request_id}
+    response = JSONResponse(status_code=exc.http_status_code, content=payload)
+    if request_id:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
+
+
+@app.exception_handler(NotFoundError)
+async def _handle_not_found_error(_request: Request, exc: NotFoundError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(ValidationError)
+async def _handle_validation_error(_request: Request, exc: ValidationError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(ConflictError)
+async def _handle_conflict_error(_request: Request, exc: ConflictError) -> JSONResponse:
+    return _cilly_error_response(exc)
+
+
+@app.exception_handler(CillyError)
+async def _handle_cilly_error(_request: Request, exc: CillyError) -> JSONResponse:
+    # Fallback for any future CillyError subclass not handled above.
+    return _cilly_error_response(exc)
+
+
+app.add_middleware(RequestTimeoutMiddleware)
+
+# Tracker is created here so the shutdown lifecycle can call ``drain()``
+# on the same instance the middleware uses. The shutdown flag itself is
+# stored on ``app.state`` so that tests constructing a fresh
+# ``TestClient`` without entering the lifespan never inherit a stale
+# shutdown state from a previous test that exited it.
+inflight_tracker = InFlightRequestTracker()
+app.state.inflight_tracker = inflight_tracker
+app.state.shutdown_started = False
+
+
+def _is_shutdown_started() -> bool:
+    return bool(getattr(app.state, "shutdown_started", False))
+
+
+app.add_middleware(
+    GracefulShutdownMiddleware,
+    tracker=inflight_tracker,
+    is_shutting_down=_is_shutdown_started,
+)
+
+# Tag responses on legacy un-versioned API paths with deprecation hints
+# (issue #1135). ``/v1/...`` traffic is unaffected.
+app.add_middleware(LegacyApiDeprecationMiddleware)
+
+app.add_middleware(RequestIdMiddleware)
+
+# Issue #1139: bounded Prometheus HTTP metrics. The middleware is added last
+# (i.e. it runs *outermost* around request handling) so it observes the full
+# end-to-end request duration including downstream middleware.
+_prometheus_metrics = PrometheusMetrics()
+app.state.prometheus_metrics = _prometheus_metrics
+app.add_middleware(PrometheusMetricsMiddleware, metrics=_prometheus_metrics)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def _metrics() -> Response:
+    return metrics_endpoint_response(_prometheus_metrics)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type", "X-Cilly-Role", REQUEST_ID_HEADER],
 )
 
 initialize_alert_state(app)
@@ -92,4 +205,4 @@ include_api_routers(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("api.main:app", host=settings.api_host, port=settings.api_port)

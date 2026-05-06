@@ -259,7 +259,7 @@ def test_paper_endpoints_are_exposed_and_schema_valid(tmp_path: Path, monkeypatc
         positions = client.get("/paper/positions", headers=READ_ONLY_HEADERS)
         account = client.get("/paper/account", headers=READ_ONLY_HEADERS)
         reconciliation = client.get("/paper/reconciliation", headers=READ_ONLY_HEADERS)
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     assert workflow.status_code == 200
     assert trades.status_code == 200
