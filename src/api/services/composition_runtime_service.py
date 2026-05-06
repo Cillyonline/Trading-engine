@@ -6,9 +6,16 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from fastapi import Header, HTTPException
+
+if TYPE_CHECKING:
+    from cilly_trading.repositories import (
+        AnalysisRunRepository,
+        SignalRepository,
+        WatchlistRepository,
+    )
 
 from ..models import ComplianceGuardStatusResponse, RuntimeIntrospectionResponse, ScreenerRequest, ScreenerResponse, SystemStateResponse
 from ..services.jwt_auth import JwtSettings, TokenValidationError, decode_access_token
@@ -126,13 +133,15 @@ class CompositionRuntimeService:
     engine_runtime_not_running_status: int
     engine_runtime_not_running_code: str
     get_analysis_db_path_override: Callable[[], Optional[str]]
-    get_analysis_run_repo: Callable[[], Any]
-    get_signal_repo: Callable[[], Any]
-    get_watchlist_repo: Callable[[], Any]
+    get_analysis_run_repo: Callable[[], "AnalysisRunRepository"]
+    get_signal_repo: Callable[[], "SignalRepository"]
+    get_watchlist_repo: Callable[[], "WatchlistRepository"]
     get_default_strategy_configs: Callable[[], Dict[str, Dict[str, Any]]]
     get_create_strategy: Callable[[], Callable[[str], Any]]
     get_create_registered_strategies: Callable[[], Callable[[], List[Any]]]
     get_trigger_operator_analysis_run: Callable[[], Callable[..., List[Dict[str, Any]]]]
+    # TODO(#1128): Typ konkretisieren, sobald Import-Zyklus
+    # (runtime_assembly.py <-> composition_runtime_service.py) aufgeloest ist.
     get_runtime_controller: Callable[[], Any]
     get_engine_runtime_guard_active: Callable[[], bool]
     get_run_watchlist_analysis: Callable[[], Callable[..., List[Dict[str, Any]]]]
