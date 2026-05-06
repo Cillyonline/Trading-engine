@@ -575,6 +575,29 @@ def test_missing_trade_risk_input_is_rejected_fail_closed(
     del signal["trade_risk_pct"]
     result = worker.process_signal(signal)
     assert result.outcome == "reject:missing_trade_risk_input"
+    assert result.decision_inputs == {
+        "outcome": "reject:missing_trade_risk_input",
+        "reason": "trade_risk_pct or stop_loss is required for deterministic sizing",
+        "symbol": "AAPL",
+        "strategy": "rsi2",
+        "stage": "setup",
+        "direction": "long",
+        "sizing_method": "stop_distance",
+        "risk_profile_contract_id": "paper-execution-risk-profile-v1",
+        "signal_id": "sig-missing-trade-risk",
+        "missing_fields": ["stop_loss", "trade_risk_pct"],
+        "required_any_of": ["stop_loss", "trade_risk_pct"],
+    }
+
+
+def test_stop_distance_candidate_with_trade_risk_pct_passes_precondition(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(signal_id="sig-explicit-trade-risk", trade_risk_pct=0.05)
+    result = worker.process_signal(signal)
+    assert result.outcome == "eligible", result.reason
+    assert result.decision_inputs is not None
+    assert Decimal(str(result.decision_inputs["trade_risk_pct"])) == Decimal("0.05")
 
 
 def test_invalid_trade_risk_input_is_rejected_fail_closed(
@@ -601,6 +624,30 @@ def test_identical_inputs_produce_identical_reason_codes_and_sizing_payloads(
     assert result_b.outcome == "reject:missing_trade_risk_input"
     assert result_a.reason == result_b.reason
     assert result_a.decision_inputs == result_b.decision_inputs
+
+
+def test_exit_signal_processed_as_entry_candidate_is_classified_before_sizing(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(
+        signal_id="sig-entry-api-exit-stage",
+        stage="exit",
+        trade_risk_pct=0.05,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "skip:exit_signal_not_entry_candidate"
+    assert result.reason == "exit signal is not an entry-sizing candidate"
+    assert result.decision_inputs == {
+        "outcome": "skip:exit_signal_not_entry_candidate",
+        "reason": "exit signal is not an entry-sizing candidate",
+        "symbol": "AAPL",
+        "strategy": "rsi2",
+        "stage": "exit",
+        "direction": "long",
+        "sizing_method": "stop_distance",
+        "risk_profile_contract_id": "paper-execution-risk-profile-v1",
+        "signal_id": "sig-entry-api-exit-stage",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +853,8 @@ def test_signal_with_stop_loss_only_is_eligible(
     )
     result = worker.process_signal(signal)
     assert result.outcome == "eligible", result.reason
+    assert result.decision_inputs is not None
+    assert Decimal(str(result.decision_inputs["trade_risk_pct"])) == Decimal("0.05")
 
 
 def test_signal_with_stop_loss_derives_trade_risk_pct(

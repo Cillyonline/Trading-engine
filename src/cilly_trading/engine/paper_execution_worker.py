@@ -142,6 +142,7 @@ OutcomeCode = Literal[
     "eligible:partial_exit",
     "eligible:full_exit",
     "skip:score_below_threshold",
+    "skip:exit_signal_not_entry_candidate",
     "skip:duplicate_entry",
     "skip:cooldown_active",
     "skip:entry_zone_not_reached",
@@ -208,7 +209,7 @@ class SignalEvaluationResult:
     order_id: Optional[str] = None
     trade_id: Optional[str] = None
     reason: Optional[str] = None
-    decision_inputs: Optional[dict[str, str]] = None
+    decision_inputs: Optional[dict[str, object]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -604,6 +605,34 @@ def _build_decision_inputs_payload(
     }
 
 
+def _build_signal_contract_evidence(
+    signal: Signal,
+    *,
+    outcome: OutcomeCode,
+    reason: str,
+    profile: PaperExecutionRiskProfile,
+    missing_fields: list[str] | None = None,
+    required_any_of: list[str] | None = None,
+) -> dict[str, object]:
+    evidence: dict[str, object] = {
+        "outcome": outcome,
+        "reason": reason,
+        "symbol": str(signal.get("symbol")),
+        "strategy": str(signal.get("strategy")),
+        "stage": str(signal.get("stage")),
+        "direction": str(signal.get("direction")),
+        "sizing_method": profile.sizing_method,
+        "risk_profile_contract_id": profile.contract_id,
+    }
+    if signal.get("signal_id"):
+        evidence["signal_id"] = str(signal["signal_id"])
+    if missing_fields is not None:
+        evidence["missing_fields"] = missing_fields
+    if required_any_of is not None:
+        evidence["required_any_of"] = required_any_of
+    return evidence
+
+
 def _compute_drawdown_state(
     closed_trades: list[Trade],
     *,
@@ -939,7 +968,7 @@ class BoundedPaperExecutionWorker:
         signal: Signal,
         *,
         entry_price: Decimal,
-    ) -> tuple[SignalEvaluationResult | None, Decimal | None, dict[str, str] | None]:
+    ) -> tuple[SignalEvaluationResult | None, Decimal | None, dict[str, object] | None]:
         rejection_outcome, trade_risk_pct, rejection_reason = _resolve_trade_risk_pct(
             signal,
             entry_price=entry_price,
@@ -947,13 +976,31 @@ class BoundedPaperExecutionWorker:
             atr_multiple=self._risk_profile.atr_multiple,
         )
         if rejection_outcome is not None or trade_risk_pct is None:
+            evidence = None
+            if (
+                rejection_outcome == "reject:missing_trade_risk_input"
+                and self._risk_profile.sizing_method == "stop_distance"
+            ):
+                reason = (
+                    rejection_reason
+                    or "trade_risk_pct or stop_loss is required for deterministic sizing"
+                )
+                evidence = _build_signal_contract_evidence(
+                    signal,
+                    outcome="reject:missing_trade_risk_input",
+                    reason=reason,
+                    profile=self._risk_profile,
+                    missing_fields=["stop_loss", "trade_risk_pct"],
+                    required_any_of=["stop_loss", "trade_risk_pct"],
+                )
             return (
                 SignalEvaluationResult(
                     outcome=rejection_outcome or "reject:invalid_trade_risk_input",
                     reason=rejection_reason,
+                    decision_inputs=evidence,
                 ),
                 None,
-                None,
+                evidence,
             )
 
         sizing_decision = compute_deterministic_trade_notional(
@@ -1027,7 +1074,21 @@ class BoundedPaperExecutionWorker:
         symbol: str = signal["symbol"]  # type: ignore[assignment]
         strategy: str = signal["strategy"]  # type: ignore[assignment]
         direction: str = signal["direction"]  # type: ignore[assignment]
+        stage: str = signal["stage"]  # type: ignore[assignment]
         score = float(signal["score"])  # type: ignore[arg-type]
+
+        if stage == "exit":
+            reason = "exit signal is not an entry-sizing candidate"
+            return SignalEvaluationResult(
+                outcome="skip:exit_signal_not_entry_candidate",
+                reason=reason,
+                decision_inputs=_build_signal_contract_evidence(
+                    signal,
+                    outcome="skip:exit_signal_not_entry_candidate",
+                    reason=reason,
+                    profile=self._risk_profile,
+                ),
+            )
 
         # Step 2: score threshold
         if score < self._risk_profile.min_score_threshold:
@@ -1217,7 +1278,7 @@ class BoundedPaperExecutionWorker:
         self,
         signal: Signal,
         *,
-        decision_inputs: dict[str, str] | None,
+        decision_inputs: dict[str, object] | None,
     ) -> SignalEvaluationResult:
         """Create and persist canonical paper entities for an eligible signal.
 
@@ -1247,7 +1308,7 @@ class BoundedPaperExecutionWorker:
             ctx.prec = 28
             ctx.rounding = ROUND_HALF_UP
             proposed_notional = (
-                Decimal(decision_inputs["proposed_position_notional"])
+                Decimal(str(decision_inputs["proposed_position_notional"]))
                 if decision_inputs is not None
                 else self._risk_profile.default_paper_quantity * entry_price
             )
