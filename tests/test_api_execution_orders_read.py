@@ -51,7 +51,7 @@ def test_execution_orders_api_contract(tmp_path: Path, monkeypatch) -> None:
             headers=READ_ONLY_HEADERS,
             params={"limit": 10, "offset": 0},
         )
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     assert response.status_code == 200
     payload = response.json()

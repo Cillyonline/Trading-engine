@@ -283,7 +283,7 @@ def test_signal_decision_surface_openapi_contract_is_explicit(monkeypatch, tmp_p
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/openapi.json")
+    response = client.get("/api/openapi.json")
     assert response.status_code == 200
     openapi = response.json()
 

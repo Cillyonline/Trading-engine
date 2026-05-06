@@ -324,21 +324,19 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
         offset: int,
         dedupe_unfiltered_reads: bool,
     ) -> Tuple[List[Signal], int]:
-        where_clauses = []
-        params: List[object] = []
+        where_clauses: list[str] = []
+        params: list[object] = []
 
-        if symbol is not None:
-            where_clauses.append("symbol = ?")
-            params.append(symbol)
-        if strategy is not None:
-            where_clauses.append("strategy = ?")
-            params.append(strategy)
-        if timeframe is not None:
-            where_clauses.append("timeframe = ?")
-            params.append(timeframe)
-        if ingestion_run_id is not None:
-            where_clauses.append("ingestion_run_id = ?")
-            params.append(ingestion_run_id)
+        self._append_equality_filters(
+            where_clauses,
+            params,
+            (
+                ("symbol", symbol),
+                ("strategy", strategy),
+                ("timeframe", timeframe),
+                ("ingestion_run_id", ingestion_run_id),
+            ),
+        )
         normalized_timestamp = "REPLACE(timestamp, 'Z', '+00:00')"
         if from_ is not None:
             where_clauses.append(f"{normalized_timestamp} >= ?")
@@ -347,9 +345,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
             where_clauses.append(f"{normalized_timestamp} <= ?")
             params.append(to.isoformat())
 
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = self._compose_where_clause(where_clauses)
 
         if sort == "created_at_asc":
             order_sql = "ORDER BY timestamp ASC, id ASC"
@@ -436,7 +432,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                     LIMIT ?
                     OFFSET ?;
                 """
-                cur.execute(data_query, [*params, limit, offset])
+                cur.execute(data_query, [*params, *self._pagination_params(limit, offset)])
                 rows = cur.fetchall()
             else:
                 count_query = f"SELECT COUNT(*) FROM signals {where_sql};"
@@ -469,7 +465,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                     LIMIT ?
                     OFFSET ?;
                 """
-                cur.execute(data_query, [*params, limit, offset])
+                cur.execute(data_query, [*params, *self._pagination_params(limit, offset)])
                 rows = cur.fetchall()
 
         result: List[Signal] = []
@@ -528,7 +524,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
             where_clauses.append("score >= ?")
             params.append(min_score)
 
-        where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = self._compose_where_clause(where_clauses)
         order_sql = "ORDER BY score DESC, symbol ASC"
 
         with self._connection() as conn:
@@ -550,7 +546,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                 LIMIT ?
                 OFFSET ?;
             """
-            cur.execute(query, [*params, limit, offset])
+            cur.execute(query, [*params, *self._pagination_params(limit, offset)])
             rows = cur.fetchall()
 
         result: List[dict] = []

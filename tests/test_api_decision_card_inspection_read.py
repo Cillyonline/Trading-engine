@@ -278,7 +278,7 @@ def test_decision_card_inspection_endpoint_is_exposed_and_schema_valid(
 
     with _client(monkeypatch, artifacts_root) as client:
         response = client.get("/decision-cards", headers=READ_ONLY_HEADERS)
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     assert response.status_code == 200
     payload = response.json()

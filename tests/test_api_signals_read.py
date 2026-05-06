@@ -92,7 +92,7 @@ def test_read_signals_openapi_exposes_timeframe_not_legacy_filters(tmp_path: Pat
     monkeypatch.setattr(api_main, "signal_repo", repo)
     client = TestClient(api_main.app)
 
-    response = client.get("/openapi.json")
+    response = client.get("/api/openapi.json")
 
     assert response.status_code == 200
     parameters = response.json()["paths"]["/signals"]["get"]["parameters"]

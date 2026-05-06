@@ -127,6 +127,67 @@ class BaseSqliteRepository:
             conn.commit()
             return cur.rowcount if cur.rowcount is not None else 0
 
+    # ------------------------------------------------------------------
+    # Read-query construction helpers (issue #1137).
+    #
+    # These helpers exist to remove duplicated optional-filter / pagination
+    # construction across read methods in repositories such as
+    # ``SqliteSignalRepository`` and ``SqliteOrderEventRepository``.
+    #
+    # They are intentionally narrow:
+    #   * They only build equality filters and append them to a caller-supplied
+    #     ``where_clauses`` / ``params`` pair.
+    #   * They never interpolate user-controlled values into SQL — only column
+    #     names from the calling repository (which are static identifiers).
+    #   * They do not introduce a new public repository API: all helpers are
+    #     marked private with a leading underscore.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _append_equality_filter(
+        where_clauses: list[str],
+        params: list[Any],
+        column: str,
+        value: Any,
+    ) -> None:
+        """Append ``column = ?`` to *where_clauses* and bind ``value``.
+
+        ``value`` is appended only if it is not ``None``. ``column`` MUST be a
+        static identifier provided by the caller (never user-controlled).
+        """
+
+        if value is None:
+            return
+        where_clauses.append(f"{column} = ?")
+        params.append(value)
+
+    @staticmethod
+    def _append_equality_filters(
+        where_clauses: list[str],
+        params: list[Any],
+        filters: Iterable[tuple[str, Any]],
+    ) -> None:
+        """Convenience wrapper for adding several optional equality filters."""
+
+        for column, value in filters:
+            BaseSqliteRepository._append_equality_filter(
+                where_clauses, params, column, value
+            )
+
+    @staticmethod
+    def _compose_where_clause(where_clauses: Sequence[str]) -> str:
+        """Return ``"WHERE a AND b"`` or ``""`` for an empty clause list."""
+
+        if not where_clauses:
+            return ""
+        return "WHERE " + " AND ".join(where_clauses)
+
+    @staticmethod
+    def _pagination_params(limit: int, offset: int) -> list[int]:
+        """Return ``[limit, offset]`` as a list ready to extend bind params."""
+
+        return [int(limit), int(offset)]
+
     async def run_in_thread(
         self, fn: Callable[..., _T], /, *args: Any, **kwargs: Any
     ) -> _T:

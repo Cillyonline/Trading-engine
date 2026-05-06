@@ -131,22 +131,18 @@ class SqliteOrderEventRepository(BaseSqliteRepository, OrderEventRepository):
         where_clauses: list[str] = []
         params: list[object] = []
 
-        if symbol is not None:
-            where_clauses.append("symbol = ?")
-            params.append(symbol)
-        if strategy is not None:
-            where_clauses.append("strategy = ?")
-            params.append(strategy)
-        if run_id is not None:
-            where_clauses.append("run_id = ?")
-            params.append(run_id)
-        if order_id is not None:
-            where_clauses.append("order_id = ?")
-            params.append(order_id)
+        self._append_equality_filters(
+            where_clauses,
+            params,
+            (
+                ("symbol", symbol),
+                ("strategy", strategy),
+                ("run_id", run_id),
+                ("order_id", order_id),
+            ),
+        )
 
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql = self._compose_where_clause(where_clauses)
 
         order_sql = """
             ORDER BY
@@ -182,7 +178,7 @@ class SqliteOrderEventRepository(BaseSqliteRepository, OrderEventRepository):
                 LIMIT ?
                 OFFSET ?;
                 """,
-                [*params, limit, offset],
+                [*params, *self._pagination_params(limit, offset)],
             )
             rows = cur.fetchall()
 

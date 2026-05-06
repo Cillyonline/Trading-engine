@@ -56,7 +56,7 @@ def test_backtest_entry_read_route_exposes_bounded_non_live_contract(
 
         with TestClient(api_main.app) as client:
             response = client.get("/backtest/artifacts", headers=READ_ONLY_HEADERS)
-            openapi = client.get("/openapi.json").json()
+            openapi = client.get("/api/openapi.json").json()
 
         assert response.status_code == 200
         payload = response.json()
