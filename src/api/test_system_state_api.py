@@ -73,7 +73,7 @@ def test_system_state_endpoint_is_documented(monkeypatch) -> None:
     monkeypatch.setattr(api_main, "start_engine_runtime", lambda: "running")
 
     with TestClient(api_main.app) as client:
-        openapi = client.get("/openapi.json").json()
+        openapi = client.get("/api/openapi.json").json()
 
     get_spec = openapi["paths"]["/system/state"]["get"]
     assert get_spec["summary"] == "System State"

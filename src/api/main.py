@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -59,6 +59,11 @@ from .models import (
     TradingCoreTradesReadResponse,
 )
 from .rate_limit import RateLimitExceeded, _rate_limit_exceeded_handler, limiter
+from .metrics import (
+    PrometheusMetrics,
+    PrometheusMetricsMiddleware,
+    metrics_endpoint_response,
+)
 from .services.composition_runtime_service import configure_logging
 from .state import initialize_alert_state
 
@@ -92,6 +97,10 @@ app = FastAPI(
     title="Cilly Trading Engine API",
     version="0.1.0",
     description="MVP-API fuer die Cilly Trading Engine (RSI2 & Turtle, D1, SQLite).",
+    # Issue #1138: pin documentation endpoints to internal `/api/...` paths.
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 app.state.limiter = limiter
@@ -155,6 +164,19 @@ app.add_middleware(
 app.add_middleware(LegacyApiDeprecationMiddleware)
 
 app.add_middleware(RequestIdMiddleware)
+
+# Issue #1139: bounded Prometheus HTTP metrics. The middleware is added last
+# (i.e. it runs *outermost* around request handling) so it observes the full
+# end-to-end request duration including downstream middleware.
+_prometheus_metrics = PrometheusMetrics()
+app.state.prometheus_metrics = _prometheus_metrics
+app.add_middleware(PrometheusMetricsMiddleware, metrics=_prometheus_metrics)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def _metrics() -> Response:
+    return metrics_endpoint_response(_prometheus_metrics)
+
 
 app.add_middleware(
     CORSMiddleware,
