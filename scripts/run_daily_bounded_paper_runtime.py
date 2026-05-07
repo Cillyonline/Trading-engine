@@ -63,6 +63,29 @@ STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID = (
     "ops_bounded_stale_open_paper_trade_review"
 )
 STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_MODE = "bounded_stale_paper_trade_review"
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_VERSION = 1
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_ID = (
+    "ops_bounded_stale_open_paper_trade_review_outcome"
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS: frozenset[str] = frozenset(
+    {
+        "acknowledged_no_action",
+        "needs_followup",
+        "external_action_recorded",
+        "deferred",
+    }
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS: frozenset[str] = frozenset(
+    {
+        "auto_close_trade",
+        "reset_paper_state",
+        "mark_to_market",
+        "force_eligible_trade_creation",
+        "lower_thresholds_to_bypass_stale_blockers",
+        "infer_trader_validation_or_profitability",
+    }
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_REVIEWER_NOT_PROVIDED = "not_provided"
 STALE_OPEN_PAPER_TRADE_REVIEW_ALLOWED_ACTIONS: tuple[dict[str, str], ...] = (
     {
         "action_code": "inspect_trade_lifecycle_evidence",
@@ -1159,6 +1182,216 @@ def build_stale_open_paper_trade_review_workflow(
         "review_guidance": STALE_OPEN_PAPER_TRADE_REVIEW_GUIDANCE_BY_STATUS[workflow_status],
         "non_inference_statement": STALE_OPEN_PAPER_TRADE_REVIEW_NON_INFERENCE_STATEMENT,
     }
+
+
+def _normalize_reviewer_id(value: Any) -> str:
+    """Return a reviewer/operator identifier or the explicit not-provided sentinel."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_REVIEWER_NOT_PROVIDED
+
+
+def _normalize_source_summary_reference(value: Any) -> str | None:
+    """Return a source daily-runtime-summary reference string or None."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def build_stale_open_paper_trade_review_outcome_artifact(
+    *,
+    stale_open_paper_trade_review_workflow: dict[str, Any] | None,
+    review_payload: dict[str, Any] | None,
+    observed_at: datetime,
+    source_summary_reference: Any = None,
+) -> dict[str, Any]:
+    """Build a bounded, non-mutating operator review outcome artifact.
+
+    The artifact records the operator review decision per stale open paper trade
+    surfaced by the bounded ``stale_open_paper_trade_review_workflow`` evidence.
+    It is strictly evidence-only:
+
+    * It does not close, reset, mark-to-market, or otherwise modify any paper
+      account, paper trade, paper position, order, execution-event, or
+      reconciliation state.
+    * It does not infer trader validation, profitability, broker readiness,
+      live readiness, or production readiness.
+    * Inputs are read deterministically and are never mutated.
+
+    Invalid or incomplete review payloads are classified into the artifact
+    without raising; callers can detect them via ``review_outcome_status`` and
+    per-trade ``decision_validity`` fields. The artifact still carries the
+    explicit ``mutates_paper_state: false`` evidence and prohibited-action
+    statements so that no downstream consumer can mistake a rejection path for
+    a mutation path.
+    """
+
+    workflow = (
+        stale_open_paper_trade_review_workflow
+        if isinstance(stale_open_paper_trade_review_workflow, dict)
+        else {}
+    )
+    raw_stale_trades = workflow.get("stale_open_trades")
+    stale_trades = (
+        [item for item in raw_stale_trades if isinstance(item, dict)]
+        if isinstance(raw_stale_trades, list)
+        else []
+    )
+
+    payload = review_payload if isinstance(review_payload, dict) else {}
+    raw_decisions = payload.get("decisions")
+    decisions = (
+        [item for item in raw_decisions if isinstance(item, dict)]
+        if isinstance(raw_decisions, list)
+        else []
+    )
+    decisions_by_trade_id: dict[str, dict[str, Any]] = {}
+    duplicate_payload_decision_count = 0
+    for decision in decisions:
+        trade_id = decision.get("trade_id")
+        if not isinstance(trade_id, str) or not trade_id:
+            continue
+        if trade_id in decisions_by_trade_id:
+            duplicate_payload_decision_count += 1
+            continue
+        decisions_by_trade_id[trade_id] = decision
+
+    reviewer_id = _normalize_reviewer_id(payload.get("reviewer_id"))
+    source_reference = _normalize_source_summary_reference(source_summary_reference)
+    if source_reference is None:
+        source_reference = _normalize_source_summary_reference(
+            payload.get("source_summary_reference")
+        )
+
+    review_entries: list[dict[str, Any]] = []
+    valid_decision_count = 0
+    invalid_decision_count = 0
+    missing_decision_count = 0
+    prohibited_decision_count = 0
+    matched_trade_ids: set[str] = set()
+
+    for trade in stale_trades:
+        trade_id = trade.get("trade_id")
+        decision_entry = decisions_by_trade_id.get(trade_id) if isinstance(trade_id, str) else None
+        if isinstance(trade_id, str) and trade_id:
+            matched_trade_ids.add(trade_id)
+
+        operator_decision: str | None = None
+        operator_rationale: str | None = None
+        decision_validity = "missing_decision"
+
+        if isinstance(decision_entry, dict):
+            raw_decision = decision_entry.get("decision")
+            raw_rationale = decision_entry.get("rationale")
+            decision_str = raw_decision.strip() if isinstance(raw_decision, str) else ""
+            rationale_str = raw_rationale.strip() if isinstance(raw_rationale, str) else ""
+            operator_decision = decision_str or None
+            operator_rationale = rationale_str or None
+            if not decision_str:
+                decision_validity = "missing_decision"
+            elif decision_str in STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS:
+                decision_validity = "prohibited_decision"
+            elif decision_str not in STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS:
+                decision_validity = "unrecognized_decision"
+            elif not rationale_str:
+                decision_validity = "missing_rationale"
+            else:
+                decision_validity = "valid"
+
+        if decision_validity == "valid":
+            valid_decision_count += 1
+        elif decision_validity == "missing_decision":
+            missing_decision_count += 1
+            invalid_decision_count += 1
+        elif decision_validity == "prohibited_decision":
+            prohibited_decision_count += 1
+            invalid_decision_count += 1
+        else:
+            invalid_decision_count += 1
+
+        review_entries.append(
+            {
+                "trade_id": trade.get("trade_id"),
+                "position_id": trade.get("position_id"),
+                "symbol": trade.get("symbol"),
+                "strategy": trade.get("strategy"),
+                "direction": trade.get("direction"),
+                "opened_at": trade.get("opened_at"),
+                "account_as_of": trade.get("account_as_of"),
+                "trade_freshness": trade.get("trade_freshness"),
+                "account_freshness": trade.get("account_freshness"),
+                "duplicate_entry_blocker": bool(trade.get("duplicate_entry_blocker")),
+                "duplicate_entry_blocker_reason": trade.get("duplicate_entry_blocker_reason"),
+                "review_classification": trade.get("review_classification"),
+                "operator_decision": operator_decision,
+                "operator_rationale": operator_rationale,
+                "decision_validity": decision_validity,
+            }
+        )
+
+    review_entries.sort(
+        key=lambda item: (
+            str(item.get("symbol") or ""),
+            str(item.get("strategy") or ""),
+            str(item.get("direction") or ""),
+            str(item.get("trade_id") or ""),
+        )
+    )
+
+    unmatched_payload_decisions = sorted(
+        trade_id
+        for trade_id in decisions_by_trade_id.keys()
+        if trade_id not in matched_trade_ids
+    )
+
+    reviewed_trade_count = len(review_entries)
+    if reviewed_trade_count == 0:
+        review_outcome_status = "no_review_required"
+    elif invalid_decision_count == 0 and reviewed_trade_count > 0:
+        review_outcome_status = "recorded"
+    elif valid_decision_count == 0:
+        review_outcome_status = "invalid_payload"
+    else:
+        review_outcome_status = "partially_recorded"
+
+    artifact: dict[str, Any] = {
+        "artifact_id": STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_ID,
+        "artifact_version": STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_VERSION,
+        "workflow_id": workflow.get("workflow_id", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID),
+        "workflow_version": workflow.get(
+            "workflow_version", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_VERSION
+        ),
+        "mode": workflow.get("mode", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_MODE),
+        "observed_at": observed_at.isoformat(),
+        "source_summary_reference": source_reference,
+        "reviewer_id": reviewer_id,
+        "review_outcome_status": review_outcome_status,
+        "reviewed_trade_count": reviewed_trade_count,
+        "valid_decision_count": valid_decision_count,
+        "invalid_decision_count": invalid_decision_count,
+        "missing_decision_count": missing_decision_count,
+        "prohibited_decision_count": prohibited_decision_count,
+        "duplicate_payload_decision_count": duplicate_payload_decision_count,
+        "unmatched_payload_decision_trade_ids": unmatched_payload_decisions,
+        "reviewed_stale_open_trades": review_entries,
+        "allowed_decisions": sorted(STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS),
+        "prohibited_decisions": sorted(
+            STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS
+        ),
+        "prohibited_actions": [
+            dict(action) for action in STALE_OPEN_PAPER_TRADE_REVIEW_PROHIBITED_ACTIONS
+        ],
+        "read_only": True,
+        "mutates_paper_state": False,
+        "non_inference_statement": STALE_OPEN_PAPER_TRADE_REVIEW_NON_INFERENCE_STATEMENT,
+    }
+    return artifact
 
 
 def _classify_run_quality(
