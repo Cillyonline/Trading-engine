@@ -67,6 +67,103 @@ OPERATOR_REVIEW_OUTCOME_NON_INFERENCE_STATEMENT = (
     "This artifact records bounded paper-runtime observations only. It is not trader validation, "
     "not profitability evidence, and not broker/live readiness evidence."
 )
+STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_VERSION = 1
+STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID = (
+    "ops_bounded_stale_open_paper_trade_review"
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_MODE = "bounded_stale_paper_trade_review"
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_VERSION = 1
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_ID = (
+    "ops_bounded_stale_open_paper_trade_review_outcome"
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS: frozenset[str] = frozenset(
+    {
+        "acknowledged_no_action",
+        "needs_followup",
+        "external_action_recorded",
+        "deferred",
+    }
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS: frozenset[str] = frozenset(
+    {
+        "auto_close_trade",
+        "reset_paper_state",
+        "mark_to_market",
+        "force_eligible_trade_creation",
+        "lower_thresholds_to_bypass_stale_blockers",
+        "infer_trader_validation_or_profitability",
+    }
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_REVIEWER_NOT_PROVIDED = "not_provided"
+STALE_OPEN_PAPER_TRADE_REVIEW_ALLOWED_ACTIONS: tuple[dict[str, str], ...] = (
+    {
+        "action_code": "inspect_trade_lifecycle_evidence",
+        "action_summary": (
+            "Inspect the captured per-trade lifecycle evidence (trade_id, position_id, "
+            "symbol, strategy, direction, status, opened_at, account_as_of, ages, freshness, "
+            "duplicate_entry_blocker)."
+        ),
+    },
+    {
+        "action_code": "compare_with_paper_inspection_surfaces",
+        "action_summary": (
+            "Compare the lifecycle evidence with the latest paper-account, paper-trades, "
+            "paper-positions, and paper-reconciliation read-only surfaces captured by this run."
+        ),
+    },
+    {
+        "action_code": "record_review_outcome_externally",
+        "action_summary": (
+            "Record the manual review outcome externally or in an explicitly non-mutating "
+            "evidence artifact; do not modify paper state to communicate the result."
+        ),
+    },
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_PROHIBITED_ACTIONS: tuple[dict[str, str], ...] = (
+    {
+        "action_code": "auto_close_trade",
+        "action_summary": "Do not auto-close the stale open paper trade.",
+    },
+    {
+        "action_code": "reset_paper_state",
+        "action_summary": "Do not reset paper account, paper trades, or paper positions state.",
+    },
+    {
+        "action_code": "mark_to_market",
+        "action_summary": "Do not mark the stale paper position to market.",
+    },
+    {
+        "action_code": "force_eligible_trade_creation",
+        "action_summary": "Do not force eligible trade creation to bypass the stale duplicate-entry blocker.",
+    },
+    {
+        "action_code": "lower_thresholds_to_bypass_stale_blockers",
+        "action_summary": "Do not lower score, risk, or duplicate thresholds to bypass stale blockers.",
+    },
+    {
+        "action_code": "infer_trader_validation_or_profitability",
+        "action_summary": (
+            "Do not infer trader validation, profitability, broker readiness, live readiness, "
+            "or production readiness from this stale-state review evidence."
+        ),
+    },
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_NON_INFERENCE_STATEMENT = (
+    "This bounded stale open paper-trade review evidence is operationally useful for "
+    "evidence hygiene only. It is not trader validation and not profitability evidence; "
+    "it does not assert broker readiness, live readiness, or production readiness."
+)
+STALE_OPEN_PAPER_TRADE_REVIEW_GUIDANCE_BY_STATUS: dict[str, str] = {
+    "no_review_required": (
+        "No stale or unknown-freshness open paper trades observed in this bounded run; "
+        "no operator review action is required from this workflow surface."
+    ),
+    "review_required": (
+        "Operator must inspect the listed stale or unknown-freshness open paper trades, "
+        "compare lifecycle evidence with the bounded paper-account/trades/positions/reconciliation "
+        "surfaces, and record the review outcome without mutating paper state."
+    ),
+}
 PAPER_STATE_DUPLICATE_ENTRY_REASON_PATTERN = re.compile(
     r"^open trade exists for \((?P<symbol>[^,]+),\s*(?P<strategy>[^,]+),\s*(?P<direction>[^)]+)\)$"
 )
@@ -470,38 +567,58 @@ def _duplicate_entry_reason_tuple(reason: Any) -> tuple[str, str, str] | None:
     )
 
 
-def _duplicate_entry_blocker_keys(
+def _duplicate_entry_blocker_index(
     *,
     execution_payload: dict[str, Any] | None,
     signals_payload: dict[str, Any] | None,
-) -> set[tuple[str, str, str]]:
+) -> dict[tuple[str, str, str], list[str]]:
+    """Return a deterministic index of duplicate-entry blocker keys to reasons.
+
+    Each key is a normalized ``(symbol, strategy, direction)`` tuple. The
+    associated value is the ordered list of execution-result ``reason`` strings
+    that produced the duplicate-entry skip for that key. Reasons may be empty
+    when the execution result did not carry a reason string.
+    """
+
     signals_by_id: dict[str, dict[str, Any]] = {}
     for signal in _items_from_payload(signals_payload):
         signal_id = signal.get("signal_id")
         if isinstance(signal_id, str) and signal_id:
             signals_by_id[signal_id] = signal
 
-    blocker_keys: set[tuple[str, str, str]] = set()
+    blocker_index: dict[tuple[str, str, str], list[str]] = {}
     results = _items_from_payload(execution_payload, key="results")
     for result in results:
         outcome = result.get("outcome")
         reason = result.get("reason")
         if outcome != "skip:duplicate_entry" and reason != "skip:duplicate_entry":
             continue
-        result_key = _normalized_trade_tuple(result)
-        if result_key is not None:
-            blocker_keys.add(result_key)
+        key: tuple[str, str, str] | None = _normalized_trade_tuple(result)
+        if key is None:
+            key = _duplicate_entry_reason_tuple(reason)
+        if key is None:
+            signal_id = result.get("signal_id")
+            if isinstance(signal_id, str):
+                key = _normalized_trade_tuple(signals_by_id.get(signal_id, {}))
+        if key is None:
             continue
-        reason_key = _duplicate_entry_reason_tuple(reason)
-        if reason_key is not None:
-            blocker_keys.add(reason_key)
-            continue
-        signal_id = result.get("signal_id")
-        if isinstance(signal_id, str):
-            signal_key = _normalized_trade_tuple(signals_by_id.get(signal_id, {}))
-            if signal_key is not None:
-                blocker_keys.add(signal_key)
-    return blocker_keys
+        bucket = blocker_index.setdefault(key, [])
+        if isinstance(reason, str) and reason and reason != "skip:duplicate_entry":
+            bucket.append(reason)
+    return blocker_index
+
+
+def _duplicate_entry_blocker_keys(
+    *,
+    execution_payload: dict[str, Any] | None,
+    signals_payload: dict[str, Any] | None,
+) -> set[tuple[str, str, str]]:
+    return set(
+        _duplicate_entry_blocker_index(
+            execution_payload=execution_payload,
+            signals_payload=signals_payload,
+        ).keys()
+    )
 
 
 def _classify_paper_state_freshness(
@@ -901,10 +1018,11 @@ def build_paper_state_freshness_evidence(
         account_as_of=account_as_of,
         observed_at=observed_at,
     )
-    duplicate_blocker_keys = _duplicate_entry_blocker_keys(
+    duplicate_blocker_index = _duplicate_entry_blocker_index(
         execution_payload=execution_payload,
         signals_payload=signals_payload,
     )
+    duplicate_blocker_keys = set(duplicate_blocker_index.keys())
 
     positions_by_id: dict[str, dict[str, Any]] = {}
     for position in _items_from_payload(positions_payload):
@@ -928,6 +1046,11 @@ def build_paper_state_freshness_evidence(
         )
         trade_key = _normalized_trade_tuple(trade)
         duplicate_entry_blocker = trade_key in duplicate_blocker_keys if trade_key is not None else False
+        duplicate_entry_blocker_reason: str | None = None
+        if duplicate_entry_blocker and trade_key is not None:
+            reasons = duplicate_blocker_index.get(trade_key) or []
+            if reasons:
+                duplicate_entry_blocker_reason = reasons[0]
         if duplicate_entry_blocker:
             duplicate_blocker_count += 1
         classification = _paper_state_blocker_classification(
@@ -950,6 +1073,7 @@ def build_paper_state_freshness_evidence(
                 "current_state": "open" if trade.get("status") == "open" else "closed",
                 "direction": trade.get("direction"),
                 "duplicate_entry_blocker": duplicate_entry_blocker,
+                "duplicate_entry_blocker_reason": duplicate_entry_blocker_reason,
                 "freshness": freshness,
                 "opened_at": trade.get("opened_at"),
                 "operator_review_guidance": PAPER_STATE_OPERATOR_REVIEW_GUIDANCE[freshness],
@@ -1058,6 +1182,306 @@ def build_operator_review_outcome_artifact(
         "workflow_id": OPERATOR_REVIEW_OUTCOME_WORKFLOW_ID,
         "workflow_version": OPERATOR_REVIEW_OUTCOME_WORKFLOW_VERSION,
     }
+
+
+_STALE_OPEN_PAPER_TRADE_REVIEW_CLASSIFICATIONS: frozenset[str] = frozenset(
+    {
+        "stale_open_trade_review_required",
+        "unknown_freshness_review_required",
+    }
+)
+
+
+def build_stale_open_paper_trade_review_workflow(
+    *,
+    paper_state_freshness: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build the bounded read-only operator-review workflow for stale open paper trades.
+
+    The workflow is built deterministically from the existing paper-state freshness
+    evidence. It does not read or mutate paper state itself: it only re-projects the
+    already-captured evidence into a structured operator-facing surface that lists
+    stale open paper trades, links them to duplicate-entry blockers when evidence
+    exists, and enumerates the allowed read-only review actions and the prohibited
+    mutation actions.
+    """
+
+    freshness = paper_state_freshness if isinstance(paper_state_freshness, dict) else {}
+    open_trades_raw = freshness.get("open_trades")
+    open_trades = [item for item in open_trades_raw if isinstance(item, dict)] if isinstance(open_trades_raw, list) else []
+
+    review_trades: list[dict[str, Any]] = []
+    duplicate_blocker_review_count = 0
+    non_duplicate_blocker_review_count = 0
+    unknown_freshness_review_count = 0
+
+    for trade in open_trades:
+        classification = trade.get("classification")
+        per_trade_classification = (
+            classification
+            if classification in _STALE_OPEN_PAPER_TRADE_REVIEW_CLASSIFICATIONS
+            else "fresh_no_review_required"
+        )
+        review_entry = {
+            "trade_id": trade.get("trade_id"),
+            "position_id": trade.get("position_id"),
+            "symbol": trade.get("symbol"),
+            "strategy": trade.get("strategy"),
+            "direction": trade.get("direction"),
+            "status": trade.get("status"),
+            "opened_at": trade.get("opened_at"),
+            "account_as_of": trade.get("account_as_of"),
+            "trade_age_seconds": trade.get("trade_age_seconds"),
+            "account_age_seconds": trade.get("account_age_seconds"),
+            "trade_freshness": trade.get("trade_freshness"),
+            "account_freshness": trade.get("account_freshness"),
+            "freshness": trade.get("freshness"),
+            "duplicate_entry_blocker": bool(trade.get("duplicate_entry_blocker")),
+            "duplicate_entry_blocker_reason": trade.get("duplicate_entry_blocker_reason"),
+            "classification": classification,
+            "review_classification": per_trade_classification,
+            "operator_review_guidance": trade.get("operator_review_guidance"),
+        }
+        if per_trade_classification == "fresh_no_review_required":
+            continue
+        if per_trade_classification == "unknown_freshness_review_required":
+            unknown_freshness_review_count += 1
+        if review_entry["duplicate_entry_blocker"]:
+            duplicate_blocker_review_count += 1
+        else:
+            non_duplicate_blocker_review_count += 1
+        review_trades.append(review_entry)
+
+    review_required_count = len(review_trades)
+    workflow_status = "review_required" if review_required_count > 0 else "no_review_required"
+
+    return {
+        "workflow_id": STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID,
+        "workflow_version": STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_VERSION,
+        "mode": STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_MODE,
+        "read_only": True,
+        "mutates_paper_state": False,
+        "workflow_status": workflow_status,
+        "review_required_count": review_required_count,
+        "duplicate_entry_blocker_review_count": duplicate_blocker_review_count,
+        "non_duplicate_entry_blocker_review_count": non_duplicate_blocker_review_count,
+        "unknown_freshness_review_count": unknown_freshness_review_count,
+        "stale_open_trades": review_trades,
+        "allowed_actions": [dict(action) for action in STALE_OPEN_PAPER_TRADE_REVIEW_ALLOWED_ACTIONS],
+        "prohibited_actions": [dict(action) for action in STALE_OPEN_PAPER_TRADE_REVIEW_PROHIBITED_ACTIONS],
+        "review_guidance": STALE_OPEN_PAPER_TRADE_REVIEW_GUIDANCE_BY_STATUS[workflow_status],
+        "non_inference_statement": STALE_OPEN_PAPER_TRADE_REVIEW_NON_INFERENCE_STATEMENT,
+    }
+
+
+def _normalize_reviewer_id(value: Any) -> str:
+    """Return a reviewer/operator identifier or the explicit not-provided sentinel."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_REVIEWER_NOT_PROVIDED
+
+
+def _normalize_source_summary_reference(value: Any) -> str | None:
+    """Return a source daily-runtime-summary reference string or None."""
+
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped:
+            return stripped
+    return None
+
+
+def build_stale_open_paper_trade_review_outcome_artifact(
+    *,
+    stale_open_paper_trade_review_workflow: dict[str, Any] | None,
+    review_payload: dict[str, Any] | None,
+    observed_at: datetime,
+    source_summary_reference: Any = None,
+) -> dict[str, Any]:
+    """Build a bounded, non-mutating operator review outcome artifact.
+
+    The artifact records the operator review decision per stale open paper trade
+    surfaced by the bounded ``stale_open_paper_trade_review_workflow`` evidence.
+    It is strictly evidence-only:
+
+    * It does not close, reset, mark-to-market, or otherwise modify any paper
+      account, paper trade, paper position, order, execution-event, or
+      reconciliation state.
+    * It does not infer trader validation, profitability, broker readiness,
+      live readiness, or production readiness.
+    * Inputs are read deterministically and are never mutated.
+
+    Invalid or incomplete review payloads are classified into the artifact
+    without raising; callers can detect them via ``review_outcome_status`` and
+    per-trade ``decision_validity`` fields. The artifact still carries the
+    explicit ``mutates_paper_state: false`` evidence and prohibited-action
+    statements so that no downstream consumer can mistake a rejection path for
+    a mutation path.
+    """
+
+    workflow = (
+        stale_open_paper_trade_review_workflow
+        if isinstance(stale_open_paper_trade_review_workflow, dict)
+        else {}
+    )
+    raw_stale_trades = workflow.get("stale_open_trades")
+    stale_trades = (
+        [item for item in raw_stale_trades if isinstance(item, dict)]
+        if isinstance(raw_stale_trades, list)
+        else []
+    )
+
+    payload = review_payload if isinstance(review_payload, dict) else {}
+    raw_decisions = payload.get("decisions")
+    decisions = (
+        [item for item in raw_decisions if isinstance(item, dict)]
+        if isinstance(raw_decisions, list)
+        else []
+    )
+    decisions_by_trade_id: dict[str, dict[str, Any]] = {}
+    duplicate_payload_decision_count = 0
+    for decision in decisions:
+        trade_id = decision.get("trade_id")
+        if not isinstance(trade_id, str) or not trade_id:
+            continue
+        if trade_id in decisions_by_trade_id:
+            duplicate_payload_decision_count += 1
+            continue
+        decisions_by_trade_id[trade_id] = decision
+
+    reviewer_id = _normalize_reviewer_id(payload.get("reviewer_id"))
+    source_reference = _normalize_source_summary_reference(source_summary_reference)
+    if source_reference is None:
+        source_reference = _normalize_source_summary_reference(
+            payload.get("source_summary_reference")
+        )
+
+    review_entries: list[dict[str, Any]] = []
+    valid_decision_count = 0
+    invalid_decision_count = 0
+    missing_decision_count = 0
+    prohibited_decision_count = 0
+    matched_trade_ids: set[str] = set()
+
+    for trade in stale_trades:
+        trade_id = trade.get("trade_id")
+        decision_entry = decisions_by_trade_id.get(trade_id) if isinstance(trade_id, str) else None
+        if isinstance(trade_id, str) and trade_id:
+            matched_trade_ids.add(trade_id)
+
+        operator_decision: str | None = None
+        operator_rationale: str | None = None
+        decision_validity = "missing_decision"
+
+        if isinstance(decision_entry, dict):
+            raw_decision = decision_entry.get("decision")
+            raw_rationale = decision_entry.get("rationale")
+            decision_str = raw_decision.strip() if isinstance(raw_decision, str) else ""
+            rationale_str = raw_rationale.strip() if isinstance(raw_rationale, str) else ""
+            operator_decision = decision_str or None
+            operator_rationale = rationale_str or None
+            if not decision_str:
+                decision_validity = "missing_decision"
+            elif decision_str in STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS:
+                decision_validity = "prohibited_decision"
+            elif decision_str not in STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS:
+                decision_validity = "unrecognized_decision"
+            elif not rationale_str:
+                decision_validity = "missing_rationale"
+            else:
+                decision_validity = "valid"
+
+        if decision_validity == "valid":
+            valid_decision_count += 1
+        elif decision_validity == "missing_decision":
+            missing_decision_count += 1
+            invalid_decision_count += 1
+        elif decision_validity == "prohibited_decision":
+            prohibited_decision_count += 1
+            invalid_decision_count += 1
+        else:
+            invalid_decision_count += 1
+
+        review_entries.append(
+            {
+                "trade_id": trade.get("trade_id"),
+                "position_id": trade.get("position_id"),
+                "symbol": trade.get("symbol"),
+                "strategy": trade.get("strategy"),
+                "direction": trade.get("direction"),
+                "opened_at": trade.get("opened_at"),
+                "account_as_of": trade.get("account_as_of"),
+                "trade_freshness": trade.get("trade_freshness"),
+                "account_freshness": trade.get("account_freshness"),
+                "duplicate_entry_blocker": bool(trade.get("duplicate_entry_blocker")),
+                "duplicate_entry_blocker_reason": trade.get("duplicate_entry_blocker_reason"),
+                "review_classification": trade.get("review_classification"),
+                "operator_decision": operator_decision,
+                "operator_rationale": operator_rationale,
+                "decision_validity": decision_validity,
+            }
+        )
+
+    review_entries.sort(
+        key=lambda item: (
+            str(item.get("symbol") or ""),
+            str(item.get("strategy") or ""),
+            str(item.get("direction") or ""),
+            str(item.get("trade_id") or ""),
+        )
+    )
+
+    unmatched_payload_decisions = sorted(
+        trade_id
+        for trade_id in decisions_by_trade_id.keys()
+        if trade_id not in matched_trade_ids
+    )
+
+    reviewed_trade_count = len(review_entries)
+    if reviewed_trade_count == 0:
+        review_outcome_status = "no_review_required"
+    elif invalid_decision_count == 0 and reviewed_trade_count > 0:
+        review_outcome_status = "recorded"
+    elif valid_decision_count == 0:
+        review_outcome_status = "invalid_payload"
+    else:
+        review_outcome_status = "partially_recorded"
+
+    artifact: dict[str, Any] = {
+        "artifact_id": STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_ID,
+        "artifact_version": STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ARTIFACT_VERSION,
+        "workflow_id": workflow.get("workflow_id", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID),
+        "workflow_version": workflow.get(
+            "workflow_version", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_VERSION
+        ),
+        "mode": workflow.get("mode", STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_MODE),
+        "observed_at": observed_at.isoformat(),
+        "source_summary_reference": source_reference,
+        "reviewer_id": reviewer_id,
+        "review_outcome_status": review_outcome_status,
+        "reviewed_trade_count": reviewed_trade_count,
+        "valid_decision_count": valid_decision_count,
+        "invalid_decision_count": invalid_decision_count,
+        "missing_decision_count": missing_decision_count,
+        "prohibited_decision_count": prohibited_decision_count,
+        "duplicate_payload_decision_count": duplicate_payload_decision_count,
+        "unmatched_payload_decision_trade_ids": unmatched_payload_decisions,
+        "reviewed_stale_open_trades": review_entries,
+        "allowed_decisions": sorted(STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_ALLOWED_DECISIONS),
+        "prohibited_decisions": sorted(
+            STALE_OPEN_PAPER_TRADE_REVIEW_OUTCOME_PROHIBITED_DECISIONS
+        ),
+        "prohibited_actions": [
+            dict(action) for action in STALE_OPEN_PAPER_TRADE_REVIEW_PROHIBITED_ACTIONS
+        ],
+        "read_only": True,
+        "mutates_paper_state": False,
+        "non_inference_statement": STALE_OPEN_PAPER_TRADE_REVIEW_NON_INFERENCE_STATEMENT,
+    }
+    return artifact
 
 
 def _classify_run_quality(
@@ -1425,12 +1849,16 @@ def run_daily_bounded_paper_runtime(
         risk_control_activation = build_risk_control_activation_evidence(
             execution_payload=script_outputs["bounded_paper_execution_cycle"]["payload"],
         )
+        stale_open_paper_trade_review_workflow = build_stale_open_paper_trade_review_workflow(
+            paper_state_freshness=paper_state_freshness,
+        )
         summary_payload: dict[str, Any] = {
             "analysis_run_id": str(analysis_payload.get("analysis_run_id", "")),
             "completed_at": completed_at.isoformat(),
             "ingestion_run_id": ingestion_run_id,
             "paper_state_freshness": paper_state_freshness,
             "risk_control_activation": risk_control_activation,
+            "stale_open_paper_trade_review_workflow": stale_open_paper_trade_review_workflow,
             **run_quality,
             "run_record_dir": str(run_record_path),
             "status": "ok",
