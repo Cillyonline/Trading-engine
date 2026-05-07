@@ -16,6 +16,7 @@ Non-live boundary:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -58,6 +59,14 @@ RUN_QUALITY_CLASSIFICATION_VERSION = 1
 OPERATOR_ACTION_CONTRACT_VERSION = 1
 PAPER_STATE_FRESHNESS_CLASSIFICATION_VERSION = 1
 PAPER_STATE_FRESHNESS_STALE_AFTER_SECONDS = 24 * 60 * 60
+OPERATOR_REVIEW_OUTCOME_ARTIFACT_VERSION = 1
+OPERATOR_REVIEW_OUTCOME_WORKFLOW_ID = "bounded_daily_paper_runtime"
+OPERATOR_REVIEW_OUTCOME_WORKFLOW_VERSION = "OPS-P64"
+OPERATOR_REVIEW_OUTCOME_ARTIFACT_ID = "operator-review"
+OPERATOR_REVIEW_OUTCOME_NON_INFERENCE_STATEMENT = (
+    "This artifact records bounded paper-runtime observations only. It is not trader validation, "
+    "not profitability evidence, and not broker/live readiness evidence."
+)
 PAPER_STATE_DUPLICATE_ENTRY_REASON_PATTERN = re.compile(
     r"^open trade exists for \((?P<symbol>[^,]+),\s*(?P<strategy>[^,]+),\s*(?P<direction>[^)]+)\)$"
 )
@@ -347,6 +356,19 @@ def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
         json.dumps(payload, sort_keys=True, ensure_ascii=True) + "\n",
         encoding="utf-8",
     )
+
+
+def _json_file_bytes(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, sort_keys=True, ensure_ascii=True) + "\n").encode("utf-8")
+
+
+def _write_json_file_with_sha256(path: Path, payload: dict[str, Any]) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    json_bytes = _json_file_bytes(payload)
+    path.write_bytes(json_bytes)
+    digest = hashlib.sha256(json_bytes).hexdigest()
+    path.with_suffix(f"{path.suffix}.sha256").write_text(f"{digest}  {path.name}\n", encoding="ascii")
+    return digest
 
 
 def _invoke_python_script(
@@ -970,6 +992,74 @@ def build_paper_state_freshness_evidence(
     }
 
 
+def build_operator_review_outcome_artifact(
+    *,
+    paper_state_freshness: dict[str, Any],
+    source_daily_runtime_summary: str,
+    observed_at: datetime,
+) -> dict[str, Any]:
+    review_outcomes: list[dict[str, Any]] = []
+    for trade in _items_from_payload(paper_state_freshness, key="open_trades"):
+        if (
+            trade.get("classification") != "stale_open_trade_review_required"
+            or trade.get("duplicate_entry_blocker") is not True
+        ):
+            continue
+        review_outcomes.append(
+            {
+                "account_as_of": trade.get("account_as_of"),
+                "account_freshness": trade.get("account_freshness"),
+                "classification": trade.get("classification"),
+                "decision_validity": "valid_review_required_evidence",
+                "direction": trade.get("direction"),
+                "duplicate_entry_blocker": True,
+                "duplicate_entry_blocker_reason": "stale_open_trade_duplicate_entry_blocker",
+                "mutates_paper_state": False,
+                "opened_at": trade.get("opened_at"),
+                "operator_decision": "pending_operator_review",
+                "operator_review_guidance": trade.get("operator_review_guidance"),
+                "operator_rationale": (
+                    "Stale open paper trade blocked duplicate entry; operator must review lifecycle evidence "
+                    "before interpreting the blocker."
+                ),
+                "position_id": trade.get("position_id"),
+                "position_status": trade.get("position_status"),
+                "review_required": True,
+                "status": trade.get("status"),
+                "strategy": trade.get("strategy"),
+                "symbol": trade.get("symbol"),
+                "trade_age_seconds": trade.get("trade_age_seconds"),
+                "trade_freshness": trade.get("trade_freshness"),
+                "trade_id": trade.get("trade_id"),
+            }
+        )
+
+    review_outcomes.sort(
+        key=lambda item: (
+            str(item.get("symbol") or ""),
+            str(item.get("strategy") or ""),
+            str(item.get("direction") or ""),
+            str(item.get("trade_id") or ""),
+        )
+    )
+
+    return {
+        "artifact_id": OPERATOR_REVIEW_OUTCOME_ARTIFACT_ID,
+        "artifact_version": OPERATOR_REVIEW_OUTCOME_ARTIFACT_VERSION,
+        "invalid_count": 0,
+        "mutates_paper_state": False,
+        "non_inference_statement": OPERATOR_REVIEW_OUTCOME_NON_INFERENCE_STATEMENT,
+        "observed_at": observed_at.isoformat(),
+        "read_only": True,
+        "recorded_count": len(review_outcomes),
+        "review_outcomes": review_outcomes,
+        "review_required_count": int(paper_state_freshness.get("review_required_count") or 0),
+        "source_daily_runtime_summary": source_daily_runtime_summary,
+        "workflow_id": OPERATOR_REVIEW_OUTCOME_WORKFLOW_ID,
+        "workflow_version": OPERATOR_REVIEW_OUTCOME_WORKFLOW_VERSION,
+    }
+
+
 def _classify_run_quality(
     *,
     execution_step: dict[str, Any] | None,
@@ -1357,6 +1447,16 @@ def run_daily_bounded_paper_runtime(
         }
         summary_file = run_record_path / f"daily-runtime-summary-{started_at.strftime('%Y%m%dT%H%M%SZ')}.json"
         _write_json_file(summary_file, summary_payload)
+        operator_review_path = run_record_path / "operator-review.json"
+        operator_review_payload = build_operator_review_outcome_artifact(
+            paper_state_freshness=paper_state_freshness,
+            source_daily_runtime_summary=str(summary_file),
+            observed_at=completed_at,
+        )
+        _write_json_file_with_sha256(
+            operator_review_path,
+            operator_review_payload,
+        )
         summary_payload["summary_file"] = str(summary_file)
         return summary_payload
     except DailyRuntimeStepError:

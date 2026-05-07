@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -263,6 +264,31 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     assert summary_file_payload["run_quality_inputs"] == payload["run_quality_inputs"]
     assert summary_file_payload["paper_state_freshness"] == payload["paper_state_freshness"]
     assert summary_file_payload["risk_control_activation"] == payload["risk_control_activation"]
+    operator_review_file = Path(payload["run_record_dir"]) / "operator-review.json"
+    operator_review_bytes = operator_review_file.read_bytes()
+    operator_review_payload = json.loads(operator_review_bytes.decode("utf-8"))
+    assert operator_review_payload == {
+        "artifact_id": "operator-review",
+        "artifact_version": 1,
+        "invalid_count": 0,
+        "mutates_paper_state": False,
+        "non_inference_statement": (
+            "This artifact records bounded paper-runtime observations only. It is not trader validation, "
+            "not profitability evidence, and not broker/live readiness evidence."
+        ),
+        "observed_at": "2026-04-06T12:00:00+00:00",
+        "read_only": True,
+        "recorded_count": 0,
+        "review_outcomes": [],
+        "review_required_count": 0,
+        "source_daily_runtime_summary": payload["summary_file"],
+        "workflow_id": "bounded_daily_paper_runtime",
+        "workflow_version": "OPS-P64",
+    }
+    operator_review_sha_file = operator_review_file.with_suffix(".json.sha256")
+    assert operator_review_sha_file.read_text(encoding="ascii") == (
+        f"{hashlib.sha256(operator_review_bytes).hexdigest()}  operator-review.json\n"
+    )
 
 
 def test_risk_control_activation_evidence_reports_required_controls_and_inactive_defaults() -> None:
@@ -315,6 +341,157 @@ def test_risk_control_activation_evidence_reports_required_controls_and_inactive
         "drawdown_guard",
         "regime_filter",
     ))
+
+
+def test_daily_runner_emits_non_empty_operator_review_artifact_for_stale_duplicate_blockers(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_script_module()
+    request_sequence: list[tuple[str, str]] = []
+
+    def _fake_run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+        script_name = Path(command[1]).name
+        if script_name == "run_snapshot_ingestion.py":
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"result": {"ingestion_run_id": "ing-dup"}}) + "\n", stderr="")
+        if script_name == "run_paper_execution_cycle.py":
+            return subprocess.CompletedProcess(
+                command,
+                1,
+                stdout=json.dumps(
+                    {
+                        "eligible": 0,
+                        "results": [
+                            {
+                                "outcome": "skip:duplicate_entry",
+                                "reason": "open trade exists for (WMT, TURTLE, long)",
+                            },
+                            {
+                                "outcome": "skip:duplicate_entry",
+                                "reason": "open trade exists for (GS, TURTLE, long)",
+                            },
+                        ],
+                        "risk_profile": _default_risk_profile(),
+                        "status": "no_eligible",
+                    }
+                )
+                + "\n",
+                stderr="",
+            )
+        if script_name == "run_post_run_reconciliation.py":
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"ok": True, "status": "pass"}) + "\n", stderr="")
+        if script_name == "generate_weekly_review.py":
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"all_valid": True, "status": "pass"}) + "\n", stderr="")
+        raise AssertionError(f"Unexpected script invocation: {script_name}")
+
+    def _fake_request_json(
+        url: str,
+        *,
+        headers: dict[str, str],
+        method: str = "GET",
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        request_sequence.append((method, url))
+        if url.endswith("/analysis/run"):
+            return {"analysis_run_id": "analysis-dup", "ingestion_run_id": "ing-dup", "signals": []}
+        assert method == "GET"
+        assert headers == {module.ROLE_HEADER_NAME: module.ROLE_READ_ONLY}
+        if "/signals?" in url:
+            return {"items": [], "total": 0}
+        if url.endswith("/paper/trades"):
+            return {
+                "items": [
+                    {
+                        "direction": "long",
+                        "opened_at": "2026-04-02T00:00:00+00:00",
+                        "position_id": "pos-wmt",
+                        "quantity_closed": "0",
+                        "quantity_opened": "1",
+                        "status": "open",
+                        "strategy_id": "TURTLE",
+                        "symbol": "WMT",
+                        "trade_id": "trade-wmt",
+                    },
+                    {
+                        "direction": "long",
+                        "opened_at": "2026-04-02T00:00:00+00:00",
+                        "position_id": "pos-gs",
+                        "quantity_closed": "0",
+                        "quantity_opened": "1",
+                        "status": "open",
+                        "strategy_id": "TURTLE",
+                        "symbol": "GS",
+                        "trade_id": "trade-gs",
+                    },
+                ],
+                "total": 2,
+            }
+        if url.endswith("/paper/positions"):
+            return {
+                "items": [
+                    {"position_id": "pos-wmt", "status": "open"},
+                    {"position_id": "pos-gs", "status": "open"},
+                ],
+                "total": 2,
+            }
+        if url.endswith("/paper/account"):
+            return {"account": {"as_of": "2026-05-06T12:00:00+00:00"}}
+        if url.endswith("/paper/reconciliation"):
+            return {"mismatches": 0, "ok": True}
+        raise AssertionError(f"Unexpected request URL: {url}")
+
+    monkeypatch.setattr(module, "_run_command", _fake_run_command)
+    monkeypatch.setattr(module, "_request_json", _fake_request_json)
+    monkeypatch.setattr(module, "_utc_now", lambda: datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc))
+
+    payload = module.run_daily_bounded_paper_runtime(
+        db_path=str(tmp_path / "analysis.db"),
+        base_url="http://127.0.0.1:18000",
+        symbols="AAPL",
+        timeframe="1d",
+        limit=100,
+        provider="test",
+        analysis_symbol="AAPL",
+        analysis_strategy="RSI2",
+        analysis_market_type="equity",
+        analysis_lookback_days=30,
+        snapshot_evidence_dir=str(tmp_path / "snapshot"),
+        execution_evidence_dir=str(tmp_path / "execution"),
+        reconciliation_evidence_dir=str(tmp_path / "reconciliation"),
+        review_evidence_dir=str(tmp_path / "review"),
+        run_record_dir=str(tmp_path / "daily-runtime"),
+        signals_limit=100,
+        run_command=module._run_command,
+        request_json=module._request_json,
+        now_fn=module._utc_now,
+    )
+
+    operator_review_file = Path(payload["run_record_dir"]) / "operator-review.json"
+    operator_review_bytes = operator_review_file.read_bytes()
+    artifact = json.loads(operator_review_bytes.decode("utf-8"))
+    assert artifact["read_only"] is True
+    assert artifact["mutates_paper_state"] is False
+    assert artifact["source_daily_runtime_summary"] == payload["summary_file"]
+    assert artifact["review_required_count"] == 2
+    assert artifact["recorded_count"] == 2
+    assert artifact["invalid_count"] == 0
+    assert [item["trade_id"] for item in artifact["review_outcomes"]] == ["trade-gs", "trade-wmt"]
+    assert {item["classification"] for item in artifact["review_outcomes"]} == {
+        "stale_open_trade_review_required"
+    }
+    assert all(item["mutates_paper_state"] is False for item in artifact["review_outcomes"])
+    assert all(item["operator_decision"] == "pending_operator_review" for item in artifact["review_outcomes"])
+    assert all(item["decision_validity"] == "valid_review_required_evidence" for item in artifact["review_outcomes"])
+    assert all(item["duplicate_entry_blocker_reason"] == "stale_open_trade_duplicate_entry_blocker" for item in artifact["review_outcomes"])
+    assert operator_review_file.with_suffix(".json.sha256").read_text(encoding="ascii") == (
+        f"{hashlib.sha256(operator_review_bytes).hexdigest()}  operator-review.json\n"
+    )
+    assert [item for item in request_sequence if "/paper/" in item[1]] == [
+        ("GET", "http://127.0.0.1:18000/paper/trades"),
+        ("GET", "http://127.0.0.1:18000/paper/positions"),
+        ("GET", "http://127.0.0.1:18000/paper/account"),
+        ("GET", "http://127.0.0.1:18000/paper/reconciliation"),
+    ]
 
 
 def test_risk_control_activation_reports_all_configurable_controls_inactive() -> None:
@@ -775,6 +952,135 @@ def test_paper_state_freshness_evidence_separates_fresh_account_from_old_trade_a
     assert evidence["open_trades"][0]["trade_freshness"] == "stale"
     assert evidence["open_trades"][0]["trade_age_seconds"] == 2980800
     assert evidence["open_trades"][0]["classification"] == "stale_open_trade_review_required"
+
+
+def test_operator_review_artifact_records_each_stale_duplicate_entry_blocker() -> None:
+    module = _load_script_module()
+
+    paper_state_freshness = module.build_paper_state_freshness_evidence(
+        trades_payload={
+            "items": [
+                {
+                    "average_entry_price": "100",
+                    "direction": "long",
+                    "opened_at": "2026-04-02T00:00:00+00:00",
+                    "position_id": "pos-wmt",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "WMT",
+                    "trade_id": "trade-wmt",
+                },
+                {
+                    "average_entry_price": "425",
+                    "direction": "long",
+                    "opened_at": "2026-04-02T00:00:00+00:00",
+                    "position_id": "pos-gs",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "GS",
+                    "trade_id": "trade-gs",
+                },
+                {
+                    "average_entry_price": "900",
+                    "direction": "long",
+                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "position_id": "pos-cost",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "COST",
+                    "trade_id": "trade-cost",
+                },
+            ]
+        },
+        positions_payload={
+            "items": [
+                {"position_id": "pos-wmt", "status": "open"},
+                {"position_id": "pos-gs", "status": "open"},
+                {"position_id": "pos-cost", "status": "open"},
+            ]
+        },
+        account_payload={"account": {"as_of": "2026-05-06T12:00:00+00:00"}},
+        execution_payload={
+            "results": [
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (WMT, TURTLE, long)",
+                },
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (GS, TURTLE, long)",
+                },
+                {
+                    "outcome": "skip:duplicate_entry",
+                    "reason": "open trade exists for (COST, TURTLE, long)",
+                },
+            ]
+        },
+        signals_payload={"items": []},
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    artifact = module.build_operator_review_outcome_artifact(
+        paper_state_freshness=paper_state_freshness,
+        source_daily_runtime_summary="runs/daily-runtime/2026-05-06/daily-runtime-summary.json",
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    duplicate_artifact = module.build_operator_review_outcome_artifact(
+        paper_state_freshness=paper_state_freshness,
+        source_daily_runtime_summary="runs/daily-runtime/2026-05-06/daily-runtime-summary.json",
+        observed_at=datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert artifact == duplicate_artifact
+    assert module._json_file_bytes(artifact) == module._json_file_bytes(duplicate_artifact)
+    assert artifact["workflow_id"] == "bounded_daily_paper_runtime"
+    assert artifact["workflow_version"] == "OPS-P64"
+    assert artifact["artifact_id"] == "operator-review"
+    assert artifact["artifact_version"] == 1
+    assert artifact["read_only"] is True
+    assert artifact["mutates_paper_state"] is False
+    assert artifact["source_daily_runtime_summary"] == "runs/daily-runtime/2026-05-06/daily-runtime-summary.json"
+    assert artifact["observed_at"] == "2026-05-06T12:00:00+00:00"
+    assert artifact["review_required_count"] == 2
+    assert artifact["recorded_count"] == 2
+    assert artifact["invalid_count"] == 0
+    assert "not trader validation" in artifact["non_inference_statement"]
+    assert "not profitability evidence" in artifact["non_inference_statement"]
+    assert "not broker/live readiness" in artifact["non_inference_statement"]
+    assert [item["trade_id"] for item in artifact["review_outcomes"]] == ["trade-gs", "trade-wmt"]
+    assert {item["classification"] for item in artifact["review_outcomes"]} == {
+        "stale_open_trade_review_required"
+    }
+    required_outcome_fields = {
+        "account_as_of",
+        "account_freshness",
+        "decision_validity",
+        "direction",
+        "duplicate_entry_blocker",
+        "duplicate_entry_blocker_reason",
+        "mutates_paper_state",
+        "opened_at",
+        "operator_decision",
+        "operator_rationale",
+        "position_id",
+        "status",
+        "strategy",
+        "symbol",
+        "trade_freshness",
+        "trade_id",
+    }
+    assert all(required_outcome_fields <= set(item) for item in artifact["review_outcomes"])
+    assert all(item["duplicate_entry_blocker"] is True for item in artifact["review_outcomes"])
+    assert all(item["mutates_paper_state"] is False for item in artifact["review_outcomes"])
+    assert all(item["operator_decision"] == "pending_operator_review" for item in artifact["review_outcomes"])
+    assert all(item["operator_rationale"] for item in artifact["review_outcomes"])
+    assert all(item["decision_validity"] == "valid_review_required_evidence" for item in artifact["review_outcomes"])
 
 
 def test_run_quality_classification_state_transitions_are_deterministic() -> None:
