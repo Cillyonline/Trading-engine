@@ -67,6 +67,12 @@ OPERATOR_REVIEW_OUTCOME_NON_INFERENCE_STATEMENT = (
     "This artifact records bounded paper-runtime observations only. It is not trader validation, "
     "not profitability evidence, and not broker/live readiness evidence."
 )
+OPERATOR_REVIEW_OUTCOME_REQUIRED_CLASSIFICATIONS: frozenset[str] = frozenset(
+    {
+        "stale_open_trade_review_required",
+        "unknown_freshness_review_required",
+    }
+)
 STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_VERSION = 1
 STALE_OPEN_PAPER_TRADE_REVIEW_WORKFLOW_ID = (
     "ops_bounded_stale_open_paper_trade_review"
@@ -464,7 +470,7 @@ def _write_json_file_with_sha256(path: Path, payload: dict[str, Any]) -> str:
     json_bytes = _json_file_bytes(payload)
     path.write_bytes(json_bytes)
     digest = hashlib.sha256(json_bytes).hexdigest()
-    path.with_suffix(f"{path.suffix}.sha256").write_text(f"{digest}  {path.name}\n", encoding="ascii")
+    path.with_suffix(".sha256").write_text(f"{digest}  {path.name}\n", encoding="ascii")
     return digest
 
 
@@ -1125,7 +1131,7 @@ def build_operator_review_outcome_artifact(
     review_outcomes: list[dict[str, Any]] = []
     for trade in _items_from_payload(paper_state_freshness, key="open_trades"):
         if (
-            trade.get("classification") != "stale_open_trade_review_required"
+            trade.get("classification") not in OPERATOR_REVIEW_OUTCOME_REQUIRED_CLASSIFICATIONS
             or trade.get("duplicate_entry_blocker") is not True
         ):
             continue
@@ -1137,13 +1143,16 @@ def build_operator_review_outcome_artifact(
                 "decision_validity": "valid_review_required_evidence",
                 "direction": trade.get("direction"),
                 "duplicate_entry_blocker": True,
-                "duplicate_entry_blocker_reason": "stale_open_trade_duplicate_entry_blocker",
+                "duplicate_entry_blocker_reason": (
+                    trade.get("duplicate_entry_blocker_reason")
+                    or "review_required_duplicate_entry_blocker"
+                ),
                 "mutates_paper_state": False,
                 "opened_at": trade.get("opened_at"),
                 "operator_decision": "pending_operator_review",
                 "operator_review_guidance": trade.get("operator_review_guidance"),
                 "operator_rationale": (
-                    "Stale open paper trade blocked duplicate entry; operator must review lifecycle evidence "
+                    "Review-required open paper trade blocked duplicate entry; operator must review lifecycle evidence "
                     "before interpreting the blocker."
                 ),
                 "position_id": trade.get("position_id"),

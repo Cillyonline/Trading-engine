@@ -286,10 +286,11 @@ def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
         "workflow_id": "bounded_daily_paper_runtime",
         "workflow_version": "OPS-P64",
     }
-    operator_review_sha_file = operator_review_file.with_suffix(".json.sha256")
+    operator_review_sha_file = operator_review_file.with_suffix(".sha256")
     assert operator_review_sha_file.read_text(encoding="ascii") == (
         f"{hashlib.sha256(operator_review_bytes).hexdigest()}  operator-review.json\n"
     )
+    assert not operator_review_file.with_suffix(".json.sha256").exists()
     assert payload["stale_open_paper_trade_review_workflow"]["workflow_id"] == (
         "ops_bounded_stale_open_paper_trade_review"
     )
@@ -376,6 +377,10 @@ def test_daily_runner_emits_non_empty_operator_review_artifact_for_stale_duplica
                         "results": [
                             {
                                 "outcome": "skip:duplicate_entry",
+                                "reason": "open trade exists for (COST, TURTLE, long)",
+                            },
+                            {
+                                "outcome": "skip:duplicate_entry",
                                 "reason": "open trade exists for (WMT, TURTLE, long)",
                             },
                             {
@@ -415,6 +420,28 @@ def test_daily_runner_emits_non_empty_operator_review_artifact_for_stale_duplica
                 "items": [
                     {
                         "direction": "long",
+                        "opened_at": "2026-05-06T11:00:00+00:00",
+                        "position_id": "pos-aapl",
+                        "quantity_closed": "0",
+                        "quantity_opened": "1",
+                        "status": "open",
+                        "strategy_id": "TURTLE",
+                        "symbol": "AAPL",
+                        "trade_id": "trade-aapl",
+                    },
+                    {
+                        "direction": "long",
+                        "opened_at": None,
+                        "position_id": "pos-cost",
+                        "quantity_closed": "0",
+                        "quantity_opened": "1",
+                        "status": "open",
+                        "strategy_id": "TURTLE",
+                        "symbol": "COST",
+                        "trade_id": "trade-cost",
+                    },
+                    {
+                        "direction": "long",
                         "opened_at": "2026-04-02T00:00:00+00:00",
                         "position_id": "pos-wmt",
                         "quantity_closed": "0",
@@ -436,15 +463,17 @@ def test_daily_runner_emits_non_empty_operator_review_artifact_for_stale_duplica
                         "trade_id": "trade-gs",
                     },
                 ],
-                "total": 2,
+                "total": 4,
             }
         if url.endswith("/paper/positions"):
             return {
                 "items": [
+                    {"position_id": "pos-aapl", "status": "open"},
+                    {"position_id": "pos-cost", "status": "open"},
                     {"position_id": "pos-wmt", "status": "open"},
                     {"position_id": "pos-gs", "status": "open"},
                 ],
-                "total": 2,
+                "total": 4,
             }
         if url.endswith("/paper/account"):
             return {"account": {"as_of": "2026-05-06T12:00:00+00:00"}}
@@ -484,20 +513,31 @@ def test_daily_runner_emits_non_empty_operator_review_artifact_for_stale_duplica
     assert artifact["read_only"] is True
     assert artifact["mutates_paper_state"] is False
     assert artifact["source_daily_runtime_summary"] == payload["summary_file"]
-    assert artifact["review_required_count"] == 2
-    assert artifact["recorded_count"] == 2
+    assert artifact["review_required_count"] == 3
+    assert artifact["recorded_count"] == 3
     assert artifact["invalid_count"] == 0
-    assert [item["trade_id"] for item in artifact["review_outcomes"]] == ["trade-gs", "trade-wmt"]
+    assert len(artifact["review_outcomes"]) == artifact["recorded_count"]
+    assert [item["trade_id"] for item in artifact["review_outcomes"]] == [
+        "trade-cost",
+        "trade-gs",
+        "trade-wmt",
+    ]
     assert {item["classification"] for item in artifact["review_outcomes"]} == {
-        "stale_open_trade_review_required"
+        "stale_open_trade_review_required",
+        "unknown_freshness_review_required",
     }
+    assert "trade-aapl" not in {item["trade_id"] for item in artifact["review_outcomes"]}
     assert all(item["mutates_paper_state"] is False for item in artifact["review_outcomes"])
     assert all(item["operator_decision"] == "pending_operator_review" for item in artifact["review_outcomes"])
     assert all(item["decision_validity"] == "valid_review_required_evidence" for item in artifact["review_outcomes"])
-    assert all(item["duplicate_entry_blocker_reason"] == "stale_open_trade_duplicate_entry_blocker" for item in artifact["review_outcomes"])
-    assert operator_review_file.with_suffix(".json.sha256").read_text(encoding="ascii") == (
+    assert all(
+        item["duplicate_entry_blocker_reason"].startswith("open trade exists for")
+        for item in artifact["review_outcomes"]
+    )
+    assert operator_review_file.with_suffix(".sha256").read_text(encoding="ascii") == (
         f"{hashlib.sha256(operator_review_bytes).hexdigest()}  operator-review.json\n"
     )
+    assert not operator_review_file.with_suffix(".json.sha256").exists()
     assert [item for item in request_sequence if "/paper/" in item[1]] == [
         ("GET", "http://127.0.0.1:18000/paper/trades"),
         ("GET", "http://127.0.0.1:18000/paper/positions"),
@@ -971,6 +1011,18 @@ def test_operator_review_artifact_records_each_stale_duplicate_entry_blocker() -
         trades_payload={
             "items": [
                 {
+                    "average_entry_price": "190",
+                    "direction": "long",
+                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "position_id": "pos-aapl",
+                    "quantity_closed": "0",
+                    "quantity_opened": "1",
+                    "status": "open",
+                    "strategy_id": "TURTLE",
+                    "symbol": "AAPL",
+                    "trade_id": "trade-aapl",
+                },
+                {
                     "average_entry_price": "100",
                     "direction": "long",
                     "opened_at": "2026-04-02T00:00:00+00:00",
@@ -997,7 +1049,7 @@ def test_operator_review_artifact_records_each_stale_duplicate_entry_blocker() -
                 {
                     "average_entry_price": "900",
                     "direction": "long",
-                    "opened_at": "2026-05-06T11:00:00+00:00",
+                    "opened_at": None,
                     "position_id": "pos-cost",
                     "quantity_closed": "0",
                     "quantity_opened": "1",
@@ -1010,6 +1062,7 @@ def test_operator_review_artifact_records_each_stale_duplicate_entry_blocker() -
         },
         positions_payload={
             "items": [
+                {"position_id": "pos-aapl", "status": "open"},
                 {"position_id": "pos-wmt", "status": "open"},
                 {"position_id": "pos-gs", "status": "open"},
                 {"position_id": "pos-cost", "status": "open"},
@@ -1057,16 +1110,23 @@ def test_operator_review_artifact_records_each_stale_duplicate_entry_blocker() -
     assert artifact["mutates_paper_state"] is False
     assert artifact["source_daily_runtime_summary"] == "runs/daily-runtime/2026-05-06/daily-runtime-summary.json"
     assert artifact["observed_at"] == "2026-05-06T12:00:00+00:00"
-    assert artifact["review_required_count"] == 2
-    assert artifact["recorded_count"] == 2
+    assert artifact["review_required_count"] == 3
+    assert artifact["recorded_count"] == 3
     assert artifact["invalid_count"] == 0
     assert "not trader validation" in artifact["non_inference_statement"]
     assert "not profitability evidence" in artifact["non_inference_statement"]
     assert "not broker/live readiness" in artifact["non_inference_statement"]
-    assert [item["trade_id"] for item in artifact["review_outcomes"]] == ["trade-gs", "trade-wmt"]
+    assert len(artifact["review_outcomes"]) == artifact["recorded_count"]
+    assert [item["trade_id"] for item in artifact["review_outcomes"]] == [
+        "trade-cost",
+        "trade-gs",
+        "trade-wmt",
+    ]
     assert {item["classification"] for item in artifact["review_outcomes"]} == {
-        "stale_open_trade_review_required"
+        "stale_open_trade_review_required",
+        "unknown_freshness_review_required",
     }
+    assert "trade-aapl" not in {item["trade_id"] for item in artifact["review_outcomes"]}
     required_outcome_fields = {
         "account_as_of",
         "account_freshness",
