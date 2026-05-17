@@ -773,6 +773,26 @@ class BoundedPaperExecutionWorker:
         strategy: str = signal["strategy"]  # type: ignore[assignment]
         direction: str = signal["direction"]  # type: ignore[assignment]
         occurred_at: str = signal["timestamp"]  # type: ignore[assignment]
+        signal_id = _resolve_signal_id(signal)
+        exit_order_id = _compute_paper_exit_order_id(signal_id)
+
+        existing_exit_order = self._repo.get_order(exit_order_id)
+        if existing_exit_order is not None:
+            existing_trade = (
+                self._repo.get_trade(existing_exit_order.trade_id)
+                if existing_exit_order.trade_id is not None
+                else None
+            )
+            return SignalEvaluationResult(
+                outcome=(
+                    "eligible:full_exit"
+                    if existing_trade is not None and existing_trade.status == "closed"
+                    else "eligible:partial_exit"
+                ),
+                signal_id=signal_id,
+                order_id=exit_order_id,
+                trade_id=existing_exit_order.trade_id,
+            )
 
         trades = self._repo.list_trades(strategy_id=strategy, symbol=symbol, limit=100)
         open_trades = [t for t in trades if t.status == "open" and t.direction == direction]
@@ -841,6 +861,12 @@ class BoundedPaperExecutionWorker:
         remaining_qty = trade.quantity_opened - new_qty_closed
         entry_px = trade.average_entry_price or Decimal("0")
         new_exposure = remaining_qty * entry_px
+        exit_event_id = compute_execution_event_id(
+            order_id=exit_order_id,
+            event_type="filled",
+            occurred_at=occurred_at,
+            sequence=1,
+        )
 
         trade_data: dict = {
             **trade.model_dump(mode="python"),
@@ -848,6 +874,8 @@ class BoundedPaperExecutionWorker:
             "average_exit_price": new_avg_exit_price,
             "realized_pnl": new_realized_pnl,
             "exposure_notional": new_exposure,
+            "closing_order_ids": [*trade.closing_order_ids, exit_order_id],
+            "execution_event_ids": [*trade.execution_event_ids, exit_event_id],
         }
         if is_full_exit:
             trade_data["status"] = "closed"
@@ -856,14 +884,6 @@ class BoundedPaperExecutionWorker:
         updated_trade = Trade.model_validate(trade_data)
 
         # Exit order and execution event
-        signal_id = _resolve_signal_id(signal)
-        exit_order_id = _compute_paper_exit_order_id(signal_id)
-        exit_event_id = compute_execution_event_id(
-            order_id=exit_order_id,
-            event_type="filled",
-            occurred_at=occurred_at,
-            sequence=1,
-        )
         exit_side = "SELL" if direction == "long" else "BUY"
         exit_order = Order.model_validate(
             {
@@ -910,6 +930,7 @@ class BoundedPaperExecutionWorker:
         return SignalEvaluationResult(
             outcome="eligible:full_exit" if is_full_exit else "eligible:partial_exit",
             signal_id=signal_id,
+            order_id=exit_order_id,
             trade_id=trade.trade_id,
         )
 
@@ -921,7 +942,12 @@ class BoundedPaperExecutionWorker:
 
         Returns one ``SignalEvaluationResult`` per signal in input order.
         """
-        return [self.process_signal(signal) for signal in signals]
+        return [
+            self.process_exit_signal(signal)
+            if signal.get("stage") == "exit"
+            else self.process_signal(signal)
+            for signal in signals
+        ]
 
     @property
     def risk_profile(self) -> PaperExecutionRiskProfile:

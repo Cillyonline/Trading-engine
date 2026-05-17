@@ -1860,3 +1860,120 @@ def test_process_exit_signal_realized_pnl_positive_on_profitable_exit(tmp_path: 
     closed = [t for t in trades if t.status == "closed"]
     assert len(closed) == 1
     assert (closed[0].realized_pnl or Decimal("0")) > Decimal("0")
+
+
+def test_process_batch_routes_exit_signal_to_full_exit(tmp_path: Path) -> None:
+    repo = SqliteCanonicalExecutionRepository(db_path=tmp_path / "batch-exit-full.db")
+    worker = BoundedPaperExecutionWorker(repository=repo, risk_profile=_exit_profile())
+
+    exit_sig: Signal = {
+        "symbol": "AAPL",
+        "strategy": "s",
+        "direction": "long",  # type: ignore[typeddict-item]
+        "score": 80.0,
+        "timestamp": "2026-01-02T12:00:00Z",
+        "stage": "exit",  # type: ignore[typeddict-item]
+        "entry_zone": {"from_": 110.0, "to": 110.0},
+        "signal_id": "sig-batch-full-exit",
+    }
+
+    results = worker.process_batch([
+        _entry_signal("sig-batch-full-entry"),
+        exit_sig,
+    ])
+
+    assert [r.outcome for r in results] == ["eligible", "eligible:full_exit"]
+    assert results[1].order_id is not None
+    trades = repo.list_trades(strategy_id="s", symbol="AAPL", limit=10)
+    assert len([t for t in trades if t.status == "closed"]) == 1
+    closed = trades[0]
+    assert closed.quantity_closed == closed.quantity_opened
+    assert closed.closing_order_ids == [results[1].order_id]
+
+
+def test_process_batch_routes_exit_signal_to_partial_exit(tmp_path: Path) -> None:
+    repo = SqliteCanonicalExecutionRepository(db_path=tmp_path / "batch-exit-partial.db")
+    worker = BoundedPaperExecutionWorker(repository=repo, risk_profile=_exit_profile())
+
+    worker.process_signal(_entry_signal("sig-batch-partial-entry"))
+    exit_sig: Signal = {
+        "symbol": "AAPL",
+        "strategy": "s",
+        "direction": "long",  # type: ignore[typeddict-item]
+        "score": 80.0,
+        "timestamp": "2026-01-02T12:00:00Z",
+        "stage": "exit",  # type: ignore[typeddict-item]
+        "entry_zone": {"from_": 110.0, "to": 110.0},
+        "exit_pct": 0.5,
+        "signal_id": "sig-batch-partial-exit",
+    }
+
+    result = worker.process_batch([exit_sig])[0]
+
+    assert result.outcome == "eligible:partial_exit"
+    assert result.order_id is not None
+    open_trade = [t for t in repo.list_trades(strategy_id="s", symbol="AAPL", limit=10) if t.status == "open"][0]
+    assert open_trade.quantity_closed > Decimal("0")
+    assert open_trade.quantity_closed < open_trade.quantity_opened
+    assert open_trade.closing_order_ids == [result.order_id]
+
+
+def test_process_batch_exit_signal_skips_without_matching_open_trade(tmp_path: Path) -> None:
+    repo = SqliteCanonicalExecutionRepository(db_path=tmp_path / "batch-exit-no-match.db")
+    worker = BoundedPaperExecutionWorker(repository=repo, risk_profile=_exit_profile())
+
+    worker.process_signal(_entry_signal("sig-batch-no-match-entry", symbol="MSFT"))
+    result = worker.process_batch([
+        {
+            "symbol": "AAPL",
+            "strategy": "s",
+            "direction": "long",  # type: ignore[typeddict-item]
+            "score": 80.0,
+            "timestamp": "2026-01-02T12:00:00Z",
+            "stage": "exit",  # type: ignore[typeddict-item]
+            "entry_zone": {"from_": 110.0, "to": 110.0},
+            "signal_id": "sig-batch-no-match-exit",
+        }
+    ])[0]
+
+    assert result.outcome == "skip:no_open_position_to_exit"
+    assert len(repo.list_orders(strategy_id="s", symbol="AAPL", limit=10)) == 0
+    msft_trade = repo.list_trades(strategy_id="s", symbol="MSFT", limit=10)[0]
+    assert msft_trade.status == "open"
+    assert msft_trade.quantity_closed == Decimal("0")
+
+
+def test_process_batch_exit_signal_is_idempotent_on_repeated_run(tmp_path: Path) -> None:
+    repo = SqliteCanonicalExecutionRepository(db_path=tmp_path / "batch-exit-idempotent.db")
+    worker = BoundedPaperExecutionWorker(repository=repo, risk_profile=_exit_profile())
+
+    worker.process_signal(_entry_signal("sig-batch-idempotent-entry"))
+    exit_sig: Signal = {
+        "symbol": "AAPL",
+        "strategy": "s",
+        "direction": "long",  # type: ignore[typeddict-item]
+        "score": 80.0,
+        "timestamp": "2026-01-02T12:00:00Z",
+        "stage": "exit",  # type: ignore[typeddict-item]
+        "entry_zone": {"from_": 110.0, "to": 110.0},
+        "exit_pct": 0.5,
+        "signal_id": "sig-batch-idempotent-exit",
+    }
+
+    first = worker.process_batch([exit_sig])[0]
+    trade_after_first = repo.list_trades(strategy_id="s", symbol="AAPL", limit=10)[0]
+    orders_after_first = repo.list_orders(strategy_id="s", symbol="AAPL", limit=10)
+    events_after_first = repo.list_execution_events(strategy_id="s", symbol="AAPL", limit=10)
+
+    second = worker.process_batch([exit_sig])[0]
+    trade_after_second = repo.list_trades(strategy_id="s", symbol="AAPL", limit=10)[0]
+    orders_after_second = repo.list_orders(strategy_id="s", symbol="AAPL", limit=10)
+    events_after_second = repo.list_execution_events(strategy_id="s", symbol="AAPL", limit=10)
+
+    assert first.outcome == "eligible:partial_exit"
+    assert second.outcome == "eligible:partial_exit"
+    assert second.order_id == first.order_id
+    assert trade_after_second.quantity_closed == trade_after_first.quantity_closed
+    assert trade_after_second.closing_order_ids == trade_after_first.closing_order_ids
+    assert [o.order_id for o in orders_after_second] == [o.order_id for o in orders_after_first]
+    assert [e.event_id for e in events_after_second] == [e.event_id for e in events_after_first]

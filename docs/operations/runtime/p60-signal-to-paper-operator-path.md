@@ -40,16 +40,22 @@ The authoritative operator path is:
 1. **Read eligible signals** - from `SqliteSignalRepository` via `list_signals`.
 2. **Instantiate worker** - `BoundedPaperExecutionWorker` with
    `SqliteCanonicalExecutionRepository`.
-3. **Process signals** - `worker.process_signal(signal)` or
-   `worker.process_batch(signals)` applies the 5-step OPS-P52 policy:
+3. **Process signals** - `worker.process_batch(signals)` routes by lifecycle
+   stage. Entry-stage signals use `worker.process_signal(signal)` and apply
+   the 5-step OPS-P52 entry policy:
    - Eligibility check (required signal fields)
    - Score threshold check (`>= 60.0`, score range `0..100`)
    - Duplicate-entry check (`(symbol, strategy, direction)`)
    - Cooldown check (`24h` per `(symbol, strategy)`)
    - Exposure and position-limit checks
-4. **Persist canonical entities** - eligible signals produce deterministic
+   Exit-stage signals use `worker.process_exit_signal(signal)` and may close
+   only a matching open paper trade for the same strategy, symbol, direction,
+   and open status.
+4. **Persist canonical entities** - eligible entry signals produce deterministic
    `Order`, `ExecutionEvent`, and `Trade` entities persisted to
-   `SqliteCanonicalExecutionRepository`.
+   `SqliteCanonicalExecutionRepository`. Eligible exit signals produce a
+   deterministic closing order and execution event, then update the matching
+   trade as partially or fully closed.
 5. **Verify via inspection** - operator confirms non-empty paper execution state
    via `/paper/trades`, `/paper/positions`, `/paper/account`, and validates
    consistency via `/paper/reconciliation`.
@@ -110,14 +116,36 @@ which is an invocation-context error, not runner logic failure.
 
 ### Policy Gates
 
-Every signal passes through the ordered 5-step OPS-P52 policy evaluation before
-any paper entity is created. The policy gates are:
+Every entry-stage signal passes through the ordered 5-step OPS-P52 policy
+evaluation before any entry paper entity is created. The policy gates are:
 
 1. `reject:invalid_signal_fields` - missing or invalid required fields
 2. `skip:score_below_threshold` - signal score below `60.0` (score range `0..100`)
 3. `skip:duplicate_entry` - open position for `(symbol, strategy, direction)`
 4. `skip:cooldown_active` - within `24h` cooldown for `(symbol, strategy)`
 5. `reject:position_size_exceeds_limit` - per-position cap exceeded
+
+### Exit Signal Routing
+
+In the bounded paper execution cycle, `stage == "exit"` signals are not entry
+sizing candidates. `process_batch()` routes them to
+`BoundedPaperExecutionWorker.process_exit_signal()` instead of the entry policy.
+
+Exit consumption is bounded to existing paper state:
+
+- the signal must match an open trade by strategy, symbol, direction, and open
+  status
+- a full exit closes the matching trade and records a deterministic closing
+  order and filled execution event
+- a partial exit updates the matching trade's closed quantity, realized PnL,
+  average exit price, remaining exposure, closing order IDs, and execution
+  event IDs while leaving the trade open
+- repeated processing of the same exit signal is idempotent because the
+  deterministic exit order ID is checked before trade quantity is mutated
+
+This is a bounded paper-runtime lifecycle behavior only. It does not change
+RSI2 or TURTLE strategy rules, score thresholds, risk defaults, broker/live
+execution, profitability status, or production readiness.
 6. `reject:total_exposure_exceeds_limit` - global exposure cap exceeded
 7. `reject:concurrent_position_limit_exceeded` - max concurrent positions exceeded
 
