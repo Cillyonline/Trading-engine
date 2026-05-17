@@ -167,7 +167,7 @@ def run_paper_execution_cycle(
         print(f"PAPER_EXECUTION_CYCLE:ERROR:{type(exc).__name__}")
         return EXIT_RUNTIME_ERROR
 
-    eligible = [r for r in results if r.outcome == "eligible"]
+    eligible = [r for r in results if r.outcome.startswith("eligible")]
     skipped = [r for r in results if r.outcome.startswith("skip:")]
     rejected = [r for r in results if r.outcome.startswith("reject:")]
 
