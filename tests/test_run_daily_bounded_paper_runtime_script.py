@@ -48,6 +48,119 @@ def _load_script_module():
     return module
 
 
+def test_daily_runner_default_db_path_uses_cilly_db_path_env(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    module = _load_script_module()
+    api_db_path = tmp_path / "api-container.db"
+
+    monkeypatch.setenv(module.DEFAULT_DB_PATH_ENV_VAR, str(api_db_path))
+
+    args = module._parse_args([])
+
+    assert args.db_path == str(api_db_path)
+
+
+def test_daily_runner_sends_current_manual_analysis_contract_and_reaches_execution(
+    tmp_path: Path,
+) -> None:
+    from api.models import ManualAnalysisRequest
+
+    module = _load_script_module()
+    ingestion_run_id = "dbfb3ea6-cef8-49f3-acdb-df0de7115d6f"
+    db_path = tmp_path / "shared-api.db"
+    executed_scripts: list[str] = []
+    analysis_requests: list[dict[str, object]] = []
+
+    def _fake_run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
+        script_name = Path(command[1]).name
+        executed_scripts.append(script_name)
+
+        if script_name == "run_snapshot_ingestion.py":
+            assert "--db-path" in command
+            assert command[command.index("--db-path") + 1] == str(db_path)
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout=json.dumps({"result": {"ingestion_run_id": ingestion_run_id}}) + "\n",
+                stderr="",
+            )
+        if script_name == "run_paper_execution_cycle.py":
+            assert "--db-path" in command
+            assert command[command.index("--db-path") + 1] == str(db_path)
+            return subprocess.CompletedProcess(
+                command,
+                2,
+                stdout="",
+                stderr=json.dumps({"code": "stop-after-proof"}) + "\n",
+            )
+        raise AssertionError(f"Unexpected script invocation: {script_name}")
+
+    def _fake_request_json(
+        url: str,
+        *,
+        headers: dict[str, str],
+        method: str = "GET",
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        assert url == "http://127.0.0.1:8000/analysis/run"
+        assert method == "POST"
+        assert headers == {module.ROLE_HEADER_NAME: module.ROLE_OPERATOR}
+        assert payload is not None
+
+        validated = ManualAnalysisRequest.model_validate(payload)
+        analysis_requests.append(validated.model_dump(exclude_none=True))
+        return {
+            "analysis_run_id": "analysis-contract-ok",
+            "ingestion_run_id": validated.ingestion_run_id,
+            "signals": [],
+            "strategy": validated.strategy.upper(),
+            "symbol": validated.symbol,
+        }
+
+    try:
+        module.run_daily_bounded_paper_runtime(
+            db_path=str(db_path),
+            base_url="http://127.0.0.1:8000",
+            symbols="AAPL,MSFT,NVDA,GS,WMT,COST",
+            timeframe="D1",
+            limit=90,
+            provider="yfinance",
+            analysis_symbol="AAPL",
+            analysis_strategy="RSI2",
+            analysis_market_type="stock",
+            analysis_lookback_days=200,
+            snapshot_evidence_dir=str(tmp_path / "snapshot"),
+            execution_evidence_dir=str(tmp_path / "execution"),
+            reconciliation_evidence_dir=str(tmp_path / "reconciliation"),
+            review_evidence_dir=str(tmp_path / "review"),
+            run_record_dir=str(tmp_path / "daily-runtime"),
+            signals_limit=100,
+            run_command=_fake_run_command,
+            request_json=_fake_request_json,
+            now_fn=lambda: datetime(2026, 4, 6, 12, 0, 0, tzinfo=timezone.utc),
+        )
+    except module.DailyRuntimeStepError as exc:
+        assert exc.step == "bounded_paper_execution_cycle"
+    else:
+        raise AssertionError("Expected controlled stop at bounded paper execution")
+
+    assert analysis_requests == [
+        {
+            "ingestion_run_id": ingestion_run_id,
+            "symbol": "AAPL",
+            "strategy": "RSI2",
+            "market_type": "stock",
+            "lookback_days": 200,
+        }
+    ]
+    assert executed_scripts == [
+        "run_snapshot_ingestion.py",
+        "run_paper_execution_cycle.py",
+    ]
+
+
 def test_daily_runner_executes_ops_p63_order_and_writes_run_record(
     monkeypatch,
     tmp_path: Path,

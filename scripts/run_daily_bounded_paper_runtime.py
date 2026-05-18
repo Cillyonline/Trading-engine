@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -30,6 +31,7 @@ from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT / "cilly_trading.db"
+DEFAULT_DB_PATH_ENV_VAR = "CILLY_DB_PATH"
 DEFAULT_SNAPSHOT_EVIDENCE_DIR = ROOT / "runs" / "snapshot_ingestion"
 DEFAULT_EXECUTION_EVIDENCE_DIR = ROOT / "runs" / "paper-execution"
 DEFAULT_RECONCILIATION_EVIDENCE_DIR = ROOT / "runs" / "reconciliation"
@@ -306,6 +308,13 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(microsecond=0)
 
 
+def _default_db_path() -> Path:
+    configured_path = os.getenv(DEFAULT_DB_PATH_ENV_VAR)
+    if configured_path and configured_path.strip():
+        return Path(configured_path)
+    return DEFAULT_DB_PATH
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python scripts/run_daily_bounded_paper_runtime.py",
@@ -316,8 +325,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-path",
-        default=str(DEFAULT_DB_PATH),
-        help="SQLite database path. Default: cilly_trading.db in repo root.",
+        default=str(_default_db_path()),
+        help=(
+            "SQLite database path. Default: CILLY_DB_PATH when set; "
+            "otherwise cilly_trading.db in repo root."
+        ),
     )
     parser.add_argument(
         "--base-url",
