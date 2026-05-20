@@ -14,7 +14,10 @@ htmlcov/
 
 # Local databases / runtime files
 *.db
+*.db-shm
+*.db-wal
 runs/
+/.codex/issue-*-runtime/
 
 # Local editor settings
 .vscode/
@@ -23,6 +26,9 @@ runs/
 /pr_body.md
 /pr_body_*.md
 /.pr-body-*.md
+/issue-*.md
+/issue-*-review-package.zip
+/issue-*-review-package/
 
 # local scripts
 scripts/*
