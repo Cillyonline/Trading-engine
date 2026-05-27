@@ -5,7 +5,7 @@ services:
       dockerfile: docker/staging/Dockerfile
     user: "${CILLY_CONTAINER_UID:?set CILLY_CONTAINER_UID}:${CILLY_CONTAINER_GID:?set CILLY_CONTAINER_GID}"
     ports:
-      - "18000:8000"
+      - "127.0.0.1:18000:8000"
     working_dir: /data
     environment:
       PYTHONPATH: "${PYTHONPATH:?set PYTHONPATH}"
