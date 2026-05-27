@@ -45,7 +45,7 @@ def test_staging_artifacts_define_canonical_runtime_contract() -> None:
     assert 'CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]' in dockerfile_content
 
     assert "dockerfile: docker/staging/Dockerfile" in compose_content
-    assert '"18000:8000"' in compose_content
+    assert '"127.0.0.1:18000:8000"' in compose_content
     assert 'user: "${CILLY_CONTAINER_UID:?set CILLY_CONTAINER_UID}:${CILLY_CONTAINER_GID:?set CILLY_CONTAINER_GID}"' in compose_content
     assert "working_dir: /data" in compose_content
     assert 'PYTHONPATH: "${PYTHONPATH:?set PYTHONPATH}"' in compose_content
