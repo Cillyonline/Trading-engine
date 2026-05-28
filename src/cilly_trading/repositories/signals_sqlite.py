@@ -25,6 +25,7 @@ _ALLOWED_SIGNAL_COLUMNS: frozenset[tuple[str, str]] = frozenset({
     ("ingestion_run_id", "TEXT"),
     ("reasons_json", "TEXT"),
     ("stop_loss", "REAL"),
+    ("trade_risk_pct", "REAL"),
 })
 
 
@@ -128,6 +129,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                     entry_zone_from,
                     entry_zone_to,
                     stop_loss,
+                    trade_risk_pct,
                     confirmation_rule,
                     timeframe,
                     market_type,
@@ -147,6 +149,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                     :entry_zone_from,
                     :entry_zone_to,
                     :stop_loss,
+                    :trade_risk_pct,
                     :confirmation_rule,
                     :timeframe,
                     :market_type,
@@ -175,6 +178,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                             s["entry_zone"]["to"] if "entry_zone" in s and s["entry_zone"] else None
                         ),
                         "stop_loss": s.get("stop_loss"),
+                        "trade_risk_pct": s.get("trade_risk_pct"),
                         "confirmation_rule": s.get("confirmation_rule"),
                         "timeframe": s["timeframe"],
                         "market_type": s["market_type"],
@@ -205,6 +209,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                     entry_zone_from,
                     entry_zone_to,
                     stop_loss,
+                    trade_risk_pct,
                     confirmation_rule,
                     timeframe,
                     market_type,
@@ -253,6 +258,8 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                 }
             if row["stop_loss"] is not None:
                 signal["stop_loss"] = row["stop_loss"]
+            if row["trade_risk_pct"] is not None:
+                signal["trade_risk_pct"] = row["trade_risk_pct"]
 
             result.append(signal)
 
@@ -383,6 +390,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                             entry_zone_from,
                             entry_zone_to,
                             stop_loss,
+                            trade_risk_pct,
                             confirmation_rule,
                             timeframe,
                             market_type,
@@ -421,6 +429,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                         entry_zone_from,
                         entry_zone_to,
                         stop_loss,
+                        trade_risk_pct,
                         confirmation_rule,
                         timeframe,
                         market_type,
@@ -454,6 +463,7 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                         entry_zone_from,
                         entry_zone_to,
                         stop_loss,
+                        trade_risk_pct,
                         confirmation_rule,
                         timeframe,
                         market_type,
@@ -503,6 +513,8 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
                 }
             if row["stop_loss"] is not None:
                 signal["stop_loss"] = row["stop_loss"]
+            if row["trade_risk_pct"] is not None:
+                signal["trade_risk_pct"] = row["trade_risk_pct"]
 
             result.append(signal)
 
@@ -666,6 +678,10 @@ def reconstruct_signal_explanation(signal: Signal) -> dict:
     }
     if "entry_zone" in signal:
         explanation["entry_zone"] = signal["entry_zone"]
+    if "stop_loss" in signal:
+        explanation["stop_loss"] = signal["stop_loss"]
+    if "trade_risk_pct" in signal:
+        explanation["trade_risk_pct"] = signal["trade_risk_pct"]
     if "confirmation_rule" in signal:
         explanation["confirmation_rule"] = signal["confirmation_rule"]
 
