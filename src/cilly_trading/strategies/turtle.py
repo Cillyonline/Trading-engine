@@ -29,6 +29,42 @@ from cilly_trading.engine.core import BaseStrategy
 from cilly_trading.strategies._constants import PRICE_SCALE
 
 
+RISK_SCALE = Decimal("0.00000001")
+
+
+def _round_price(value: Decimal) -> float:
+    return float(value.quantize(PRICE_SCALE, ROUND_HALF_UP))
+
+
+def _round_risk_pct(value: Decimal) -> float:
+    return float(value.quantize(RISK_SCALE, ROUND_HALF_UP))
+
+
+def _derive_stop_loss(
+    *,
+    breakout_level: float,
+    stop_loss_buffer_pct: float,
+) -> float:
+    return _round_price(
+        Decimal(str(breakout_level))
+        * (Decimal("1") - Decimal(str(stop_loss_buffer_pct)))
+    )
+
+
+def _derive_setup_trade_risk_pct(
+    *,
+    breakout_level: float,
+    stop_loss: float,
+) -> float:
+    return _round_risk_pct(
+        (
+            Decimal(str(breakout_level))
+            - Decimal(str(stop_loss))
+        )
+        / Decimal(str(breakout_level))
+    )
+
+
 @dataclass
 class TurtleConfig:
     """Configuration for the Turtle strategy.
@@ -164,11 +200,9 @@ class TurtleStrategy(BaseStrategy):
                 "breakout level (e.g. daily close below breakout high or trailing stop)."
             )
 
-            _stop = float(
-                (
-                    Decimal(str(breakout_level))
-                    * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
-                ).quantize(PRICE_SCALE, ROUND_HALF_UP)
+            _stop = _derive_stop_loss(
+                breakout_level=breakout_level,
+                stop_loss_buffer_pct=cfg.stop_loss_buffer_pct,
             )
             signal: Signal = {
                 "strategy": self.name,
@@ -208,11 +242,13 @@ class TurtleStrategy(BaseStrategy):
                         "Alternative: stop-buy order just above the breakout high."
                     )
 
-                    _stop = float(
-                        (
-                            Decimal(str(breakout_level))
-                            * (Decimal("1") - Decimal(str(cfg.stop_loss_buffer_pct)))
-                        ).quantize(PRICE_SCALE, ROUND_HALF_UP)
+                    _stop = _derive_stop_loss(
+                        breakout_level=breakout_level,
+                        stop_loss_buffer_pct=cfg.stop_loss_buffer_pct,
+                    )
+                    _trade_risk_pct = _derive_setup_trade_risk_pct(
+                        breakout_level=breakout_level,
+                        stop_loss=_stop,
                     )
                     signal = {
                         "strategy": self.name,
@@ -235,6 +271,7 @@ class TurtleStrategy(BaseStrategy):
                             ),
                         },
                         "stop_loss": _stop,
+                        "trade_risk_pct": _trade_risk_pct,
                     }
                     signals.append(signal)
 
