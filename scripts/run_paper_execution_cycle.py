@@ -124,7 +124,100 @@ def _result_to_dict(result: SignalEvaluationResult) -> dict[str, Any]:
         d["trade_id"] = result.trade_id
     if result.reason is not None:
         d["reason"] = result.reason
+    if result.decision_inputs is not None:
+        d["decision_inputs"] = result.decision_inputs
     return d
+
+
+def _signal_stage(signal: Any) -> str | None:
+    stage = signal.get("stage") if isinstance(signal, dict) else getattr(signal, "stage", None)
+    return str(stage) if stage is not None else None
+
+
+def _signal_value(signal: Any, field: str) -> Any:
+    if isinstance(signal, dict):
+        return signal.get(field)
+    return getattr(signal, field, None)
+
+
+def _is_exit_signal(signal: Any) -> bool:
+    return _signal_stage(signal) == "exit"
+
+
+def _build_missing_trade_risk_input_diagnostic(
+    signal: Any,
+    result: SignalEvaluationResult,
+) -> dict[str, Any]:
+    decision_inputs = result.decision_inputs or {}
+    diagnostic: dict[str, Any] = {
+        "symbol": decision_inputs.get("symbol", _signal_value(signal, "symbol")),
+        "strategy": decision_inputs.get("strategy", _signal_value(signal, "strategy")),
+        "stage": decision_inputs.get("stage", _signal_value(signal, "stage")),
+        "direction": decision_inputs.get("direction", _signal_value(signal, "direction")),
+        "outcome": decision_inputs.get("outcome", result.outcome),
+        "reason": decision_inputs.get("reason", result.reason),
+        "missing_fields": decision_inputs.get("missing_fields", []),
+        "required_any_of": decision_inputs.get("required_any_of", []),
+        "sizing_method": decision_inputs.get("sizing_method"),
+        "risk_profile_contract_id": decision_inputs.get("risk_profile_contract_id"),
+    }
+    signal_id = decision_inputs.get("signal_id", result.signal_id or _signal_value(signal, "signal_id"))
+    if signal_id is not None:
+        diagnostic["signal_id"] = signal_id
+    return diagnostic
+
+
+def _build_diagnostics_summary(
+    signals: list[Any],
+    results: list[SignalEvaluationResult],
+) -> dict[str, Any]:
+    """Build deterministic JSON-safe diagnostics without changing outcomes."""
+    entry_candidate_count = 0
+    exit_candidate_count = 0
+    eligible_entry_count = 0
+    eligible_exit_count = 0
+    skipped_exits_without_open_position = 0
+    score_filtered_entries = 0
+    risk_input_rejected_entries = 0
+    missing_trade_risk_input_count = 0
+    missing_trade_risk_input_rejections: list[dict[str, Any]] = []
+
+    for signal, result in zip(signals, results):
+        is_exit = _is_exit_signal(signal)
+        if is_exit:
+            exit_candidate_count += 1
+        else:
+            entry_candidate_count += 1
+
+        if result.outcome.startswith("eligible"):
+            if is_exit:
+                eligible_exit_count += 1
+            else:
+                eligible_entry_count += 1
+
+        if is_exit and result.outcome == "skip:no_open_position_to_exit":
+            skipped_exits_without_open_position += 1
+        if not is_exit and result.outcome == "skip:score_below_threshold":
+            score_filtered_entries += 1
+        if not is_exit and result.outcome == "reject:missing_trade_risk_input":
+            risk_input_rejected_entries += 1
+            missing_trade_risk_input_count += 1
+            missing_trade_risk_input_rejections.append(
+                _build_missing_trade_risk_input_diagnostic(signal, result)
+            )
+
+    return {
+        "signals_read": len(signals),
+        "entry_candidate_count": entry_candidate_count,
+        "exit_candidate_count": exit_candidate_count,
+        "eligible_entry_count": eligible_entry_count,
+        "eligible_exit_count": eligible_exit_count,
+        "skipped_exits_without_open_position": skipped_exits_without_open_position,
+        "score_filtered_entries": score_filtered_entries,
+        "risk_input_rejected_entries": risk_input_rejected_entries,
+        "missing_trade_risk_input_count": missing_trade_risk_input_count,
+        "missing_trade_risk_input_rejections": missing_trade_risk_input_rejections,
+    }
 
 
 def run_paper_execution_cycle(
@@ -174,6 +267,7 @@ def run_paper_execution_cycle(
     result_payload: dict[str, Any] = {
         "cycle_type": "bounded_paper_execution",
         "db_path": db_path,
+        "diagnostics_summary": _build_diagnostics_summary(signals, results),
         "eligible": len(eligible),
         "ran_at": ran_at.isoformat(),
         "rejected": len(rejected),
