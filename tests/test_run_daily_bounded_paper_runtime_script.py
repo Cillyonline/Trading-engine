@@ -89,6 +89,8 @@ def test_daily_runner_sends_current_manual_analysis_contract_and_reaches_executi
         if script_name == "run_paper_execution_cycle.py":
             assert "--db-path" in command
             assert command[command.index("--db-path") + 1] == str(db_path)
+            assert command[command.index("--analysis-run-id") + 1] == "analysis-contract-ok"
+            assert command[command.index("--ingestion-run-id") + 1] == ingestion_run_id
             return subprocess.CompletedProcess(
                 command,
                 2,

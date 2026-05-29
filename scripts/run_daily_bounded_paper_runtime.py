@@ -1723,6 +1723,7 @@ def run_daily_bounded_paper_runtime(
                     "ingestion_run_id": ingestion_run_id,
                 },
             )
+        analysis_run_id = str(analysis_payload.get("analysis_run_id", ""))
         steps_completed.append("analysis_signal_generation")
 
         # Step 3: bounded paper execution cycle
@@ -1733,6 +1734,10 @@ def run_daily_bounded_paper_runtime(
                 db_path,
                 "--evidence-dir",
                 execution_evidence_dir,
+                "--analysis-run-id",
+                analysis_run_id,
+                "--ingestion-run-id",
+                ingestion_run_id,
             ],
             run_command=run_command,
         )
@@ -1874,7 +1879,7 @@ def run_daily_bounded_paper_runtime(
             paper_state_freshness=paper_state_freshness,
         )
         summary_payload: dict[str, Any] = {
-            "analysis_run_id": str(analysis_payload.get("analysis_run_id", "")),
+            "analysis_run_id": analysis_run_id,
             "completed_at": completed_at.isoformat(),
             "ingestion_run_id": ingestion_run_id,
             "paper_state_freshness": paper_state_freshness,

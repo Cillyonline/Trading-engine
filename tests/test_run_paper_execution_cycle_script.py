@@ -115,3 +115,143 @@ def test_run_paper_execution_cycle_routes_exit_signals_to_worker(
     closed_trade = execution_repo.get_trade(entry_result.trade_id)
     assert closed_trade is not None
     assert closed_trade.status == "closed"
+
+
+def test_run_paper_execution_cycle_uses_current_run_scope_over_stale_turtle_rows(
+    tmp_path: Path,
+) -> None:
+    module = _load_script_module()
+
+    db_path = tmp_path / "paper_execution_scope.db"
+    evidence_dir = tmp_path / "evidence"
+    signal_repo = SqliteSignalRepository(db_path=db_path)
+
+    signal_repo.save_signals(
+        [
+            {
+                "signal_id": "turtle-scope-signal",
+                "analysis_run_id": "analysis-stale",
+                "ingestion_run_id": "ingestion-stale",
+                "symbol": "WMT",
+                "strategy": "TURTLE",
+                "direction": "long",  # type: ignore[typeddict-item]
+                "score": 80.0,
+                "timestamp": "2026-05-27T12:00:00Z",
+                "stage": "setup",  # type: ignore[typeddict-item]
+                "entry_zone": {"from_": 100.0, "to": 100.0},
+                "timeframe": "D1",
+                "market_type": "stock",  # type: ignore[typeddict-item]
+                "data_source": "snapshot",  # type: ignore[typeddict-item]
+            },
+            {
+                "signal_id": "turtle-scope-signal",
+                "analysis_run_id": "analysis-current",
+                "ingestion_run_id": "ingestion-current",
+                "symbol": "WMT",
+                "strategy": "TURTLE",
+                "direction": "long",  # type: ignore[typeddict-item]
+                "score": 80.0,
+                "timestamp": "2026-05-28T12:00:00Z",
+                "stage": "setup",  # type: ignore[typeddict-item]
+                "entry_zone": {"from_": 100.0, "to": 100.0},
+                "stop_loss": 95.0,
+                "timeframe": "D1",
+                "market_type": "stock",  # type: ignore[typeddict-item]
+                "data_source": "snapshot",  # type: ignore[typeddict-item]
+            },
+        ]
+    )
+
+    exit_code = module.run_paper_execution_cycle(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_dir),
+        signal_limit=10,
+        analysis_run_id="analysis-current",
+        ingestion_run_id="ingestion-current",
+        ran_at=datetime(2026, 5, 28, 13, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert exit_code == module.EXIT_CYCLE_PASS
+    evidence_file = evidence_dir / "paper-execution-pass-20260528T130000Z.json"
+    payload = json.loads(evidence_file.read_text(encoding="utf-8"))
+
+    assert payload["signals_read"] == 1
+    assert payload["signal_scope"] == {
+        "analysis_run_id": "analysis-current",
+        "fallback_reason": None,
+        "ingestion_run_id": "ingestion-current",
+        "scope_filters": ["analysis_run_id", "ingestion_run_id"],
+        "selection_mode": "current_run_scope",
+        "signals_read": 1,
+    }
+    assert payload["eligible"] == 1
+    assert payload["rejected"] == 0
+    assert payload["diagnostics_summary"]["missing_trade_risk_input_count"] == 0
+    assert payload["results"][0]["outcome"] == "eligible"
+    assert payload["results"][0]["decision_inputs"]["trade_risk_pct"] == "0.05"
+
+
+def test_run_paper_execution_cycle_fallback_uses_latest_signal_identity_with_risk(
+    tmp_path: Path,
+) -> None:
+    module = _load_script_module()
+
+    db_path = tmp_path / "paper_execution_fallback.db"
+    evidence_dir = tmp_path / "evidence"
+    signal_repo = SqliteSignalRepository(db_path=db_path)
+
+    signal_repo.save_signals(
+        [
+            {
+                "signal_id": "turtle-fallback-signal",
+                "analysis_run_id": "analysis-old",
+                "ingestion_run_id": "ingestion-old",
+                "symbol": "COST",
+                "strategy": "TURTLE",
+                "direction": "long",  # type: ignore[typeddict-item]
+                "score": 80.0,
+                "timestamp": "2026-05-27T12:00:00Z",
+                "stage": "setup",  # type: ignore[typeddict-item]
+                "entry_zone": {"from_": 200.0, "to": 200.0},
+                "timeframe": "D1",
+                "market_type": "stock",  # type: ignore[typeddict-item]
+                "data_source": "snapshot",  # type: ignore[typeddict-item]
+            },
+            {
+                "signal_id": "turtle-fallback-signal",
+                "analysis_run_id": "analysis-new",
+                "ingestion_run_id": "ingestion-new",
+                "symbol": "COST",
+                "strategy": "TURTLE",
+                "direction": "long",  # type: ignore[typeddict-item]
+                "score": 80.0,
+                "timestamp": "2026-05-28T12:00:00Z",
+                "stage": "setup",  # type: ignore[typeddict-item]
+                "entry_zone": {"from_": 200.0, "to": 200.0},
+                "trade_risk_pct": 0.03,
+                "timeframe": "D1",
+                "market_type": "stock",  # type: ignore[typeddict-item]
+                "data_source": "snapshot",  # type: ignore[typeddict-item]
+            },
+        ]
+    )
+
+    exit_code = module.run_paper_execution_cycle(
+        db_path=str(db_path),
+        evidence_dir=str(evidence_dir),
+        signal_limit=10,
+        ran_at=datetime(2026, 5, 28, 14, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert exit_code == module.EXIT_CYCLE_PASS
+    evidence_file = evidence_dir / "paper-execution-pass-20260528T140000Z.json"
+    payload = json.loads(evidence_file.read_text(encoding="utf-8"))
+
+    assert payload["signals_read"] == 1
+    assert payload["signal_scope"]["selection_mode"] == "latest_per_identity_fallback"
+    assert payload["signal_scope"]["fallback_reason"] == "current_run_scope_unavailable"
+    assert payload["eligible"] == 1
+    assert payload["rejected"] == 0
+    assert payload["diagnostics_summary"]["missing_trade_risk_input_count"] == 0
+    assert payload["results"][0]["outcome"] == "eligible"
+    assert payload["results"][0]["decision_inputs"]["trade_risk_pct"] == "0.03"

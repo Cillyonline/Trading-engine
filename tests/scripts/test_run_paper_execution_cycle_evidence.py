@@ -17,7 +17,15 @@ class _FakeSignalRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
 
-    def list_signals(self, limit: int) -> list[dict[str, Any]]:
+    def list_signals(
+        self,
+        limit: int,
+        *,
+        analysis_run_id: str | None = None,
+        ingestion_run_id: str | None = None,
+        latest_per_identity: bool = False,
+    ) -> list[dict[str, Any]]:
+        del analysis_run_id, ingestion_run_id, latest_per_identity
         return self.signals[:limit]
 
 
@@ -132,4 +140,12 @@ def test_paper_execution_cycle_evidence_includes_diagnostics_and_decision_inputs
         "risk_input_rejected_entries": 1,
         "missing_trade_risk_input_count": 1,
         "missing_trade_risk_input_rejections": [missing_risk_evidence],
+    }
+    assert payload["signal_scope"] == {
+        "analysis_run_id": None,
+        "fallback_reason": "current_run_scope_unavailable",
+        "ingestion_run_id": None,
+        "scope_filters": [],
+        "selection_mode": "latest_per_identity_fallback",
+        "signals_read": 3,
     }
