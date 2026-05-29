@@ -190,37 +190,126 @@ class SqliteSignalRepository(BaseSqliteRepository, SignalRepository):
             )
             conn.commit()
 
-    def list_signals(self, limit: int = 100) -> List[Signal]:
+    def list_signals(
+        self,
+        limit: int = 100,
+        *,
+        analysis_run_id: Optional[str] = None,
+        ingestion_run_id: Optional[str] = None,
+        latest_per_identity: bool = False,
+    ) -> List[Signal]:
+        where_clauses: list[str] = []
+        params: list[object] = []
+        scope_clauses: list[str] = []
+        if analysis_run_id is not None:
+            scope_clauses.append("analysis_run_id = ?")
+            params.append(analysis_run_id)
+        if ingestion_run_id is not None:
+            scope_clauses.append("ingestion_run_id = ?")
+            params.append(ingestion_run_id)
+        if scope_clauses:
+            where_clauses.append(f"({' OR '.join(scope_clauses)})")
+        where_sql = self._compose_where_clause(where_clauses)
+        normalized_timestamp = "REPLACE(timestamp, 'Z', '+00:00')"
+
         with self._connection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT
-                    id,
-                    signal_id,
-                    analysis_run_id,
-                    ingestion_run_id,
-                    symbol,
-                    strategy,
-                    direction,
-                    score,
-                    timestamp,
-                    stage,
-                    entry_zone_from,
-                    entry_zone_to,
-                    stop_loss,
-                    trade_risk_pct,
-                    confirmation_rule,
-                    timeframe,
-                    market_type,
-                    data_source,
-                    reasons_json
-                FROM signals
-                ORDER BY id DESC
-                LIMIT ?;
-                """,
-                (limit,),
-            )
+            if latest_per_identity:
+                dedupe_identity_sql = (
+                    "CASE "
+                    "WHEN signal_id IS NOT NULL THEN signal_id "
+                    "ELSE symbol || '|' || strategy || '|' || direction || '|' || "
+                    "CAST(score AS TEXT) || '|' || timestamp || '|' || stage || '|' || "
+                    "timeframe || '|' || market_type || '|' || data_source "
+                    "END"
+                )
+                cur.execute(
+                    f"""
+                    WITH ranked_signals AS (
+                        SELECT
+                            id,
+                            signal_id,
+                            analysis_run_id,
+                            ingestion_run_id,
+                            symbol,
+                            strategy,
+                            direction,
+                            score,
+                            timestamp,
+                            stage,
+                            entry_zone_from,
+                            entry_zone_to,
+                            stop_loss,
+                            trade_risk_pct,
+                            confirmation_rule,
+                            timeframe,
+                            market_type,
+                            data_source,
+                            reasons_json,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY {dedupe_identity_sql}
+                                ORDER BY {normalized_timestamp} DESC, id DESC
+                            ) AS dedupe_rank
+                        FROM signals
+                        {where_sql}
+                    )
+                    SELECT
+                        id,
+                        signal_id,
+                        analysis_run_id,
+                        ingestion_run_id,
+                        symbol,
+                        strategy,
+                        direction,
+                        score,
+                        timestamp,
+                        stage,
+                        entry_zone_from,
+                        entry_zone_to,
+                        stop_loss,
+                        trade_risk_pct,
+                        confirmation_rule,
+                        timeframe,
+                        market_type,
+                        data_source,
+                        reasons_json
+                    FROM ranked_signals
+                    WHERE dedupe_rank = 1
+                    ORDER BY {normalized_timestamp} DESC, id DESC
+                    LIMIT ?;
+                    """,
+                    [*params, limit],
+                )
+            else:
+                cur.execute(
+                    f"""
+                    SELECT
+                        id,
+                        signal_id,
+                        analysis_run_id,
+                        ingestion_run_id,
+                        symbol,
+                        strategy,
+                        direction,
+                        score,
+                        timestamp,
+                        stage,
+                        entry_zone_from,
+                        entry_zone_to,
+                        stop_loss,
+                        trade_risk_pct,
+                        confirmation_rule,
+                        timeframe,
+                        market_type,
+                        data_source,
+                        reasons_json
+                    FROM signals
+                    {where_sql}
+                    ORDER BY id DESC
+                    LIMIT ?;
+                    """,
+                    [*params, limit],
+                )
             rows = cur.fetchall()
 
         result: List[Signal] = []

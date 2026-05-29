@@ -83,6 +83,16 @@ def _parse_args() -> argparse.Namespace:
         default=500,
         help="Maximum number of signals to read.  Default: 500.",
     )
+    parser.add_argument(
+        "--analysis-run-id",
+        default=None,
+        help="Scope signal reads to the current analysis run when provided.",
+    )
+    parser.add_argument(
+        "--ingestion-run-id",
+        default=None,
+        help="Scope signal reads to the current ingestion run when provided.",
+    )
     return parser.parse_args()
 
 
@@ -142,6 +152,42 @@ def _signal_value(signal: Any, field: str) -> Any:
 
 def _is_exit_signal(signal: Any) -> bool:
     return _signal_stage(signal) == "exit"
+
+
+def _clean_scope_id(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _signal_scope_metadata(
+    *,
+    analysis_run_id: str | None,
+    ingestion_run_id: str | None,
+    signals_read: int,
+) -> dict[str, Any]:
+    scope_filters: list[str] = []
+    if analysis_run_id is not None:
+        scope_filters.append("analysis_run_id")
+    if ingestion_run_id is not None:
+        scope_filters.append("ingestion_run_id")
+
+    if scope_filters:
+        selection_mode = "current_run_scope"
+        fallback_reason = None
+    else:
+        selection_mode = "latest_per_identity_fallback"
+        fallback_reason = "current_run_scope_unavailable"
+
+    return {
+        "analysis_run_id": analysis_run_id,
+        "fallback_reason": fallback_reason,
+        "ingestion_run_id": ingestion_run_id,
+        "scope_filters": scope_filters,
+        "selection_mode": selection_mode,
+        "signals_read": signals_read,
+    }
 
 
 def _build_missing_trade_risk_input_diagnostic(
@@ -225,10 +271,14 @@ def run_paper_execution_cycle(
     db_path: str,
     evidence_dir: str,
     signal_limit: int = 500,
+    analysis_run_id: str | None = None,
+    ingestion_run_id: str | None = None,
     ran_at: datetime | None = None,
 ) -> int:
     """Execute bounded paper execution cycle.  Returns exit code."""
     ran_at = ran_at or _utc_now()
+    analysis_run_id = _clean_scope_id(analysis_run_id)
+    ingestion_run_id = _clean_scope_id(ingestion_run_id)
     evidence_path = Path(evidence_dir)
     stamp = ran_at.strftime("%Y%m%dT%H%M%SZ")
 
@@ -236,7 +286,12 @@ def run_paper_execution_cycle(
         signal_repo = SqliteSignalRepository(db_path=Path(db_path))
         execution_repo = SqliteCanonicalExecutionRepository(db_path=Path(db_path))
 
-        signals = signal_repo.list_signals(limit=signal_limit)
+        signals = signal_repo.list_signals(
+            limit=signal_limit,
+            analysis_run_id=analysis_run_id,
+            ingestion_run_id=ingestion_run_id,
+            latest_per_identity=analysis_run_id is None and ingestion_run_id is None,
+        )
 
         risk_profile = DEFAULT_PAPER_EXECUTION_RISK_PROFILE
         worker = BoundedPaperExecutionWorker(
@@ -273,6 +328,11 @@ def run_paper_execution_cycle(
         "rejected": len(rejected),
         "results": [_result_to_dict(r) for r in results],
         "risk_profile": risk_profile.to_payload(),
+        "signal_scope": _signal_scope_metadata(
+            analysis_run_id=analysis_run_id,
+            ingestion_run_id=ingestion_run_id,
+            signals_read=len(signals),
+        ),
         "signals_read": len(signals),
         "skipped": len(skipped),
         "status": "pass" if eligible else "no_eligible",
@@ -298,6 +358,8 @@ def main() -> int:
         db_path=args.db_path,
         evidence_dir=args.evidence_dir,
         signal_limit=args.signal_limit,
+        analysis_run_id=args.analysis_run_id,
+        ingestion_run_id=args.ingestion_run_id,
     )
 
 
