@@ -36,6 +36,7 @@ import hashlib
 import json
 import sys
 from datetime import date, datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,8 @@ _SNAPSHOT_DATE_FMT = "%Y-%m-%d"
 # a signal would be blocked by the real runtime gates.
 _MIN_SCORE_THRESHOLD = 60.0
 _MAX_RISK_PER_TRADE_PCT = 0.01
+_RISK_PCT_SCALE = Decimal("0.00000001")
+_SCORE_BUCKETS = ("<50", "50-55", "55-60", "60-65", "65-70", "70+")
 
 # Default TurtleStrategy parameters (match TurtleConfig defaults).
 _TURTLE_DEFAULT_CONFIG: dict[str, Any] = {
@@ -274,13 +277,53 @@ def _build_symbol_ohlcv_df(rows: list[dict[str, Any]]):
 def _score_bucket(score: float | None) -> str | None:
     if score is None:
         return None
-    if score >= 80:
-        return "80-100"
-    if score >= 60:
-        return "60-79"
-    if score >= 40:
-        return "40-59"
-    return "0-39"
+    if score < 50:
+        return "<50"
+    if score < 55:
+        return "50-55"
+    if score < 60:
+        return "55-60"
+    if score < 65:
+        return "60-65"
+    if score < 70:
+        return "65-70"
+    return "70+"
+
+
+def _derive_entry_price(signal: dict[str, Any]) -> tuple[float | None, str | None]:
+    """Return the explicit entry price used for TURTLE risk annotation."""
+    entry_zone = signal.get("entry_zone")
+    if not isinstance(entry_zone, dict):
+        return None, None
+    if entry_zone.get("from_") is None or entry_zone.get("to") is None:
+        return None, None
+
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        entry_price = (
+            Decimal(str(entry_zone["from_"])) + Decimal(str(entry_zone["to"]))
+        ) / Decimal("2")
+    return float(entry_price), "entry_zone_midpoint"
+
+
+def _derive_trade_risk_pct(
+    signal: dict[str, Any],
+) -> tuple[float | None, float | None, str | None]:
+    entry_price, entry_price_source = _derive_entry_price(signal)
+    raw_stop_loss = signal.get("stop_loss")
+    if entry_price is None or entry_price <= 0 or raw_stop_loss is None:
+        return None, entry_price, entry_price_source
+
+    with localcontext() as ctx:
+        ctx.prec = 28
+        ctx.rounding = ROUND_HALF_UP
+        stop_loss = Decimal(str(raw_stop_loss))
+        entry = Decimal(str(entry_price))
+        if stop_loss <= 0:
+            return None, entry_price, entry_price_source
+        trade_risk_pct = (abs(entry - stop_loss) / entry).quantize(_RISK_PCT_SCALE)
+    return float(trade_risk_pct), entry_price, entry_price_source
 
 
 def _compute_signal_id_local(
@@ -342,10 +385,7 @@ def generate_turtle_signal_annotations(
             ts_str = bar_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             df_window = df.iloc[: i + 1]
-            try:
-                signals = strategy.generate_signals(df_window, cfg)
-            except Exception:
-                signals = []
+            signals = strategy.generate_signals(df_window, cfg)
 
             if not signals:
                 annotations[snap_id] = {
@@ -360,6 +400,8 @@ def generate_turtle_signal_annotations(
                     "signal_id": None,
                     "confirmation_rule": None,
                     "entry_zone": None,
+                    "entry_price": None,
+                    "entry_price_source": None,
                     "stop_loss": None,
                     "trade_risk_pct": None,
                     "score_blocked": False,
@@ -372,12 +414,15 @@ def generate_turtle_signal_annotations(
             stage = sig.get("stage")
             score = sig.get("score")
             direction = sig.get("direction", "long")
+            derived_trade_risk_pct, entry_price, entry_price_source = _derive_trade_risk_pct(sig)
             trade_risk_pct = sig.get("trade_risk_pct")
+            if stage == "entry_confirmed" or trade_risk_pct is None:
+                trade_risk_pct = derived_trade_risk_pct
 
             sig_id = _compute_signal_id_local(symbol, ts_str, stage, direction)
 
             score_blocked = (
-                stage == "entry_confirmed"
+                stage in {"entry_confirmed", "setup"}
                 and score is not None
                 and score < min_score_threshold
             )
@@ -398,6 +443,8 @@ def generate_turtle_signal_annotations(
                 "signal_id": sig_id,
                 "confirmation_rule": sig.get("confirmation_rule"),
                 "entry_zone": sig.get("entry_zone"),
+                "entry_price": entry_price,
+                "entry_price_source": entry_price_source,
                 "stop_loss": sig.get("stop_loss"),
                 "trade_risk_pct": trade_risk_pct,
                 "score_blocked": score_blocked,
@@ -459,9 +506,18 @@ def _build_signals_array(
             "risk_evidence": {
                 "decision": decision,
                 "max_allowed": str(min_score_threshold),
+                "max_risk_per_trade_pct": str(max_risk_per_trade_pct),
                 "reason": reason,
                 "rule_version": "turtle-research-v1",
                 "score": str(round(score, 6)),
+                "trade_risk_pct": (
+                    str(round(float(trade_risk_pct), 8))
+                    if trade_risk_pct is not None
+                    else None
+                ),
+                "entry_price": annotation.get("entry_price"),
+                "entry_price_source": annotation.get("entry_price_source"),
+                "stop_loss": annotation.get("stop_loss"),
             },
             "score": score,
             "signal_id": annotation["signal_id"],
@@ -511,6 +567,8 @@ def annotate_snapshots(
                 "signal_id": None,
                 "confirmation_rule": None,
                 "entry_zone": None,
+                "entry_price": None,
+                "entry_price_source": None,
                 "stop_loss": None,
                 "trade_risk_pct": None,
                 "score_blocked": False,
@@ -542,7 +600,7 @@ def build_turtle_research_summary(
                 "score_blocked_count": 0,
                 "risk_blocked_count": 0,
                 "entry_candidates": 0,
-                "score_buckets": {"0-39": 0, "40-59": 0, "60-79": 0, "80-100": 0},
+                "score_buckets": {bucket: 0 for bucket in _SCORE_BUCKETS},
             }
             scores_by_sym[symbol] = []
 

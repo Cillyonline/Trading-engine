@@ -50,6 +50,7 @@ def _load_module():
 _mod = _load_module()
 build_export = _mod.build_export
 _snapshot_id = _mod._snapshot_id
+_score_bucket = _mod._score_bucket
 GOVERNED_SYMBOLS = _mod.GOVERNED_SYMBOLS
 generate_turtle_signal_annotations = _mod.generate_turtle_signal_annotations
 annotate_snapshots = _mod.annotate_snapshots
@@ -375,7 +376,8 @@ class TestGenerateTurtleSignalAnnotations:
             "symbol", "timestamp", "strategy", "signal_produced",
             "stage", "score", "score_bucket", "direction", "signal_id",
             "confirmation_rule", "entry_zone", "stop_loss", "trade_risk_pct",
-            "score_blocked", "risk_blocked", "is_entry_candidate",
+            "entry_price", "entry_price_source", "score_blocked", "risk_blocked",
+            "is_entry_candidate",
         }
         for ann in anns.values():
             assert required.issubset(ann.keys()), f"Missing keys: {required - ann.keys()}"
@@ -401,22 +403,22 @@ class TestGenerateTurtleSignalAnnotations:
         assert "entry_confirmed" in stages
 
     def test_score_blocked_flag_set_when_score_below_threshold(self):
-        """entry_confirmed signals with score < 60 must have score_blocked=True."""
+        """entry_confirmed/setup signals with score < 60 must have score_blocked=True."""
         rows = _make_trending_bars("AAPL", n=30)
         anns = generate_turtle_signal_annotations({"AAPL": rows})
         for ann in anns.values():
-            if ann["stage"] == "entry_confirmed" and ann["score"] is not None:
+            if ann["stage"] in ("entry_confirmed", "setup") and ann["score"] is not None:
                 if ann["score"] < _MIN_SCORE_THRESHOLD:
                     assert ann["score_blocked"] is True
                 else:
                     assert ann["score_blocked"] is False
 
     def test_non_entry_confirmed_stages_not_score_blocked(self):
-        """setup and exit signals never have score_blocked=True."""
+        """exit signals never have score_blocked=True."""
         rows = _make_trending_bars("AAPL", n=30)
         anns = generate_turtle_signal_annotations({"AAPL": rows})
         for ann in anns.values():
-            if ann["stage"] in ("setup", "exit"):
+            if ann["stage"] == "exit":
                 assert ann["score_blocked"] is False
 
     def test_risk_blocked_when_trade_risk_pct_exceeds_max(self):
@@ -442,6 +444,56 @@ class TestGenerateTurtleSignalAnnotations:
         symbols_in_anns = {a["symbol"] for a in anns.values()}
         assert "AAPL" in symbols_in_anns
         assert "MSFT" in symbols_in_anns
+
+    def test_setup_signal_in_55_60_band_is_score_threshold_blocked(self):
+        rows = [_make_bar("AAPL", "2023-01-03")]
+        setup_signal = {
+            "strategy": "TURTLE",
+            "direction": "long",
+            "score": 58.0,
+            "stage": "setup",
+            "confirmation_rule": "test",
+            "entry_zone": {"from_": 97.0, "to": 101.0},
+            "stop_loss": 99.0,
+            "trade_risk_pct": 0.01,
+        }
+        with patch("cilly_trading.strategies.turtle.TurtleStrategy") as strategy_cls:
+            strategy_cls.return_value.generate_signals.return_value = [setup_signal]
+            anns = generate_turtle_signal_annotations({"AAPL": rows})
+
+        ann = anns["AAPL_2023-01-03"]
+        assert ann["stage"] == "setup"
+        assert ann["score_bucket"] == "55-60"
+        assert ann["score_blocked"] is True
+
+    def test_entry_confirmed_stop_distance_risk_above_max_is_blocked(self):
+        rows = [_make_bar("GS", "2023-01-03")]
+        entry_signal = {
+            "strategy": "TURTLE",
+            "direction": "long",
+            "score": 80.0,
+            "stage": "entry_confirmed",
+            "confirmation_rule": "test",
+            "entry_zone": {"from_": 100.0, "to": 110.0},
+            "stop_loss": 99.0,
+        }
+        with patch("cilly_trading.strategies.turtle.TurtleStrategy") as strategy_cls:
+            strategy_cls.return_value.generate_signals.return_value = [entry_signal]
+            anns = generate_turtle_signal_annotations({"GS": rows})
+
+        ann = anns["GS_2023-01-03"]
+        assert ann["entry_price_source"] == "entry_zone_midpoint"
+        assert ann["entry_price"] == 105.0
+        assert ann["trade_risk_pct"] == 0.05714286
+        assert ann["risk_blocked"] is True
+        assert ann["is_entry_candidate"] is False
+
+    def test_signal_generation_exception_fails_explicitly(self):
+        rows = [_make_bar("AAPL", "2023-01-03")]
+        with patch("cilly_trading.strategies.turtle.TurtleStrategy") as strategy_cls:
+            strategy_cls.return_value.generate_signals.side_effect = RuntimeError("boom")
+            with pytest.raises(RuntimeError, match="boom"):
+                generate_turtle_signal_annotations({"AAPL": rows})
 
 
 class TestBuildSignalsArray:
@@ -570,7 +622,7 @@ class TestAnnotateSnapshots:
                 "signal_produced": True,
                 "stage": "entry_confirmed",
                 "score": 70.0,
-                "score_bucket": "60-79",
+                "score_bucket": "70+",
                 "direction": "long",
                 "signal_id": "abc123",
                 "confirmation_rule": "test",
@@ -598,7 +650,7 @@ class TestAnnotateSnapshots:
                 "signal_produced": True,
                 "stage": "setup",
                 "score": 70.0,
-                "score_bucket": "60-79",
+                "score_bucket": "70+",
                 "direction": "long",
                 "signal_id": "abc123",
                 "confirmation_rule": None,
@@ -627,13 +679,13 @@ class TestBuildTurtleResearchSummary:
         return {
             "AAPL_2023-01-03": {
                 "symbol": "AAPL", "signal_produced": True, "stage": "entry_confirmed",
-                "score": 65.0, "score_bucket": "60-79",
+                "score": 65.0, "score_bucket": "65-70",
                 "score_blocked": False, "risk_blocked": False, "is_entry_candidate": True,
             },
             "AAPL_2023-01-04": {
                 "symbol": "AAPL", "signal_produced": True, "stage": "setup",
-                "score": 55.0, "score_bucket": "40-59",
-                "score_blocked": False, "risk_blocked": False, "is_entry_candidate": False,
+                "score": 58.0, "score_bucket": "55-60",
+                "score_blocked": True, "risk_blocked": False, "is_entry_candidate": False,
             },
             "AAPL_2023-01-05": {
                 "symbol": "AAPL", "signal_produced": False, "stage": None,
@@ -642,7 +694,7 @@ class TestBuildTurtleResearchSummary:
             },
             "GS_2023-01-03": {
                 "symbol": "GS", "signal_produced": True, "stage": "entry_confirmed",
-                "score": 62.0, "score_bucket": "60-79",
+                "score": 62.0, "score_bucket": "60-65",
                 "score_blocked": False, "risk_blocked": True, "is_entry_candidate": False,
             },
         }
@@ -662,6 +714,7 @@ class TestBuildTurtleResearchSummary:
         assert t["setup_count"] == 1
         assert t["exit_count"] == 0
         assert t["entry_candidates"] == 1
+        assert t["score_blocked_count"] == 1
         assert t["risk_blocked_count"] == 1
 
     def test_by_symbol_aapl(self):
@@ -672,8 +725,25 @@ class TestBuildTurtleResearchSummary:
         assert aapl["stages"]["entry_confirmed"] == 1
         assert aapl["stages"]["setup"] == 1
         assert aapl["entry_candidates"] == 1
-        assert aapl["score_min"] == 55.0
+        assert aapl["score_blocked_count"] == 1
+        assert aapl["score_buckets"]["55-60"] == 1
+        assert aapl["score_min"] == 58.0
         assert aapl["score_max"] == 65.0
+
+    def test_new_score_buckets_are_used(self):
+        summary = build_turtle_research_summary(self._make_annotations())
+        buckets = summary["by_symbol"]["AAPL"]["score_buckets"]
+        assert list(buckets) == ["<50", "50-55", "55-60", "60-65", "65-70", "70+"]
+        assert buckets["65-70"] == 1
+        assert buckets["55-60"] == 1
+
+    def test_score_bucket_boundaries(self):
+        assert _score_bucket(49.9999) == "<50"
+        assert _score_bucket(50.0) == "50-55"
+        assert _score_bucket(55.0) == "55-60"
+        assert _score_bucket(60.0) == "60-65"
+        assert _score_bucket(65.0) == "65-70"
+        assert _score_bucket(70.0) == "70+"
 
     def test_thresholds_recorded(self):
         summary = build_turtle_research_summary(
