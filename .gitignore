@@ -20,6 +20,7 @@ htmlcov/
 runs/
 /.codex/issue-*-runtime/
 /data/artifacts/
+/data/local_ohlcv_cache*/
 
 # Local editor settings
 .vscode/
