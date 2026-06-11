@@ -32,6 +32,7 @@ Additional outputs (--annotate-signals mode):
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
@@ -58,6 +59,8 @@ _MIN_SCORE_THRESHOLD = 60.0
 _MAX_RISK_PER_TRADE_PCT = 0.01
 _RISK_PCT_SCALE = Decimal("0.00000001")
 _SCORE_BUCKETS = ("<50", "50-55", "55-60", "60-65", "65-70", "70+")
+_SOURCE_YFINANCE = "yfinance"
+_SOURCE_CSV_DIR = "csv-dir"
 
 # Default TurtleStrategy parameters (match TurtleConfig defaults).
 _TURTLE_DEFAULT_CONFIG: dict[str, Any] = {
@@ -148,6 +151,94 @@ def _fetch_symbol(symbol: str, start: date, end: date, *, session=None) -> list[
     return rows
 
 
+def _parse_local_csv_date(raw_value: str) -> datetime | None:
+    value = raw_value.strip()
+    if not value:
+        return None
+    try:
+        if "T" in value:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        parsed_date = date.fromisoformat(value)
+        return datetime(parsed_date.year, parsed_date.month, parsed_date.day, tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _normalize_local_csv_number(raw_value: Any, *, integer: bool = False) -> str | None:
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    if not value:
+        return None
+    try:
+        number = Decimal(value)
+    except Exception:
+        return None
+    if not number.is_finite():
+        return None
+    if integer:
+        return str(int(number))
+    return str(round(float(number), 6))
+
+
+def _fetch_symbol_from_csv_dir(
+    symbol: str,
+    start: date,
+    end: date,
+    *,
+    source_dir: Path,
+) -> tuple[list[dict[str, Any]], int]:
+    """Read deterministic OHLCV rows from <source_dir>/<SYMBOL>.csv."""
+    csv_path = source_dir / f"{symbol}.csv"
+    if not csv_path.exists():
+        return [], 0
+
+    rows: list[dict[str, Any]] = []
+    missing_ohlcv_rows = 0
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as fh:
+        reader = csv.DictReader(fh)
+        for raw in reader:
+            raw_timestamp = raw.get("timestamp") or raw.get("date") or ""
+            parsed_ts = _parse_local_csv_date(raw_timestamp)
+            open_value = _normalize_local_csv_number(raw.get("open"))
+            high_value = _normalize_local_csv_number(raw.get("high"))
+            low_value = _normalize_local_csv_number(raw.get("low"))
+            close_value = _normalize_local_csv_number(raw.get("close"))
+            volume_value = _normalize_local_csv_number(raw.get("volume"), integer=True)
+            if (
+                parsed_ts is None
+                or open_value is None
+                or high_value is None
+                or low_value is None
+                or close_value is None
+                or volume_value is None
+            ):
+                missing_ohlcv_rows += 1
+                continue
+
+            bar_date = parsed_ts.date()
+            if bar_date < start or bar_date > end:
+                continue
+
+            rows.append({
+                "id": _snapshot_id(symbol, bar_date),
+                "timestamp": parsed_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "symbol": symbol,
+                "open": open_value,
+                "high": high_value,
+                "low": low_value,
+                "close": close_value,
+                "volume": volume_value,
+                "timeframe": "D1",
+            })
+
+    rows.sort(key=lambda r: (r["timestamp"], r["id"]))
+    return rows, missing_ohlcv_rows
+
+
 # ---------------------------------------------------------------------------
 # Build snapshot array + metadata
 # ---------------------------------------------------------------------------
@@ -159,15 +250,35 @@ def build_export(
     *,
     command: str,
     session=None,
+    source: str = _SOURCE_YFINANCE,
+    source_dir: Path | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Return (snapshots, metadata) for the given symbol universe and date range."""
     per_symbol: dict[str, list[dict[str, Any]]] = {}
+    missing_ohlcv_by_symbol: dict[str, int] = {}
     missing_symbols: list[str] = []
     actual_start: date | None = None
     actual_end: date | None = None
 
     for symbol in sorted(symbols):
-        rows = _fetch_symbol(symbol, start, end, session=session)
+        if source == _SOURCE_YFINANCE:
+            rows = _fetch_symbol(symbol, start, end, session=session)
+            missing_ohlcv_by_symbol[symbol] = sum(
+                1 for r in rows
+                if any(r.get(f) is None for f in ("open", "high", "low", "close", "volume"))
+            )
+        elif source == _SOURCE_CSV_DIR:
+            if source_dir is None:
+                raise ValueError("--source-dir is required when source='csv-dir'")
+            rows, missing_ohlcv_rows = _fetch_symbol_from_csv_dir(
+                symbol,
+                start,
+                end,
+                source_dir=source_dir,
+            )
+            missing_ohlcv_by_symbol[symbol] = missing_ohlcv_rows
+        else:
+            raise ValueError(f"unsupported source: {source!r}")
         per_symbol[symbol] = rows
         if not rows:
             missing_symbols.append(symbol)
@@ -204,15 +315,16 @@ def build_export(
         symbol_coverage[symbol] = {
             "snapshot_count": len(rows),
             "missing": len(rows) == 0,
-            "missing_ohlcv_rows": sum(
-                1 for r in rows
-                if any(r.get(f) is None for f in ("open", "high", "low", "close", "volume"))
-            ),
+            "missing_ohlcv_rows": missing_ohlcv_by_symbol.get(symbol, 0),
         }
 
     metadata: dict[str, Any] = {
         "artifact_type": "historical_multi_asset_snapshot_export",
-        "data_source": "yfinance",
+        "data_source": source,
+        "source": {
+            "type": source,
+            "path": str(source_dir) if source_dir is not None else None,
+        },
         "command": command,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "requested_date_range": {
@@ -714,6 +826,20 @@ def _parse_args() -> argparse.Namespace:
         help="Output directory for generated artifacts.",
     )
     parser.add_argument(
+        "--source",
+        choices=(_SOURCE_YFINANCE, _SOURCE_CSV_DIR),
+        default=_SOURCE_YFINANCE,
+        help="OHLCV data source. Default: yfinance.",
+    )
+    parser.add_argument(
+        "--source-dir",
+        default=None,
+        help=(
+            "Local OHLCV CSV directory for --source csv-dir. "
+            "Expected files: <SYMBOL>.csv with date or timestamp, open, high, low, close, volume."
+        ),
+    )
+    parser.add_argument(
         "--annotate-signals",
         action="store_true",
         default=False,
@@ -744,6 +870,10 @@ def _build_command(args: argparse.Namespace) -> str:
         f"--end {args.end}",
         f"--out {args.out}",
     ]
+    if getattr(args, "source", _SOURCE_YFINANCE) != _SOURCE_YFINANCE:
+        parts.append(f"--source {args.source}")
+    if getattr(args, "source_dir", None):
+        parts.append(f"--source-dir {args.source_dir}")
     if getattr(args, "annotate_signals", False):
         parts.append("--annotate-signals")
     return " ".join(parts)
@@ -779,6 +909,10 @@ def main() -> int:
     if not symbols:
         print("No symbols specified.", file=sys.stderr)
         return 2
+    source_dir = Path(args.source_dir) if args.source_dir else None
+    if args.source == _SOURCE_CSV_DIR and source_dir is None:
+        print("--source-dir is required when --source csv-dir", file=sys.stderr)
+        return 2
 
     out_dir = Path(args.out)
     date_tag = f"{start.strftime(_SNAPSHOT_DATE_FMT)}_{end.strftime(_SNAPSHOT_DATE_FMT)}"
@@ -787,7 +921,18 @@ def main() -> int:
 
     command = _build_command(args)
     print(f"Fetching OHLCV data for: {', '.join(symbols)}", flush=True)
-    snapshots, metadata = build_export(symbols, start, end, command=command, session=yf_session)
+    print(f"Source : {args.source}", flush=True)
+    if source_dir is not None:
+        print(f"Source dir : {source_dir}", flush=True)
+    snapshots, metadata = build_export(
+        symbols,
+        start,
+        end,
+        command=command,
+        session=yf_session,
+        source=args.source,
+        source_dir=source_dir,
+    )
 
     _write_json(snapshots_path, snapshots)
     _write_json(meta_path, metadata)

@@ -58,6 +58,7 @@ build_turtle_research_summary = _mod.build_turtle_research_summary
 _build_signals_array = _mod._build_signals_array
 _MIN_SCORE_THRESHOLD = _mod._MIN_SCORE_THRESHOLD
 _MAX_RISK_PER_TRADE_PCT = _mod._MAX_RISK_PER_TRADE_PCT
+_SOURCE_CSV_DIR = _mod._SOURCE_CSV_DIR
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +123,27 @@ def _make_trending_bars(symbol: str, n: int = 30) -> list[dict[str, Any]]:
             "timeframe": "D1",
         })
     return rows
+
+
+def _write_symbol_csv(source_dir: Path, symbol: str, rows: list[dict[str, Any]]) -> Path:
+    source_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = source_dir / f"{symbol}.csv"
+    lines = ["date,open,high,low,close,volume"]
+    for row in rows:
+        lines.append(
+            ",".join(
+                [
+                    row["timestamp"][:10],
+                    str(row["open"]),
+                    str(row["high"]),
+                    str(row["low"]),
+                    str(row["close"]),
+                    str(row["volume"]),
+                ]
+            )
+        )
+    csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return csv_path
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +370,165 @@ def test_governed_symbol_universe_all_present():
     assert meta["total_snapshot_count"] == len(GOVERNED_SYMBOLS)
     for sym in GOVERNED_SYMBOLS:
         assert meta["symbol_coverage"][sym]["snapshot_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Local CSV source
+# ---------------------------------------------------------------------------
+
+def test_local_csv_source_parses_ohlcv_rows(tmp_path: Path):
+    _write_symbol_csv(
+        tmp_path,
+        "AAPL",
+        [
+            _make_bar("AAPL", "2023-01-03", px=150.0),
+            _make_bar("AAPL", "2023-01-04", px=151.0),
+        ],
+    )
+    snapshots, meta = build_export(
+        ("AAPL",),
+        date(2023, 1, 3),
+        date(2023, 1, 4),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert [snap["id"] for snap in snapshots] == ["AAPL_2023-01-03", "AAPL_2023-01-04"]
+    assert snapshots[0]["timestamp"] == "2023-01-03T00:00:00Z"
+    assert snapshots[0]["open"] == "150.0"
+    assert snapshots[0]["high"] == "151.0"
+    assert snapshots[0]["low"] == "149.0"
+    assert snapshots[0]["close"] == "150.0"
+    assert snapshots[0]["volume"] == "1000000"
+    assert meta["data_source"] == "csv-dir"
+
+
+def test_local_csv_source_required_ohlcv_fields_present(tmp_path: Path):
+    _write_symbol_csv(tmp_path, "MSFT", [_make_bar("MSFT", "2023-01-03")])
+    snapshots, _ = build_export(
+        ("MSFT",),
+        date(2023, 1, 3),
+        date(2023, 1, 3),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    for field in ("symbol", "timestamp", "open", "high", "low", "close", "volume"):
+        assert field in snapshots[0]
+
+
+def test_local_csv_source_six_symbol_coverage(tmp_path: Path):
+    for symbol in GOVERNED_SYMBOLS:
+        _write_symbol_csv(tmp_path, symbol, [_make_bar(symbol, "2023-01-03")])
+    snapshots, meta = build_export(
+        GOVERNED_SYMBOLS,
+        date(2023, 1, 3),
+        date(2023, 1, 3),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert meta["missing_symbols"] == []
+    assert meta["total_snapshot_count"] == len(GOVERNED_SYMBOLS)
+    assert {snap["symbol"] for snap in snapshots} == set(GOVERNED_SYMBOLS)
+
+
+def test_local_csv_source_missing_symbol_report(tmp_path: Path):
+    _write_symbol_csv(tmp_path, "AAPL", [_make_bar("AAPL", "2023-01-03")])
+    _, meta = build_export(
+        ("AAPL", "GS"),
+        date(2023, 1, 3),
+        date(2023, 1, 3),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert meta["missing_symbols"] == ["GS"]
+    assert meta["symbol_coverage"]["GS"]["missing"] is True
+    assert meta["symbol_coverage"]["GS"]["snapshot_count"] == 0
+
+
+def test_local_csv_source_missing_data_report(tmp_path: Path):
+    csv_path = tmp_path / "AAPL.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "date,open,high,low,close,volume",
+                "2023-01-03,100,101,99,100,1000000",
+                "2023-01-04,100,101,99,,1000000",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    snapshots, meta = build_export(
+        ("AAPL",),
+        date(2023, 1, 3),
+        date(2023, 1, 4),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert len(snapshots) == 1
+    assert meta["symbol_coverage"]["AAPL"]["missing_ohlcv_rows"] == 1
+
+
+def test_local_csv_source_deterministic_ordering(tmp_path: Path):
+    _write_symbol_csv(
+        tmp_path,
+        "AAPL",
+        [
+            _make_bar("AAPL", "2023-01-05"),
+            _make_bar("AAPL", "2023-01-03"),
+            _make_bar("AAPL", "2023-01-04"),
+        ],
+    )
+    snapshots, _ = build_export(
+        ("AAPL",),
+        date(2023, 1, 3),
+        date(2023, 1, 5),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert [snap["id"] for snap in snapshots] == [
+        "AAPL_2023-01-03",
+        "AAPL_2023-01-04",
+        "AAPL_2023-01-05",
+    ]
+
+
+def test_local_csv_source_metadata_records_source_type_and_path(tmp_path: Path):
+    _write_symbol_csv(tmp_path, "AAPL", [_make_bar("AAPL", "2023-01-03")])
+    _, meta = build_export(
+        ("AAPL",),
+        date(2023, 1, 3),
+        date(2023, 1, 3),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    assert meta["data_source"] == "csv-dir"
+    assert meta["source"] == {"type": "csv-dir", "path": str(tmp_path)}
+    assert meta["requested_date_range"] == {"start": "2023-01-03", "end": "2023-01-03"}
+    assert meta["actual_date_range"] == {"start": "2023-01-03", "end": "2023-01-03"}
+
+
+def test_local_csv_source_supports_turtle_annotation(tmp_path: Path):
+    rows = _make_trending_bars("AAPL", n=30)
+    _write_symbol_csv(tmp_path, "AAPL", rows)
+    snapshots, _ = build_export(
+        ("AAPL",),
+        date(2023, 1, 1),
+        date(2023, 1, 30),
+        command="test",
+        source=_SOURCE_CSV_DIR,
+        source_dir=tmp_path,
+    )
+    annotations = generate_turtle_signal_annotations({"AAPL": snapshots})
+    annotated = annotate_snapshots(snapshots, annotations)
+    assert len(annotated) == 30
+    assert any(snap["turtle_research"]["stage"] == "entry_confirmed" for snap in annotated)
 
 
 # ===========================================================================
