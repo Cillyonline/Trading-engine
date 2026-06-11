@@ -1,0 +1,26 @@
+{
+  "artifact_type": "turtle_signal_frequency_research",
+  "by_symbol": {},
+  "max_risk_per_trade_pct_applied": 0.01,
+  "min_score_threshold_applied": 60.0,
+  "note": "Thresholds are reference values from paper execution config. No threshold was changed by this script.",
+  "strategy": "TURTLE",
+  "totals": {
+    "entry_candidates": 0,
+    "entry_confirmed_count": 0,
+    "exit_count": 0,
+    "risk_blocked_count": 0,
+    "score_blocked_count": 0,
+    "setup_count": 0,
+    "signals_produced": 0,
+    "total_bars": 0
+  },
+  "traceability": {
+    "follows": [
+      "#1217",
+      "#1218",
+      "#1219"
+    ],
+    "issue": "#1220"
+  }
+}

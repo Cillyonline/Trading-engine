@@ -1,0 +1,153 @@
+{
+  "artifact_type": "turtle_signal_frequency_research",
+  "by_symbol": {
+    "AAPL": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 25,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    },
+    "COST": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 0,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    },
+    "GS": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 0,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    },
+    "MSFT": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 0,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    },
+    "NVDA": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 0,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    },
+    "WMT": {
+      "entry_candidates": 1,
+      "risk_blocked_count": 25,
+      "score_blocked_count": 0,
+      "score_buckets": {
+        "0-39": 0,
+        "40-59": 0,
+        "60-79": 39,
+        "80-100": 2
+      },
+      "score_max": 100.0,
+      "score_mean": 71.753428,
+      "score_min": 60.099502,
+      "signals_produced": 41,
+      "stages": {
+        "entry_confirmed": 1,
+        "exit": 1,
+        "setup": 39
+      },
+      "total_bars": 61
+    }
+  },
+  "max_risk_per_trade_pct_applied": 0.01,
+  "min_score_threshold_applied": 60.0,
+  "note": "Thresholds are reference values from paper execution config. No threshold was changed by this script.",
+  "strategy": "TURTLE",
+  "totals": {
+    "entry_candidates": 6,
+    "entry_confirmed_count": 6,
+    "exit_count": 6,
+    "risk_blocked_count": 50,
+    "score_blocked_count": 0,
+    "setup_count": 234,
+    "signals_produced": 246,
+    "total_bars": 366
+  },
+  "traceability": {
+    "follows": [
+      "#1217",
+      "#1218",
+      "#1219"
+    ],
+    "issue": "#1220"
+  }
+}

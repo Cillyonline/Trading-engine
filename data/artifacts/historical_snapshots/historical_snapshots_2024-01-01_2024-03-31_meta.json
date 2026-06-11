@@ -1,0 +1,81 @@
+{
+  "actual_date_range": {
+    "end": null,
+    "start": null
+  },
+  "artifact_type": "historical_multi_asset_snapshot_export",
+  "backtest_contract": {
+    "compatible": true,
+    "note": "Each snapshot object contains id (non-empty string) and timestamp (ISO-8601 UTC string) satisfying the --snapshots input contract of python -m cilly_trading backtest.",
+    "required_fields_present": [
+      "id",
+      "timestamp"
+    ]
+  },
+  "command": "python scripts/export_historical_snapshots.py --symbols AAPL,MSFT,NVDA,GS,WMT,COST --start 2024-01-01 --end 2024-03-31 --out data/artifacts/historical_snapshots --annotate-signals",
+  "content_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "data_source": "yfinance",
+  "generated_at": "2026-06-10T21:58:09Z",
+  "missing_symbols": [
+    "AAPL",
+    "COST",
+    "GS",
+    "MSFT",
+    "NVDA",
+    "WMT"
+  ],
+  "requested_date_range": {
+    "end": "2024-03-31",
+    "start": "2024-01-01"
+  },
+  "symbol_coverage": {
+    "AAPL": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    },
+    "COST": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    },
+    "GS": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    },
+    "MSFT": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    },
+    "NVDA": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    },
+    "WMT": {
+      "missing": true,
+      "missing_ohlcv_rows": 0,
+      "snapshot_count": 0
+    }
+  },
+  "symbol_universe": [
+    "AAPL",
+    "COST",
+    "GS",
+    "MSFT",
+    "NVDA",
+    "WMT"
+  ],
+  "total_snapshot_count": 0,
+  "traceability": {
+    "follows": [
+      "#1217",
+      "#1218",
+      "#1219"
+    ],
+    "issue": "#1220",
+    "unblocks": "historical multi-asset TURTLE score-threshold and stop-distance research"
+  }
+}
