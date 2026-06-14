@@ -163,6 +163,21 @@ fail-closed deterministic function:
 - proposed notional: `risk_budget_notional / bounded_trade_risk_pct`
 - deterministic rounding: configured notional quantum with `ROUND_HALF_UP`
 
+`max_risk_per_trade_pct` is a sizing risk-budget input. It is not a hard raw
+`trade_risk_pct` rejection cap. Runtime sizing uses the canonical formula:
+
+```text
+risk_budget_notional = account_equity * max_risk_per_trade_pct
+position_notional = risk_budget_notional / bounded_trade_risk_pct
+```
+
+Historical TURTLE export artifacts may include exporter-only raw-risk
+sensitivity fields such as `raw_trade_risk_research_cap_pct`,
+`raw_trade_risk_research_exceeded`, and `is_research_threshold_candidate`.
+Those fields are research annotations only. They do not represent runtime
+paper-execution rejection decisions and must not be interpreted as equivalent to
+`reject:max_risk_per_trade_exceeded`.
+
 Fail-closed outcomes:
 
 - missing trade-risk input -> `reject:missing_trade_risk_input`
