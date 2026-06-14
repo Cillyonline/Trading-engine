@@ -12,7 +12,7 @@ Covers:
 - TURTLE signal annotation: generate_turtle_signal_annotations
 - TURTLE annotation embedding: annotate_snapshots
 - build_turtle_research_summary structure and accuracy
-- score_blocked / risk_blocked / is_entry_candidate flags
+- score_blocked / raw_trade_risk_research_exceeded / is_research_threshold_candidate flags
 - signals array embedded for entry_confirmed bars
 - research summary totals
 """
@@ -557,11 +557,14 @@ class TestGenerateTurtleSignalAnnotations:
             "symbol", "timestamp", "strategy", "signal_produced",
             "stage", "score", "score_bucket", "direction", "signal_id",
             "confirmation_rule", "entry_zone", "stop_loss", "trade_risk_pct",
-            "entry_price", "entry_price_source", "score_blocked", "risk_blocked",
-            "is_entry_candidate",
+            "entry_price", "entry_price_source", "score_blocked",
+            "raw_trade_risk_research_cap_pct", "raw_trade_risk_research_exceeded",
+            "is_research_threshold_candidate",
         }
         for ann in anns.values():
             assert required.issubset(ann.keys()), f"Missing keys: {required - ann.keys()}"
+            assert "risk_blocked" not in ann
+            assert "is_entry_candidate" not in ann
 
     def test_strategy_field_is_turtle(self):
         rows = _make_trending_bars("AAPL", n=25)
@@ -602,8 +605,8 @@ class TestGenerateTurtleSignalAnnotations:
             if ann["stage"] == "exit":
                 assert ann["score_blocked"] is False
 
-    def test_risk_blocked_when_trade_risk_pct_exceeds_max(self):
-        """Annotation risk_blocked=True when trade_risk_pct > max_risk_per_trade_pct."""
+    def test_raw_trade_risk_research_exceeded_when_trade_risk_pct_exceeds_max(self):
+        """Annotation raw_trade_risk_research_exceeded=True when trade_risk_pct > max_risk_per_trade_pct."""
         # Create a signal with very large trade_risk_pct by using large stop_loss_buffer
         rows = _make_trending_bars("AAPL", n=30)
         # Use large stop_loss_buffer_pct so trade_risk_pct is large
@@ -616,7 +619,7 @@ class TestGenerateTurtleSignalAnnotations:
         if setup_with_risk:
             for ann in setup_with_risk:
                 if ann["trade_risk_pct"] > _MAX_RISK_PER_TRADE_PCT:
-                    assert ann["risk_blocked"] is True
+                    assert ann["raw_trade_risk_research_exceeded"] is True
 
     def test_multiple_symbols(self):
         rows_aapl = _make_trending_bars("AAPL", n=25)
@@ -647,7 +650,7 @@ class TestGenerateTurtleSignalAnnotations:
         assert ann["score_bucket"] == "55-60"
         assert ann["score_blocked"] is True
 
-    def test_entry_confirmed_stop_distance_risk_above_max_is_blocked(self):
+    def test_entry_confirmed_stop_distance_risk_above_cap_is_research_exceeded(self):
         rows = [_make_bar("GS", "2023-01-03")]
         entry_signal = {
             "strategy": "TURTLE",
@@ -666,8 +669,8 @@ class TestGenerateTurtleSignalAnnotations:
         assert ann["entry_price_source"] == "entry_zone_midpoint"
         assert ann["entry_price"] == 105.0
         assert ann["trade_risk_pct"] == 0.05714286
-        assert ann["risk_blocked"] is True
-        assert ann["is_entry_candidate"] is False
+        assert ann["raw_trade_risk_research_exceeded"] is True
+        assert ann["is_research_threshold_candidate"] is False
 
     def test_signal_generation_exception_fails_explicitly(self):
         rows = [_make_bar("AAPL", "2023-01-03")]
@@ -738,6 +741,7 @@ class TestBuildSignalsArray:
         assert sig["quantity"] == "1"
         assert sig["symbol"] == "AAPL"
         assert sig["signal_id"] == "test-signal-id"
+        assert sig["risk_evidence"]["rule_version"] == "turtle-research-v2"
 
     def test_entry_confirmed_below_threshold_rejected(self):
         ann = self._entry_confirmed_annotation(score=58.0)
@@ -751,7 +755,7 @@ class TestBuildSignalsArray:
         assert sig["risk_evidence"]["decision"] == "REJECTED"
         assert "min_score_threshold" in sig["risk_evidence"]["reason"]
 
-    def test_entry_confirmed_risk_exceeds_gate_rejected(self):
+    def test_entry_confirmed_raw_trade_risk_exceeds_research_cap_not_rejected(self):
         ann = self._entry_confirmed_annotation(score=80.0)
         ann["trade_risk_pct"] = 0.05  # exceeds max_risk_per_trade_pct=0.01
         result = _build_signals_array(
@@ -760,8 +764,12 @@ class TestBuildSignalsArray:
             max_risk_per_trade_pct=0.01,
         )
         assert len(result) == 1
-        assert result[0]["risk_evidence"]["decision"] == "REJECTED"
-        assert "max_risk_per_trade_pct" in result[0]["risk_evidence"]["reason"]
+        ev = result[0]["risk_evidence"]
+        assert ev["decision"] == "APPROVED"
+        assert ev["reason"] == "signal_approved"
+        assert ev["raw_trade_risk_research_cap_pct"] == "0.01"
+        assert ev["raw_trade_risk_research_exceeded"] is True
+        assert ev["rule_version"] == "turtle-research-v2"
 
     def test_required_risk_evidence_fields(self):
         ann = self._entry_confirmed_annotation(score=65.0)
@@ -773,6 +781,41 @@ class TestBuildSignalsArray:
         ev = result[0]["risk_evidence"]
         for field in ("decision", "max_allowed", "reason", "rule_version", "score"):
             assert field in ev, f"Missing risk_evidence field: {field}"
+
+    def test_risk_evidence_uses_v2_research_fields_without_legacy_raw_risk_gate(self):
+        ann = self._entry_confirmed_annotation(score=80.0)
+        ann["trade_risk_pct"] = 0.05
+        result = _build_signals_array(
+            ann,
+            min_score_threshold=60.0,
+            max_risk_per_trade_pct=0.01,
+        )
+
+        ev = result[0]["risk_evidence"]
+        assert ev["rule_version"] == "turtle-research-v2"
+        assert ev["decision"] == "APPROVED"
+        assert ev["raw_trade_risk_research_cap_pct"] == "0.01"
+        assert ev["raw_trade_risk_research_exceeded"] is True
+        assert "raw_trade_risk_research_note" in ev
+        assert "max_risk_per_trade_pct" not in ev
+        assert "risk_blocked" not in ev
+        assert "is_entry_candidate" not in ev
+
+    def test_signals_array_output_is_deterministic_with_v2_fields(self):
+        ann = self._entry_confirmed_annotation(score=80.0)
+        ann["trade_risk_pct"] = 0.05
+        first = _build_signals_array(
+            ann,
+            min_score_threshold=60.0,
+            max_risk_per_trade_pct=0.01,
+        )
+        second = _build_signals_array(
+            ann,
+            min_score_threshold=60.0,
+            max_risk_per_trade_pct=0.01,
+        )
+
+        assert first == second
 
 
 class TestAnnotateSnapshots:
@@ -811,8 +854,8 @@ class TestAnnotateSnapshots:
                 "stop_loss": None,
                 "trade_risk_pct": None,
                 "score_blocked": False,
-                "risk_blocked": False,
-                "is_entry_candidate": True,
+                "raw_trade_risk_research_exceeded": False,
+                "is_research_threshold_candidate": True,
             }
         }
         result = annotate_snapshots([snap], anns)
@@ -839,8 +882,8 @@ class TestAnnotateSnapshots:
                 "stop_loss": None,
                 "trade_risk_pct": 0.005,
                 "score_blocked": False,
-                "risk_blocked": False,
-                "is_entry_candidate": False,
+                "raw_trade_risk_research_exceeded": False,
+                "is_research_threshold_candidate": False,
             }
         }
         result = annotate_snapshots([snap], anns)
@@ -861,30 +904,31 @@ class TestBuildTurtleResearchSummary:
             "AAPL_2023-01-03": {
                 "symbol": "AAPL", "signal_produced": True, "stage": "entry_confirmed",
                 "score": 65.0, "score_bucket": "65-70",
-                "score_blocked": False, "risk_blocked": False, "is_entry_candidate": True,
+                "score_blocked": False, "raw_trade_risk_research_exceeded": False, "is_research_threshold_candidate": True,
             },
             "AAPL_2023-01-04": {
                 "symbol": "AAPL", "signal_produced": True, "stage": "setup",
                 "score": 58.0, "score_bucket": "55-60",
-                "score_blocked": True, "risk_blocked": False, "is_entry_candidate": False,
+                "score_blocked": True, "raw_trade_risk_research_exceeded": False, "is_research_threshold_candidate": False,
             },
             "AAPL_2023-01-05": {
                 "symbol": "AAPL", "signal_produced": False, "stage": None,
                 "score": None, "score_bucket": None,
-                "score_blocked": False, "risk_blocked": False, "is_entry_candidate": False,
+                "score_blocked": False, "raw_trade_risk_research_exceeded": False, "is_research_threshold_candidate": False,
             },
             "GS_2023-01-03": {
                 "symbol": "GS", "signal_produced": True, "stage": "entry_confirmed",
                 "score": 62.0, "score_bucket": "60-65",
-                "score_blocked": False, "risk_blocked": True, "is_entry_candidate": False,
+                "score_blocked": False, "raw_trade_risk_research_exceeded": True, "is_research_threshold_candidate": False,
             },
         }
 
     def test_required_top_level_fields(self):
         summary = build_turtle_research_summary(self._make_annotations())
         for key in ("artifact_type", "strategy", "min_score_threshold_applied",
-                    "max_risk_per_trade_pct_applied", "by_symbol", "totals", "traceability"):
+                    "raw_trade_risk_research_cap_pct", "by_symbol", "totals", "traceability"):
             assert key in summary
+        assert "max_risk_per_trade_pct_applied" not in summary
 
     def test_totals_counts(self):
         summary = build_turtle_research_summary(self._make_annotations())
@@ -894,9 +938,11 @@ class TestBuildTurtleResearchSummary:
         assert t["entry_confirmed_count"] == 2
         assert t["setup_count"] == 1
         assert t["exit_count"] == 0
-        assert t["entry_candidates"] == 1
+        assert t["research_threshold_candidates"] == 1
         assert t["score_blocked_count"] == 1
-        assert t["risk_blocked_count"] == 1
+        assert t["raw_trade_risk_research_exceeded_count"] == 1
+        assert "entry_candidates" not in t
+        assert "risk_blocked_count" not in t
 
     def test_by_symbol_aapl(self):
         summary = build_turtle_research_summary(self._make_annotations())
@@ -905,7 +951,7 @@ class TestBuildTurtleResearchSummary:
         assert aapl["signals_produced"] == 2
         assert aapl["stages"]["entry_confirmed"] == 1
         assert aapl["stages"]["setup"] == 1
-        assert aapl["entry_candidates"] == 1
+        assert aapl["research_threshold_candidates"] == 1
         assert aapl["score_blocked_count"] == 1
         assert aapl["score_buckets"]["55-60"] == 1
         assert aapl["score_min"] == 58.0
@@ -933,7 +979,7 @@ class TestBuildTurtleResearchSummary:
             max_risk_per_trade_pct=0.01,
         )
         assert summary["min_score_threshold_applied"] == 60.0
-        assert summary["max_risk_per_trade_pct_applied"] == 0.01
+        assert summary["raw_trade_risk_research_cap_pct"] == 0.01
 
     def test_empty_annotations(self):
         summary = build_turtle_research_summary({})

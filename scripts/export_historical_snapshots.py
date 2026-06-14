@@ -54,9 +54,10 @@ _SNAPSHOT_DATE_FMT = "%Y-%m-%d"
 
 # Research thresholds — read-only reference values from paper execution config.
 # These are not changed by this script; they are used only to annotate whether
-# a signal would be blocked by the real runtime gates.
+# raw trade-risk distance exceeds an exporter-only research threshold.
 _MIN_SCORE_THRESHOLD = 60.0
-_MAX_RISK_PER_TRADE_PCT = 0.01
+_RAW_TRADE_RISK_RESEARCH_CAP_PCT = 0.01
+_MAX_RISK_PER_TRADE_PCT = _RAW_TRADE_RISK_RESEARCH_CAP_PCT
 _RISK_PCT_SCALE = Decimal("0.00000001")
 _SCORE_BUCKETS = ("<50", "50-55", "55-60", "60-65", "65-70", "70+")
 _SOURCE_YFINANCE = "yfinance"
@@ -517,8 +518,9 @@ def generate_turtle_signal_annotations(
                     "stop_loss": None,
                     "trade_risk_pct": None,
                     "score_blocked": False,
-                    "risk_blocked": False,
-                    "is_entry_candidate": False,
+                    "raw_trade_risk_research_cap_pct": max_risk_per_trade_pct,
+                    "raw_trade_risk_research_exceeded": False,
+                    "is_research_threshold_candidate": False,
                 }
                 continue
 
@@ -538,7 +540,7 @@ def generate_turtle_signal_annotations(
                 and score is not None
                 and score < min_score_threshold
             )
-            risk_blocked = (
+            raw_trade_risk_research_exceeded = (
                 trade_risk_pct is not None
                 and trade_risk_pct > max_risk_per_trade_pct
             )
@@ -560,11 +562,12 @@ def generate_turtle_signal_annotations(
                 "stop_loss": sig.get("stop_loss"),
                 "trade_risk_pct": trade_risk_pct,
                 "score_blocked": score_blocked,
-                "risk_blocked": risk_blocked,
-                "is_entry_candidate": (
+                "raw_trade_risk_research_cap_pct": max_risk_per_trade_pct,
+                "raw_trade_risk_research_exceeded": raw_trade_risk_research_exceeded,
+                "is_research_threshold_candidate": (
                     stage == "entry_confirmed"
                     and not score_blocked
-                    and not risk_blocked
+                    and not raw_trade_risk_research_exceeded
                 ),
             }
 
@@ -581,8 +584,8 @@ def _build_signals_array(
 
     Only entry_confirmed signals receive an action/quantity/risk_evidence block.
     setup and exit annotations are research-only; they do not create backtest orders.
-    Risk evidence decision reflects score-threshold and risk-gate checks using
-    the reference thresholds — thresholds are NOT changed.
+    Risk evidence decision reflects the score threshold only. Raw trade-risk
+    comparison is exporter-only sensitivity analysis, not runtime rejection.
     """
     if not annotation.get("signal_produced"):
         return []
@@ -595,20 +598,18 @@ def _build_signals_array(
     trade_risk_pct = annotation.get("trade_risk_pct")
 
     score_ok = score >= min_score_threshold
-    risk_ok = trade_risk_pct is None or trade_risk_pct <= max_risk_per_trade_pct
+    raw_trade_risk_research_exceeded = (
+        trade_risk_pct is not None
+        and trade_risk_pct > max_risk_per_trade_pct
+    )
 
-    decision = "APPROVED" if (score_ok and risk_ok) else "REJECTED"
+    decision = "APPROVED" if score_ok else "REJECTED"
 
     blocker_parts: list[str] = []
     if not score_ok:
         blocker_parts.append(
             f"score={score:.6f} < min_score_threshold={min_score_threshold}"
         )
-    if not risk_ok:
-        blocker_parts.append(
-            f"trade_risk_pct={trade_risk_pct:.8f} > max_risk_per_trade_pct={max_risk_per_trade_pct}"
-        )
-
     reason = "; ".join(blocker_parts) if blocker_parts else "signal_approved"
 
     return [
@@ -618,9 +619,15 @@ def _build_signals_array(
             "risk_evidence": {
                 "decision": decision,
                 "max_allowed": str(min_score_threshold),
-                "max_risk_per_trade_pct": str(max_risk_per_trade_pct),
+                "raw_trade_risk_research_cap_pct": str(max_risk_per_trade_pct),
+                "raw_trade_risk_research_exceeded": raw_trade_risk_research_exceeded,
+                "raw_trade_risk_research_note": (
+                    "Exporter-only sensitivity analysis. Runtime treats "
+                    "max_risk_per_trade_pct as a sizing risk-budget input, not "
+                    "as a hard raw trade_risk_pct rejection cap."
+                ),
                 "reason": reason,
-                "rule_version": "turtle-research-v1",
+                "rule_version": "turtle-research-v2",
                 "score": str(round(score, 6)),
                 "trade_risk_pct": (
                     str(round(float(trade_risk_pct), 8))
@@ -684,8 +691,9 @@ def annotate_snapshots(
                 "stop_loss": None,
                 "trade_risk_pct": None,
                 "score_blocked": False,
-                "risk_blocked": False,
-                "is_entry_candidate": False,
+                "raw_trade_risk_research_cap_pct": max_risk_per_trade_pct,
+                "raw_trade_risk_research_exceeded": False,
+                "is_research_threshold_candidate": False,
             }
 
         result.append(enriched)
@@ -710,8 +718,8 @@ def build_turtle_research_summary(
                 "signals_produced": 0,
                 "stages": {"entry_confirmed": 0, "setup": 0, "exit": 0},
                 "score_blocked_count": 0,
-                "risk_blocked_count": 0,
-                "entry_candidates": 0,
+                "raw_trade_risk_research_exceeded_count": 0,
+                "research_threshold_candidates": 0,
                 "score_buckets": {bucket: 0 for bucket in _SCORE_BUCKETS},
             }
             scores_by_sym[symbol] = []
@@ -733,10 +741,10 @@ def build_turtle_research_summary(
 
             if ann.get("score_blocked"):
                 by_symbol[symbol]["score_blocked_count"] += 1
-            if ann.get("risk_blocked"):
-                by_symbol[symbol]["risk_blocked_count"] += 1
-            if ann.get("is_entry_candidate"):
-                by_symbol[symbol]["entry_candidates"] += 1
+            if ann.get("raw_trade_risk_research_exceeded"):
+                by_symbol[symbol]["raw_trade_risk_research_exceeded_count"] += 1
+            if ann.get("is_research_threshold_candidate"):
+                by_symbol[symbol]["research_threshold_candidates"] += 1
 
     # Attach score statistics
     for symbol, data in by_symbol.items():
@@ -756,19 +764,26 @@ def build_turtle_research_summary(
         "entry_confirmed_count": sum(d["stages"]["entry_confirmed"] for d in by_symbol.values()),
         "setup_count": sum(d["stages"]["setup"] for d in by_symbol.values()),
         "exit_count": sum(d["stages"]["exit"] for d in by_symbol.values()),
-        "entry_candidates": sum(d["entry_candidates"] for d in by_symbol.values()),
+        "research_threshold_candidates": sum(
+            d["research_threshold_candidates"] for d in by_symbol.values()
+        ),
         "score_blocked_count": sum(d["score_blocked_count"] for d in by_symbol.values()),
-        "risk_blocked_count": sum(d["risk_blocked_count"] for d in by_symbol.values()),
+        "raw_trade_risk_research_exceeded_count": sum(
+            d["raw_trade_risk_research_exceeded_count"] for d in by_symbol.values()
+        ),
     }
 
     return {
         "artifact_type": "turtle_signal_frequency_research",
         "strategy": "TURTLE",
         "min_score_threshold_applied": min_score_threshold,
-        "max_risk_per_trade_pct_applied": max_risk_per_trade_pct,
+        "raw_trade_risk_research_cap_pct": max_risk_per_trade_pct,
         "note": (
-            "Thresholds are reference values from paper execution config. "
-            "No threshold was changed by this script."
+            "Score threshold is a reference value from paper execution config. "
+            "Raw trade-risk threshold comparison is exporter-only sensitivity "
+            "analysis; runtime max_risk_per_trade_pct is a sizing risk-budget "
+            "input, not a hard raw trade_risk_pct cap. No threshold was changed "
+            "by this script."
         ),
         "by_symbol": by_symbol,
         "totals": totals,
@@ -973,9 +988,12 @@ def main() -> int:
         print(f"    entry_confirmed: {totals['entry_confirmed_count']}")
         print(f"    setup          : {totals['setup_count']}")
         print(f"    exit           : {totals['exit_count']}")
-        print(f"  Entry candidates : {totals['entry_candidates']}")
+        print(f"  Research threshold candidates : {totals['research_threshold_candidates']}")
         print(f"  Score-blocked    : {totals['score_blocked_count']}")
-        print(f"  Risk-blocked     : {totals['risk_blocked_count']}")
+        print(
+            "  Raw trade-risk research exceeded : "
+            f"{totals['raw_trade_risk_research_exceeded_count']}"
+        )
 
         print("\nPer-symbol breakdown:")
         for sym, data in sorted(summary["by_symbol"].items()):
@@ -986,7 +1004,8 @@ def main() -> int:
                 f"setup={stages['setup']}  "
                 f"exit={stages['exit']}  "
                 f"score_blocked={data['score_blocked_count']}  "
-                f"risk_blocked={data['risk_blocked_count']}  "
+                "raw_trade_risk_research_exceeded="
+                f"{data['raw_trade_risk_research_exceeded_count']}  "
                 f"score_min={data.get('score_min')}  "
                 f"score_max={data.get('score_max')}"
             )
