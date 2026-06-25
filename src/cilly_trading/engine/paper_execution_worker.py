@@ -143,6 +143,7 @@ OutcomeCode = Literal[
     "eligible:full_exit",
     "skip:score_below_threshold",
     "skip:exit_signal_not_entry_candidate",
+    "skip:entry_stage_not_confirmed",
     "skip:duplicate_entry",
     "skip:cooldown_active",
     "skip:entry_zone_not_reached",
@@ -1079,15 +1080,17 @@ class BoundedPaperExecutionWorker:
 
         Steps:
             1. Eligibility check (required fields)
-            2. Score threshold check
-            3. Duplicate-entry check
-            4. Cooldown check
-            5. Entry-bar fill check (if entry_bar provided)
-            6. Regime filter (if regime_state provided and allowed_regimes non-empty)
-            7. Drawdown guard (if drawdown_guard_enabled)
-            8. Trade sizing
-            9. Exposure and position-limit checks
-            10. Correlation risk check (if price_history provided and correlation_check_enabled)
+            2. Exit classification
+            3. Executable-stage validation
+            4. Score threshold check
+            5. Duplicate-entry check
+            6. Cooldown check
+            7. Entry-bar fill check (if entry_bar provided)
+            8. Regime filter (if regime_state provided and allowed_regimes non-empty)
+            9. Drawdown guard (if drawdown_guard_enabled)
+            10. Trade sizing
+            11. Exposure and position-limit checks
+            12. Correlation risk check (if price_history provided and correlation_check_enabled)
         """
         # Step 1: eligibility — required signal fields
         field_error = _validate_signal_fields(signal)
@@ -1111,6 +1114,24 @@ class BoundedPaperExecutionWorker:
                 decision_inputs=_build_signal_contract_evidence(
                     signal,
                     outcome="skip:exit_signal_not_entry_candidate",
+                    reason=reason,
+                    profile=self._risk_profile,
+                ),
+            )
+
+        is_rsi2_setup = strategy.upper() == "RSI2" and stage == "setup"
+        is_unsupported_stage = stage not in {"setup", "entry_confirmed"}
+        if is_rsi2_setup or is_unsupported_stage:
+            reason = (
+                "entry candidate stage must be entry_confirmed; "
+                f"got {stage!r}"
+            )
+            return SignalEvaluationResult(
+                outcome="skip:entry_stage_not_confirmed",
+                reason=reason,
+                decision_inputs=_build_signal_contract_evidence(
+                    signal,
+                    outcome="skip:entry_stage_not_confirmed",
                     reason=reason,
                     profile=self._risk_profile,
                 ),

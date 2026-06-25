@@ -87,10 +87,10 @@ def test_rsi2_signal_schema_over_252bar_fixture(df_252: pd.DataFrame) -> None:
     signals = _rsi2_walk_forward(df_252)
     for s in signals:
         assert s["strategy"] == "RSI2"
-        assert s["stage"] in ("setup", "exit"), f"Unexpected stage: {s['stage']}"
+        assert s["stage"] in ("setup", "entry_confirmed", "exit"), f"Unexpected stage: {s['stage']}"
         assert s["direction"] == "long"
         assert 0.0 <= float(s["score"]) <= 100.0
-        if s["stage"] == "setup":
+        if s["stage"] in ("setup", "entry_confirmed"):
             ez = s.get("entry_zone", {})
             assert isinstance(ez, dict)
             assert float(ez["from_"]) < float(ez["to"])
