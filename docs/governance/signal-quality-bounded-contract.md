@@ -187,6 +187,29 @@ Qualification output remains technical-only and must expose:
 - explicit missing criteria fields
 - explicit blocking-condition fields
 
+## RSI2 Setup and Confirmed-Entry Boundary
+
+RSI2 uses explicit, separate stage semantics:
+
+- `setup` = non-executable candidate
+- `entry_confirmed` = only executable RSI2 entry stage
+- `exit` = explicit separate exit stage
+
+RSI2 confirmation occurs only on a subsequent bar. The setup bar cannot confirm
+itself, and confirmation is evaluated without lookahead: evaluation at index
+`n` may use only rows `0..n`. A confirmed RSI2 long entry requires a prior setup,
+the current close above the setup/trigger bar high, and RSI2 no longer inside the
+oversold zone.
+
+Evaluation/backtest and bounded paper execution consume the same executable
+stage: `stage == "entry_confirmed"` with `direction == "long"`. A `setup` is
+available for analysis/ranking as a candidate but must not create a backtest or
+bounded paper entry.
+
+This technical alignment does not establish trader validation, profitability,
+operational readiness, broker readiness, live readiness, production readiness,
+or real-money safety.
+
 ## Stability Boundary
 
 Given equivalent fixture content, ranked output remains stable independent of input list order.

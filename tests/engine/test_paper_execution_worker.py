@@ -61,7 +61,7 @@ def _make_signal(
     direction: str = "long",
     score: float = 75.0,
     timestamp: str = "2024-01-15T10:00:00Z",
-    stage: str = "setup",
+    stage: str = "entry_confirmed",
     trade_risk_pct: float = 0.20,
     signal_id: str | None = None,
 ) -> Signal:
@@ -122,7 +122,7 @@ def test_missing_symbol_returns_reject(worker: BoundedPaperExecutionWorker) -> N
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2024-01-15T10:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
     }
     result = worker.process_signal(signal)
     assert result.outcome == "reject:invalid_signal_fields"
@@ -136,7 +136,7 @@ def test_missing_strategy_returns_reject(worker: BoundedPaperExecutionWorker) ->
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2024-01-15T10:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
     }
     result = worker.process_signal(signal)
     assert result.outcome == "reject:invalid_signal_fields"
@@ -580,7 +580,7 @@ def test_missing_trade_risk_input_is_rejected_fail_closed(
         "reason": "trade_risk_pct or stop_loss is required for deterministic sizing",
         "symbol": "AAPL",
         "strategy": "rsi2",
-        "stage": "setup",
+        "stage": "entry_confirmed",
         "direction": "long",
         "sizing_method": "stop_distance",
         "risk_profile_contract_id": "paper-execution-risk-profile-v1",
@@ -648,6 +648,111 @@ def test_exit_signal_processed_as_entry_candidate_is_classified_before_sizing(
         "risk_profile_contract_id": "paper-execution-risk-profile-v1",
         "signal_id": "sig-entry-api-exit-stage",
     }
+
+
+def test_rsi2_setup_stage_is_rejected_before_score_gate(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(
+        signal_id="sig-entry-api-setup-stage",
+        score=1.0,
+        stage="setup",
+        trade_risk_pct=0.05,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "skip:entry_stage_not_confirmed"
+    assert result.order_id is None
+    assert result.trade_id is None
+    assert result.reason == "entry candidate stage must be entry_confirmed; got 'setup'"
+    assert result.decision_inputs == {
+        "outcome": "skip:entry_stage_not_confirmed",
+        "reason": "entry candidate stage must be entry_confirmed; got 'setup'",
+        "symbol": "AAPL",
+        "strategy": "rsi2",
+        "stage": "setup",
+        "direction": "long",
+        "sizing_method": "stop_distance",
+        "risk_profile_contract_id": "paper-execution-risk-profile-v1",
+        "signal_id": "sig-entry-api-setup-stage",
+    }
+
+
+def test_unknown_entry_stage_is_rejected_before_score_gate(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    signal = _make_signal(
+        signal_id="sig-entry-api-unknown-stage",
+        score=1.0,
+        stage="watch",
+        trade_risk_pct=0.05,
+    )
+    result = worker.process_signal(signal)
+    assert result.outcome == "skip:entry_stage_not_confirmed"
+    assert result.order_id is None
+    assert result.trade_id is None
+    assert result.reason == "entry candidate stage must be entry_confirmed; got 'watch'"
+
+
+def test_entry_confirmed_low_score_reaches_score_gate(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    result = worker.process_signal(
+        _make_signal(
+            signal_id="sig-entry-api-confirmed-low-score",
+            score=1.0,
+            stage="entry_confirmed",
+            trade_risk_pct=0.05,
+        )
+    )
+    assert result.outcome == "skip:score_below_threshold"
+    assert result.reason == "score=1.0 < min_score_threshold=60.0"
+
+
+def test_turtle_setup_low_score_preserves_score_gate(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    result = worker.process_signal(
+        _make_signal(
+            strategy="TURTLE",
+            signal_id="sig-entry-api-turtle-setup-low-score",
+            score=1.0,
+            stage="setup",
+            trade_risk_pct=0.05,
+        )
+    )
+    assert result.outcome == "skip:score_below_threshold"
+    assert result.reason == "score=1.0 < min_score_threshold=60.0"
+
+
+def test_entry_confirmed_stage_reaches_normal_entry_gates(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    result = worker.process_signal(
+        _make_signal(
+            signal_id="sig-entry-api-confirmed-stage",
+            stage="entry_confirmed",
+            trade_risk_pct=0.05,
+        )
+    )
+    assert result.outcome == "eligible"
+    assert result.order_id is not None
+    assert result.trade_id is not None
+
+
+def test_turtle_setup_stage_preserves_existing_entry_path(
+    worker: BoundedPaperExecutionWorker,
+) -> None:
+    result = worker.process_signal(
+        _make_signal(
+            strategy="TURTLE",
+            signal_id="sig-entry-api-turtle-setup-stage",
+            stage="setup",
+            trade_risk_pct=0.05,
+        )
+    )
+    assert result.outcome == "eligible"
+    assert result.order_id is not None
+    assert result.trade_id is not None
 
 
 # ---------------------------------------------------------------------------
@@ -831,7 +936,7 @@ def _make_signal_with_stop_loss(
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 75.0,
         "timestamp": "2024-01-15T10:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "stop_loss": stop_loss,
         "entry_zone": {
             "from_": entry_low,
@@ -1045,7 +1150,7 @@ def _make_signal_with_entry_zone(
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 75.0,
         "timestamp": timestamp,
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "entry_zone": {"from_": entry_low, "to": entry_high},
         "signal_id": signal_id,
@@ -1229,7 +1334,7 @@ def test_atr_sizing_produces_notional_proportional_to_risk_budget(
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "atr": 2.0,
         "entry_zone": {"from_": 100.0, "to": 100.0},
     }
@@ -1252,7 +1357,7 @@ def test_atr_sizing_rejected_when_atr_not_provided(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         # no atr field
     }
     result = worker.process_signal(signal)
@@ -1270,7 +1375,7 @@ def test_fixed_sizing_uses_explicit_trade_risk_pct(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
     }
     result = worker.process_signal(signal)
@@ -1290,7 +1395,7 @@ def test_fixed_sizing_rejected_when_trade_risk_pct_missing(tmp_path: Path) -> No
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         # no trade_risk_pct
     }
     result = worker.process_signal(signal)
@@ -1309,7 +1414,7 @@ def test_atr_multiple_scales_position_size(tmp_path: Path) -> None:
             "direction": "long",  # type: ignore[typeddict-item]
             "score": 80.0,
             "timestamp": "2026-01-01T00:00:00Z",
-            "stage": "setup",  # type: ignore[typeddict-item]
+            "stage": "entry_confirmed",  # type: ignore[typeddict-item]
             "atr": 1.0,
             "entry_zone": {"from_": 100.0, "to": 100.0},
         }
@@ -1366,7 +1471,7 @@ def test_correlation_gate_blocks_entry_when_highly_correlated(tmp_path: Path) ->
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-corr-aapl",
     }
@@ -1380,7 +1485,7 @@ def test_correlation_gate_blocks_entry_when_highly_correlated(tmp_path: Path) ->
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-02T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-corr-msft",
     }
@@ -1403,7 +1508,7 @@ def test_correlation_gate_skipped_when_disabled(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-nc-aapl",
     }
@@ -1415,7 +1520,7 @@ def test_correlation_gate_skipped_when_disabled(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-02T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-nc-msft",
     }
@@ -1439,7 +1544,7 @@ def test_correlation_gate_passes_without_price_history(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-noph-aapl",
     }
@@ -1451,7 +1556,7 @@ def test_correlation_gate_passes_without_price_history(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-02T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-noph-msft",
     }
@@ -1568,7 +1673,7 @@ def test_drawdown_guard_blocks_entry_after_consecutive_losses(tmp_path: Path) ->
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-10T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-dg-block",
     })
@@ -1614,7 +1719,7 @@ def test_drawdown_guard_disabled_does_not_block(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-10T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-dg-nodisable",
     })
@@ -1681,7 +1786,7 @@ def test_drawdown_guard_blocks_on_equity_drawdown(tmp_path: Path) -> None:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-10T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "signal_id": "sig-dg-equity",
     })
@@ -1719,7 +1824,7 @@ def _entry_signal(signal_id: str, symbol: str = "AAPL") -> Signal:
         "direction": "long",  # type: ignore[typeddict-item]
         "score": 80.0,
         "timestamp": "2026-01-01T00:00:00Z",
-        "stage": "setup",  # type: ignore[typeddict-item]
+        "stage": "entry_confirmed",  # type: ignore[typeddict-item]
         "trade_risk_pct": 0.05,
         "entry_zone": {"from_": 100.0, "to": 100.0},
         "signal_id": signal_id,

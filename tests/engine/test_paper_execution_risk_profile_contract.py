@@ -66,6 +66,6 @@ def test_same_profile_and_same_input_produce_same_outcome(tmp_path: Path) -> Non
     result_a = worker_a.process_signal(signal)
     result_b = worker_b.process_signal(signal)
 
-    assert result_a.outcome == "skip:score_below_threshold"
-    assert result_b.outcome == "skip:score_below_threshold"
+    assert result_a.outcome == "skip:entry_stage_not_confirmed"
+    assert result_b.outcome == "skip:entry_stage_not_confirmed"
     assert result_a.reason == result_b.reason

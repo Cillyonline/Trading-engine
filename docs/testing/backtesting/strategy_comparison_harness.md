@@ -54,10 +54,20 @@ Optional per-strategy configs are provided via `--strategy-config` as:
 Strategy output is translated into executable backtest signals with a fixed rule:
 
 - only `stage="entry_confirmed"` and `direction="long"` are executable
+- RSI2 `setup` is a non-executable candidate
+- RSI2 `entry_confirmed` is the only executable RSI2 entry stage
+- RSI2 `exit` is an explicit separate exit stage
 - executable signal becomes one deterministic `BUY` order with `quantity="1"`
 - maximum one open position per strategy in the harness flow
 
 This keeps strategy comparison deterministic and bounded.
+
+For RSI2, confirmation occurs on a subsequent bar without lookahead. At
+evaluation index `n`, strategy generation may use only rows `0..n`; a setup bar
+cannot confirm itself. Evaluation/backtest and bounded paper execution therefore
+consume the same executable RSI2 stage, `entry_confirmed`. This alignment is
+technical only and does not establish trader validation, profitability, or
+operational readiness.
 
 ## Output Contract
 
@@ -99,4 +109,3 @@ This guarantees the comparison harness stays aligned with existing backtesting a
 | `20` | Snapshot/config input invalid |
 | `30` | Strategy selection invalid |
 | `1` | Unexpected fallback error |
-
