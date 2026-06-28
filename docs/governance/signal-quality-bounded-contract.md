@@ -206,6 +206,12 @@ stage: `stage == "entry_confirmed"` with `direction == "long"`. A `setup` is
 available for analysis/ranking as a candidate but must not create a backtest or
 bounded paper entry.
 
+RSI2 setup eligibility is finite-indicator bounded. RSI warmup bars or other
+non-finite RSI2 values are not setup episodes and cannot be used later to emit
+`entry_confirmed`. Repeated `entry_confirmed` events remain allowed while the
+strategy can deterministically re-find the same finite prior setup from the
+available no-lookahead history.
+
 This technical alignment does not establish trader validation, profitability,
 operational readiness, broker readiness, live readiness, production readiness,
 or real-money safety.
