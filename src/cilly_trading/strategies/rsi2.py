@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
+import math
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -91,6 +92,8 @@ class Rsi2Strategy(BaseStrategy):
         last_idx = df.index[-1]
         last_close = float(df.loc[last_idx, "close"])
         last_rsi = float(rsi_series.loc[last_idx])
+        if not math.isfinite(last_rsi):
+            return []
         confirmation_rule = (
             "Enter long when a subsequent bar closes above the high of the trigger bar "
             "AND RSI2 is no longer in the oversold zone."
@@ -159,6 +162,8 @@ class Rsi2Strategy(BaseStrategy):
 
         for idx in reversed(df.index):
             candidate_rsi = float(rsi_series.loc[idx])
+            if not math.isfinite(candidate_rsi):
+                continue
             if candidate_rsi >= cfg.oversold_threshold:
                 continue
 
